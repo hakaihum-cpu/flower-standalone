@@ -186,3 +186,19 @@ Also, the current high-resolution renderer has only walk + optional stand banks.
 2. Define the high-resolution per-identity pose/asset contract from the recovered three references.
 3. Do not cross the asset boundary until production walk/pose sources are recoverable or explicitly reviewed.
 4. Only then run the minimum useful build; do not spend CI minutes on an image-replacement build that still falls back to the legacy atlas.
+
+
+## Non-generative extraction test — rejected
+A local, non-committed extraction test was performed against the recovered eight-identity reference `1000005616.png`.
+
+Result:
+- the sheet is already flattened against a light background,
+- the white blouse / skin edge values overlap the background values,
+- automatic alpha recovery either removes valid body regions or retains visible light/white matte around the silhouette,
+- this directly conflicts with the accepted DEFRINGE quality requirement.
+
+Decision:
+- do not commit these derived cutouts,
+- do not use the flattened cast sheet as a shortcut production sprite source,
+- retain it as identity/placement/effects reference only,
+- production transparent actor assets still require the original clean cutouts or a separately reviewed regeneration/derivation path.
