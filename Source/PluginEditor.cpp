@@ -312,7 +312,7 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
         juce::Desktop::rotatedClockwise | juce::Desktop::rotatedAntiClockwise);
 
     int targetWidth = 900;
-    int targetHeight = 540;
+    int targetHeight = 405;
 
     if (auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
     {
@@ -323,18 +323,14 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
         if (longSide > 0 && shortSide > 0)
         {
             targetWidth = juce::jlimit (640, 1100, longSide);
-            targetHeight = juce::jlimit (
-                360, 820,
-                juce::roundToInt (
-                    static_cast<float> (targetWidth)
-                    * static_cast<float> (shortSide)
-                    / static_cast<float> (longSide)));
+            targetHeight = juce::jlimit (300, 560,
+                juce::roundToInt (static_cast<float> (targetWidth) * shortSide / longSide));
         }
     }
 
     setSize (targetWidth, targetHeight);
     setResizable (true, true);
-    setResizeLimits (640, 360, 1400, 1000);
+    setResizeLimits (640, 300, 1400, 700);
 
     // MIYAKO's proven Android standalone path explicitly discards any device
     // setup chosen by the generic standalone holder and reopens the default
