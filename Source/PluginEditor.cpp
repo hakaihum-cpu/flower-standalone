@@ -16,6 +16,22 @@
 #if JUCE_ANDROID
 namespace
 {
+constexpr float androidReferencePixels = 720.0f;
+
+float androidReferenceScale()
+{
+    if (auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+        if (display->scale > 0.0)
+            return static_cast<float> (1.0 / display->scale);
+
+    return 1.0f;
+}
+
+int androidMetric (float referencePixels)
+{
+    return juce::jmax (1, juce::roundToInt (referencePixels * androidReferenceScale()));
+}
+
 juce::Image decodeAndroidPngWithStb (const void* data, size_t size)
 {
     if (data == nullptr || size == 0 || size > static_cast<size_t> (std::numeric_limits<int>::max()))
@@ -88,7 +104,11 @@ void LabelledKnob::resized()
 {
     auto area = getLocalBounds();
    #if JUCE_ANDROID
-    label.setBounds (area.removeFromTop (16));
+    const auto scale = androidReferenceScale();
+    label.setFont (juce::FontOptions (juce::jmax (5.0f, 11.0f * scale)).withStyle ("Bold"));
+    control.setTextBoxStyle (juce::Slider::TextBoxBelow, false,
+                             androidMetric (72.0f), androidMetric (20.0f));
+    label.setBounds (area.removeFromTop (androidMetric (16.0f)));
    #else
     label.setBounds (area.removeFromTop (15));
    #endif
@@ -105,35 +125,40 @@ RetroToggleSwitch::RetroToggleSwitch (const juce::String& name)
 void RetroToggleSwitch::paintButton (juce::Graphics& g, bool isMouseOverButton, bool isButtonDown)
 {
     const bool on = getToggleState();
-    auto area = getLocalBounds().toFloat().reduced (2.0f);
+   #if JUCE_ANDROID
+    const float ui = androidReferenceScale();
+   #else
+    constexpr float ui = 1.0f;
+   #endif
+    auto area = getLocalBounds().toFloat().reduced (2.0f * ui);
 
     g.setColour (juce::Colour (0x33000000));
-    g.fillRoundedRectangle (area.translated (1.5f, 2.0f), 4.0f);
+    g.fillRoundedRectangle (area.translated (1.5f * ui, 2.0f * ui), 4.0f * ui);
 
     g.setColour (juce::Colour (0xffded4b6));
-    g.fillRoundedRectangle (area, 4.0f);
+    g.fillRoundedRectangle (area, 4.0f * ui);
     g.setColour (juce::Colour (0xff8e846c));
-    g.drawRoundedRectangle (area, 4.0f, 1.0f);
+    g.drawRoundedRectangle (area, 4.0f * ui, 1.0f * ui);
 
-    auto rocker = area.reduced (9.0f, 7.0f);
+    auto rocker = area.reduced (9.0f * ui, 7.0f * ui);
     juce::ColourGradient face (on ? juce::Colour (0xfff5edd7) : juce::Colour (0xffc8bea5),
                                rocker.getX(), rocker.getY(),
                                on ? juce::Colour (0xffc8bea5) : juce::Colour (0xfff5edd7),
                                rocker.getX(), rocker.getBottom(), false);
     g.setGradientFill (face);
-    g.fillRoundedRectangle (rocker, 2.0f);
+    g.fillRoundedRectangle (rocker, 2.0f * ui);
     g.setColour (juce::Colour (0xff746b59));
-    g.drawRoundedRectangle (rocker, 2.0f, 1.0f);
+    g.drawRoundedRectangle (rocker, 2.0f * ui, 1.0f * ui);
 
     if (isMouseOverButton || isButtonDown)
     {
         g.setColour (juce::Colour (0x16000000));
-        g.fillRoundedRectangle (rocker, 2.0f);
+        g.fillRoundedRectangle (rocker, 2.0f * ui);
     }
 
     g.setColour (on ? juce::Colour (0xffb3443f) : juce::Colour (0xff777064));
-    const auto led = juce::Rectangle<float> (5.0f, 5.0f)
-                         .withCentre ({ area.getRight() - 8.0f, area.getY() + 8.0f });
+    const auto led = juce::Rectangle<float> (5.0f * ui, 5.0f * ui)
+                         .withCentre ({ area.getRight() - 8.0f * ui, area.getY() + 8.0f * ui });
     g.fillEllipse (led);
 
     if (namedStateStyle)
@@ -142,17 +167,17 @@ void RetroToggleSwitch::paintButton (juce::Graphics& g, bool isMouseOverButton, 
         auto nameArea = textArea.removeFromTop (juce::jmax (8, textArea.getHeight() / 2));
 
         g.setColour (juce::Colour (0xff273249));
-        g.setFont (juce::FontOptions ("Comic Sans MS", 7.2f, juce::Font::bold));
+        g.setFont (juce::FontOptions ("Comic Sans MS", juce::jmax (4.0f, 7.2f * ui), juce::Font::bold));
         g.drawFittedText (getButtonText(), nameArea, juce::Justification::centred, 1);
 
         g.setColour (on ? juce::Colour (0xffa33b36) : juce::Colour (0xff777064));
-        g.setFont (juce::FontOptions ("Comic Sans MS", 7.8f, juce::Font::bold));
+        g.setFont (juce::FontOptions ("Comic Sans MS", juce::jmax (4.0f, 7.8f * ui), juce::Font::bold));
         g.drawFittedText (on ? "ON" : "OFF", textArea, juce::Justification::centred, 1);
     }
     else
     {
         g.setColour (juce::Colour (0xff273249));
-        g.setFont (juce::FontOptions ("Comic Sans MS", 8.0f, juce::Font::bold));
+        g.setFont (juce::FontOptions ("Comic Sans MS", juce::jmax (4.0f, 8.0f * ui), juce::Font::bold));
         g.drawFittedText (on ? "ON" : "OFF", rocker.toNearestInt(), juce::Justification::centred, 1);
     }
 }
@@ -161,38 +186,48 @@ void FlowerPanel::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff1b1713));
 
-    auto bounds = getLocalBounds().toFloat().reduced (1.0f);
+    #if JUCE_ANDROID
+    const float ui = androidReferenceScale();
+   #else
+    constexpr float ui = 1.0f;
+   #endif
+    auto bounds = getLocalBounds().toFloat().reduced (1.0f * ui);
     g.setColour (juce::Colour (0xff7c6d52));
-    g.drawRoundedRectangle (bounds, 12.0f, 1.2f);
+    g.drawRoundedRectangle (bounds, 12.0f * ui, 1.2f * ui);
 
     g.setColour (juce::Colour (0xffddd0a5));
-    g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
-    g.drawText ("FLOWER", getLocalBounds().removeFromTop (34).reduced (12, 0),
+    g.setFont (juce::FontOptions (juce::jmax (7.0f, 18.0f * ui)).withStyle ("Bold"));
+    g.drawText ("FLOWER", getLocalBounds().removeFromTop (juce::roundToInt (34.0f * ui)).reduced (juce::roundToInt (12.0f * ui), 0),
                 juce::Justification::centredLeft);
 
     g.setColour (juce::Colour (0xff91866e));
-    g.setFont (juce::FontOptions (10.0f));
+    g.setFont (juce::FontOptions (juce::jmax (5.0f, 10.0f * ui)));
     g.drawText ("LOOPER / GRANULAR",
-                getLocalBounds().removeFromTop (34).reduced (94, 0),
+                getLocalBounds().removeFromTop (juce::roundToInt (34.0f * ui)).reduced (juce::roundToInt (94.0f * ui), 0),
                 juce::Justification::centredLeft);
 }
 
 void SynthPanel::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff1b1713));
-    auto bounds = getLocalBounds().toFloat().reduced (1.0f);
+    #if JUCE_ANDROID
+    const float ui = androidReferenceScale();
+   #else
+    constexpr float ui = 1.0f;
+   #endif
+    auto bounds = getLocalBounds().toFloat().reduced (1.0f * ui);
     g.setColour (juce::Colour (0xff7c6d52));
-    g.drawRoundedRectangle (bounds, 12.0f, 1.2f);
+    g.drawRoundedRectangle (bounds, 12.0f * ui, 1.2f * ui);
 
     g.setColour (juce::Colour (0xffddd0a5));
-    g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
-    g.drawText ("SYNTH", getLocalBounds().removeFromTop (34).reduced (12, 0),
+    g.setFont (juce::FontOptions (juce::jmax (7.0f, 18.0f * ui)).withStyle ("Bold"));
+    g.drawText ("SYNTH", getLocalBounds().removeFromTop (juce::roundToInt (34.0f * ui)).reduced (juce::roundToInt (12.0f * ui), 0),
                 juce::Justification::centredLeft);
 
     g.setColour (juce::Colour (0xff91866e));
-    g.setFont (juce::FontOptions (10.0f));
+    g.setFont (juce::FontOptions (juce::jmax (5.0f, 10.0f * ui)));
     g.drawText ("SINE / ADSR / FILTER / LFO",
-                getLocalBounds().removeFromTop (34).reduced (78, 0),
+                getLocalBounds().removeFromTop (juce::roundToInt (34.0f * ui)).reduced (juce::roundToInt (78.0f * ui), 0),
                 juce::Justification::centredLeft);
 }
 
@@ -221,13 +256,18 @@ void FlowerWaveformComponent::setState (
 
 void FlowerWaveformComponent::paint (juce::Graphics& g)
 {
-    auto bounds = getLocalBounds().reduced (8);
+   #if JUCE_ANDROID
+    const float ui = androidReferenceScale();
+   #else
+    constexpr float ui = 1.0f;
+   #endif
+    auto bounds = getLocalBounds().reduced (juce::roundToInt (8.0f * ui));
     g.setColour (juce::Colour (0xff080808));
-    g.fillRoundedRectangle (bounds.toFloat(), 4.0f);
+    g.fillRoundedRectangle (bounds.toFloat(), 4.0f * ui);
     g.setColour (juce::Colour (0xff8e8e89));
-    g.drawRoundedRectangle (bounds.toFloat(), 4.0f, 1.0f);
+    g.drawRoundedRectangle (bounds.toFloat(), 4.0f * ui, 1.0f * ui);
 
-    auto graph = bounds.reduced (10, 13);
+    auto graph = bounds.reduced (juce::roundToInt (10.0f * ui), juce::roundToInt (13.0f * ui));
     const int centreY = graph.getCentreY();
 
     g.setColour (juce::Colour (0xff3b3b38));
@@ -296,9 +336,9 @@ void FlowerWaveformComponent::paint (juce::Graphics& g)
     {
         const float gx = graph.getX()
             + juce::jlimit (0.0f, 1.0f, grains[static_cast<size_t> (i)]) * graph.getWidth();
-        const float radius = 3.0f + static_cast<float> (i % 2);
+        const float radius = (3.0f + static_cast<float> (i % 2)) * ui;
         g.setColour (juce::Colour (0xffbcbcb7).withAlpha (0.92f - i * 0.12f));
-        g.fillEllipse (gx - radius, graph.getY() + 5.0f + i * 7.0f,
+        g.fillEllipse (gx - radius, graph.getY() + 5.0f * ui + i * 7.0f * ui,
                        radius * 2.0f, radius * 2.0f);
     }
 
@@ -312,9 +352,9 @@ void FlowerWaveformComponent::paint (juce::Graphics& g)
     }
 
     g.setColour (juce::Colour (0xff6b6b67));
-    g.setFont (juce::FontOptions (8.5f));
+    g.setFont (juce::FontOptions (juce::jmax (4.5f, 8.5f * ui)));
     g.drawText ("SIZE " + juce::String (sizeAmount * 1000.0f, 0) + " ms",
-                bounds.removeFromBottom (13), juce::Justification::centredRight);
+                bounds.removeFromBottom (juce::roundToInt (13.0f * ui)), juce::Justification::centredRight);
 }
 
 void FlowerWaveformComponent::mouseDown (const juce::MouseEvent& e)
@@ -327,7 +367,15 @@ void FlowerWaveformComponent::mouseDrag (const juce::MouseEvent& e)
     if (! onPositionChanged)
         return;
 
+   #if JUCE_ANDROID
+    const auto ui = androidReferenceScale();
+    auto graph = getLocalBounds()
+                     .reduced (juce::roundToInt (8.0f * ui))
+                     .reduced (juce::roundToInt (10.0f * ui),
+                               juce::roundToInt (13.0f * ui));
+   #else
     auto graph = getLocalBounds().reduced (8).reduced (10, 13);
+   #endif
     if (graph.getWidth() <= 0)
         return;
 
@@ -371,11 +419,27 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     // Do not force orientation during startup. On the target 720x720 Android
     // device this can tear down the JUCE activity window before it is drawn.
 
-    constexpr int androidCanvasSize = 720;
-    setSize (androidCanvasSize, androidCanvasSize);
+    // 720x720 is the physical-pixel target. JUCE component bounds are logical
+    // pixels, so forcing 720 logical pixels overflows high-density 720x720
+    // Android displays. Convert the physical target through Display::scale and
+    // let the fullscreen standalone wrapper supply the final logical bounds.
+    int logicalCanvasSide = juce::roundToInt (720.0 / juce::jmax (0.1, juce::Desktop::getInstance()
+        .getDisplays().getPrimaryDisplay() != nullptr
+            ? juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()->scale
+            : 1.0));
+
+    if (auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+    {
+        const int availableSide = juce::roundToInt (
+            juce::jmin (display->userBounds.getWidth(), display->userBounds.getHeight()));
+
+        if (availableSide > 0)
+            logicalCanvasSide = juce::jmin (logicalCanvasSide, availableSide);
+    }
+
+    logicalCanvasSide = juce::jmax (1, logicalCanvasSide);
+    setSize (logicalCanvasSide, logicalCanvasSide);
     setResizable (false, false);
-    setResizeLimits (androidCanvasSize, androidCanvasSize,
-                     androidCanvasSize, androidCanvasSize);
 
     // MIYAKO's proven Android standalone path explicitly discards any device
     // setup chosen by the generic standalone holder and reopens the default
@@ -559,48 +623,59 @@ void FlowerStandaloneAudioProcessorEditor::showSynth (bool shouldShow)
 void FlowerStandaloneAudioProcessorEditor::resized()
 {
    #if JUCE_ANDROID
-    // The Android product target is a fixed 720 x 720 square. Use a dedicated
-    // square layout rather than adapting the desktop 4:3/landscape geometry.
-    flowerPanel.setBounds (getLocalBounds().reduced (8));
-
-    auto flower = flowerPanel.getLocalBounds().reduced (14);
-    auto flowerHeader = flower.removeFromTop (48);
-
-    const auto placeHeaderButton = [&flowerHeader] (juce::Component& button, int width)
+    // Layout is authored against a 720x720 physical-pixel reference, then
+    // converted to JUCE logical pixels. This keeps the complete interface
+    // visible on high-density 720x720 Android panels.
+    const float ui = juce::jmax (0.1f,
+        static_cast<float> (juce::jmin (getWidth(), getHeight())) / androidReferencePixels);
+    const auto px = [ui] (float value)
     {
-        button.setBounds (flowerHeader.removeFromRight (width).reduced (3, 7));
+        return juce::jmax (1, juce::roundToInt (value * ui));
     };
 
-    placeHeaderButton (synthButton, 78);
-    placeHeaderButton (flowerClear, 74);
-    placeHeaderButton (flowerReverse, 92);
-    placeHeaderButton (flowerOn, 82);
+    const int referenceSide = px (720.0f);
+    auto square = getLocalBounds().withSizeKeepingCentre (referenceSide, referenceSide);
+    flowerPanel.setBounds (square.reduced (px (8.0f)));
 
-    flower.removeFromTop (6);
+    auto flower = flowerPanel.getLocalBounds().reduced (px (14.0f));
+    auto flowerHeader = flower.removeFromTop (px (48.0f));
 
-    auto animationArea = flower.removeFromTop (336);
-    flowerAnimation.setBounds (animationArea.reduced (2));
+    const auto placeHeaderButton = [&flowerHeader, &px] (juce::Component& button, float width)
+    {
+        button.setBounds (flowerHeader.removeFromRight (px (width))
+                                      .reduced (px (3.0f), px (7.0f)));
+    };
 
-    flower.removeFromTop (6);
-    auto waveformArea = flower.removeFromTop (84);
-    flowerWaveform.setBounds (waveformArea.reduced (2));
+    placeHeaderButton (synthButton, 78.0f);
+    placeHeaderButton (flowerClear, 74.0f);
+    placeHeaderButton (flowerReverse, 92.0f);
+    placeHeaderButton (flowerOn, 82.0f);
 
-    flower.removeFromTop (8);
-    auto flowerControls = flower.reduced (2, 0);
+    flower.removeFromTop (px (6.0f));
+
+    auto animationArea = flower.removeFromTop (px (336.0f));
+    flowerAnimation.setBounds (animationArea.reduced (px (2.0f)));
+
+    flower.removeFromTop (px (6.0f));
+    auto waveformArea = flower.removeFromTop (px (84.0f));
+    flowerWaveform.setBounds (waveformArea.reduced (px (2.0f)));
+
+    flower.removeFromTop (px (8.0f));
+    auto flowerControls = flower.reduced (px (2.0f), 0);
 
     const int flowerRowH = juce::jmax (1, flowerControls.getHeight() / 2);
     auto flowerRow1 = flowerControls.removeFromTop (flowerRowH);
     auto flowerRow2 = flowerControls;
 
-    const auto placeFour = [] (juce::Rectangle<int> row,
-                               LabelledKnob& a, LabelledKnob& b,
-                               LabelledKnob& c, LabelledKnob& d)
+    const auto placeFour = [&px] (juce::Rectangle<int> row,
+                                  LabelledKnob& a, LabelledKnob& b,
+                                  LabelledKnob& c, LabelledKnob& d)
     {
         const int quarter = juce::jmax (1, row.getWidth() / 4);
-        a.setBounds (row.removeFromLeft (quarter).reduced (5, 3));
-        b.setBounds (row.removeFromLeft (quarter).reduced (5, 3));
-        c.setBounds (row.removeFromLeft (quarter).reduced (5, 3));
-        d.setBounds (row.reduced (5, 3));
+        a.setBounds (row.removeFromLeft (quarter).reduced (px (5.0f), px (3.0f)));
+        b.setBounds (row.removeFromLeft (quarter).reduced (px (5.0f), px (3.0f)));
+        c.setBounds (row.removeFromLeft (quarter).reduced (px (5.0f), px (3.0f)));
+        d.setBounds (row.reduced (px (5.0f), px (3.0f)));
     };
 
     placeFour (flowerRow1,
@@ -609,41 +684,44 @@ void FlowerStandaloneAudioProcessorEditor::resized()
                flowerHold, flowerPitch, flowerMix, flowerFeedback);
 
     synthPanel.setBounds (flowerPanel.getBounds());
-    auto synth = synthPanel.getLocalBounds().reduced (14);
-    auto synthHeader = synth.removeFromTop (48);
-    closeSynthButton.setBounds (synthHeader.removeFromRight (78).reduced (3, 7));
+    auto synth = synthPanel.getLocalBounds().reduced (px (14.0f));
+    auto synthHeader = synth.removeFromTop (px (48.0f));
+    closeSynthButton.setBounds (
+        synthHeader.removeFromRight (px (78.0f)).reduced (px (3.0f), px (7.0f)));
 
-    synth.removeFromTop (8);
-    auto keyboardArea = synth.removeFromBottom (118);
-    keyboard.setBounds (keyboardArea.reduced (4, 6));
-    synth.removeFromBottom (8);
+    synth.removeFromTop (px (8.0f));
+    auto keyboardArea = synth.removeFromBottom (px (118.0f));
+    keyboard.setBounds (keyboardArea.reduced (px (4.0f), px (6.0f)));
+    synth.removeFromBottom (px (8.0f));
 
     const int rowH = juce::jmax (1, synth.getHeight() / 3);
     auto row1 = synth.removeFromTop (rowH);
     auto row2 = synth.removeFromTop (rowH);
     auto row3 = synth;
 
-    const auto placeThree = [] (juce::Rectangle<int> row,
-                                LabelledKnob& a, LabelledKnob& b, LabelledKnob& c)
+    const auto placeThree = [&px] (juce::Rectangle<int> row,
+                                   LabelledKnob& a, LabelledKnob& b, LabelledKnob& c)
     {
         const int third = juce::jmax (1, row.getWidth() / 3);
-        a.setBounds (row.removeFromLeft (third).reduced (7, 5));
-        b.setBounds (row.removeFromLeft (third).reduced (7, 5));
-        c.setBounds (row.reduced (7, 5));
+        a.setBounds (row.removeFromLeft (third).reduced (px (7.0f), px (5.0f)));
+        b.setBounds (row.removeFromLeft (third).reduced (px (7.0f), px (5.0f)));
+        c.setBounds (row.reduced (px (7.0f), px (5.0f)));
     };
 
     placeThree (row1, synthLevel, synthAttack, synthDecay);
     placeThree (row2, synthSustain, synthRelease, synthCutoff);
 
     const int third = juce::jmax (1, row3.getWidth() / 3);
-    synthResonance.setBounds (row3.removeFromLeft (third).reduced (7, 5));
-    synthLfoRate.setBounds (row3.removeFromLeft (third).reduced (7, 5));
+    synthResonance.setBounds (row3.removeFromLeft (third).reduced (px (7.0f), px (5.0f)));
+    synthLfoRate.setBounds (row3.removeFromLeft (third).reduced (px (7.0f), px (5.0f)));
 
-    auto lfoCell = row3.reduced (7, 5);
+    auto lfoCell = row3.reduced (px (7.0f), px (5.0f));
     auto lfoTop = lfoCell.removeFromTop (juce::roundToInt (lfoCell.getHeight() * 0.66f));
     synthLfoDepth.setBounds (lfoTop);
-    synthLfoTargetLabel.setBounds (lfoCell.removeFromTop (18));
-    synthLfoTarget.setBounds (lfoCell.reduced (3, 2));
+    synthLfoTargetLabel.setFont (
+        juce::FontOptions (juce::jmax (4.5f, 9.0f * ui)).withStyle ("Bold"));
+    synthLfoTargetLabel.setBounds (lfoCell.removeFromTop (px (18.0f)));
+    synthLfoTarget.setBounds (lfoCell.reduced (px (3.0f), px (2.0f)));
    #else
     flowerPanel.setBounds (getLocalBounds().reduced (28, 22));
 
