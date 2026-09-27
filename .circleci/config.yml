@@ -431,7 +431,7 @@ jobs:
 
   publish_verified_apk:
     docker:
-      - image: cimg/base:2026.09
+      - image: cimg/android:2026.08.1
     resource_class: small
     steps:
       - attach_workspace:
