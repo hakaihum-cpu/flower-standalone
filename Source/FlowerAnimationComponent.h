@@ -15,7 +15,9 @@ public:
 
     bool loadDirectory (const juce::File& directory);
     bool loadEmbeddedAtlas (const void* data, size_t size);
+    bool loadDecodedAtlas (const juce::Image& atlas);
     bool loadHighResWalkStrip (const void* data, size_t size, int studentIndex, bool walksRight);
+    bool loadDecodedHighResWalkStrip (const juce::Image& strip, int studentIndex, bool walksRight);
     bool loadHighResStand (const void* data, size_t size, int studentIndex);
     bool hasCompleteHighResActorCore() const noexcept;
     bool hasVisualBank() const noexcept
