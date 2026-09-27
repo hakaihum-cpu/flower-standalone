@@ -67,7 +67,7 @@ LabelledKnob::LabelledKnob (juce::String name)
 {
     control.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
    #if JUCE_ANDROID
-    control.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 52, 15);
+    control.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 72, 20);
    #else
     control.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 62, 17);
    #endif
@@ -76,7 +76,7 @@ LabelledKnob::LabelledKnob (juce::String name)
     label.setText (std::move (name), juce::dontSendNotification);
     label.setJustificationType (juce::Justification::centred);
    #if JUCE_ANDROID
-    label.setFont (juce::FontOptions (8.5f).withStyle ("Bold"));
+    label.setFont (juce::FontOptions (11.0f).withStyle ("Bold"));
    #else
     label.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
    #endif
@@ -88,7 +88,7 @@ void LabelledKnob::resized()
 {
     auto area = getLocalBounds();
    #if JUCE_ANDROID
-    label.setBounds (area.removeFromTop (11));
+    label.setBounds (area.removeFromTop (16));
    #else
     label.setBounds (area.removeFromTop (15));
    #endif
@@ -558,6 +558,93 @@ void FlowerStandaloneAudioProcessorEditor::showSynth (bool shouldShow)
 
 void FlowerStandaloneAudioProcessorEditor::resized()
 {
+   #if JUCE_ANDROID
+    // The Android product target is a fixed 720 x 720 square. Use a dedicated
+    // square layout rather than adapting the desktop 4:3/landscape geometry.
+    flowerPanel.setBounds (getLocalBounds().reduced (8));
+
+    auto flower = flowerPanel.getLocalBounds().reduced (14);
+    auto flowerHeader = flower.removeFromTop (48);
+
+    const auto placeHeaderButton = [&flowerHeader] (juce::Component& button, int width)
+    {
+        button.setBounds (flowerHeader.removeFromRight (width).reduced (3, 7));
+    };
+
+    placeHeaderButton (synthButton, 78);
+    placeHeaderButton (flowerClear, 74);
+    placeHeaderButton (flowerReverse, 92);
+    placeHeaderButton (flowerOn, 82);
+
+    flower.removeFromTop (6);
+
+    auto animationArea = flower.removeFromTop (286);
+    flowerAnimation.setBounds (animationArea.reduced (2));
+
+    flower.removeFromTop (6);
+    auto waveformArea = flower.removeFromTop (96);
+    flowerWaveform.setBounds (waveformArea.reduced (2));
+
+    flower.removeFromTop (8);
+    auto flowerControls = flower.reduced (2, 0);
+
+    const int flowerRowH = juce::jmax (1, flowerControls.getHeight() / 2);
+    auto flowerRow1 = flowerControls.removeFromTop (flowerRowH);
+    auto flowerRow2 = flowerControls;
+
+    const auto placeFour = [] (juce::Rectangle<int> row,
+                               LabelledKnob& a, LabelledKnob& b,
+                               LabelledKnob& c, LabelledKnob& d)
+    {
+        const int quarter = juce::jmax (1, row.getWidth() / 4);
+        a.setBounds (row.removeFromLeft (quarter).reduced (5, 3));
+        b.setBounds (row.removeFromLeft (quarter).reduced (5, 3));
+        c.setBounds (row.removeFromLeft (quarter).reduced (5, 3));
+        d.setBounds (row.reduced (5, 3));
+    };
+
+    placeFour (flowerRow1,
+               flowerPosition, flowerSize, flowerDensity, flowerSpread);
+    placeFour (flowerRow2,
+               flowerHold, flowerPitch, flowerMix, flowerFeedback);
+
+    synthPanel.setBounds (flowerPanel.getBounds());
+    auto synth = synthPanel.getLocalBounds().reduced (14);
+    auto synthHeader = synth.removeFromTop (48);
+    closeSynthButton.setBounds (synthHeader.removeFromRight (78).reduced (3, 7));
+
+    synth.removeFromTop (8);
+    auto keyboardArea = synth.removeFromBottom (118);
+    keyboard.setBounds (keyboardArea.reduced (4, 6));
+    synth.removeFromBottom (8);
+
+    const int rowH = juce::jmax (1, synth.getHeight() / 3);
+    auto row1 = synth.removeFromTop (rowH);
+    auto row2 = synth.removeFromTop (rowH);
+    auto row3 = synth;
+
+    const auto placeThree = [] (juce::Rectangle<int> row,
+                                LabelledKnob& a, LabelledKnob& b, LabelledKnob& c)
+    {
+        const int third = juce::jmax (1, row.getWidth() / 3);
+        a.setBounds (row.removeFromLeft (third).reduced (7, 5));
+        b.setBounds (row.removeFromLeft (third).reduced (7, 5));
+        c.setBounds (row.reduced (7, 5));
+    };
+
+    placeThree (row1, synthLevel, synthAttack, synthDecay);
+    placeThree (row2, synthSustain, synthRelease, synthCutoff);
+
+    const int third = juce::jmax (1, row3.getWidth() / 3);
+    synthResonance.setBounds (row3.removeFromLeft (third).reduced (7, 5));
+    synthLfoRate.setBounds (row3.removeFromLeft (third).reduced (7, 5));
+
+    auto lfoCell = row3.reduced (7, 5);
+    auto lfoTop = lfoCell.removeFromTop (juce::roundToInt (lfoCell.getHeight() * 0.66f));
+    synthLfoDepth.setBounds (lfoTop);
+    synthLfoTargetLabel.setBounds (lfoCell.removeFromTop (18));
+    synthLfoTarget.setBounds (lfoCell.reduced (3, 2));
+   #else
     flowerPanel.setBounds (getLocalBounds().reduced (28, 22));
 
     auto flower = flowerPanel.getLocalBounds().reduced (14);
@@ -570,41 +657,14 @@ void FlowerStandaloneAudioProcessorEditor::resized()
 
     flower.removeFromTop (5);
 
-    const float layoutAspect = static_cast<float> (juce::jmax (1, getWidth()))
-                             / static_cast<float> (juce::jmax (1, getHeight()));
-    const bool stackedLayout = layoutAspect < 1.45f;
+    auto flowerControls = flower.removeFromRight (juce::jmax (240, flower.getWidth() / 3));
+    auto flowerVisuals = flower.reduced (5);
 
-    juce::Rectangle<int> flowerControls;
-    juce::Rectangle<int> flowerVisuals;
-
-    if (stackedLayout)
-    {
-        const int controlsHeight = juce::jlimit (
-            168, 240,
-            juce::roundToInt (static_cast<float> (flower.getHeight()) * 0.38f));
-        flowerControls = flower.removeFromBottom (controlsHeight);
-        flower.removeFromBottom (6);
-        flowerVisuals = flower.reduced (4, 2);
-
-        const int waveHeight = juce::jlimit (
-            62, 110,
-            juce::roundToInt (static_cast<float> (flowerVisuals.getHeight()) * 0.28f));
-        auto waveformArea = flowerVisuals.removeFromBottom (waveHeight);
-        flowerVisuals.removeFromBottom (5);
-        flowerAnimation.setBounds (flowerVisuals.reduced (2));
-        flowerWaveform.setBounds (waveformArea.reduced (2));
-    }
-    else
-    {
-        flowerControls = flower.removeFromRight (juce::jmax (240, flower.getWidth() / 3));
-        flowerVisuals = flower.reduced (5);
-
-        auto animationArea = flowerVisuals.removeFromTop (
-            juce::roundToInt (static_cast<float> (flowerVisuals.getHeight()) * 0.59f));
-        flowerAnimation.setBounds (animationArea.reduced (2));
-        flowerVisuals.removeFromTop (6);
-        flowerWaveform.setBounds (flowerVisuals.reduced (2));
-    }
+    auto animationArea = flowerVisuals.removeFromTop (
+        juce::roundToInt (static_cast<float> (flowerVisuals.getHeight()) * 0.59f));
+    flowerAnimation.setBounds (animationArea.reduced (2));
+    flowerVisuals.removeFromTop (6);
+    flowerWaveform.setBounds (flowerVisuals.reduced (2));
 
     flowerControls = flowerControls.reduced (8, 2);
     const int flowerRowH = juce::jmax (1, flowerControls.getHeight() / 4);
@@ -657,6 +717,7 @@ void FlowerStandaloneAudioProcessorEditor::resized()
     synthLfoDepth.setBounds (lfoTop);
     synthLfoTargetLabel.setBounds (lfoCell.removeFromTop (14));
     synthLfoTarget.setBounds (lfoCell.reduced (3, 1));
+   #endif
 }
 
 void FlowerStandaloneAudioProcessorEditor::timerCallback()
