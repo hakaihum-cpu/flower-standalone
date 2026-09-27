@@ -75,6 +75,10 @@ jobs:
             set -euo pipefail
             "$PROJUCER" --resave FLOWER_Standalone.jucer
             test -d Builds/Android
+            python3 scripts/patch_android_native_parallelism.py Builds/Android/app/build.gradle
+            grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
+            grep -F -- '-DCMAKE_JOB_POOL_COMPILE:STRING=compile' Builds/Android/app/build.gradle
+            grep -F -- '-DCMAKE_JOB_POOL_LINK:STRING=link' Builds/Android/app/build.gradle
             printf 'sdk.dir=%s\n' "$ANDROID_HOME" > Builds/Android/local.properties
 
       - run:
@@ -193,7 +197,15 @@ jobs:
             mkdir -p android-artifact
             git rev-parse HEAD | tee android-artifact/SOURCE_COMMIT.txt
 
-            find Builds/Android/app/.cxx -type f -name 'build_command.txt' -print -exec sh -c 'echo "===== $1 ====="; cat "$1"' _ {} \;               > android-artifact/native-build-commands.txt 2>/dev/null || true
+            find Builds/Android/app/.cxx -type f -name 'build_command.txt' -print -exec sh -c 'echo "===== $1 ====="; cat "$1"' _ {} \; \
+              > android-artifact/native-build-commands.txt 2>/dev/null || true
+
+            {
+              echo "Expected CMake/Ninja job pools:"
+              echo "compile=2"
+              echo "link=1"
+              find Builds/Android/app/.cxx -type f -name 'build.ninja' -print -exec sh -c 'echo "===== $1 ====="; grep -E "^(pool (compile|link)|  depth = )" "$1" || true' _ {} \;
+            } > android-artifact/native-job-pools.txt 2>/dev/null || true
 
             APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1 || true)"
             if [ -n "$APK" ]; then
