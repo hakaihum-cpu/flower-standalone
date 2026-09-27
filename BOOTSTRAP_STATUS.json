@@ -1,12 +1,12 @@
 {
   "project": "androidapp",
   "description": "Android application development",
-  "status": "GITHUB_BOOTSTRAP_PREPARED",
+  "status": "CI_VERIFIED",
   "remote_provisioning": {
     "source_repository": "hakaihum-cpu/flower-standalone",
     "jira_project": "AN",
     "confluence_space_pages": "PENDING_ATLASSIAN_SERVICE_RECOVERY",
-    "circleci_project_connection": "PENDING_EXTERNAL_CONNECTION"
+    "circleci_project_connection": "CONNECTED_AND_VERIFIED"
   },
   "baseline": {
     "branch": "main",
@@ -15,6 +15,12 @@
   },
   "ci": {
     "automatic_build_on_push": false,
-    "manual_parameter": "run_build=true"
+    "manual_parameter": "run_build=true",
+    "first_verified_build": {
+      "pipeline": "circleci-pipeline-2",
+      "branch": "feature/AN-4-project-bootstrap",
+      "source_commit": "1955eb556a2b090702bbc30b9e9d9d6e235cee2e",
+      "result": "SUCCESS"
+    }
   }
 }
