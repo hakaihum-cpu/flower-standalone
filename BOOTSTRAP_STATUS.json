@@ -1,7 +1,7 @@
 {
   "project": "flower-standalone",
   "description": "Standalone Android extraction of Flower Actor v3",
-  "status": "FLOWER_PORT_STATIC_PREBUILD",
+  "status": "FLOWER_PORT_CI_RETRY_READY",
   "remote_provisioning": {
     "source_repository": "hakaihum-cpu/flower-standalone",
     "jira_project": "AN",
@@ -22,6 +22,15 @@
     "automatic_build_on_push": false,
     "manual_parameter": "run_build=true",
     "last_verified_bootstrap_build": "circleci-pipeline-2",
-    "flower_port_build": "NOT_RUN"
+    "flower_port_build": {
+      "last_attempt": "circleci-pipeline-3",
+      "source_commit": "4823d619b7ab40761540ff379d8d7a8525e95781",
+      "result": "FAILURE",
+      "failure_class": "CI_NO_OUTPUT_TIMEOUT",
+      "failure_step": "buildCMakeRelWithDebInfo[arm64-v8a]",
+      "fix_issue": "AN-10",
+      "retry_branch": "fix/AN-10-circleci-no-output-timeout",
+      "retry_reason": "CircleCI build step no_output_timeout extended from default 10m to 30m; product source unchanged"
+    }
   }
 }
