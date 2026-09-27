@@ -140,5 +140,10 @@ private:
     std::vector<std::unique_ptr<ButtonAttachment>> buttonAttachments;
     std::vector<std::unique_ptr<ComboAttachment>> comboAttachments;
 
+   #if JUCE_ANDROID
+    int androidStartupTicks = 0;
+    bool androidVisualLoadAttempted = false;
+   #endif
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FlowerStandaloneAudioProcessorEditor)
 };
