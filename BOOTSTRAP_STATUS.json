@@ -1,7 +1,7 @@
 {
   "project": "flower-standalone",
   "description": "Standalone Android extraction of Flower Actor v3",
-  "status": "FLOWER_PORT_CI_RETRY_READY",
+  "status": "FLOWER_PORT_NATIVE_DIAGNOSTIC_READY",
   "remote_provisioning": {
     "source_repository": "hakaihum-cpu/flower-standalone",
     "jira_project": "AN",
@@ -23,14 +23,17 @@
     "manual_parameter": "run_build=true",
     "last_verified_bootstrap_build": "circleci-pipeline-2",
     "flower_port_build": {
-      "last_attempt": "circleci-pipeline-3",
-      "source_commit": "4823d619b7ab40761540ff379d8d7a8525e95781",
+      "last_attempt": "circleci-job-9a1e07b2-9fcb-4e1c-af6b-bc18314e8337",
+      "source_commit": "7f28b9f8f58cd04e1a47b7bc4e927970a4d92ffb",
       "result": "FAILURE",
-      "failure_class": "CI_NO_OUTPUT_TIMEOUT",
+      "failure_class": "ABRUPT_NATIVE_BUILD_TERMINATION_UNDIAGNOSED",
       "failure_step": "buildCMakeRelWithDebInfo[arm64-v8a]",
-      "fix_issue": "AN-10",
-      "retry_branch": "fix/AN-10-circleci-no-output-timeout",
-      "retry_reason": "CircleCI build step no_output_timeout extended from default 10m to 30m; product source unchanged"
+      "duration_observed": "~8m55s from pending to failure status",
+      "compiler_error_observed": false,
+      "no_output_timeout_30m_observed": false,
+      "fix_issue": "AN-11",
+      "diagnostic_branch": "fix/AN-11-circleci-native-diagnostics",
+      "next_run_purpose": "Capture Gradle exit code, heartbeat, memory/cgroup/process state, and complete build log without changing product Source/Resources"
     }
   }
 }
