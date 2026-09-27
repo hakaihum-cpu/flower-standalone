@@ -175,8 +175,8 @@ for required_android_startup in [
 
 for required_720_ui in [
     "flowerPanel.setBounds (getLocalBounds().reduced (8))",
-    "auto animationArea = flower.removeFromTop (286)",
-    "auto waveformArea = flower.removeFromTop (96)",
+    "auto animationArea = flower.removeFromTop (336)",
+    "auto waveformArea = flower.removeFromTop (84)",
     "placeFour (flowerRow1",
     "flowerPosition, flowerSize, flowerDensity, flowerSpread",
     "placeFour (flowerRow2",
