@@ -7,6 +7,7 @@
 #endif
 
 #include <cmath>
+#include <thread>
 
 LabelledKnob::LabelledKnob (juce::String name)
 {
@@ -482,9 +483,24 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     };
 
    #if JUCE_ANDROID
-    // AN-21 diagnostic isolation: do not decode Flower PNG resources on the
-    // Android main thread during editor construction. Keep the visual component
-    // itself present so window/UI creation can be tested independently.
+    // Decode PNG resources away from Android's main/UI thread. The editor and
+    // activity window can finish startup even on devices where libpng decoding
+    // is unusually slow. Only decoded juce::Image objects cross back to the
+    // message thread, where FlowerAnimationComponent state is updated.
+    asyncVisualLoadState = std::make_shared<AsyncVisualLoadState>();
+    const auto loadState = asyncVisualLoadState;
+    std::thread ([loadState]
+    {
+        loadState->atlas = juce::ImageFileFormat::loadFrom (
+            BinaryData::flower_embedded_atlas_png,
+            static_cast<size_t> (BinaryData::flower_embedded_atlas_pngSize));
+
+        loadState->walkStrip = juce::ImageFileFormat::loadFrom (
+            BinaryData::flower_actor_v3_walk_student01_png,
+            static_cast<size_t> (BinaryData::flower_actor_v3_walk_student01_pngSize));
+
+        loadState->ready.store (true, std::memory_order_release);
+    }).detach();
    #else
     const bool atlasLoaded = flowerAnimation.loadEmbeddedAtlas (
         BinaryData::flower_embedded_atlas_png,
@@ -625,6 +641,20 @@ void FlowerStandaloneAudioProcessorEditor::resized()
 
 void FlowerStandaloneAudioProcessorEditor::timerCallback()
 {
+   #if JUCE_ANDROID
+    if (! asyncVisualsApplied
+        && asyncVisualLoadState != nullptr
+        && asyncVisualLoadState->ready.load (std::memory_order_acquire))
+    {
+        const bool atlasLoaded = flowerAnimation.loadDecodedAtlas (asyncVisualLoadState->atlas);
+        if (atlasLoaded)
+            flowerAnimation.loadDecodedHighResWalkStrip (asyncVisualLoadState->walkStrip, 0, true);
+
+        asyncVisualsApplied = true;
+        asyncVisualLoadState.reset();
+    }
+   #endif
+
     std::array<float, FlowerStandaloneAudioProcessor::flowerWaveformBins> waveform {};
     std::array<float, FlowerStandaloneAudioProcessor::flowerGrainCount> grainPositions {};
 
