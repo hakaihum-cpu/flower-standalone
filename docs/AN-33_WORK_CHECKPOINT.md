@@ -120,3 +120,69 @@ Library contains:
 
 ## Build gate
 No CircleCI build at this checkpoint.
+
+
+## Approved-reference recovery — 2026-09-28
+The exact three-role reference set has been recovered from Library and visually inspected:
+
+- `1000005617.png` — finished-screen composition/staging reference.
+- `1000005616.png` — eight-student identity / placement / effects reference. It contains the labelled `student_01`–`student_08` cast and rooftop example.
+- `1000005615.png` — pose/body-proportion/walk reference.
+
+These are the recovered source references behind the AN-33 role contract. They are **not** permission to invent missing per-student walk strips; derived production cutouts must preserve the referenced identity.
+
+The 2026-09-26 Actor-v3 production rule still applies: the high-resolution output is authoritative, Level-4 degradation remains retired, and student_02–08 walk-strip candidates are not considered production assets unless recovered/verified or newly reviewed.
+
+## Actor-v3 local-event implementation — 2026-09-28
+Implemented on this branch only:
+- header state commit: `19ab00e6e4691a7ba12eb6cb126528c7041b0499`
+- runtime commit: `e2c0c68933177ea24b4f0e5a9e770a2c74444624`
+
+The implementation deliberately does **not** reconnect the retired global `SceneType` scheduler.
+
+Added actor-scoped local events:
+- quiet individual pose,
+- two-person conversation,
+- hand holding,
+- push/recoil,
+- staggered two-person jump,
+- single jump,
+- ascend/suspend/return,
+- fall/sit/rise,
+- occasional odd pose.
+
+Rules preserved:
+- normal Actor-v3 independent movement stays dominant,
+- pair participants approach using their own normal walk path rather than teleporting,
+- local events exclude unrelated actors,
+- pair/event timing is local and staggerable,
+- variation is not stacked onto an active local event,
+- population exit cancels only the affected local relationship,
+- no global pose reset or shared pose clock.
+
+Static audit against Golden `df2378f...`:
+- branch is 4 commits ahead / 0 behind,
+- changed paths are only:
+  - `Source/FlowerAnimationComponent.cpp`
+  - `Source/FlowerAnimationComponent.h`
+  - `docs/AN-33_WORK_CHECKPOINT.md`
+- `timerCallback()` still drives `advanceActors()` only; old scene functions remain dormant,
+- Android startup, UI/layout, audio/DSP, MIDI, waveform and CI files are unchanged,
+- no CircleCI build has been run.
+
+## Remaining visual-bank boundary
+The exact approved `student_02`–`student_08` high-resolution 8-frame walk source strips have not been recovered from Git history or Library.
+
+The recovered cast reference gives authoritative identity appearance, but it is not itself seven complete directional walk strips. Therefore:
+- do not mark image replacement complete,
+- do not enable a mixed high-resolution/legacy runtime,
+- do not extract compressed QA-video frames and pretend they are production source,
+- do not silently generate substitute walk strips.
+
+Also, the current high-resolution renderer has only walk + optional stand banks. The new local-event poses will require an approved per-identity high-resolution pose bank (or an explicitly approved derivation workflow) before the legacy atlas can be removed without losing pose identity.
+
+## Current next action
+1. Keep the local-event patch unbuilt until its source diff is fully audited.
+2. Define the high-resolution per-identity pose/asset contract from the recovered three references.
+3. Do not cross the asset boundary until production walk/pose sources are recoverable or explicitly reviewed.
+4. Only then run the minimum useful build; do not spend CI minutes on an image-replacement build that still falls back to the legacy atlas.
