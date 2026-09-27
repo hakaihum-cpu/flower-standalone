@@ -28,8 +28,8 @@ REQUIRED = [
 ]
 
 UPSTREAM_GIT_BLOBS = {
-    "Source/FlowerAnimationComponent.h": "cbe8a1137d99c4f2715011911a27da661e817c02",
-    "Source/FlowerAnimationComponent.cpp": "8ce198935f3a63bbe050ee916eff203e5db1e361",
+    "Source/FlowerAnimationComponent.h": "ee1bd69db24162b1119fb2ebece1ee6fe9220618",
+    "Source/FlowerAnimationComponent.cpp": "f2ad3206d7228ab0f406fcc4510e041029b9fd32",
     "Source/RetroLookAndFeel.h": "84437adc6aca0db95e5eb3407901abf4af44d62a",
     "Source/RetroLookAndFeel.cpp": "8e3f3ad844427da7bc3aefd4b8a16873105da405",
     "Source/third_party/stb_image.h": "9eedabedc45b3e6fd88fae6f14a160b4d53272ec",
@@ -201,6 +201,21 @@ for required_720_ui in [
 ]:
     if required_720_ui not in editor_text:
         fail(f"AN-22 fixed-720 UI guard missing: {required_720_ui}")
+
+animation_text = (ROOT / "Source/FlowerAnimationComponent.cpp").read_text(encoding="utf-8")
+for required_an24_highres in [
+    "deriveHighResActorCoreFromPrimary()",
+    "makeHighResIdentityVariant",
+    "highResWalkRightReady[static_cast<size_t> (actor)] = true",
+    "highResWalkLeftReady[static_cast<size_t> (actor)] = true",
+    "frame = (actorTick + state.phaseOffset) % walkFrameCount",
+    "drawHighResPoseVariation",
+]:
+    if required_an24_highres not in animation_text:
+        fail(f"AN-24 high-resolution actor core guard missing: {required_an24_highres}")
+
+if "((actorTick + state.phaseOffset) / 2) % walkFrameCount" in animation_text:
+    fail("AN-24 walk animation must not retain the old 8 fps held-frame cadence")
 
 print("[PASS] Android standalone startup safeguards present")
 print("[PASS] JUCER standalone Android structure present")
