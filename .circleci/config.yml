@@ -99,6 +99,8 @@ jobs:
           command: |
             set -u
             export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
+            export CMAKE_BUILD_PARALLEL_LEVEL=2
+            export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=2"
             mkdir -p android-artifact
             LOG="$PWD/android-artifact/gradle-build.log"
             EXIT_FILE="$PWD/android-artifact/gradle-exit-code.txt"
@@ -106,6 +108,8 @@ jobs:
             {
               echo "[diagnostic] start $(date -u +%Y-%m-%dT%H:%M:%SZ)"
               echo "[diagnostic] nproc=$(nproc)"
+              echo "[diagnostic] processors_online=$(getconf _NPROCESSORS_ONLN || true)"
+              echo "[diagnostic] CMAKE_BUILD_PARALLEL_LEVEL=$CMAKE_BUILD_PARALLEL_LEVEL"
               echo "[diagnostic] uname=$(uname -a)"
               java -version 2>&1
               free -m || true
@@ -123,7 +127,7 @@ jobs:
             chmod +x gradlew
 
             set +e
-            ./gradlew assembleRelease --stacktrace --info --console=plain --no-daemon >> "$LOG" 2>&1 &
+            ./gradlew assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2 >> "$LOG" 2>&1 &
             GRADLE_PID=$!
             echo "[diagnostic] gradle_pid=$GRADLE_PID" | tee -a "$LOG"
 
@@ -134,7 +138,24 @@ jobs:
                 if [ -r /sys/fs/cgroup/memory.current ]; then
                   echo "[heartbeat] cgroup memory.current=$(cat /sys/fs/cgroup/memory.current)"
                 fi
+                CLANG_COUNT="$(ps -eo comm= | grep -Ec '^clang(\+\+)?$' || true)"
+                echo "[heartbeat] clang_processes=$CLANG_COUNT"
                 ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 16 || true
+
+                if [ "$CLANG_COUNT" -gt 4 ]; then
+                  echo "[guard] excessive native parallelism detected: $CLANG_COUNT clang processes" | tee -a "$LOG"
+                  kill "$GRADLE_PID" 2>/dev/null || true
+                  break
+                fi
+
+                if [ -r /sys/fs/cgroup/memory.current ]; then
+                  CURRENT_MEMORY="$(cat /sys/fs/cgroup/memory.current)"
+                  if [ "$CURRENT_MEMORY" -gt 4026531840 ]; then
+                    echo "[guard] cgroup memory exceeded 3.75 GiB: $CURRENT_MEMORY" | tee -a "$LOG"
+                    kill "$GRADLE_PID" 2>/dev/null || true
+                    break
+                  fi
+                fi
               } | tee -a "$LOG"
               sleep 30
             done
