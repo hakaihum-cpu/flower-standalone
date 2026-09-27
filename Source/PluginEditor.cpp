@@ -578,11 +578,11 @@ void FlowerStandaloneAudioProcessorEditor::resized()
 
     flower.removeFromTop (6);
 
-    auto animationArea = flower.removeFromTop (286);
+    auto animationArea = flower.removeFromTop (336);
     flowerAnimation.setBounds (animationArea.reduced (2));
 
     flower.removeFromTop (6);
-    auto waveformArea = flower.removeFromTop (96);
+    auto waveformArea = flower.removeFromTop (84);
     flowerWaveform.setBounds (waveformArea.reduced (2));
 
     flower.removeFromTop (8);
