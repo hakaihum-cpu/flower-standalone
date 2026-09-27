@@ -1,7 +1,7 @@
 {
   "project": "flower-standalone",
   "description": "Standalone Android extraction of Flower Actor v3",
-  "status": "FLOWER_ANDROID_STARTUP_ANR_FIX_READY",
+  "status": "FLOWER_ANDROID_STARTUP_BUILD_SUCCESS_DEVICE_SMOKE_PENDING",
   "remote_provisioning": {
     "source_repository": "hakaihum-cpu/flower-standalone",
     "jira_project": "AN",
@@ -41,13 +41,12 @@
     }
   },
   "device_smoke": {
-    "source_commit": "23d6f0a185d619cfda4b2c3637131f4e4ee592e3",
-    "result": "FAILURE",
-    "symptom": "black screen on Android launch followed by ANR after roughly 10+ seconds",
+    "source_commit": "7fb73d646267c052db751ef815fcf0d5da7f93e8",
+    "ci_result": "SUCCESS",
+    "ci_job": "0831ac31-19f8-41ae-b022-9bb4a9096e8e",
     "issue": "AN-16",
-    "fix_branch": "fix/AN-16-android-startup-anr",
-    "suspected_omission": "MIYAKO-proven Android standalone editor sizing and default stereo audio-device reinitialisation were not carried into Flower standalone",
-    "verification": "PENDING_SINGLE_CI_BUILD_AND_DEVICE_SMOKE",
+    "symptom_under_test": "black screen followed by Android ANR",
+    "verification": "PENDING_SAME_DEVICE_LAUNCH_SMOKE",
     "golden_baseline": false
   }
 }
