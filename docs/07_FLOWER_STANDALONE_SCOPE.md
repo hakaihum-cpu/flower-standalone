@@ -57,6 +57,8 @@ Initial synth:
 Reuse Flower layout and visual language first.
 Only remove controls that become meaningless outside MIYAKO and add the minimum Sine/ADSR/Filter/LFO controls required to make the standalone instrument usable.
 
+Android uses a fixed 720 x 720 canvas. The Flower page and Synth page must use a dedicated square layout with touch-readable labels/values and sufficiently large rotary controls. This is a standalone requirement and does not import MIYAKO's former optional 720 TOUCH UI mode or RG Rotate behavior.
+
 Do not perform a general visual redesign during extraction.
 
 ## Definition of first standalone parity
