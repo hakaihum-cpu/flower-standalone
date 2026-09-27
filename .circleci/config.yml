@@ -227,6 +227,7 @@ jobs:
           root: .
           paths:
             - Builds/Android
+            - JuceLibraryCode
             - android-artifact
             - release-artifact
 
@@ -254,6 +255,25 @@ jobs:
     steps:
       - checkout
 
+      - run:
+          name: Initialize emulator diagnostics
+          command: |
+            set -euo pipefail
+            mkdir -p emulator-artifact android-smoke
+            echo "0" > emulator-artifact/prepare-exit-code.txt
+            echo "0" > emulator-artifact/build-exit-code.txt
+            echo "0" > emulator-artifact/smoke-exit-code.txt
+            {
+              echo "[emulator-diagnostic] start $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              echo "[emulator-diagnostic] uname=$(uname -a)"
+              echo "[emulator-diagnostic] ANDROID_HOME=${ANDROID_HOME:-}"
+              command -v sdkmanager || true
+              command -v avdmanager || true
+              command -v emulator || true
+              command -v adb || true
+              command -v circle-android || true
+            } | tee emulator-artifact/environment.txt
+
       - attach_workspace:
           at: .
 
@@ -265,51 +285,121 @@ jobs:
       - run:
           name: Prepare x86_64 emulator APK build
           command: |
-            set -euo pipefail
+            set -u
+            LOG="emulator-artifact/prepare.log"
+            STATUS=0
+            exec > >(tee "$LOG") 2>&1
+            set +e
+
+            echo "[prepare] begin $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
             test -d Builds/Android
-            test -d JUCE/modules
+            RC=$?
+            if [ "$RC" -ne 0 ]; then
+              echo "[prepare] Builds/Android missing"
+              STATUS=$RC
+            fi
 
-            yes | sdkmanager --licenses >/dev/null || true
-            sdkmanager \
-              "platforms;android-35" \
-              "build-tools;35.0.0" \
-              "ndk;28.1.13356709" \
-              "cmake;3.22.1" \
-              "system-images;android-35;google_apis;x86_64"
+            if [ "$STATUS" -eq 0 ]; then
+              test -d JUCE/modules
+              RC=$?
+              if [ "$RC" -ne 0 ]; then
+                echo "[prepare] JUCE/modules missing"
+                STATUS=$RC
+              fi
+            fi
 
-            rm -rf Builds/Android/app/.cxx Builds/Android/app/build
-            python3 scripts/patch_android_smoke_abi.py Builds/Android/app/build.gradle
-            grep -F -- 'abiFilters("x86_64")' Builds/Android/app/build.gradle
-            grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
-            printf 'sdk.dir=%s\n' "$ANDROID_HOME" > Builds/Android/local.properties
+            if [ "$STATUS" -eq 0 ]; then
+              yes | sdkmanager --licenses >/dev/null 2>&1 || true
+              sdkmanager \
+                "platforms;android-35" \
+                "build-tools;35.0.0" \
+                "ndk;28.1.13356709" \
+                "cmake;3.22.1" \
+                "system-images;android-35;google_apis;x86_64"
+              RC=$?
+              [ "$RC" -ne 0 ] && STATUS=$RC
+            fi
 
-            mkdir -p "$HOME/.android"
-            rm -f "$HOME/.android/debug.keystore"
-            keytool -genkeypair -v \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android -alias androiddebugkey -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US" \
-              -keyalg RSA -keysize 2048 -validity 10000
+            if [ "$STATUS" -eq 0 ]; then
+              rm -rf Builds/Android/app/.cxx Builds/Android/app/build
+              python3 scripts/patch_android_smoke_abi.py Builds/Android/app/build.gradle
+              RC=$?
+              [ "$RC" -ne 0 ] && STATUS=$RC
+            fi
+
+            if [ "$STATUS" -eq 0 ]; then
+              grep -F -- 'abiFilters("x86_64")' Builds/Android/app/build.gradle
+              RC=$?
+              [ "$RC" -ne 0 ] && STATUS=$RC
+            fi
+
+            if [ "$STATUS" -eq 0 ]; then
+              grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
+              RC=$?
+              [ "$RC" -ne 0 ] && STATUS=$RC
+            fi
+
+            if [ "$STATUS" -eq 0 ]; then
+              printf 'sdk.dir=%s\n' "$ANDROID_HOME" > Builds/Android/local.properties
+              mkdir -p "$HOME/.android"
+              rm -f "$HOME/.android/debug.keystore"
+              keytool -genkeypair -v \
+                -keystore "$HOME/.android/debug.keystore" \
+                -storepass android -alias androiddebugkey -keypass android \
+                -dname "CN=Android Debug,O=Android,C=US" \
+                -keyalg RSA -keysize 2048 -validity 10000
+              RC=$?
+              [ "$RC" -ne 0 ] && STATUS=$RC
+            fi
+
+            echo "[prepare] exit=$STATUS"
+            echo "$STATUS" > emulator-artifact/prepare-exit-code.txt
+            exit 0
 
       - run:
           name: Build x86_64 emulator APK
           no_output_timeout: 30m
           command: |
-            set -euo pipefail
-            export CMAKE_BUILD_PARALLEL_LEVEL=2
-            export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=2"
+            set -u
+            LOG="emulator-artifact/x86-build.log"
+            PREPARE_STATUS="$(cat emulator-artifact/prepare-exit-code.txt 2>/dev/null || echo 97)"
+            STATUS=0
 
-            cd Builds/Android
-            chmod +x gradlew
-            ./gradlew assembleRelease --stacktrace --console=plain --no-daemon --max-workers=2
+            if [ "$PREPARE_STATUS" -ne 0 ]; then
+              echo "[build] skipped because prepare failed with $PREPARE_STATUS" | tee "$LOG"
+              STATUS=90
+            else
+              export CMAKE_BUILD_PARALLEL_LEVEL=2
+              export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=2"
 
-            cd ../..
-            mkdir -p android-smoke
-            APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1)"
-            test -n "$APK"
-            cp "$APK" android-smoke/Flower-Standalone-x86_64.apk
-            sha256sum android-smoke/Flower-Standalone-x86_64.apk \
-              | tee android-smoke/SHA256-x86_64.txt
+              set +e
+              (
+                cd Builds/Android
+                chmod +x gradlew
+                ./gradlew assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2
+              ) 2>&1 | tee "$LOG"
+              STATUS=${PIPESTATUS[0]}
+              set -e
+
+              tail -n 250 "$LOG" || true
+
+              if [ "$STATUS" -eq 0 ]; then
+                APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1 || true)"
+                if [ -z "$APK" ]; then
+                  echo "[build] Gradle succeeded but x86_64 APK was not found" | tee -a "$LOG"
+                  STATUS=91
+                else
+                  cp "$APK" android-smoke/Flower-Standalone-x86_64.apk
+                  sha256sum android-smoke/Flower-Standalone-x86_64.apk \
+                    | tee android-smoke/SHA256-x86_64.txt
+                fi
+              fi
+            fi
+
+            echo "$STATUS" > emulator-artifact/build-exit-code.txt
+            echo "[build] exit=$STATUS" | tee -a "$LOG"
+            exit 0
 
       - run:
           name: Android emulator startup smoke
@@ -322,9 +412,19 @@ jobs:
             PACKAGE="local.flower.standalone"
             AVD="flower-smoke"
             SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
+            BUILD_STATUS="$(cat emulator-artifact/build-exit-code.txt 2>/dev/null || echo 97)"
             STATUS=0
 
-            echo "no" | avdmanager --verbose create avd -n "$AVD" -k "$SYSTEM_IMAGE" --force > emulator-artifact/avd-create.log 2>&1 || STATUS=10
+            if [ "$BUILD_STATUS" -ne 0 ]; then
+              echo "Smoke skipped because x86_64 build failed with $BUILD_STATUS." \
+                | tee emulator-artifact/smoke-summary.txt
+              STATUS=92
+            fi
+
+            if [ "$STATUS" -eq 0 ]; then
+              echo "no" | avdmanager --verbose create avd -n "$AVD" -k "$SYSTEM_IMAGE" --force \
+                > emulator-artifact/avd-create.log 2>&1 || STATUS=10
+            fi
 
             if [ "$STATUS" -eq 0 ]; then
               emulator -avd "$AVD" \
@@ -425,13 +525,21 @@ jobs:
           when: always
           command: |
             set -euo pipefail
-            if [ ! -f emulator-artifact/smoke-exit-code.txt ]; then
-              echo "Emulator smoke result is missing."
-              exit 97
+            PREPARE_STATUS="$(cat emulator-artifact/prepare-exit-code.txt 2>/dev/null || echo 97)"
+            BUILD_STATUS="$(cat emulator-artifact/build-exit-code.txt 2>/dev/null || echo 97)"
+            SMOKE_STATUS="$(cat emulator-artifact/smoke-exit-code.txt 2>/dev/null || echo 97)"
+
+            echo "Prepare exit code: $PREPARE_STATUS"
+            echo "x86 build exit code: $BUILD_STATUS"
+            echo "Emulator smoke exit code: $SMOKE_STATUS"
+
+            if [ "$PREPARE_STATUS" -ne 0 ]; then
+              exit "$PREPARE_STATUS"
             fi
-            STATUS="$(cat emulator-artifact/smoke-exit-code.txt)"
-            echo "Emulator smoke exit code: $STATUS"
-            exit "$STATUS"
+            if [ "$BUILD_STATUS" -ne 0 ]; then
+              exit "$BUILD_STATUS"
+            fi
+            exit "$SMOKE_STATUS"
 
   publish_verified_apk:
     docker:

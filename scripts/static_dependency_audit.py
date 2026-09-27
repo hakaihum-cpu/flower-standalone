@@ -193,6 +193,31 @@ for required_trace_ci in [
     if required_trace_ci not in circle:
         fail(f"Android startup trace CI capture missing: {required_trace_ci}")
 
+if "- JuceLibraryCode" not in circle:
+    fail("generated JuceLibraryCode is not persisted for emulator build")
+
+for required_failure_artifact in [
+    "Initialize emulator diagnostics",
+    "prepare-exit-code.txt",
+    "build-exit-code.txt",
+    "smoke-exit-code.txt",
+    "emulator-artifact/prepare.log",
+    "emulator-artifact/x86-build.log",
+    "Smoke skipped because x86_64 build failed",
+    "Prepare exit code:",
+    "x86 build exit code:",
+    "Emulator smoke exit code:",
+]:
+    if required_failure_artifact not in circle:
+        fail(f"Emulator failure diagnostics are not preserved: {required_failure_artifact}")
+
+if "name: Prepare x86_64 emulator APK build\n          command: |\n            set -euo pipefail" in circle:
+    fail("Emulator prepare step still hard-fails before artifact collection")
+
+if "name: Build x86_64 emulator APK\n          no_output_timeout: 30m\n          command: |\n            set -euo pipefail" in circle:
+    fail("Emulator x86 build step still hard-fails before artifact collection")
+
+
 print("[PASS] Android startup trace instrumentation present")
 
 print("[PASS] JUCER standalone Android structure present")
