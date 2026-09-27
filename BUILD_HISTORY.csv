@@ -1,0 +1,2 @@
+build_id,date_time,jira_issue,branch,commit_sha,result,artifact,golden_baseline,notes
+circleci-pipeline-2,2026-09-27,AN-5,feature/AN-4-project-bootstrap,1955eb556a2b090702bbc30b9e9d9d6e235cee2e,SUCCESS,app/build/outputs/apk/debug/app-debug.apk,false,"Manual verification build completed successfully; GitHub Actions not used."

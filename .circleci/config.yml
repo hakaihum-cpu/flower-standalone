@@ -1,0 +1,57 @@
+version: 2.1
+
+parameters:
+  run_build:
+    type: boolean
+    default: false
+
+jobs:
+  android_build:
+    docker:
+      - image: cimg/android:2026.08.1
+    resource_class: medium
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - gradle-v1-{{ checksum "build.gradle.kts" }}-{{ checksum "app/build.gradle.kts" }}
+            - gradle-v1-
+
+      - run:
+          name: Toolchain check
+          command: |
+            java -version
+            chmod +x ./ci/gradle-bootstrap.sh
+            ./ci/gradle-bootstrap.sh --version
+
+      - run:
+          name: Static checks and unit tests
+          command: |
+            ./ci/gradle-bootstrap.sh --no-daemon lint testDebugUnitTest
+
+      - run:
+          name: Build debug APK
+          command: |
+            ./ci/gradle-bootstrap.sh --no-daemon assembleDebug
+
+      - save_cache:
+          key: gradle-v1-{{ checksum "build.gradle.kts" }}-{{ checksum "app/build.gradle.kts" }}
+          paths:
+            - ~/.gradle/caches
+            - ~/.gradle/wrapper
+            - ~/.cache/androidapp
+
+      - store_artifacts:
+          path: app/build/outputs/apk/debug
+          destination: apk
+
+      - store_artifacts:
+          path: app/build/reports
+          destination: reports
+
+workflows:
+  manual_android_build:
+    when: << pipeline.parameters.run_build >>
+    jobs:
+      - android_build
