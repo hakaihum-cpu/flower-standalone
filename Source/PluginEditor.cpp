@@ -441,23 +441,11 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     setSize (logicalCanvasSide, logicalCanvasSide);
     setResizable (false, false);
 
-    // MIYAKO's proven Android standalone path explicitly discards any device
-    // setup chosen by the generic standalone holder and reopens the default
-    // Android stereo output as 0-in / 2-out. Keep the sequence identical.
-    if (auto* holder = juce::StandalonePluginHolder::getInstance())
-    {
-        holder->stopPlaying();
-        holder->deviceManager.closeAudioDevice();
-
-        const auto audioError =
-            holder->deviceManager.initialise (0, 2, nullptr, true);
-
-        if (audioError.isNotEmpty())
-            juce::Logger::writeToLog (
-                "FLOWER Android audio initialise failed: " + audioError);
-
-        holder->startPlaying();
-    }
+    // Let JUCE StandalonePluginHolder own the Android audio lifecycle.
+    // The holder has already setupAudioDevices(), restored state and called
+    // startPlaying() before the editor is created. Reopening the device from
+    // the editor constructor caused a second stop/close/initialise/start cycle
+    // while the standalone window was still being assembled.
    #else
     setSize (960, 720);
    #endif
