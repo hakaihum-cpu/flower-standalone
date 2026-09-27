@@ -2293,43 +2293,64 @@ void FlowerAnimationComponent::paint (juce::Graphics& g)
         const float studentBaseline = baselineY + state.floorOffset * stageHeight;
 
         // Actor v3 never mixes high-resolution and legacy artwork on screen.
-        // The approved 8-frame walk core becomes active only after all eight
-        // students have a verified source strip; the opposite direction is
-        // derived from that source by the approved geometric mirror rule.
-        if (walking && hasCompleteHighResActorCore())
+        // AN-24 promotes the approved 8-frame high-resolution source into an
+        // eight-actor core. Identity geometry, animation phase and behaviour
+        // remain independent per actor; the opposite direction is always an
+        // exact geometric mirror.
+        if (hasCompleteHighResActorCore())
         {
-            // Approved walk QA is displayed at 16 fps, but each source pose is
-            // held for two actor ticks. This preserves the accepted restrained
-            // 8 fps pose cadence while position still advances at 16 Hz.
-            const int frame = ((actorTick + state.phaseOffset) / 2) % walkFrameCount;
-            const auto& bank = state.motionDirection < 0
-                             ? highResWalkLeft[static_cast<size_t> (i)]
-                             : highResWalkRight[static_cast<size_t> (i)];
-            drawActorVariation (g,
-                                bank[static_cast<size_t> (frame)],
-                                state,
-                                i,
-                                x,
-                                studentBaseline,
-                                studentHeight,
-                                stage);
-            continue;
-        }
+            constexpr int idleFrame = 4;
+            const juce::Image* highResImage = nullptr;
 
-        if (! walking && hasCompleteHighResActorCore())
-        {
-            const auto& idleImage = highResStandReady[static_cast<size_t> (i)]
-                                  ? highResStand[static_cast<size_t> (i)]
-                                  : highResWalkRight[static_cast<size_t> (i)][0];
+            if (walking)
+            {
+                // The specification sheet calls for the basic eight-frame walk
+                // at 16 fps. One actor tick equals one displayed source frame.
+                const int frame = (actorTick + state.phaseOffset) % walkFrameCount;
+                const auto& bank = state.motionDirection < 0
+                                 ? highResWalkLeft[static_cast<size_t> (i)]
+                                 : highResWalkRight[static_cast<size_t> (i)];
+                highResImage = &bank[static_cast<size_t> (frame)];
+            }
+            else
+            {
+                const bool faceLeft =
+                    pose == Pose::TurnLeft
+                    || pose == Pose::TalkLeft
+                    || pose == Pose::HoldLeft;
 
-            drawActorVariation (g,
-                                idleImage,
-                                state,
-                                i,
-                                x,
-                                studentBaseline,
-                                studentHeight,
-                                stage);
+                if (faceLeft)
+                    highResImage = &highResWalkLeft[static_cast<size_t> (i)][idleFrame];
+                else if (highResStandReady[static_cast<size_t> (i)])
+                    highResImage = &highResStand[static_cast<size_t> (i)];
+                else
+                    highResImage = &highResWalkRight[static_cast<size_t> (i)][idleFrame];
+            }
+
+            if (verticalOffsetForPose (pose, i) > -0.04f)
+            {
+                juce::Graphics::ScopedSaveState shadowState (g);
+                const float shadowWidth = studentHeight * 0.13f;
+                const float shadowHeight = juce::jmax (2.0f, stageHeight * 0.008f);
+                g.setColour (juce::Colours::black.withAlpha (0.15f));
+                g.fillEllipse (x - shadowWidth * 0.5f,
+                               studentBaseline - shadowHeight * 0.25f,
+                               shadowWidth,
+                               shadowHeight);
+            }
+
+            if (highResImage != nullptr && highResImage->isValid())
+            {
+                drawHighResPoseVariation (g,
+                                          *highResImage,
+                                          state,
+                                          pose,
+                                          i,
+                                          x,
+                                          studentBaseline,
+                                          studentHeight,
+                                          stage);
+            }
             continue;
         }
 
