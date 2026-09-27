@@ -149,6 +149,22 @@ private:
         Freeze
     };
 
+    // Actor-v3 local events are deliberately actor-scoped.  They add small
+    // scene-like relationships without restoring the retired global
+    // SceneType choreography or a shared pose clock.
+    enum class ActorLocalEvent : int
+    {
+        None,
+        QuietPose,
+        Conversation,
+        HoldHands,
+        Push,
+        Jump,
+        Ascend,
+        FallOrSit,
+        OddPose
+    };
+
     struct StudentAsset
     {
         juce::String id;
@@ -182,6 +198,11 @@ private:
         Pose restPose = Pose::Stand;
         ActionKind action = ActionKind::None;
         ActorVariation variation = ActorVariation::None;
+        ActorLocalEvent localEvent = ActorLocalEvent::None;
+        Pose localEventPose = Pose::Stand;
+        int localEventTicks = 0;
+        int localEventTotalTicks = 0;
+        int localEventDelayTicks = 0;
         int variationTicks = 0;
         int variationTotalTicks = 0;
         float variationSeed = 0.0f;
@@ -215,6 +236,10 @@ private:
     Pose chooseActorRestPose (int index);
     ActorVariation chooseActorVariation() noexcept;
     void maybeStartActorVariation (StudentState& state);
+    bool canStartActorLocalEvent (int index) const noexcept;
+    void maybeStartActorLocalEvent();
+    void advanceActorLocalEvents();
+    void cancelActorLocalEvent (int index);
     int currentTargetActorCount() const noexcept;
     SceneType sanitiseSceneForCount (SceneType scene, int count) const noexcept;
     SceneType chooseNextScene();
@@ -277,6 +302,7 @@ private:
     int populationCooldownTicks = 0;
     int populationDecisionTicks = 0;
     int actorPopulationTarget = 0;
+    int localEventDecisionTicks = 0;
 
     float densityValue = 0.0f;
     float positionValue = 0.5f;
