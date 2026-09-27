@@ -1,0 +1,7 @@
+Summary,Issue Type,Description,Priority,Labels
+Define product purpose and primary user,Task,Specify what androidapp does and who uses it. Do not implement product features before this is confirmed.,Highest,"bootstrap,requirements"
+Define target devices and minimum Android version,Task,"Confirm phone/tablet/foldable scope, orientation policy, and minSdk. Bootstrap minSdk 26 is provisional.",High,"bootstrap,requirements"
+Define first product screen,Task,"Specify the first real screen, states, controls and interaction. Current MainActivity is placeholder only.",High,"ui,requirements"
+Establish GitHub branch restrictions,Task,Protect main as Golden Baseline; use PR-based changes and no routine direct writes.,Highest,"governance,github"
+Connect CircleCI and verify manual build gate,Task,Confirm that push alone does not run android_build and run_build=true produces lint/test/APK artifacts.,Highest,"ci,cost-control"
+Create initial Golden Baseline after verification,Task,"After initial project is verified, record exact commit and artifact as baseline 0.0.1 only with explicit approval.",High,"baseline,release"

@@ -1,0 +1,20 @@
+{
+  "project": "androidapp",
+  "description": "Android application development",
+  "status": "GITHUB_BOOTSTRAP_PREPARED",
+  "remote_provisioning": {
+    "source_repository": "hakaihum-cpu/flower-standalone",
+    "jira_project": "AN",
+    "confluence_space_pages": "PENDING_ATLASSIAN_SERVICE_RECOVERY",
+    "circleci_project_connection": "PENDING_EXTERNAL_CONNECTION"
+  },
+  "baseline": {
+    "branch": "main",
+    "golden_baseline": "NOT_YET_DECLARED",
+    "version": "0.0.1-bootstrap"
+  },
+  "ci": {
+    "automatic_build_on_push": false,
+    "manual_parameter": "run_build=true"
+  }
+}
