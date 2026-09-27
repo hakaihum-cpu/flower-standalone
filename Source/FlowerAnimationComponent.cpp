@@ -512,8 +512,87 @@ bool FlowerAnimationComponent::loadDecodedHighResWalkStrip (const juce::Image& s
         oppositeReady = true;
     }
 
+    if (studentIndex == 0)
+        deriveHighResActorCoreFromPrimary();
+
     repaint();
     return true;
+}
+
+juce::Image FlowerAnimationComponent::makeHighResIdentityVariant (const juce::Image& source,
+                                                                  int actorIndex) const
+{
+    if (! source.isValid())
+        return {};
+
+    static constexpr float widthScale[studentCount]
+    {
+        1.00f, 0.96f, 1.03f, 0.98f, 0.94f, 1.05f, 1.00f, 0.97f
+    };
+    static constexpr float heightScale[studentCount]
+    {
+        1.00f, 1.02f, 0.99f, 1.01f, 0.96f, 1.04f, 1.00f, 1.02f
+    };
+    static constexpr float xShift[studentCount]
+    {
+         0.0f, -2.0f,  1.5f, -1.0f,  2.0f, -1.5f,  1.0f, -2.0f
+    };
+
+    const int index = juce::jlimit (0, studentCount - 1, actorIndex);
+    const float ws = widthScale[index];
+    const float hs = heightScale[index];
+    const float outW = static_cast<float> (source.getWidth());
+    const float outH = static_cast<float> (source.getHeight());
+
+    juce::Image result (juce::Image::ARGB, source.getWidth(), source.getHeight(), true);
+    juce::Graphics g (result);
+    g.setImageResamplingQuality (juce::Graphics::mediumResamplingQuality);
+
+    const auto transform = juce::AffineTransform::scale (ws, hs)
+        .translated ((outW - outW * ws) * 0.5f + xShift[index],
+                     outH - outH * hs);
+    g.drawImageTransformed (source, transform, false);
+    return result;
+}
+
+void FlowerAnimationComponent::deriveHighResActorCoreFromPrimary()
+{
+    if (! highResWalkRightReady[0] || ! highResWalkLeftReady[0])
+        return;
+
+    constexpr int idleFrame = 4;
+
+    for (int actor = 0; actor < studentCount; ++actor)
+    {
+        if (actor > 0)
+        {
+            for (int frame = 0; frame < walkFrameCount; ++frame)
+            {
+                highResWalkRight[static_cast<size_t> (actor)][static_cast<size_t> (frame)] =
+                    makeHighResIdentityVariant (
+                        highResWalkRight[0][static_cast<size_t> (frame)], actor);
+
+                const auto& right =
+                    highResWalkRight[static_cast<size_t> (actor)][static_cast<size_t> (frame)];
+                juce::Image left (juce::Image::ARGB, right.getWidth(), right.getHeight(), true);
+                juce::Graphics lg (left);
+                lg.addTransform (juce::AffineTransform (-1.0f, 0.0f,
+                                                        static_cast<float> (right.getWidth()),
+                                                        0.0f, 1.0f, 0.0f));
+                lg.drawImageAt (right, 0, 0);
+                highResWalkLeft[static_cast<size_t> (actor)][static_cast<size_t> (frame)] =
+                    std::move (left);
+            }
+
+            highResWalkRightReady[static_cast<size_t> (actor)] = true;
+            highResWalkLeftReady[static_cast<size_t> (actor)] = true;
+        }
+
+        highResStand[static_cast<size_t> (actor)] =
+            highResWalkRight[static_cast<size_t> (actor)][idleFrame];
+        highResStandReady[static_cast<size_t> (actor)] =
+            highResStand[static_cast<size_t> (actor)].isValid();
+    }
 }
 
 bool FlowerAnimationComponent::loadHighResStand (const void* data,
@@ -2058,6 +2137,71 @@ void FlowerAnimationComponent::drawActorVariation (juce::Graphics& g,
             drawActorImage (g, image, centreX, baselineY, targetHeight, 1.0f);
             break;
     }
+}
+
+void FlowerAnimationComponent::drawHighResPoseVariation (
+    juce::Graphics& g,
+    const juce::Image& image,
+    const StudentState& state,
+    Pose pose,
+    int actorIndex,
+    float centreX,
+    float baselineY,
+    float targetHeight,
+    juce::Rectangle<float> stage) const
+{
+    float poseHeight = 1.0f;
+    float rotation = 0.0f;
+
+    switch (pose)
+    {
+        case Pose::Crouch:
+        case Pose::HalfSquat:
+            poseHeight = 0.78f;
+            break;
+
+        case Pose::SitFloor:
+        case Pose::SitKneesUp:
+        case Pose::SitLeanBack:
+        case Pose::KneelDown:
+            poseHeight = 0.66f;
+            break;
+
+        case Pose::FallBack:
+            poseHeight = 0.76f;
+            rotation = -1.18f;
+            break;
+
+        case Pose::BodyTiltUnnatural:
+            rotation = (actorIndex % 2 == 0 ? -0.22f : 0.22f);
+            break;
+
+        case Pose::HangingPose:
+            rotation = (actorIndex % 2 == 0 ? -0.08f : 0.08f);
+            break;
+
+        default:
+            break;
+    }
+
+    const float adjustedBaseline =
+        baselineY + verticalOffsetForPose (pose, actorIndex) * targetHeight;
+
+    juce::Graphics::ScopedSaveState saved (g);
+    if (std::abs (rotation) > 0.0001f)
+    {
+        const float pivotY = adjustedBaseline - targetHeight * poseHeight * 0.5f;
+        g.addTransform (juce::AffineTransform::rotation (rotation, centreX, pivotY));
+    }
+
+    drawActorVariation (g,
+                        image,
+                        state,
+                        actorIndex,
+                        centreX,
+                        adjustedBaseline,
+                        targetHeight * poseHeight,
+                        stage);
 }
 
 void FlowerAnimationComponent::drawStudent (juce::Graphics& g,
