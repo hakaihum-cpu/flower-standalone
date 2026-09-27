@@ -94,14 +94,70 @@ jobs:
             - gradle-flower-v1-
 
       - run:
-          name: Build optimized installable APK
+          name: Build optimized installable APK with native diagnostics
           no_output_timeout: 30m
           command: |
-            set -euo pipefail
+            set -u
             export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
+            mkdir -p android-artifact
+            LOG="$PWD/android-artifact/gradle-build.log"
+            EXIT_FILE="$PWD/android-artifact/gradle-exit-code.txt"
+
+            {
+              echo "[diagnostic] start $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              echo "[diagnostic] nproc=$(nproc)"
+              echo "[diagnostic] uname=$(uname -a)"
+              java -version 2>&1
+              free -m || true
+              df -h || true
+              ulimit -a || true
+              if [ -r /sys/fs/cgroup/memory.max ]; then
+                echo "[diagnostic] cgroup memory.max=$(cat /sys/fs/cgroup/memory.max)"
+              fi
+              if [ -r /sys/fs/cgroup/memory.current ]; then
+                echo "[diagnostic] cgroup memory.current=$(cat /sys/fs/cgroup/memory.current)"
+              fi
+            } | tee "$LOG"
+
             cd Builds/Android
             chmod +x gradlew
-            ./gradlew assembleRelease --stacktrace --no-daemon
+
+            set +e
+            ./gradlew assembleRelease --stacktrace --info --console=plain --no-daemon >> "$LOG" 2>&1 &
+            GRADLE_PID=$!
+            echo "[diagnostic] gradle_pid=$GRADLE_PID" | tee -a "$LOG"
+
+            while kill -0 "$GRADLE_PID" 2>/dev/null; do
+              {
+                echo "[heartbeat] $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                free -m || true
+                if [ -r /sys/fs/cgroup/memory.current ]; then
+                  echo "[heartbeat] cgroup memory.current=$(cat /sys/fs/cgroup/memory.current)"
+                fi
+                ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 16 || true
+              } | tee -a "$LOG"
+              sleep 30
+            done
+
+            wait "$GRADLE_PID"
+            STATUS=$?
+            set -e
+
+            echo "$STATUS" | tee "$EXIT_FILE"
+            echo "[diagnostic] gradle_exit=$STATUS" | tee -a "$LOG"
+            echo "[diagnostic] final memory/process snapshot" | tee -a "$LOG"
+            free -m | tee -a "$LOG" || true
+            if [ -r /sys/fs/cgroup/memory.events ]; then
+              cat /sys/fs/cgroup/memory.events | tee -a "$LOG" || true
+            fi
+            ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 20 | tee -a "$LOG" || true
+
+            echo "[diagnostic] last 250 Gradle log lines:"
+            tail -n 250 "$LOG" || true
+
+            # Do not fail this step. Artifact collection and the explicit
+            # result-propagation step below must run even when Gradle fails.
+            exit 0
 
       - save_cache:
           key: gradle-flower-v1-{{ epoch }}
@@ -110,20 +166,44 @@ jobs:
             - ~/.gradle/wrapper
 
       - run:
-          name: Collect APK and checksum
+          name: Collect build diagnostics and APK
+          when: always
           command: |
             set -euo pipefail
             mkdir -p android-artifact
-            APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1)"
-            test -n "$APK"
-            cp "$APK" android-artifact/Flower-Standalone-Android.apk
-            sha256sum android-artifact/Flower-Standalone-Android.apk \
-              | tee android-artifact/SHA256.txt
             git rev-parse HEAD | tee android-artifact/SOURCE_COMMIT.txt
+
+            APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk
+workflows:
+  manual_android_build:
+    when: << pipeline.parameters.run_build >>
+    jobs:
+      - android_build
+ | head -n 1 || true)"
+            if [ -n "$APK" ]; then
+              cp "$APK" android-artifact/Flower-Standalone-Android.apk
+              sha256sum android-artifact/Flower-Standalone-Android.apk \
+                | tee android-artifact/SHA256.txt
+            else
+              echo "No release APK produced." | tee android-artifact/NO_APK.txt
+            fi
 
       - store_artifacts:
           path: android-artifact
           destination: android-artifact
+
+      - run:
+          name: Propagate Gradle build result
+          when: always
+          command: |
+            set -euo pipefail
+            if [ ! -f android-artifact/gradle-exit-code.txt ]; then
+              echo "Gradle exit code file is missing; runner may have terminated unexpectedly."
+              exit 97
+            fi
+            STATUS="$(cat android-artifact/gradle-exit-code.txt)"
+            echo "Gradle exit code: $STATUS"
+            exit "$STATUS"
 
 workflows:
   manual_android_build:
