@@ -227,6 +227,7 @@ jobs:
           root: .
           paths:
             - Builds/Android
+            - JuceLibraryCode
             - android-artifact
             - release-artifact
 
