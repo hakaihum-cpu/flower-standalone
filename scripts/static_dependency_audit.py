@@ -161,8 +161,16 @@ for forbidden_fixed_logical_720 in [
     if forbidden_fixed_logical_720 in editor_text:
         fail(f"AN-22 must not force a 720-logical-pixel Android editor: {forbidden_fixed_logical_720}")
 
+for forbidden_editor_audio_reinit in [
+    "juce::StandalonePluginHolder::getInstance()",
+    "holder->deviceManager.closeAudioDevice()",
+    "holder->deviceManager.initialise (0, 2, nullptr, true)",
+    "holder->startPlaying()",
+]:
+    if forbidden_editor_audio_reinit in editor_text:
+        fail(f"AN-30 editor-side Android audio reinitialisation reintroduced: {forbidden_editor_audio_reinit}")
+
 for required_android_startup in [
-    "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
     "logicalCanvasSide",
     "720.0 / juce::jmax",
     "display->scale",
@@ -170,10 +178,6 @@ for required_android_startup in [
     "display->userBounds.getHeight()",
     "setSize (logicalCanvasSide, logicalCanvasSide)",
     "setResizable (false, false)",
-    "juce::StandalonePluginHolder::getInstance()",
-    "holder->deviceManager.closeAudioDevice()",
-    "holder->deviceManager.initialise (0, 2, nullptr, true)",
-    "holder->startPlaying()",
     "#define STB_IMAGE_IMPLEMENTATION",
     "#include \"third_party/stb_image.h\"",
     "decodeAndroidPngWithStb",
