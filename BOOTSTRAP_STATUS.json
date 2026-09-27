@@ -1,7 +1,7 @@
 {
   "project": "flower-standalone",
   "description": "Standalone Android extraction of Flower Actor v3",
-  "status": "FLOWER_PORT_NATIVE_DIAGNOSTIC_READY",
+  "status": "FLOWER_PORT_NATIVE_PARALLELISM_FIX_READY",
   "remote_provisioning": {
     "source_repository": "hakaihum-cpu/flower-standalone",
     "jira_project": "AN",
@@ -23,17 +23,27 @@
     "manual_parameter": "run_build=true",
     "last_verified_bootstrap_build": "circleci-pipeline-2",
     "flower_port_build": {
-      "last_attempt": "circleci-job-9a1e07b2-9fcb-4e1c-af6b-bc18314e8337",
-      "source_commit": "7f28b9f8f58cd04e1a47b7bc4e927970a4d92ffb",
+      "last_attempt": "circleci-job-8a552aa6-376c-4497-81ef-229029f84a74",
+      "source_commit": "a6041bea9464fa5538b38dbb236855e9e12addb3",
       "result": "FAILURE",
-      "failure_class": "ABRUPT_NATIVE_BUILD_TERMINATION_UNDIAGNOSED",
-      "failure_step": "buildCMakeRelWithDebInfo[arm64-v8a]",
-      "duration_observed": "~8m55s from pending to failure status",
-      "compiler_error_observed": false,
-      "no_output_timeout_30m_observed": false,
-      "fix_issue": "AN-11",
-      "diagnostic_branch": "fix/AN-11-circleci-native-diagnostics",
-      "next_run_purpose": "Capture Gradle exit code, heartbeat, memory/cgroup/process state, and complete build log without changing product Source/Resources"
+      "root_cause": "EXCESSIVE_NATIVE_BUILD_PARALLELISM_MEMORY_EXHAUSTION",
+      "evidence": {
+        "circleci_resource_class": "medium",
+        "allocated_vcpu": 2,
+        "allocated_memory": "4GB",
+        "observed_cgroup_memory_current_bytes": 4287696896,
+        "observed_memory_utilization_of_4GiB_percent": 99.83,
+        "observed_clang_processes": "more than 10 concurrently"
+      },
+      "fix_issue": "AN-13",
+      "fix_branch": "fix/AN-13-native-build-parallelism",
+      "controls": [
+        "CMAKE_BUILD_PARALLEL_LEVEL=2",
+        "JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=2",
+        "Gradle --max-workers=2",
+        "abort if clang process count exceeds 4",
+        "abort before cgroup usage exceeds 3.75 GiB"
+      ]
     }
   }
 }
