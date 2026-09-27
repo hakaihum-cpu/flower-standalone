@@ -649,6 +649,7 @@ void FlowerAnimationComponent::resetStudentStates()
     populationCooldownTicks = 0;
     populationDecisionTicks = 0;
     actorPopulationTarget = 0;
+    localEventDecisionTicks = 0;
     visibleCount = 0;
     previousVisibleCount = 0;
     sceneActorCount = 0;
@@ -781,7 +782,10 @@ FlowerAnimationComponent::ActorVariation FlowerAnimationComponent::chooseActorVa
 
 void FlowerAnimationComponent::maybeStartActorVariation (StudentState& state)
 {
-    if (state.exiting || state.variation != ActorVariation::None || state.variationTicks > 0)
+    if (state.exiting
+        || state.localEvent != ActorLocalEvent::None
+        || state.variation != ActorVariation::None
+        || state.variationTicks > 0)
         return;
 
     const float pitchActivity = juce::jlimit (0.0f, 1.0f, (pitchValue + 12.0f) / 24.0f);
@@ -799,6 +803,456 @@ void FlowerAnimationComponent::maybeStartActorVariation (StudentState& state)
                          + juce::roundToInt (holdValue * 36.0f);
     state.variationTotalTicks = state.variationTicks;
     state.variationSeed = random.nextFloat();
+}
+
+bool FlowerAnimationComponent::canStartActorLocalEvent (int index) const noexcept
+{
+    if (index < 0 || index >= studentCount)
+        return false;
+
+    const auto& state = studentStates[static_cast<size_t> (index)];
+    return state.visible
+        && ! state.exiting
+        && state.localEvent == ActorLocalEvent::None
+        && state.variation == ActorVariation::None
+        && std::abs (state.targetX - state.currentX) <= 0.004f;
+}
+
+void FlowerAnimationComponent::cancelActorLocalEvent (int index)
+{
+    if (index < 0 || index >= studentCount)
+        return;
+
+    const int partnerIndex = studentStates[static_cast<size_t> (index)].relation;
+
+    const auto releaseOne = [this] (int actorIndex)
+    {
+        if (actorIndex < 0 || actorIndex >= studentCount)
+            return;
+
+        auto& state = studentStates[static_cast<size_t> (actorIndex)];
+        state.localEvent = ActorLocalEvent::None;
+        state.localEventPose = state.ambientPose;
+        state.localEventTicks = 0;
+        state.localEventTotalTicks = 0;
+        state.localEventDelayTicks = 0;
+        state.relation = -1;
+        state.targetX = state.currentX;
+        state.previousTargetX = state.currentX;
+        state.restPose = chooseActorRestPose (actorIndex);
+        state.ambientPose = state.restPose;
+        state.pose = state.restPose;
+        state.decisionTicks = 16 + random.nextInt (54)
+                            + juce::roundToInt (holdValue * 84.0f);
+    };
+
+    releaseOne (index);
+
+    if (partnerIndex >= 0 && partnerIndex < studentCount)
+    {
+        const auto& partner = studentStates[static_cast<size_t> (partnerIndex)];
+        if (partner.relation == index
+            && partner.localEvent != ActorLocalEvent::None)
+            releaseOne (partnerIndex);
+    }
+}
+
+void FlowerAnimationComponent::maybeStartActorLocalEvent()
+{
+    if (recordingValue || ! loopActiveValue || visibleCount <= 0)
+    {
+        localEventDecisionTicks = 0;
+        return;
+    }
+
+    if (localEventDecisionTicks > 0)
+    {
+        --localEventDecisionTicks;
+        return;
+    }
+
+    // Keep normal independent Actor-v3 movement dominant.  Local events are
+    // occasional interruptions, with HOLD stretching the gap between them.
+    localEventDecisionTicks = 36 + random.nextInt (88)
+                            + juce::roundToInt (holdValue * 96.0f);
+
+    std::array<int, studentCount> candidates {};
+    int candidateCount = 0;
+    for (int i = 0; i < studentCount; ++i)
+        if (canStartActorLocalEvent (i))
+            candidates[static_cast<size_t> (candidateCount++)] = i;
+
+    if (candidateCount <= 0)
+        return;
+
+    const auto chooseQuietPose = [this] (int actorIndex)
+    {
+        static constexpr Pose quietEventPoses[]
+        {
+            Pose::SitFloor, Pose::Crouch, Pose::LookBack, Pose::Rail,
+            Pose::LeanWall, Pose::HandsBehind, Pose::OneKnee, Pose::LookDown
+        };
+
+        const auto& student = students[static_cast<size_t> (actorIndex)];
+        for (int attempt = 0; attempt < 8; ++attempt)
+        {
+            const auto candidate = quietEventPoses[
+                random.nextInt (static_cast<int> (std::size (quietEventPoses)))];
+            if (student.has (candidate))
+                return candidate;
+        }
+
+        return Pose::Stand;
+    };
+
+    const auto chooseOddPose = [this] (int actorIndex)
+    {
+        static constexpr Pose oddPoses[]
+        {
+            Pose::BodyTiltUnnatural, Pose::ArmsHeldOddly,
+            Pose::HeadTurnBodyStill, Pose::FreezeMidStep
+        };
+
+        const auto& student = students[static_cast<size_t> (actorIndex)];
+        for (int attempt = 0; attempt < 6; ++attempt)
+        {
+            const auto candidate = oddPoses[
+                random.nextInt (static_cast<int> (std::size (oddPoses)))];
+            if (student.has (candidate))
+                return candidate;
+        }
+
+        return Pose::LookBack;
+    };
+
+    const auto startSingle = [this] (int actorIndex,
+                                     ActorLocalEvent event,
+                                     Pose eventPose,
+                                     int duration,
+                                     int delay)
+    {
+        auto& state = studentStates[static_cast<size_t> (actorIndex)];
+        state.localEvent = event;
+        state.localEventPose = eventPose;
+        state.localEventTotalTicks = juce::jmax (1, duration);
+        state.localEventTicks = state.localEventTotalTicks;
+        state.localEventDelayTicks = juce::jmax (0, delay);
+        state.relation = -1;
+        state.targetX = state.currentX;
+        state.previousTargetX = state.currentX;
+    };
+
+    const auto nearestPartner = [&] (int first)
+    {
+        int partner = -1;
+        float bestDistance = 10.0f;
+
+        for (int k = 0; k < candidateCount; ++k)
+        {
+            const int candidate = candidates[static_cast<size_t> (k)];
+            if (candidate == first)
+                continue;
+
+            const float distance = std::abs (
+                studentStates[static_cast<size_t> (candidate)].currentX
+                - studentStates[static_cast<size_t> (first)].currentX);
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                partner = candidate;
+            }
+        }
+
+        return partner;
+    };
+
+    const auto startPair = [this] (int first,
+                                   int second,
+                                   ActorLocalEvent event,
+                                   Pose leftPose,
+                                   Pose rightPose,
+                                   int duration)
+    {
+        if (first < 0 || second < 0 || first == second)
+            return;
+
+        int left = first;
+        int right = second;
+        if (studentStates[static_cast<size_t> (left)].currentX
+            > studentStates[static_cast<size_t> (right)].currentX)
+            std::swap (left, right);
+
+        auto& l = studentStates[static_cast<size_t> (left)];
+        auto& r = studentStates[static_cast<size_t> (right)];
+
+        const float midpoint = juce::jlimit (
+            0.13f, 0.87f, (l.currentX + r.currentX) * 0.5f);
+        const float halfGap = 0.035f + spreadValue * 0.012f;
+
+        const auto prepare = [&] (StudentState& state,
+                                  int relation,
+                                  Pose pose,
+                                  float target)
+        {
+            state.localEvent = event;
+            state.localEventPose = pose;
+            state.localEventTotalTicks = juce::jmax (1, duration);
+            state.localEventTicks = state.localEventTotalTicks;
+            state.localEventDelayTicks = 0;
+            state.relation = relation;
+            state.previousTargetX = state.targetX;
+            state.targetX = juce::jlimit (0.07f, 0.93f, target);
+            state.moveRate = juce::jmax (
+                state.moveRate, 0.0055f + random.nextFloat() * 0.0040f);
+        };
+
+        prepare (l, right, leftPose, midpoint - halfGap);
+        prepare (r, left, rightPose, midpoint + halfGap);
+    };
+
+    const int first = candidates[static_cast<size_t> (random.nextInt (candidateCount))];
+    const int second = candidateCount > 1 ? nearestPartner (first) : -1;
+    const int roll = random.nextInt (100);
+
+    if (candidateCount > 1)
+    {
+        if (roll < 28)
+        {
+            startPair (first, second, ActorLocalEvent::Conversation,
+                       Pose::TalkRight, Pose::TalkLeft,
+                       46 + random.nextInt (52)
+                       + juce::roundToInt (holdValue * 70.0f));
+            return;
+        }
+
+        if (roll < 40)
+        {
+            startPair (first, second, ActorLocalEvent::HoldHands,
+                       Pose::HoldRight, Pose::HoldLeft,
+                       42 + random.nextInt (48)
+                       + juce::roundToInt (holdValue * 76.0f));
+            return;
+        }
+
+        if (roll < 48)
+        {
+            startSingle (first, ActorLocalEvent::Jump, Pose::Stand,
+                         28 + random.nextInt (14), 0);
+            startSingle (second, ActorLocalEvent::Jump, Pose::Stand,
+                         28 + random.nextInt (14), 7 + random.nextInt (14));
+            return;
+        }
+
+        if (roll < 53)
+        {
+            startPair (first, second, ActorLocalEvent::Push,
+                       Pose::PushReady, Pose::HeadTurnBodyStill,
+                       38 + random.nextInt (30));
+            return;
+        }
+    }
+
+    const int singleRoll = candidateCount > 1 ? roll : random.nextInt (100);
+
+    if (singleRoll < 75)
+    {
+        startSingle (first, ActorLocalEvent::QuietPose, chooseQuietPose (first),
+                     36 + random.nextInt (70)
+                     + juce::roundToInt (holdValue * 88.0f), 0);
+    }
+    else if (singleRoll < 86)
+    {
+        startSingle (first, ActorLocalEvent::Jump, Pose::Stand,
+                     28 + random.nextInt (18), 0);
+    }
+    else if (singleRoll < 93)
+    {
+        startSingle (first, ActorLocalEvent::FallOrSit, Pose::SitFloor,
+                     50 + random.nextInt (26), 0);
+    }
+    else if (singleRoll < 97)
+    {
+        startSingle (first, ActorLocalEvent::Ascend, Pose::Suspended,
+                     62 + random.nextInt (32), 0);
+    }
+    else
+    {
+        startSingle (first, ActorLocalEvent::OddPose, chooseOddPose (first),
+                     38 + random.nextInt (48)
+                     + juce::roundToInt (holdValue * 56.0f), 0);
+    }
+}
+
+void FlowerAnimationComponent::advanceActorLocalEvents()
+{
+    for (int i = 0; i < studentCount; ++i)
+    {
+        auto& state = studentStates[static_cast<size_t> (i)];
+
+        if (state.localEvent == ActorLocalEvent::None)
+            continue;
+
+        if (! state.visible || state.exiting)
+        {
+            cancelActorLocalEvent (i);
+            continue;
+        }
+
+        if (state.localEventDelayTicks > 0)
+        {
+            --state.localEventDelayTicks;
+            state.pose = state.restPose;
+            continue;
+        }
+
+        const bool pairEvent = state.localEvent == ActorLocalEvent::Conversation
+                            || state.localEvent == ActorLocalEvent::HoldHands
+                            || state.localEvent == ActorLocalEvent::Push;
+
+        if (pairEvent)
+        {
+            const int partnerIndex = state.relation;
+            if (partnerIndex < 0 || partnerIndex >= studentCount)
+            {
+                cancelActorLocalEvent (i);
+                continue;
+            }
+
+            auto& partner = studentStates[static_cast<size_t> (partnerIndex)];
+            if (! partner.visible || partner.exiting
+                || partner.relation != i
+                || partner.localEvent != state.localEvent)
+            {
+                cancelActorLocalEvent (i);
+                continue;
+            }
+
+            // One member owns the pair update so timers and phases cannot
+            // accidentally run twice per 16-Hz tick.
+            if (i > partnerIndex)
+                continue;
+
+            const bool thisArrived = std::abs (state.targetX - state.currentX) <= 0.004f;
+            const bool partnerArrived = std::abs (partner.targetX - partner.currentX) <= 0.004f;
+            if (! thisArrived || ! partnerArrived)
+                continue;
+
+            const int total = juce::jmax (
+                1, juce::jmax (state.localEventTotalTicks, partner.localEventTotalTicks));
+            const int remaining = juce::jmin (state.localEventTicks, partner.localEventTicks);
+            const float progress = juce::jlimit (
+                0.0f, 1.0f,
+                1.0f - static_cast<float> (remaining) / static_cast<float> (total));
+
+            if (state.localEvent == ActorLocalEvent::Conversation)
+            {
+                state.pose = (((actorTick + state.phaseOffset * 3) / 23) % 2 == 0)
+                           ? state.localEventPose : Pose::Listen;
+                partner.pose = (((actorTick + partner.phaseOffset * 5) / 29) % 2 == 0)
+                             ? partner.localEventPose : Pose::Whisper;
+            }
+            else if (state.localEvent == ActorLocalEvent::HoldHands)
+            {
+                state.pose = state.localEventPose;
+                partner.pose = partner.localEventPose;
+            }
+            else
+            {
+                if (progress < 0.42f)
+                {
+                    state.pose = Pose::PushReady;
+                    partner.pose = Pose::HeadTurnBodyStill;
+                }
+                else if (progress < 0.68f)
+                {
+                    state.pose = Pose::PushContact;
+                    partner.pose = Pose::PushRecoil;
+                }
+                else
+                {
+                    state.pose = Pose::HandsBehind;
+                    partner.pose = Pose::Crouch;
+                }
+            }
+
+            --state.localEventTicks;
+            --partner.localEventTicks;
+
+            if (state.localEventTicks <= 0 || partner.localEventTicks <= 0)
+                cancelActorLocalEvent (i);
+
+            continue;
+        }
+
+        const int total = juce::jmax (1, state.localEventTotalTicks);
+        const float progress = juce::jlimit (
+            0.0f, 1.0f,
+            1.0f - static_cast<float> (state.localEventTicks)
+                  / static_cast<float> (total));
+
+        switch (state.localEvent)
+        {
+            case ActorLocalEvent::QuietPose:
+                state.pose = state.localEventPose;
+                break;
+
+            case ActorLocalEvent::Jump:
+                if (progress < 0.24f)
+                    state.pose = Pose::JumpLow;
+                else if (progress < 0.55f)
+                    state.pose = Pose::JumpHigh;
+                else if (progress < 0.78f)
+                    state.pose = Pose::Land;
+                else
+                    state.pose = state.restPose;
+                break;
+
+            case ActorLocalEvent::Ascend:
+                if (progress < 0.18f)
+                    state.pose = Pose::LevitateLow;
+                else if (progress < 0.35f)
+                    state.pose = Pose::AscendArmsLoose;
+                else if (progress < 0.62f)
+                    state.pose = Pose::Suspended;
+                else if (progress < 0.78f)
+                    state.pose = Pose::AscendArmsLoose;
+                else if (progress < 0.91f)
+                    state.pose = Pose::LevitateLow;
+                else
+                    state.pose = state.restPose;
+                break;
+
+            case ActorLocalEvent::FallOrSit:
+                if (progress < 0.16f)
+                    state.pose = Pose::Stumble;
+                else if (progress < 0.32f)
+                    state.pose = Pose::FallBack;
+                else if (progress < 0.48f)
+                    state.pose = Pose::KneelDown;
+                else if (progress < 0.78f)
+                    state.pose = Pose::SitFloor;
+                else if (progress < 0.92f)
+                    state.pose = Pose::RiseFromFloor;
+                else
+                    state.pose = state.restPose;
+                break;
+
+            case ActorLocalEvent::OddPose:
+                state.pose = state.localEventPose;
+                break;
+
+            case ActorLocalEvent::Conversation:
+            case ActorLocalEvent::HoldHands:
+            case ActorLocalEvent::Push:
+            case ActorLocalEvent::None:
+                break;
+        }
+
+        --state.localEventTicks;
+        if (state.localEventTicks <= 0)
+            cancelActorLocalEvent (i);
+    }
 }
 
 void FlowerAnimationComponent::assignActorGoal (int index, bool entering)
@@ -903,6 +1357,11 @@ void FlowerAnimationComponent::reconcileActorPopulation()
             state.targetVisible = true;
             state.exiting = false;
             state.action = ActionKind::None;
+            state.localEvent = ActorLocalEvent::None;
+            state.localEventPose = state.basePose;
+            state.localEventTicks = 0;
+            state.localEventTotalTicks = 0;
+            state.localEventDelayTicks = 0;
             state.variation = ActorVariation::None;
             state.variationTicks = 0;
             state.variationTotalTicks = 0;
@@ -926,6 +1385,7 @@ void FlowerAnimationComponent::reconcileActorPopulation()
         if (count > 0)
         {
             const int index = candidates[static_cast<size_t> (random.nextInt (count))];
+            cancelActorLocalEvent (index);
             auto& state = studentStates[static_cast<size_t> (index)];
             state.targetVisible = false;
             state.exiting = true;
@@ -941,6 +1401,7 @@ void FlowerAnimationComponent::reconcileActorPopulation()
 void FlowerAnimationComponent::advanceActors()
 {
     reconcileActorPopulation();
+    maybeStartActorLocalEvent();
 
     const float pitchActivity = juce::jlimit (0.0f, 1.0f, (pitchValue + 12.0f) / 24.0f);
     const float activity = juce::jlimit (0.0f, 1.0f, pitchActivity * 0.72f + mixValue * 0.28f);
@@ -1003,6 +1464,12 @@ void FlowerAnimationComponent::advanceActors()
                 continue;
             }
 
+            if (state.localEvent != ActorLocalEvent::None)
+            {
+                state.pose = state.localEventPose;
+                continue;
+            }
+
             state.pose = state.restPose;
 
             if (state.decisionTicks > 0)
@@ -1022,6 +1489,8 @@ void FlowerAnimationComponent::advanceActors()
             }
         }
     }
+
+    advanceActorLocalEvents();
 
     visibleCount = 0;
     for (const auto& state : studentStates)
