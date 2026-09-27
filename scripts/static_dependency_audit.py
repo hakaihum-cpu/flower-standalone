@@ -193,6 +193,9 @@ for required_trace_ci in [
     if required_trace_ci not in circle:
         fail(f"Android startup trace CI capture missing: {required_trace_ci}")
 
+if "- JuceLibraryCode" not in circle:
+    fail("generated JuceLibraryCode is not persisted for emulator build")
+
 for required_failure_artifact in [
     "Initialize emulator diagnostics",
     "prepare-exit-code.txt",
