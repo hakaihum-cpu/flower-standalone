@@ -173,5 +173,20 @@ for required_android_startup in [
     if required_android_startup not in editor_text:
         fail(f"Android standalone startup safeguard missing: {required_android_startup}")
 
+for required_720_ui in [
+    "flowerPanel.setBounds (getLocalBounds().reduced (8))",
+    "auto animationArea = flower.removeFromTop (286)",
+    "auto waveformArea = flower.removeFromTop (96)",
+    "placeFour (flowerRow1",
+    "flowerPosition, flowerSize, flowerDensity, flowerSpread",
+    "placeFour (flowerRow2",
+    "flowerHold, flowerPitch, flowerMix, flowerFeedback",
+    "auto keyboardArea = synth.removeFromBottom (118)",
+    "control.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 72, 20)",
+    "label.setFont (juce::FontOptions (11.0f).withStyle (\"Bold\"))",
+]:
+    if required_720_ui not in editor_text:
+        fail(f"AN-22 fixed-720 UI guard missing: {required_720_ui}")
+
 print("[PASS] Android standalone startup safeguards present")
 print("[PASS] JUCER standalone Android structure present")
