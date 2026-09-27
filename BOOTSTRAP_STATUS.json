@@ -1,7 +1,7 @@
 {
   "project": "flower-standalone",
   "description": "Standalone Android extraction of Flower Actor v3",
-  "status": "FLOWER_PORT_CMAKE_JOB_POOL_FIX_READY",
+  "status": "FLOWER_PORT_BUILD_SUCCESS_ARTIFACT_PENDING",
   "remote_provisioning": {
     "source_repository": "hakaihum-cpu/flower-standalone",
     "jira_project": "AN",
@@ -23,32 +23,21 @@
     "manual_parameter": "run_build=true",
     "last_verified_bootstrap_build": "circleci-pipeline-2",
     "flower_port_build": {
-      "last_attempt": "circleci-job-c0ca11dd-dd2d-4b1b-b8d1-e7c290239a5c",
-      "source_commit": "ddf11aa037756a836beab4266cafecbf0fff3ec3",
-      "result": "FAILURE",
-      "root_cause": "AGP_NINJA_NATIVE_OVERPARALLELISM",
-      "evidence": {
-        "reported_processors": 36,
-        "circleci_resource_class": "medium",
-        "configured_cmake_build_parallel_level": 2,
-        "gradle_worker_leases": 2,
-        "observed_clang_processes": 38,
-        "observed_anon_memory_bytes": 4198043648,
-        "swap": "0",
-        "oom_kill_observed_before_log_end": 0
-      },
-      "interpretation": "CMAKE_BUILD_PARALLEL_LEVEL and Gradle worker limits did not constrain the AGP/Ninja native compile stage.",
-      "fix_issue": "AN-15",
-      "fix_branch": "fix/AN-15-cmake-job-pools",
-      "corrective_controls": [
-        "inject CMAKE_JOB_POOLS compile=2;link=1 into generated externalNativeBuild CMake arguments",
-        "inject CMAKE_JOB_POOL_COMPILE=compile",
-        "inject CMAKE_JOB_POOL_LINK=link",
-        "retain CMAKE_BUILD_PARALLEL_LEVEL=2",
-        "retain JAVA_TOOL_OPTIONS ActiveProcessorCount=2",
-        "retain Gradle --max-workers=2",
-        "collect generated build.ninja pool definitions as artifact"
-      ]
+      "last_successful_job": "circleci-job-6b5d922c-1b88-4e19-b0d8-b5a6182b994a",
+      "source_commit": "23d6f0a185d619cfda4b2c3637131f4e4ee592e3",
+      "result": "SUCCESS",
+      "issue": "AN-15",
+      "branch": "fix/AN-15-cmake-job-pools",
+      "controls": [
+        "CMAKE_JOB_POOLS compile=2;link=1 injected into generated Android CMake arguments",
+        "CMAKE_JOB_POOL_COMPILE=compile",
+        "CMAKE_JOB_POOL_LINK=link",
+        "CMAKE_BUILD_PARALLEL_LEVEL=2",
+        "JAVA_TOOL_OPTIONS ActiveProcessorCount=2",
+        "Gradle --max-workers=2"
+      ],
+      "artifact_verification": "PENDING",
+      "golden_baseline": false
     }
   }
 }
