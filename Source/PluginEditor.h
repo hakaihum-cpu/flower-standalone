@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include <array>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -139,6 +140,18 @@ private:
     std::vector<std::unique_ptr<SliderAttachment>> sliderAttachments;
     std::vector<std::unique_ptr<ButtonAttachment>> buttonAttachments;
     std::vector<std::unique_ptr<ComboAttachment>> comboAttachments;
+
+   #if JUCE_ANDROID
+    struct AsyncVisualLoadState
+    {
+        juce::Image atlas;
+        juce::Image walkStrip;
+        std::atomic<bool> ready { false };
+    };
+
+    std::shared_ptr<AsyncVisualLoadState> asyncVisualLoadState;
+    bool asyncVisualsApplied = false;
+   #endif
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FlowerStandaloneAudioProcessorEditor)
 };
