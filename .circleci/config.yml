@@ -142,19 +142,13 @@ jobs:
                 echo "[heartbeat] clang_processes=$CLANG_COUNT"
                 ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 16 || true
 
-                if [ "$CLANG_COUNT" -gt 4 ]; then
-                  echo "[guard] excessive native parallelism detected: $CLANG_COUNT clang processes" | tee -a "$LOG"
-                  kill "$GRADLE_PID" 2>/dev/null || true
-                  break
+                if [ -r /sys/fs/cgroup/memory.stat ]; then
+                  echo "[heartbeat] memory.stat selected fields:"
+                  grep -E '^(anon|file|kernel|kernel_stack|pagetables|sock|slab|shmem) ' /sys/fs/cgroup/memory.stat || true
                 fi
-
-                if [ -r /sys/fs/cgroup/memory.current ]; then
-                  CURRENT_MEMORY="$(cat /sys/fs/cgroup/memory.current)"
-                  if [ "$CURRENT_MEMORY" -gt 4026531840 ]; then
-                    echo "[guard] cgroup memory exceeded 3.75 GiB: $CURRENT_MEMORY" | tee -a "$LOG"
-                    kill "$GRADLE_PID" 2>/dev/null || true
-                    break
-                  fi
+                if [ -r /sys/fs/cgroup/memory.events ]; then
+                  echo "[heartbeat] memory.events:"
+                  cat /sys/fs/cgroup/memory.events || true
                 fi
               } | tee -a "$LOG"
               sleep 30
@@ -168,7 +162,12 @@ jobs:
             echo "[diagnostic] gradle_exit=$STATUS" | tee -a "$LOG"
             echo "[diagnostic] final memory/process snapshot" | tee -a "$LOG"
             free -m | tee -a "$LOG" || true
+            if [ -r /sys/fs/cgroup/memory.stat ]; then
+              echo "[diagnostic] final memory.stat selected fields" | tee -a "$LOG"
+              grep -E '^(anon|file|kernel|kernel_stack|pagetables|sock|slab|shmem) ' /sys/fs/cgroup/memory.stat | tee -a "$LOG" || true
+            fi
             if [ -r /sys/fs/cgroup/memory.events ]; then
+              echo "[diagnostic] final memory.events" | tee -a "$LOG"
               cat /sys/fs/cgroup/memory.events | tee -a "$LOG" || true
             fi
             ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 20 | tee -a "$LOG" || true
@@ -193,6 +192,8 @@ jobs:
             set -euo pipefail
             mkdir -p android-artifact
             git rev-parse HEAD | tee android-artifact/SOURCE_COMMIT.txt
+
+            find Builds/Android/app/.cxx -type f -name 'build_command.txt' -print -exec sh -c 'echo "===== $1 ====="; cat "$1"' _ {} \;               > android-artifact/native-build-commands.txt 2>/dev/null || true
 
             APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1 || true)"
             if [ -n "$APK" ]; then

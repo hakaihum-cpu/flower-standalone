@@ -1,7 +1,7 @@
 {
   "project": "flower-standalone",
   "description": "Standalone Android extraction of Flower Actor v3",
-  "status": "FLOWER_PORT_NATIVE_PARALLELISM_FIX_READY",
+  "status": "FLOWER_PORT_NON_INTRUSIVE_NATIVE_DIAGNOSTIC_READY",
   "remote_provisioning": {
     "source_repository": "hakaihum-cpu/flower-standalone",
     "jira_project": "AN",
@@ -23,26 +23,30 @@
     "manual_parameter": "run_build=true",
     "last_verified_bootstrap_build": "circleci-pipeline-2",
     "flower_port_build": {
-      "last_attempt": "circleci-job-8a552aa6-376c-4497-81ef-229029f84a74",
-      "source_commit": "a6041bea9464fa5538b38dbb236855e9e12addb3",
+      "last_attempt": "AN-13 diagnostic run",
+      "source_commit": "d4a830dd5424b8b3935579f28010787a7940f887",
       "result": "FAILURE",
-      "root_cause": "EXCESSIVE_NATIVE_BUILD_PARALLELISM_MEMORY_EXHAUSTION",
+      "failure_class": "DIAGNOSTIC_GUARD_FALSE_POSITIVE",
+      "direct_cause": "CI guard sent SIGTERM after raw cgroup memory.current crossed 3.75 GiB",
       "evidence": {
-        "circleci_resource_class": "medium",
-        "allocated_vcpu": 2,
-        "allocated_memory": "4GB",
-        "observed_cgroup_memory_current_bytes": 4287696896,
-        "observed_memory_utilization_of_4GiB_percent": 99.83,
-        "observed_clang_processes": "more than 10 concurrently"
+        "build_start_memory_current_bytes": 3072626688,
+        "guard_memory_current_bytes": 4283375616,
+        "clang_processes_at_guard": 0,
+        "oom_events": 0,
+        "oom_kill_events": 0,
+        "gradle_exit_code": 143,
+        "gradle_worker_leases": 2
       },
-      "fix_issue": "AN-13",
-      "fix_branch": "fix/AN-13-native-build-parallelism",
-      "controls": [
+      "interpretation": "Native parallelism root-cause hypothesis remains unverified because this run never reached native compilation.",
+      "fix_issue": "AN-14",
+      "fix_branch": "fix/AN-14-nonintrusive-memory-diagnostics",
+      "next_run_controls": [
         "CMAKE_BUILD_PARALLEL_LEVEL=2",
         "JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=2",
         "Gradle --max-workers=2",
-        "abort if clang process count exceeds 4",
-        "abort before cgroup usage exceeds 3.75 GiB"
+        "memory.current/stat/events observed only; no auto-kill",
+        "clang process count observed only; no auto-kill",
+        "collect AGP build_command.txt when generated"
       ]
     }
   }
