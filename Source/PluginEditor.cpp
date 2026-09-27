@@ -3,7 +3,6 @@
 #include "BinaryData.h"
 
 #if JUCE_ANDROID
- #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
  #define STBI_ONLY_PNG
  #define STBI_NO_STDIO
  #define STB_IMAGE_IMPLEMENTATION
