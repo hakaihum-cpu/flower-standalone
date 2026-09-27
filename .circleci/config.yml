@@ -207,14 +207,28 @@ jobs:
               find Builds/Android/app/.cxx -type f -name 'build.ninja' -print -exec sh -c 'echo "===== $1 ====="; grep -E "^(pool (compile|link)|  depth = )" "$1" || true' _ {} \;
             } > android-artifact/native-job-pools.txt 2>/dev/null || true
 
+            mkdir -p release-artifact
             APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1 || true)"
             if [ -n "$APK" ]; then
-              cp "$APK" android-artifact/Flower-Standalone-Android.apk
-              sha256sum android-artifact/Flower-Standalone-Android.apk \
-                | tee android-artifact/SHA256.txt
+              cp "$APK" release-artifact/Flower-Standalone-Android.apk
+              sha256sum release-artifact/Flower-Standalone-Android.apk \
+                | tee release-artifact/SHA256.txt
             else
               echo "No release APK produced." | tee android-artifact/NO_APK.txt
             fi
+
+      - run:
+          name: Trim generated Android project for emulator workspace
+          when: always
+          command: |
+            rm -rf Builds/Android/app/.cxx Builds/Android/app/build Builds/Android/.gradle
+
+      - persist_to_workspace:
+          root: .
+          paths:
+            - Builds/Android
+            - android-artifact
+            - release-artifact
 
       - store_artifacts:
           path: android-artifact
@@ -233,8 +247,216 @@ jobs:
             echo "Gradle exit code: $STATUS"
             exit "$STATUS"
 
+  android_emulator_smoke:
+    machine:
+      image: android:default
+    resource_class: medium
+    steps:
+      - checkout
+
+      - attach_workspace:
+          at: .
+
+      - restore_cache:
+          keys:
+            - juce-9.0.2-projucer-v1
+            - gradle-flower-v1-
+
+      - run:
+          name: Prepare x86_64 emulator APK build
+          command: |
+            set -euo pipefail
+            test -d Builds/Android
+            test -d JUCE/modules
+
+            yes | sdkmanager --licenses >/dev/null || true
+            sdkmanager \
+              "platforms;android-35" \
+              "build-tools;35.0.0" \
+              "ndk;28.1.13356709" \
+              "cmake;3.22.1" \
+              "system-images;android-35;google_apis;x86_64"
+
+            rm -rf Builds/Android/app/.cxx Builds/Android/app/build
+            python3 scripts/patch_android_smoke_abi.py Builds/Android/app/build.gradle
+            grep -F -- 'abiFilters("x86_64")' Builds/Android/app/build.gradle
+            grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
+            printf 'sdk.dir=%s\n' "$ANDROID_HOME" > Builds/Android/local.properties
+
+            mkdir -p "$HOME/.android"
+            rm -f "$HOME/.android/debug.keystore"
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -alias androiddebugkey -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA -keysize 2048 -validity 10000
+
+      - run:
+          name: Build x86_64 emulator APK
+          no_output_timeout: 30m
+          command: |
+            set -euo pipefail
+            export CMAKE_BUILD_PARALLEL_LEVEL=2
+            export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=2"
+
+            cd Builds/Android
+            chmod +x gradlew
+            ./gradlew assembleRelease --stacktrace --console=plain --no-daemon --max-workers=2
+
+            cd ../..
+            mkdir -p android-smoke
+            APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1)"
+            test -n "$APK"
+            cp "$APK" android-smoke/Flower-Standalone-x86_64.apk
+            sha256sum android-smoke/Flower-Standalone-x86_64.apk \
+              | tee android-smoke/SHA256-x86_64.txt
+
+      - run:
+          name: Android emulator startup smoke
+          no_output_timeout: 15m
+          command: |
+            set -u
+            mkdir -p emulator-artifact
+            LOG="emulator-artifact/emulator-console.log"
+            RESULT="emulator-artifact/smoke-exit-code.txt"
+            PACKAGE="local.flower.standalone"
+            AVD="flower-smoke"
+            SYSTEM_IMAGE="system-images;android-35;google_apis;x86_64"
+            STATUS=0
+
+            echo "no" | avdmanager --verbose create avd -n "$AVD" -k "$SYSTEM_IMAGE" --force > emulator-artifact/avd-create.log 2>&1 || STATUS=10
+
+            if [ "$STATUS" -eq 0 ]; then
+              emulator -avd "$AVD" \
+                -no-window \
+                -gpu swiftshader_indirect \
+                -no-snapshot \
+                -noaudio \
+                -no-boot-anim \
+                > "$LOG" 2>&1 &
+              EMULATOR_PID=$!
+              echo "$EMULATOR_PID" > emulator-artifact/emulator-pid.txt
+
+              timeout 300s circle-android wait-for-boot >> "$LOG" 2>&1 || STATUS=11
+            fi
+
+            if [ "$STATUS" -eq 0 ]; then
+              adb shell settings put global window_animation_scale 0.0 || true
+              adb shell settings put global transition_animation_scale 0.0 || true
+              adb shell settings put global animator_duration_scale 0.0 || true
+
+              adb install -r android-smoke/Flower-Standalone-x86_64.apk \
+                > emulator-artifact/adb-install.txt 2>&1 || STATUS=12
+            fi
+
+            if [ "$STATUS" -eq 0 ]; then
+              adb logcat -c || true
+              COMPONENT="$(adb shell cmd package resolve-activity --brief "$PACKAGE" 2>/dev/null | tr -d '\r' | tail -n 1)"
+              echo "$COMPONENT" | tee emulator-artifact/resolved-activity.txt
+
+              if ! echo "$COMPONENT" | grep -q '/'; then
+                STATUS=13
+              else
+                adb shell am start -W -n "$COMPONENT" \
+                  > emulator-artifact/activity-start.txt 2>&1 || STATUS=14
+              fi
+            fi
+
+            if [ "$STATUS" -eq 0 ]; then
+              sleep 2
+              adb shell pidof "$PACKAGE" | tr -d '\r' > emulator-artifact/pid-initial.txt || true
+              sleep 20
+            fi
+
+            adb logcat -d -v threadtime > emulator-artifact/logcat.txt 2>&1 || true
+            adb shell dumpsys activity activities > emulator-artifact/activities.txt 2>&1 || true
+            adb shell dumpsys activity processes > emulator-artifact/processes.txt 2>&1 || true
+            adb shell dumpsys window windows > emulator-artifact/windows.txt 2>&1 || true
+            adb exec-out screencap -p > emulator-artifact/screenshot.png 2>/dev/null || true
+            adb shell pidof "$PACKAGE" | tr -d '\r' > emulator-artifact/pid-final.txt || true
+
+            if [ "$STATUS" -eq 0 ] && [ ! -s emulator-artifact/pid-final.txt ]; then
+              echo "FLOWER process disappeared after launch." >> emulator-artifact/smoke-summary.txt
+              STATUS=20
+            fi
+
+            if grep -Eqi "ANR in $PACKAGE|am_anr.*$PACKAGE|Input dispatching timed out.*$PACKAGE|$PACKAGE.*Input dispatching timed out" emulator-artifact/logcat.txt; then
+              echo "ANR signature detected." >> emulator-artifact/smoke-summary.txt
+              STATUS=21
+            fi
+
+            if grep -Eqi "am_crash.*$PACKAGE|Process: $PACKAGE.*FATAL EXCEPTION|$PACKAGE.*Fatal signal" emulator-artifact/logcat.txt; then
+              echo "Crash signature detected." >> emulator-artifact/smoke-summary.txt
+              STATUS=22
+            fi
+
+            if ! grep -Eq "$PACKAGE" emulator-artifact/activities.txt; then
+              echo "FLOWER activity is not present in activity dump." >> emulator-artifact/smoke-summary.txt
+              [ "$STATUS" -eq 0 ] && STATUS=23
+            fi
+
+            if [ "$STATUS" -eq 0 ]; then
+              echo "PASS: FLOWER remained launched for 20 seconds without detected ANR/crash." \
+                | tee -a emulator-artifact/smoke-summary.txt
+            else
+              echo "FAIL: emulator smoke status=$STATUS" \
+                | tee -a emulator-artifact/smoke-summary.txt
+            fi
+
+            echo "$STATUS" | tee "$RESULT"
+
+            # Always return success here so diagnostics can be stored.
+            exit 0
+
+      - store_artifacts:
+          path: emulator-artifact
+          destination: emulator-artifact
+
+      - store_artifacts:
+          path: android-smoke
+          destination: android-smoke
+
+      - run:
+          name: Propagate emulator smoke result
+          when: always
+          command: |
+            set -euo pipefail
+            if [ ! -f emulator-artifact/smoke-exit-code.txt ]; then
+              echo "Emulator smoke result is missing."
+              exit 97
+            fi
+            STATUS="$(cat emulator-artifact/smoke-exit-code.txt)"
+            echo "Emulator smoke exit code: $STATUS"
+            exit "$STATUS"
+
+  publish_verified_apk:
+    docker:
+      - image: cimg/android:2026.08.1
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: .
+
+      - run:
+          name: Verify gated release artifact
+          command: |
+            set -euo pipefail
+            test -f release-artifact/Flower-Standalone-Android.apk
+            test -f release-artifact/SHA256.txt
+            sha256sum -c release-artifact/SHA256.txt
+
+      - store_artifacts:
+          path: release-artifact
+          destination: verified-release
+
 workflows:
   manual_android_build:
     when: << pipeline.parameters.run_build >>
     jobs:
       - android_build
+      - android_emulator_smoke:
+          requires:
+            - android_build
+      - publish_verified_apk:
+          requires:
+            - android_emulator_smoke

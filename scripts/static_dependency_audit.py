@@ -24,6 +24,7 @@ REQUIRED = [
     "Resources/flower_embedded_atlas.png",
     "Resources/flower_actor_v3_walk_student01.png",
     "scripts/patch_android_native_parallelism.py",
+    "scripts/patch_android_smoke_abi.py",
 ]
 
 UPSTREAM_GIT_BLOBS = {
@@ -115,6 +116,33 @@ for required_ci in [
 ]:
     if required_ci not in circle:
         fail(f"CircleCI native parallelism control missing: {required_ci}")
+
+for required_emulator_ci in [
+    "android_emulator_smoke:",
+    "image: android:default",
+    "system-images;android-35;google_apis;x86_64",
+    "patch_android_smoke_abi.py",
+    "Flower-Standalone-x86_64.apk",
+    "circle-android wait-for-boot",
+    "adb install -r",
+    "ANR in $PACKAGE",
+    "screencap -p",
+    "smoke-exit-code.txt",
+    "requires:\n            - android_build",
+    "publish_verified_apk:",
+    "release-artifact/Flower-Standalone-Android.apk",
+    "destination: verified-release",
+    "requires:\n            - android_emulator_smoke",
+]:
+    if required_emulator_ci not in circle:
+        fail(f"Android emulator smoke gate missing: {required_emulator_ci}")
+
+if "android-artifact/Flower-Standalone-Android.apk" in circle:
+    fail("unverified ARM64 APK is exposed from the build job")
+
+smoke_patcher = (ROOT / "scripts/patch_android_smoke_abi.py").read_text(encoding="utf-8")
+if 'abiFilters("x86_64")' not in smoke_patcher or 'abiFilters\\("arm64-v8a"\\)' not in smoke_patcher:
+    fail("Android emulator ABI patcher is incomplete")
 
 patcher = (ROOT / "scripts/patch_android_native_parallelism.py").read_text(encoding="utf-8")
 for required_patcher in [
