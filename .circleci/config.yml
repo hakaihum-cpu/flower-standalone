@@ -207,11 +207,12 @@ jobs:
               find Builds/Android/app/.cxx -type f -name 'build.ninja' -print -exec sh -c 'echo "===== $1 ====="; grep -E "^(pool (compile|link)|  depth = )" "$1" || true' _ {} \;
             } > android-artifact/native-job-pools.txt 2>/dev/null || true
 
+            mkdir -p release-artifact
             APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1 || true)"
             if [ -n "$APK" ]; then
-              cp "$APK" android-artifact/Flower-Standalone-Android.apk
-              sha256sum android-artifact/Flower-Standalone-Android.apk \
-                | tee android-artifact/SHA256.txt
+              cp "$APK" release-artifact/Flower-Standalone-Android.apk
+              sha256sum release-artifact/Flower-Standalone-Android.apk \
+                | tee release-artifact/SHA256.txt
             else
               echo "No release APK produced." | tee android-artifact/NO_APK.txt
             fi
@@ -227,6 +228,7 @@ jobs:
           paths:
             - Builds/Android
             - android-artifact
+            - release-artifact
 
       - store_artifacts:
           path: android-artifact
@@ -427,6 +429,26 @@ jobs:
             echo "Emulator smoke exit code: $STATUS"
             exit "$STATUS"
 
+  publish_verified_apk:
+    docker:
+      - image: cimg/base:2026.09
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: .
+
+      - run:
+          name: Verify gated release artifact
+          command: |
+            set -euo pipefail
+            test -f release-artifact/Flower-Standalone-Android.apk
+            test -f release-artifact/SHA256.txt
+            sha256sum -c release-artifact/SHA256.txt
+
+      - store_artifacts:
+          path: release-artifact
+          destination: verified-release
+
 workflows:
   manual_android_build:
     when: << pipeline.parameters.run_build >>
@@ -435,3 +457,6 @@ workflows:
       - android_emulator_smoke:
           requires:
             - android_build
+      - publish_verified_apk:
+          requires:
+            - android_emulator_smoke
