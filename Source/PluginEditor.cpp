@@ -556,6 +556,13 @@ FlowerStandaloneAudioProcessorEditor::~FlowerStandaloneAudioProcessorEditor()
 
 void FlowerStandaloneAudioProcessorEditor::paint (juce::Graphics& g)
 {
+   #if JUCE_ANDROID
+    static int paintTraceCount = 0;
+    if (paintTraceCount < 3)
+        juce::Logger::writeToLog (
+            "FLOWER_STARTUP UI paint_" + juce::String (++paintTraceCount));
+   #endif
+
     g.fillAll (juce::Colour (0xff080807));
 }
 
@@ -568,6 +575,14 @@ void FlowerStandaloneAudioProcessorEditor::showSynth (bool shouldShow)
 
 void FlowerStandaloneAudioProcessorEditor::resized()
 {
+   #if JUCE_ANDROID
+    static int resizeTraceCount = 0;
+    if (resizeTraceCount < 12)
+        juce::Logger::writeToLog (
+            "FLOWER_STARTUP UI resized_" + juce::String (++resizeTraceCount)
+            + " " + juce::String (getWidth()) + "x" + juce::String (getHeight()));
+   #endif
+
     flowerPanel.setBounds (getLocalBounds().reduced (28, 22));
 
     auto flower = flowerPanel.getLocalBounds().reduced (14);
@@ -671,6 +686,13 @@ void FlowerStandaloneAudioProcessorEditor::resized()
 
 void FlowerStandaloneAudioProcessorEditor::timerCallback()
 {
+   #if JUCE_ANDROID
+    static int timerTraceCount = 0;
+    if (timerTraceCount < 3)
+        juce::Logger::writeToLog (
+            "FLOWER_STARTUP UI timer_" + juce::String (++timerTraceCount));
+   #endif
+
     std::array<float, FlowerStandaloneAudioProcessor::flowerWaveformBins> waveform {};
     std::array<float, FlowerStandaloneAudioProcessor::flowerGrainCount> grainPositions {};
 
