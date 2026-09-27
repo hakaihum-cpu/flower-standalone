@@ -1,7 +1,7 @@
 {
   "project": "flower-standalone",
   "description": "Standalone Android extraction of Flower Actor v3",
-  "status": "FLOWER_ANDROID_ANR_TRACE_READY",
+  "status": "FLOWER_ANDROID_EMULATOR_SMOKE_FAILED_DIAGNOSTICS_PENDING",
   "remote_provisioning": {
     "source_repository": "hakaihum-cpu/flower-standalone",
     "jira_project": "AN",
@@ -40,10 +40,25 @@
       "golden_baseline": false
     },
     "emulator_gate": {
-      "issue": "AN-17",
-      "branch": "feature/AN-17-ci-emulator-smoke",
-      "policy": "arm64 APK is published only after Android emulator startup smoke passes",
-      "unverified_apk_publication": false
+      "issue": "AN-18",
+      "source_commit": "01e909c3288ba473d2d5c2f68b23dad414288f35",
+      "workflow": "b16137d3-5b0b-477c-b47b-1167daf9a5ee",
+      "android_build": {
+        "result": "SUCCESS",
+        "job": "1fe63adb-044a-4aaf-8d09-8ad8e4cef79a"
+      },
+      "android_emulator_smoke": {
+        "result": "FAILURE",
+        "job": "ab8259d3-297b-4660-93b1-51f45fa20198"
+      },
+      "verified_apk_published": false,
+      "diagnostics_required": [
+        "startup-trace.txt",
+        "lastanr.txt",
+        "logcat.txt",
+        "activity-start.txt",
+        "smoke-summary.txt"
+      ]
     }
   },
   "device_smoke": {
