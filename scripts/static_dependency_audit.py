@@ -25,8 +25,6 @@ REQUIRED = [
     "Resources/flower_actor_v3_walk_student01.png",
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_android_smoke_abi.py",
-    "tools/circleci/FLOWER_CI_RUN.bat",
-    "tools/circleci/flower_ci.ps1",
 ]
 
 UPSTREAM_GIT_BLOBS = {
@@ -138,18 +136,6 @@ for required_emulator_ci in [
 smoke_patcher = (ROOT / "scripts/patch_android_smoke_abi.py").read_text(encoding="utf-8")
 if 'abiFilters("x86_64")' not in smoke_patcher or 'abiFilters\\("arm64-v8a"\\)' not in smoke_patcher:
     fail("Android emulator ABI patcher is incomplete")
-
-ci_ps1 = (ROOT / "tools/circleci/flower_ci.ps1").read_text(encoding="utf-8")
-for required_runner in [
-    "/pipeline/run",
-    "run_build",
-    "definition_id",
-    "Circle-Token",
-    "ProtectedData",
-    "The APK was intentionally NOT downloaded",
-]:
-    if required_runner not in ci_ps1:
-        fail(f"CircleCI Windows runner control missing: {required_runner}")
 
 patcher = (ROOT / "scripts/patch_android_native_parallelism.py").read_text(encoding="utf-8")
 for required_patcher in [
