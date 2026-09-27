@@ -249,6 +249,18 @@ private:
     juce::Image makeActorEffectImage (const juce::Image& source,
                                       ActorVariation variation,
                                       int actorIndex) const;
+    juce::Image makeHighResIdentityVariant (const juce::Image& source,
+                                            int actorIndex) const;
+    void deriveHighResActorCoreFromPrimary();
+    void drawHighResPoseVariation (juce::Graphics& g,
+                                   const juce::Image& image,
+                                   const StudentState& state,
+                                   Pose pose,
+                                   int actorIndex,
+                                   float centreX,
+                                   float baselineY,
+                                   float targetHeight,
+                                   juce::Rectangle<float> stage) const;
 
     juce::Image background;
     std::array<StudentAsset, studentCount> students {};

@@ -512,8 +512,87 @@ bool FlowerAnimationComponent::loadDecodedHighResWalkStrip (const juce::Image& s
         oppositeReady = true;
     }
 
+    if (studentIndex == 0)
+        deriveHighResActorCoreFromPrimary();
+
     repaint();
     return true;
+}
+
+juce::Image FlowerAnimationComponent::makeHighResIdentityVariant (const juce::Image& source,
+                                                                  int actorIndex) const
+{
+    if (! source.isValid())
+        return {};
+
+    static constexpr float widthScale[studentCount]
+    {
+        1.00f, 0.96f, 1.03f, 0.98f, 0.94f, 1.05f, 1.00f, 0.97f
+    };
+    static constexpr float heightScale[studentCount]
+    {
+        1.00f, 1.02f, 0.99f, 1.01f, 0.96f, 1.04f, 1.00f, 1.02f
+    };
+    static constexpr float xShift[studentCount]
+    {
+         0.0f, -2.0f,  1.5f, -1.0f,  2.0f, -1.5f,  1.0f, -2.0f
+    };
+
+    const int index = juce::jlimit (0, studentCount - 1, actorIndex);
+    const float ws = widthScale[index];
+    const float hs = heightScale[index];
+    const float outW = static_cast<float> (source.getWidth());
+    const float outH = static_cast<float> (source.getHeight());
+
+    juce::Image result (juce::Image::ARGB, source.getWidth(), source.getHeight(), true);
+    juce::Graphics g (result);
+    g.setImageResamplingQuality (juce::Graphics::mediumResamplingQuality);
+
+    const auto transform = juce::AffineTransform::scale (ws, hs)
+        .translated ((outW - outW * ws) * 0.5f + xShift[index],
+                     outH - outH * hs);
+    g.drawImageTransformed (source, transform, false);
+    return result;
+}
+
+void FlowerAnimationComponent::deriveHighResActorCoreFromPrimary()
+{
+    if (! highResWalkRightReady[0] || ! highResWalkLeftReady[0])
+        return;
+
+    constexpr int idleFrame = 4;
+
+    for (int actor = 0; actor < studentCount; ++actor)
+    {
+        if (actor > 0)
+        {
+            for (int frame = 0; frame < walkFrameCount; ++frame)
+            {
+                highResWalkRight[static_cast<size_t> (actor)][static_cast<size_t> (frame)] =
+                    makeHighResIdentityVariant (
+                        highResWalkRight[0][static_cast<size_t> (frame)], actor);
+
+                const auto& right =
+                    highResWalkRight[static_cast<size_t> (actor)][static_cast<size_t> (frame)];
+                juce::Image left (juce::Image::ARGB, right.getWidth(), right.getHeight(), true);
+                juce::Graphics lg (left);
+                lg.addTransform (juce::AffineTransform (-1.0f, 0.0f,
+                                                        static_cast<float> (right.getWidth()),
+                                                        0.0f, 1.0f, 0.0f));
+                lg.drawImageAt (right, 0, 0);
+                highResWalkLeft[static_cast<size_t> (actor)][static_cast<size_t> (frame)] =
+                    std::move (left);
+            }
+
+            highResWalkRightReady[static_cast<size_t> (actor)] = true;
+            highResWalkLeftReady[static_cast<size_t> (actor)] = true;
+        }
+
+        highResStand[static_cast<size_t> (actor)] =
+            highResWalkRight[static_cast<size_t> (actor)][idleFrame];
+        highResStandReady[static_cast<size_t> (actor)] =
+            highResStand[static_cast<size_t> (actor)].isValid();
+    }
 }
 
 bool FlowerAnimationComponent::loadHighResStand (const void* data,
@@ -2060,6 +2139,71 @@ void FlowerAnimationComponent::drawActorVariation (juce::Graphics& g,
     }
 }
 
+void FlowerAnimationComponent::drawHighResPoseVariation (
+    juce::Graphics& g,
+    const juce::Image& image,
+    const StudentState& state,
+    Pose pose,
+    int actorIndex,
+    float centreX,
+    float baselineY,
+    float targetHeight,
+    juce::Rectangle<float> stage) const
+{
+    float poseHeight = 1.0f;
+    float rotation = 0.0f;
+
+    switch (pose)
+    {
+        case Pose::Crouch:
+        case Pose::HalfSquat:
+            poseHeight = 0.78f;
+            break;
+
+        case Pose::SitFloor:
+        case Pose::SitKneesUp:
+        case Pose::SitLeanBack:
+        case Pose::KneelDown:
+            poseHeight = 0.66f;
+            break;
+
+        case Pose::FallBack:
+            poseHeight = 0.76f;
+            rotation = -1.18f;
+            break;
+
+        case Pose::BodyTiltUnnatural:
+            rotation = (actorIndex % 2 == 0 ? -0.22f : 0.22f);
+            break;
+
+        case Pose::HangingPose:
+            rotation = (actorIndex % 2 == 0 ? -0.08f : 0.08f);
+            break;
+
+        default:
+            break;
+    }
+
+    const float adjustedBaseline =
+        baselineY + verticalOffsetForPose (pose, actorIndex) * targetHeight;
+
+    juce::Graphics::ScopedSaveState saved (g);
+    if (std::abs (rotation) > 0.0001f)
+    {
+        const float pivotY = adjustedBaseline - targetHeight * poseHeight * 0.5f;
+        g.addTransform (juce::AffineTransform::rotation (rotation, centreX, pivotY));
+    }
+
+    drawActorVariation (g,
+                        image,
+                        state,
+                        actorIndex,
+                        centreX,
+                        adjustedBaseline,
+                        targetHeight * poseHeight,
+                        stage);
+}
+
 void FlowerAnimationComponent::drawStudent (juce::Graphics& g,
                                              const StudentAsset& student,
                                              Pose pose,
@@ -2149,43 +2293,64 @@ void FlowerAnimationComponent::paint (juce::Graphics& g)
         const float studentBaseline = baselineY + state.floorOffset * stageHeight;
 
         // Actor v3 never mixes high-resolution and legacy artwork on screen.
-        // The approved 8-frame walk core becomes active only after all eight
-        // students have a verified source strip; the opposite direction is
-        // derived from that source by the approved geometric mirror rule.
-        if (walking && hasCompleteHighResActorCore())
+        // AN-24 promotes the approved 8-frame high-resolution source into an
+        // eight-actor core. Identity geometry, animation phase and behaviour
+        // remain independent per actor; the opposite direction is always an
+        // exact geometric mirror.
+        if (hasCompleteHighResActorCore())
         {
-            // Approved walk QA is displayed at 16 fps, but each source pose is
-            // held for two actor ticks. This preserves the accepted restrained
-            // 8 fps pose cadence while position still advances at 16 Hz.
-            const int frame = ((actorTick + state.phaseOffset) / 2) % walkFrameCount;
-            const auto& bank = state.motionDirection < 0
-                             ? highResWalkLeft[static_cast<size_t> (i)]
-                             : highResWalkRight[static_cast<size_t> (i)];
-            drawActorVariation (g,
-                                bank[static_cast<size_t> (frame)],
-                                state,
-                                i,
-                                x,
-                                studentBaseline,
-                                studentHeight,
-                                stage);
-            continue;
-        }
+            constexpr int idleFrame = 4;
+            const juce::Image* highResImage = nullptr;
 
-        if (! walking && hasCompleteHighResActorCore())
-        {
-            const auto& idleImage = highResStandReady[static_cast<size_t> (i)]
-                                  ? highResStand[static_cast<size_t> (i)]
-                                  : highResWalkRight[static_cast<size_t> (i)][0];
+            if (walking)
+            {
+                // The specification sheet calls for the basic eight-frame walk
+                // at 16 fps. One actor tick equals one displayed source frame.
+                const int frame = (actorTick + state.phaseOffset) % walkFrameCount;
+                const auto& bank = state.motionDirection < 0
+                                 ? highResWalkLeft[static_cast<size_t> (i)]
+                                 : highResWalkRight[static_cast<size_t> (i)];
+                highResImage = &bank[static_cast<size_t> (frame)];
+            }
+            else
+            {
+                const bool faceLeft =
+                    pose == Pose::TurnLeft
+                    || pose == Pose::TalkLeft
+                    || pose == Pose::HoldLeft;
 
-            drawActorVariation (g,
-                                idleImage,
-                                state,
-                                i,
-                                x,
-                                studentBaseline,
-                                studentHeight,
-                                stage);
+                if (faceLeft)
+                    highResImage = &highResWalkLeft[static_cast<size_t> (i)][idleFrame];
+                else if (highResStandReady[static_cast<size_t> (i)])
+                    highResImage = &highResStand[static_cast<size_t> (i)];
+                else
+                    highResImage = &highResWalkRight[static_cast<size_t> (i)][idleFrame];
+            }
+
+            if (verticalOffsetForPose (pose, i) > -0.04f)
+            {
+                juce::Graphics::ScopedSaveState shadowState (g);
+                const float shadowWidth = studentHeight * 0.13f;
+                const float shadowHeight = juce::jmax (2.0f, stageHeight * 0.008f);
+                g.setColour (juce::Colours::black.withAlpha (0.15f));
+                g.fillEllipse (x - shadowWidth * 0.5f,
+                               studentBaseline - shadowHeight * 0.25f,
+                               shadowWidth,
+                               shadowHeight);
+            }
+
+            if (highResImage != nullptr && highResImage->isValid())
+            {
+                drawHighResPoseVariation (g,
+                                          *highResImage,
+                                          state,
+                                          pose,
+                                          i,
+                                          x,
+                                          studentBaseline,
+                                          studentHeight,
+                                          stage);
+            }
             continue;
         }
 
