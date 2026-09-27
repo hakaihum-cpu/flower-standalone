@@ -481,6 +481,11 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             setParameterNormalized (parameter, position);
     };
 
+   #if JUCE_ANDROID
+    // AN-21 diagnostic isolation: do not decode Flower PNG resources on the
+    // Android main thread during editor construction. Keep the visual component
+    // itself present so window/UI creation can be tested independently.
+   #else
     const bool atlasLoaded = flowerAnimation.loadEmbeddedAtlas (
         BinaryData::flower_embedded_atlas_png,
         static_cast<size_t> (BinaryData::flower_embedded_atlas_pngSize));
@@ -492,6 +497,7 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             static_cast<size_t> (BinaryData::flower_actor_v3_walk_student01_pngSize),
             0, true);
     }
+   #endif
 
     startTimerHz (20);
 }
