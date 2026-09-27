@@ -173,13 +173,7 @@ jobs:
             mkdir -p android-artifact
             git rev-parse HEAD | tee android-artifact/SOURCE_COMMIT.txt
 
-            APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk
-workflows:
-  manual_android_build:
-    when: << pipeline.parameters.run_build >>
-    jobs:
-      - android_build
- | head -n 1 || true)"
+            APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1 || true)"
             if [ -n "$APK" ]; then
               cp "$APK" android-artifact/Flower-Standalone-Android.apk
               sha256sum android-artifact/Flower-Standalone-Android.apk \
