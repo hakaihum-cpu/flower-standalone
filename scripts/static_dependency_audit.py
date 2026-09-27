@@ -129,4 +129,19 @@ print("[PASS] Flower standalone static dependency audit")
 print("[PASS] MIYAKO-only code dependencies absent")
 print("[PASS] Actor v3/LookAndFeel/resources remain byte-identical to extraction source")
 print("[PASS] obsolete Java bootstrap removed")
+editor_text = (ROOT / "Source/PluginEditor.cpp").read_text(encoding="utf-8")
+for required_android_startup in [
+    "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
+    "juce::Desktop::getInstance().setOrientationsEnabled",
+    "getDisplays().getPrimaryDisplay()",
+    "setResizable (true, true)",
+    "juce::StandalonePluginHolder::getInstance()",
+    "holder->deviceManager.closeAudioDevice()",
+    "holder->deviceManager.initialise (0, 2, nullptr, true)",
+    "holder->startPlaying()",
+]:
+    if required_android_startup not in editor_text:
+        fail(f"Android standalone startup safeguard missing: {required_android_startup}")
+
+print("[PASS] Android standalone startup safeguards present")
 print("[PASS] JUCER standalone Android structure present")

@@ -1,6 +1,11 @@
 #include "PluginEditor.h"
 #include "ParameterIDs.h"
 #include "BinaryData.h"
+
+#if JUCE_ANDROID
+ #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#endif
+
 #include <cmath>
 
 LabelledKnob::LabelledKnob (juce::String name)
@@ -303,7 +308,55 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
 {
     setLookAndFeel (&retroLookAndFeel);
     setOpaque (true);
+
+   #if JUCE_ANDROID
+    // Keep the standalone editor inside the actual Android display bounds.
+    // This mirrors the proven MIYAKO Android startup path rather than keeping
+    // the desktop-only fixed 960x720 editor size.
+    juce::Desktop::getInstance().setOrientationsEnabled (
+        juce::Desktop::rotatedClockwise | juce::Desktop::rotatedAntiClockwise);
+
+    int targetWidth = 900;
+    int targetHeight = 405;
+
+    if (auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+    {
+        const auto area = display->userArea;
+        const int longSide = juce::jmax (area.getWidth(), area.getHeight());
+        const int shortSide = juce::jmin (area.getWidth(), area.getHeight());
+
+        if (longSide > 0 && shortSide > 0)
+        {
+            targetWidth = juce::jlimit (640, 1100, longSide);
+            targetHeight = juce::jlimit (300, 560,
+                juce::roundToInt (static_cast<float> (targetWidth) * shortSide / longSide));
+        }
+    }
+
+    setSize (targetWidth, targetHeight);
+    setResizable (true, true);
+    setResizeLimits (640, 300, 1400, 700);
+
+    // MIYAKO's proven Android standalone path explicitly discards any device
+    // setup chosen by the generic standalone holder and reopens the default
+    // Android stereo output as 0-in / 2-out. Keep the sequence identical.
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+    {
+        holder->stopPlaying();
+        holder->deviceManager.closeAudioDevice();
+
+        const auto audioError =
+            holder->deviceManager.initialise (0, 2, nullptr, true);
+
+        if (audioError.isNotEmpty())
+            juce::Logger::writeToLog (
+                "FLOWER Android audio initialise failed: " + audioError);
+
+        holder->startPlaying();
+    }
+   #else
     setSize (960, 720);
+   #endif
 
     addAndMakeVisible (flowerPanel);
     flowerPanel.addAndMakeVisible (flowerWaveform);
