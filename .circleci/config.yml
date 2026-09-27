@@ -216,6 +216,12 @@ jobs:
               echo "No release APK produced." | tee android-artifact/NO_APK.txt
             fi
 
+      - run:
+          name: Trim generated Android project for emulator workspace
+          when: always
+          command: |
+            rm -rf Builds/Android/app/.cxx Builds/Android/app/build Builds/Android/.gradle
+
       - persist_to_workspace:
           root: .
           paths:
