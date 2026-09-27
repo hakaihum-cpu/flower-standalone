@@ -287,76 +287,72 @@ jobs:
             set -u
             LOG="emulator-artifact/prepare.log"
             STATUS=0
+            exec > >(tee "$LOG") 2>&1
+            set +e
 
-            {
-              set +e
-              echo "[prepare] begin $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "[prepare] begin $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-              test -d Builds/Android
+            test -d Builds/Android
+            RC=$?
+            if [ "$RC" -ne 0 ]; then
+              echo "[prepare] Builds/Android missing"
+              STATUS=$RC
+            fi
+
+            if [ "$STATUS" -eq 0 ]; then
+              test -d JUCE/modules
               RC=$?
               if [ "$RC" -ne 0 ]; then
-                echo "[prepare] Builds/Android missing"
+                echo "[prepare] JUCE/modules missing"
                 STATUS=$RC
               fi
+            fi
 
-              if [ "$STATUS" -eq 0 ]; then
-                test -d JUCE/modules
-                RC=$?
-                if [ "$RC" -ne 0 ]; then
-                  echo "[prepare] JUCE/modules missing"
-                  STATUS=$RC
-                fi
-              fi
+            if [ "$STATUS" -eq 0 ]; then
+              yes | sdkmanager --licenses >/dev/null 2>&1 || true
+              sdkmanager \
+                "platforms;android-35" \
+                "build-tools;35.0.0" \
+                "ndk;28.1.13356709" \
+                "cmake;3.22.1" \
+                "system-images;android-35;google_apis;x86_64"
+              RC=$?
+              [ "$RC" -ne 0 ] && STATUS=$RC
+            fi
 
-              if [ "$STATUS" -eq 0 ]; then
-                yes | sdkmanager --licenses >/dev/null 2>&1 || true
-                sdkmanager \
-                  "platforms;android-35" \
-                  "build-tools;35.0.0" \
-                  "ndk;28.1.13356709" \
-                  "cmake;3.22.1" \
-                  "system-images;android-35;google_apis;x86_64"
-                RC=$?
-                [ "$RC" -ne 0 ] && STATUS=$RC
-              fi
+            if [ "$STATUS" -eq 0 ]; then
+              rm -rf Builds/Android/app/.cxx Builds/Android/app/build
+              python3 scripts/patch_android_smoke_abi.py Builds/Android/app/build.gradle
+              RC=$?
+              [ "$RC" -ne 0 ] && STATUS=$RC
+            fi
 
-              if [ "$STATUS" -eq 0 ]; then
-                rm -rf Builds/Android/app/.cxx Builds/Android/app/build
-                python3 scripts/patch_android_smoke_abi.py Builds/Android/app/build.gradle
-                RC=$?
-                [ "$RC" -ne 0 ] && STATUS=$RC
-              fi
+            if [ "$STATUS" -eq 0 ]; then
+              grep -F -- 'abiFilters("x86_64")' Builds/Android/app/build.gradle
+              RC=$?
+              [ "$RC" -ne 0 ] && STATUS=$RC
+            fi
 
-              if [ "$STATUS" -eq 0 ]; then
-                grep -F -- 'abiFilters("x86_64")' Builds/Android/app/build.gradle
-                RC=$?
-                [ "$RC" -ne 0 ] && STATUS=$RC
-              fi
+            if [ "$STATUS" -eq 0 ]; then
+              grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
+              RC=$?
+              [ "$RC" -ne 0 ] && STATUS=$RC
+            fi
 
-              if [ "$STATUS" -eq 0 ]; then
-                grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
-                RC=$?
-                [ "$RC" -ne 0 ] && STATUS=$RC
-              fi
+            if [ "$STATUS" -eq 0 ]; then
+              printf 'sdk.dir=%s\n' "$ANDROID_HOME" > Builds/Android/local.properties
+              mkdir -p "$HOME/.android"
+              rm -f "$HOME/.android/debug.keystore"
+              keytool -genkeypair -v \
+                -keystore "$HOME/.android/debug.keystore" \
+                -storepass android -alias androiddebugkey -keypass android \
+                -dname "CN=Android Debug,O=Android,C=US" \
+                -keyalg RSA -keysize 2048 -validity 10000
+              RC=$?
+              [ "$RC" -ne 0 ] && STATUS=$RC
+            fi
 
-              if [ "$STATUS" -eq 0 ]; then
-                printf 'sdk.dir=%s\n' "$ANDROID_HOME" > Builds/Android/local.properties
-                mkdir -p "$HOME/.android"
-                rm -f "$HOME/.android/debug.keystore"
-                keytool -genkeypair -v \
-                  -keystore "$HOME/.android/debug.keystore" \
-                  -storepass android -alias androiddebugkey -keypass android \
-                  -dname "CN=Android Debug,O=Android,C=US" \
-                  -keyalg RSA -keysize 2048 -validity 10000
-                RC=$?
-                [ "$RC" -ne 0 ] && STATUS=$RC
-              fi
-
-              echo "[prepare] exit=$STATUS"
-              exit 0
-            } > "$LOG" 2>&1
-
-            cat "$LOG"
+            echo "[prepare] exit=$STATUS"
             echo "$STATUS" > emulator-artifact/prepare-exit-code.txt
             exit 0
 
@@ -381,8 +377,8 @@ jobs:
                 cd Builds/Android
                 chmod +x gradlew
                 ./gradlew assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2
-              ) > "$LOG" 2>&1
-              STATUS=$?
+              ) 2>&1 | tee "$LOG"
+              STATUS=${PIPESTATUS[0]}
               set -e
 
               tail -n 250 "$LOG" || true
