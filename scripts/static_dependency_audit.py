@@ -158,9 +158,13 @@ print("[PASS] MIYAKO-only code dependencies absent")
 print("[PASS] Actor v3/LookAndFeel/resources remain byte-identical to extraction source")
 print("[PASS] obsolete Java bootstrap removed")
 editor_text = (ROOT / "Source/PluginEditor.cpp").read_text(encoding="utf-8")
+if "juce::Desktop::getInstance().setOrientationsEnabled" in editor_text:
+    fail("AN-22 must not force Android orientation during editor startup")
+if "FLOWER_STARTUP E9 atlas_load_skipped_android" not in editor_text:
+    fail("AN-22 Android PNG-decode isolation marker missing")
+
 for required_android_startup in [
     "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
-    "juce::Desktop::getInstance().setOrientationsEnabled",
     "getDisplays().getPrimaryDisplay()",
     "setResizable (true, true)",
     "juce::StandalonePluginHolder::getInstance()",
