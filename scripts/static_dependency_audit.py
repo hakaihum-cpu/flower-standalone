@@ -32,6 +32,7 @@ UPSTREAM_GIT_BLOBS = {
     "Source/FlowerAnimationComponent.cpp": "8ce198935f3a63bbe050ee916eff203e5db1e361",
     "Source/RetroLookAndFeel.h": "84437adc6aca0db95e5eb3407901abf4af44d62a",
     "Source/RetroLookAndFeel.cpp": "8e3f3ad844427da7bc3aefd4b8a16873105da405",
+    "Source/third_party/stb_image.h": "9eedabedc45b3e6fd88fae6f14a160b4d53272ec",
     "Resources/flower_embedded_atlas.png": "ec5873bb022f6efdef9fc72c0099ca71e344887b",
     "Resources/flower_actor_v3_walk_student01.png": "d516c56bef14ae5cc2e73e755b4f221ddf2aa04d",
 }
@@ -146,8 +147,9 @@ for required_an21_deferred_load in [
     "androidVisualLoadAttempted",
     "androidStartupTicks >= 4",
     "isShowing()",
-    "flowerAnimation.loadEmbeddedAtlas",
-    "flowerAnimation.loadHighResWalkStrip",
+    "decodeAndroidPngWithStb",
+    "flowerAnimation.loadDecodedAtlas",
+    "flowerAnimation.loadDecodedHighResWalkStrip",
 ]:
     if required_an21_deferred_load not in editor_text:
         fail(f"AN-21 post-window visual load guard missing: {required_an21_deferred_load}")
