@@ -19,9 +19,10 @@ Key observed source objects:
 These identifiers document what was inspected. They do not create a build dependency on MIYAKO.
 
 ## Reuse unchanged in behavior first
-- 16-second Flower loop concept
-- REC / DUB / CLEAR
-- feedback and reverse
+- rolling capture of the most recent 16 seconds of generated audio
+- rolling capture continues while Flower is bypassed
+- CLEAR resets the rolling buffer/state
+- reverse
 - four-grain granular playback
 - Flower waveform/telemetry concepts
 - Flower parameter semantics
@@ -64,14 +65,16 @@ The first parity checkpoint is reached when:
 1. Android app launches independently of MIYAKO.
 2. MIDI note input can sound the Sine synth.
 3. ADSR, Filter and LFO affect the synth.
-4. Flower can record that synth output.
-5. Flower loop playback works.
-6. DUB, CLEAR, feedback and reverse work.
-7. Four-grain processing and core parameters work.
-8. Waveform/telemetry reacts correctly.
+4. The most recent synth output is continuously captured into the rolling buffer up to 16 seconds.
+5. Flower granular playback can use that rolling buffer when Flower is enabled.
+6. CLEAR and reverse work.
+7. Four-grain processing and POSITION / SIZE / DENSITY / SPREAD / HOLD / PITCH / MIX work.
+8. Waveform/buffer/playhead telemetry reacts correctly.
 9. Actor v3 visual behavior runs without MIYAKO dependencies.
 10. No MIYAKO repository access is needed to build or run.
 11. MIYAKO repository remains unchanged.
-12. Static checks pass before the first CI build.
+12. Static checks pass before a verification build.
+
+The older written REC/DUB workflow is not a parity requirement because the current Actor-v3 processor no longer uses it.
 
 Only after this checkpoint do we treat new Flower behavior as design work rather than extraction work.

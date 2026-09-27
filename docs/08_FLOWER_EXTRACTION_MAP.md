@@ -69,8 +69,9 @@ Flower-specific UI:
 - Android full-overlay layout behavior
 
 Current upstream note:
-- `flowerRecord` and `flowerOverdub` objects exist in the editor class, but current Actor-v3 UI layout hides them with empty bounds.
-- REC/DUB semantics remain part of Flower behavior and must be resolved deliberately in the standalone baseline rather than accidentally discarded.
+- `flowerRecord` and `flowerOverdub` identifiers remain in the source/state surface, but the current Actor-v3 UI does not expose REC/DUB controls.
+- Current Actor-v3 audio continuously captures the most recent 16 seconds and explicitly does not use the older REC/DUB workflow.
+- Standalone therefore keeps rolling capture as the baseline behavior. REC/DUB must not be reintroduced implicitly from the older written spec.
 
 ## Standalone synth module
 New minimal module:

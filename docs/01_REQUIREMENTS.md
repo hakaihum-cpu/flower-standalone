@@ -17,17 +17,18 @@ REQ-005: The initial synth is intentionally minimal:
 
 REQ-006: The initial UI reuses the existing Flower page/UI as the starting point. Do not redesign it during the extraction phase unless required to remove MIYAKO-only controls.
 
-REQ-007: Initial Flower behavior to retain:
-- Flower looper
-- REC / DUB / CLEAR
-- feedback / reverse
-- maximum 16-second loop
+REQ-007: Initial Flower behavior to retain from the current Actor-v3 source:
+- continuous rolling capture of the most recent generated synth audio, up to 16 seconds
+- Flower bypass still keeps the rolling capture current while leaving the dry signal unchanged
+- CLEAR resets the rolling buffer/state
 - 4-grain granular engine
-- POSITION / SIZE / DENSITY / SPREAD / HOLD / PITCH / MIX
-- waveform/record/playhead telemetry
+- POSITION / SIZE / DENSITY / SPREAD / HOLD / PITCH / REVERSE / MIX
+- waveform / rolling-buffer-validity / playhead telemetry
 - approved rooftop/cast visual baseline
 - Actor Engine v3 independent-actor behavior and continuity rules
 - existing Flower MIDI behavior where it remains meaningful in standalone
+
+The older REC/DUB workflow in `docs/FLOWER_SPEC.md` is superseded by the current Actor-v3 source. `flowerRecord` and `flowerOverdub` parameter IDs may remain in the extracted state for compatibility while no visible REC/DUB controls or active REC/DUB audio path are present. FEEDBACK remains an inherited parameter/UI surface but is not used as an overdub feedback control while REC/DUB is inactive.
 
 REQ-008: MIYAKO-only systems are not part of the standalone baseline unless explicitly reintroduced:
 - DX7
