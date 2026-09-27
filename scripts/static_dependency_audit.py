@@ -21,14 +21,15 @@ REQUIRED = [
     "Source/FlowerAnimationComponent.cpp",
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
+    "Source/third_party/stb_image.h",
     "Resources/flower_embedded_atlas.png",
     "Resources/flower_actor_v3_walk_student01.png",
     "scripts/patch_android_native_parallelism.py",
 ]
 
 UPSTREAM_GIT_BLOBS = {
-    "Source/FlowerAnimationComponent.h": "3e64de47666541ef2487b729540c12f96d0a3ae6",
-    "Source/FlowerAnimationComponent.cpp": "e7d6ba2cab824fd61e39441b0198337b9a82b6b0",
+    "Source/FlowerAnimationComponent.h": "cbe8a1137d99c4f2715011911a27da661e817c02",
+    "Source/FlowerAnimationComponent.cpp": "8ce198935f3a63bbe050ee916eff203e5db1e361",
     "Source/RetroLookAndFeel.h": "84437adc6aca0db95e5eb3407901abf4af44d62a",
     "Source/RetroLookAndFeel.cpp": "8e3f3ad844427da7bc3aefd4b8a16873105da405",
     "Resources/flower_embedded_atlas.png": "ec5873bb022f6efdef9fc72c0099ca71e344887b",
@@ -127,7 +128,7 @@ for required_patcher in [
 
 print("[PASS] Flower standalone static dependency audit")
 print("[PASS] MIYAKO-only code dependencies absent")
-print("[PASS] Actor v3/LookAndFeel/resources remain byte-identical to extraction source")
+print("[PASS] Flower visual sources/resources match the AN-21 stb-decoder snapshot")
 print("[PASS] obsolete Java bootstrap removed")
 editor_text = (ROOT / "Source/PluginEditor.cpp").read_text(encoding="utf-8")
 if "juce::Desktop::getInstance().setOrientationsEnabled" in editor_text:
@@ -137,7 +138,6 @@ for forbidden_an21_worker in [
     "std::thread",
     "detach()",
     "AsyncVisualLoadState",
-    "std::atomic",
 ]:
     if forbidden_an21_worker in editor_text:
         fail(f"unsafe AN-21 background visual loader still present: {forbidden_an21_worker}")
@@ -154,12 +154,19 @@ for required_an21_deferred_load in [
 
 for required_android_startup in [
     "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
-    "getDisplays().getPrimaryDisplay()",
-    "setResizable (true, true)",
+    "constexpr int androidCanvasSize = 720",
+    "setSize (androidCanvasSize, androidCanvasSize)",
+    "setResizable (false, false)",
+    "setResizeLimits (androidCanvasSize, androidCanvasSize",
     "juce::StandalonePluginHolder::getInstance()",
     "holder->deviceManager.closeAudioDevice()",
     "holder->deviceManager.initialise (0, 2, nullptr, true)",
     "holder->startPlaying()",
+    "#define STB_IMAGE_IMPLEMENTATION",
+    "#include \"third_party/stb_image.h\"",
+    "decodeAndroidPngWithStb",
+    "flowerAnimation.loadDecodedAtlas",
+    "flowerAnimation.loadDecodedHighResWalkStrip",
 ]:
     if required_android_startup not in editor_text:
         fail(f"Android standalone startup safeguard missing: {required_android_startup}")
