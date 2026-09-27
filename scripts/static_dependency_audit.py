@@ -154,12 +154,22 @@ for required_an21_deferred_load in [
     if required_an21_deferred_load not in editor_text:
         fail(f"AN-21 post-window visual load guard missing: {required_an21_deferred_load}")
 
+for forbidden_fixed_logical_720 in [
+    "setResizeLimits (androidCanvasSize, androidCanvasSize",
+    "constexpr int androidCanvasSize = 720",
+]:
+    if forbidden_fixed_logical_720 in editor_text:
+        fail(f"AN-22 must not force a 720-logical-pixel Android editor: {forbidden_fixed_logical_720}")
+
 for required_android_startup in [
     "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
-    "constexpr int androidCanvasSize = 720",
-    "setSize (androidCanvasSize, androidCanvasSize)",
+    "logicalCanvasSide",
+    "720.0 / juce::jmax",
+    "display->scale",
+    "display->userBounds.getWidth()",
+    "display->userBounds.getHeight()",
+    "setSize (logicalCanvasSide, logicalCanvasSide)",
     "setResizable (false, false)",
-    "setResizeLimits (androidCanvasSize, androidCanvasSize",
     "juce::StandalonePluginHolder::getInstance()",
     "holder->deviceManager.closeAudioDevice()",
     "holder->deviceManager.initialise (0, 2, nullptr, true)",
@@ -174,16 +184,20 @@ for required_android_startup in [
         fail(f"Android standalone startup safeguard missing: {required_android_startup}")
 
 for required_720_ui in [
-    "flowerPanel.setBounds (getLocalBounds().reduced (8))",
-    "auto animationArea = flower.removeFromTop (336)",
-    "auto waveformArea = flower.removeFromTop (84)",
+    "androidReferencePixels = 720.0f",
+    "androidReferenceScale()",
+    "static_cast<float> (juce::jmin (getWidth(), getHeight())) / androidReferencePixels",
+    "auto square = getLocalBounds().withSizeKeepingCentre",
+    "flowerPanel.setBounds (square.reduced (px (8.0f)))",
+    "auto animationArea = flower.removeFromTop (px (336.0f))",
+    "auto waveformArea = flower.removeFromTop (px (84.0f))",
     "placeFour (flowerRow1",
     "flowerPosition, flowerSize, flowerDensity, flowerSpread",
     "placeFour (flowerRow2",
     "flowerHold, flowerPitch, flowerMix, flowerFeedback",
-    "auto keyboardArea = synth.removeFromBottom (118)",
-    "control.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 72, 20)",
-    "label.setFont (juce::FontOptions (11.0f).withStyle (\"Bold\"))",
+    "auto keyboardArea = synth.removeFromBottom (px (118.0f))",
+    "androidMetric (72.0f), androidMetric (20.0f)",
+    "11.0f * scale",
 ]:
     if required_720_ui not in editor_text:
         fail(f"AN-22 fixed-720 UI guard missing: {required_720_ui}")
