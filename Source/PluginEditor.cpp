@@ -4,9 +4,63 @@
 
 #if JUCE_ANDROID
  #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+ #define STBI_ONLY_PNG
+ #define STBI_NO_STDIO
+ #define STB_IMAGE_IMPLEMENTATION
+ #include "third_party/stb_image.h"
 #endif
 
 #include <cmath>
+#include <limits>
+
+#if JUCE_ANDROID
+namespace
+{
+juce::Image decodeAndroidPngWithStb (const void* data, size_t size)
+{
+    if (data == nullptr || size == 0 || size > static_cast<size_t> (std::numeric_limits<int>::max()))
+        return {};
+
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    auto* rgba = stbi_load_from_memory (
+        static_cast<const stbi_uc*> (data),
+        static_cast<int> (size),
+        &width,
+        &height,
+        &channels,
+        STBI_rgb_alpha);
+
+    if (rgba == nullptr || width <= 0 || height <= 0)
+    {
+        if (rgba != nullptr)
+            stbi_image_free (rgba);
+        return {};
+    }
+
+    juce::Image image (juce::Image::ARGB, width, height, true);
+    juce::Image::BitmapData bitmap (image, juce::Image::BitmapData::writeOnly);
+
+    for (int y = 0; y < height; ++y)
+    {
+        auto* line = bitmap.getLinePointer (y);
+        const auto* src = rgba + static_cast<size_t> (y) * static_cast<size_t> (width) * 4u;
+
+        for (int x = 0; x < width; ++x)
+        {
+            auto* pixel = reinterpret_cast<juce::PixelARGB*> (
+                line + static_cast<ptrdiff_t> (x) * bitmap.pixelStride);
+            const auto* p = src + static_cast<size_t> (x) * 4u;
+            pixel->setARGB (p[3], p[0], p[1], p[2]);
+        }
+    }
+
+    stbi_image_free (rgba);
+    return image;
+}
+}
+#endif
 
 LabelledKnob::LabelledKnob (juce::String name)
 {
@@ -316,26 +370,11 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     // Do not force orientation during startup. On the target 720x720 Android
     // device this can tear down the JUCE activity window before it is drawn.
 
-    int targetWidth = 900;
-    int targetHeight = 405;
-
-    if (auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
-    {
-        const auto area = display->userArea;
-        const int longSide = juce::jmax (area.getWidth(), area.getHeight());
-        const int shortSide = juce::jmin (area.getWidth(), area.getHeight());
-
-        if (longSide > 0 && shortSide > 0)
-        {
-            targetWidth = juce::jlimit (640, 1100, longSide);
-            targetHeight = juce::jlimit (300, 560,
-                juce::roundToInt (static_cast<float> (targetWidth) * shortSide / longSide));
-        }
-    }
-
-    setSize (targetWidth, targetHeight);
-    setResizable (true, true);
-    setResizeLimits (640, 300, 1400, 700);
+    constexpr int androidCanvasSize = 720;
+    setSize (androidCanvasSize, androidCanvasSize);
+    setResizable (false, false);
+    setResizeLimits (androidCanvasSize, androidCanvasSize,
+                     androidCanvasSize, androidCanvasSize);
 
     // MIYAKO's proven Android standalone path explicitly discards any device
     // setup chosen by the generic standalone holder and reopens the default
@@ -633,16 +672,17 @@ void FlowerStandaloneAudioProcessorEditor::timerCallback()
         {
             androidVisualLoadAttempted = true;
 
-            const bool atlasLoaded = flowerAnimation.loadEmbeddedAtlas (
+            const auto atlas = decodeAndroidPngWithStb (
                 BinaryData::flower_embedded_atlas_png,
                 static_cast<size_t> (BinaryData::flower_embedded_atlas_pngSize));
+            const bool atlasLoaded = flowerAnimation.loadDecodedAtlas (atlas);
 
             if (atlasLoaded)
             {
-                flowerAnimation.loadHighResWalkStrip (
+                const auto walkStrip = decodeAndroidPngWithStb (
                     BinaryData::flower_actor_v3_walk_student01_png,
-                    static_cast<size_t> (BinaryData::flower_actor_v3_walk_student01_pngSize),
-                    0, true);
+                    static_cast<size_t> (BinaryData::flower_actor_v3_walk_student01_pngSize));
+                flowerAnimation.loadDecodedHighResWalkStrip (walkStrip, 0, true);
             }
         }
     }
