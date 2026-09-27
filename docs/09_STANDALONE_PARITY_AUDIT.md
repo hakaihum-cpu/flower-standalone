@@ -31,9 +31,23 @@ Read-only upstream reference:
 | MIX | Present | smoothed dry/wet. |
 | CLEAR | Present | clears rolling buffer/state through atomic request. |
 | Waveform telemetry | Present | 256 bins plus buffer validity, base position and four grain positions. |
-| Actor v3 | Present | standalone carries the independent-actor component and approved embedded visual resources. |
+| Actor v3 engine | Present | standalone carries the independent-actor component, 16 Hz independent simulation and variation layer. |
 | Parameter state save/restore | Present | APVTS XML state in getStateInformation/setStateInformation. |
 | MIYAKO isolation | Present | standalone build/runtime has no MIYAKO repository dependency. |
+
+
+## Actor v3 production visual-bank status
+
+The runtime engine is present, but the production high-resolution eight-student walk bank is not complete.
+
+- approved high-resolution source strip present: student_01 only,
+- student_02 through student_08 are not present as approved production strips in the repository,
+- the renderer intentionally enables the high-resolution bank only when all eight students have both directional banks ready,
+- the opposite direction is derived by exact geometric mirror from each approved source strip,
+- until all eight approved strips exist, the current runtime falls back to the legacy embedded atlas and must not mix high-resolution and legacy actors in one scene,
+- completion is tracked separately in AN-24.
+
+This is an incomplete production asset bank, not a missing Actor-v3 engine implementation.
 
 ## Superseded legacy behavior
 
