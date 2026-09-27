@@ -18,9 +18,17 @@ FlowerStandaloneAudioProcessor::FlowerStandaloneAudioProcessor()
                             .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "FLOWER_STATE", createParameterLayout())
 {
+   #if JUCE_ANDROID
+    juce::Logger::writeToLog ("FLOWER_STARTUP P1 processor_ctor_begin");
+   #endif
+
     for (int i = 0; i < 8; ++i)
         synthesiser.addVoice (new SineVoice());
     synthesiser.addSound (new SineSound());
+
+   #if JUCE_ANDROID
+    juce::Logger::writeToLog ("FLOWER_STARTUP P2 processor_ctor_end");
+   #endif
 }
 
 bool FlowerStandaloneAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -32,6 +40,10 @@ bool FlowerStandaloneAudioProcessor::isBusesLayoutSupported (const BusesLayout& 
 
 void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int)
 {
+   #if JUCE_ANDROID
+    juce::Logger::writeToLog ("FLOWER_STARTUP P3 prepareToPlay_begin");
+   #endif
+
     currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
     synthesiser.setCurrentPlaybackSampleRate (currentSampleRate);
 
@@ -56,6 +68,10 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int)
     initialise (flowerHoldSmoothed, ParamIDs::flowerHold, 0.025);
     initialise (flowerPitchSmoothed, ParamIDs::flowerPitch, 0.020);
     initialise (flowerMixSmoothed, ParamIDs::flowerMix, 0.025);
+
+   #if JUCE_ANDROID
+    juce::Logger::writeToLog ("FLOWER_STARTUP P4 prepareToPlay_end");
+   #endif
 }
 
 void FlowerStandaloneAudioProcessor::updateSynthParams()
