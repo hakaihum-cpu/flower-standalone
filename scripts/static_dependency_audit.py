@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+import xml.etree.ElementTree as ET
+
+ROOT = Path(__file__).resolve().parents[1]
+
+REQUIRED = [
+    "FLOWER_Standalone.jucer",
+    "Source/ParameterIDs.h",
+    "Source/Modulation.h",
+    "Source/SynthVoice.h",
+    "Source/SynthVoice.cpp",
+    "Source/PluginProcessor.h",
+    "Source/PluginProcessor.cpp",
+    "Source/PluginEditor.h",
+    "Source/PluginEditor.cpp",
+    "Source/FlowerAnimationComponent.h",
+    "Source/FlowerAnimationComponent.cpp",
+    "Source/RetroLookAndFeel.h",
+    "Source/RetroLookAndFeel.cpp",
+    "Resources/flower_embedded_atlas.png",
+    "Resources/flower_actor_v3_walk_student01.png",
+]
+
+UPSTREAM_GIT_BLOBS = {
+    "Source/FlowerAnimationComponent.h": "3e64de47666541ef2487b729540c12f96d0a3ae6",
+    "Source/FlowerAnimationComponent.cpp": "e7d6ba2cab824fd61e39441b0198337b9a82b6b0",
+    "Source/RetroLookAndFeel.h": "84437adc6aca0db95e5eb3407901abf4af44d62a",
+    "Source/RetroLookAndFeel.cpp": "8e3f3ad844427da7bc3aefd4b8a16873105da405",
+    "Resources/flower_embedded_atlas.png": "ec5873bb022f6efdef9fc72c0099ca71e344887b",
+    "Resources/flower_actor_v3_walk_student01.png": "d516c56bef14ae5cc2e73e755b4f221ddf2aa04d",
+}
+
+FORBIDDEN_SOURCE_TOKENS = [
+    "Dx7Patch",
+    "SamplerData",
+    "VisualizerComponent",
+    "twilightEnabled",
+    "TwilightEvent",
+    "ParamIDs::oscType",
+    "ParamIDs::sampler",
+    "NotebookFx",
+]
+
+def git_blob_sha(path: Path) -> str:
+    data = path.read_bytes()
+    header = f"blob {len(data)}\0".encode("ascii")
+    return hashlib.sha1(header + data).hexdigest()
+
+def fail(message: str) -> None:
+    print(f"[FAIL] {message}")
+    raise SystemExit(1)
+
+for relative in REQUIRED:
+    if not (ROOT / relative).is_file():
+        fail(f"required file missing: {relative}")
+
+if (ROOT / "app").exists():
+    fail("obsolete Java bootstrap app/ directory still exists")
+
+for obsolete in ["build.gradle.kts", "settings.gradle.kts", "gradle.properties", "ci/gradle-bootstrap.sh"]:
+    if (ROOT / obsolete).exists():
+        fail(f"obsolete Java bootstrap file still exists: {obsolete}")
+
+for relative, expected in UPSTREAM_GIT_BLOBS.items():
+    actual = git_blob_sha(ROOT / relative)
+    if actual != expected:
+        fail(f"upstream-reuse file changed unexpectedly: {relative} {actual} != {expected}")
+
+source_text = "\n".join(
+    p.read_text(encoding="utf-8", errors="strict")
+    for p in sorted((ROOT / "Source").glob("*"))
+    if p.suffix in {".h", ".cpp"}
+)
+
+for token in FORBIDDEN_SOURCE_TOKENS:
+    if token in source_text:
+        fail(f"MIYAKO-only dependency token found in standalone Source: {token}")
+
+jucer = ROOT / "FLOWER_Standalone.jucer"
+root = ET.parse(jucer).getroot()
+if root.attrib.get("name") != "FLOWER":
+    fail("JUCER project name is not FLOWER")
+if root.attrib.get("pluginFormats") != "buildStandalone":
+    fail("JUCER is not standalone-only")
+if root.attrib.get("bundleIdentifier") != "local.flower.standalone":
+    fail("unexpected provisional bundleIdentifier")
+if root.attrib.get("pluginIsSynth") != "1" or root.attrib.get("pluginWantsMidiIn") != "1":
+    fail("standalone synth/MIDI flags are not enabled")
+
+jucer_text = jucer.read_text(encoding="utf-8")
+for required_ref in [
+    "Source/FlowerAnimationComponent.cpp",
+    "Source/PluginProcessor.cpp",
+    "Source/PluginEditor.cpp",
+    "Resources/flower_embedded_atlas.png",
+]:
+    if required_ref not in jucer_text:
+        fail(f"JUCER reference missing: {required_ref}")
+
+circle = (ROOT / ".circleci/config.yml").read_text(encoding="utf-8")
+if "default: false" not in circle or "run_build" not in circle:
+    fail("CircleCI manual build gate is missing")
+
+print("[PASS] Flower standalone static dependency audit")
+print("[PASS] MIYAKO-only code dependencies absent")
+print("[PASS] Actor v3/LookAndFeel/resources remain byte-identical to extraction source")
+print("[PASS] obsolete Java bootstrap removed")
+print("[PASS] JUCER standalone Android structure present")
