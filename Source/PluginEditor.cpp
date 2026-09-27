@@ -317,8 +317,8 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     // Keep the standalone editor inside the actual Android display bounds.
     // This mirrors the proven MIYAKO Android startup path rather than keeping
     // the desktop-only fixed 960x720 editor size.
-    juce::Desktop::getInstance().setOrientationsEnabled (
-        juce::Desktop::rotatedClockwise | juce::Desktop::rotatedAntiClockwise);
+    // AN-22: keep AN-19 startup tracing, but do not force orientation while
+    // the Android activity/window is still being created.
 
     int targetWidth = 900;
     int targetHeight = 405;
@@ -508,34 +508,22 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     };
 
    #if JUCE_ANDROID
-    juce::Logger::writeToLog ("FLOWER_STARTUP E9 atlas_load_begin");
-   #endif
-
+    // AN-22: preserve AN-19 tracing while isolating PNG decode from the
+    // Android main-thread startup path (AN-21).
+    juce::Logger::writeToLog ("FLOWER_STARTUP E9 atlas_load_skipped_android");
+   #else
     const bool atlasLoaded = flowerAnimation.loadEmbeddedAtlas (
         BinaryData::flower_embedded_atlas_png,
         static_cast<size_t> (BinaryData::flower_embedded_atlas_pngSize));
 
-   #if JUCE_ANDROID
-    juce::Logger::writeToLog (
-        atlasLoaded
-            ? "FLOWER_STARTUP E10 atlas_load_ok"
-            : "FLOWER_STARTUP E10 atlas_load_failed");
-   #endif
-
     if (atlasLoaded)
     {
-        const bool walkLoaded = flowerAnimation.loadHighResWalkStrip (
+        flowerAnimation.loadHighResWalkStrip (
             BinaryData::flower_actor_v3_walk_student01_png,
             static_cast<size_t> (BinaryData::flower_actor_v3_walk_student01_pngSize),
             0, true);
-
-       #if JUCE_ANDROID
-        juce::Logger::writeToLog (
-            walkLoaded
-                ? "FLOWER_STARTUP E11 walk_strip_ok"
-                : "FLOWER_STARTUP E11 walk_strip_failed");
-       #endif
     }
+   #endif
 
    #if JUCE_ANDROID
     juce::Logger::writeToLog ("FLOWER_STARTUP E12 timer_start_begin");
