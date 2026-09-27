@@ -95,6 +95,7 @@ jobs:
 
       - run:
           name: Build optimized installable APK
+          no_output_timeout: 30m
           command: |
             set -euo pipefail
             export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
