@@ -23,6 +23,7 @@ REQUIRED = [
     "Source/RetroLookAndFeel.cpp",
     "Resources/flower_embedded_atlas.png",
     "Resources/flower_actor_v3_walk_student01.png",
+    "scripts/patch_android_native_parallelism.py",
 ]
 
 UPSTREAM_GIT_BLOBS = {
@@ -104,6 +105,25 @@ for required_ref in [
 circle = (ROOT / ".circleci/config.yml").read_text(encoding="utf-8")
 if "default: false" not in circle or "run_build" not in circle:
     fail("CircleCI manual build gate is missing")
+
+for required_ci in [
+    "patch_android_native_parallelism.py",
+    "CMAKE_BUILD_PARALLEL_LEVEL=2",
+    "ActiveProcessorCount=2",
+    "--max-workers=2",
+    "native-job-pools.txt",
+]:
+    if required_ci not in circle:
+        fail(f"CircleCI native parallelism control missing: {required_ci}")
+
+patcher = (ROOT / "scripts/patch_android_native_parallelism.py").read_text(encoding="utf-8")
+for required_patcher in [
+    "-DCMAKE_JOB_POOLS:STRING=compile=2;link=1",
+    "-DCMAKE_JOB_POOL_COMPILE:STRING=compile",
+    "-DCMAKE_JOB_POOL_LINK:STRING=link",
+]:
+    if required_patcher not in patcher:
+        fail(f"generated Gradle job-pool patcher missing: {required_patcher}")
 
 print("[PASS] Flower standalone static dependency audit")
 print("[PASS] MIYAKO-only code dependencies absent")

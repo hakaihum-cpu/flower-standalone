@@ -1,7 +1,7 @@
 {
   "project": "flower-standalone",
   "description": "Standalone Android extraction of Flower Actor v3",
-  "status": "FLOWER_PORT_NON_INTRUSIVE_NATIVE_DIAGNOSTIC_READY",
+  "status": "FLOWER_PORT_BUILD_SUCCESS_ARTIFACT_PENDING",
   "remote_provisioning": {
     "source_repository": "hakaihum-cpu/flower-standalone",
     "jira_project": "AN",
@@ -23,31 +23,21 @@
     "manual_parameter": "run_build=true",
     "last_verified_bootstrap_build": "circleci-pipeline-2",
     "flower_port_build": {
-      "last_attempt": "AN-13 diagnostic run",
-      "source_commit": "d4a830dd5424b8b3935579f28010787a7940f887",
-      "result": "FAILURE",
-      "failure_class": "DIAGNOSTIC_GUARD_FALSE_POSITIVE",
-      "direct_cause": "CI guard sent SIGTERM after raw cgroup memory.current crossed 3.75 GiB",
-      "evidence": {
-        "build_start_memory_current_bytes": 3072626688,
-        "guard_memory_current_bytes": 4283375616,
-        "clang_processes_at_guard": 0,
-        "oom_events": 0,
-        "oom_kill_events": 0,
-        "gradle_exit_code": 143,
-        "gradle_worker_leases": 2
-      },
-      "interpretation": "Native parallelism root-cause hypothesis remains unverified because this run never reached native compilation.",
-      "fix_issue": "AN-14",
-      "fix_branch": "fix/AN-14-nonintrusive-memory-diagnostics",
-      "next_run_controls": [
+      "last_successful_job": "circleci-job-6b5d922c-1b88-4e19-b0d8-b5a6182b994a",
+      "source_commit": "23d6f0a185d619cfda4b2c3637131f4e4ee592e3",
+      "result": "SUCCESS",
+      "issue": "AN-15",
+      "branch": "fix/AN-15-cmake-job-pools",
+      "controls": [
+        "CMAKE_JOB_POOLS compile=2;link=1 injected into generated Android CMake arguments",
+        "CMAKE_JOB_POOL_COMPILE=compile",
+        "CMAKE_JOB_POOL_LINK=link",
         "CMAKE_BUILD_PARALLEL_LEVEL=2",
-        "JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=2",
-        "Gradle --max-workers=2",
-        "memory.current/stat/events observed only; no auto-kill",
-        "clang process count observed only; no auto-kill",
-        "collect AGP build_command.txt when generated"
-      ]
+        "JAVA_TOOL_OPTIONS ActiveProcessorCount=2",
+        "Gradle --max-workers=2"
+      ],
+      "artifact_verification": "PENDING",
+      "golden_baseline": false
     }
   }
 }
