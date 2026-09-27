@@ -7,7 +7,6 @@
 #endif
 
 #include <cmath>
-#include <thread>
 
 LabelledKnob::LabelledKnob (juce::String name)
 {
@@ -482,26 +481,7 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             setParameterNormalized (parameter, position);
     };
 
-   #if JUCE_ANDROID
-    // Decode PNG resources away from Android's main/UI thread. The editor and
-    // activity window can finish startup even on devices where libpng decoding
-    // is unusually slow. Only decoded juce::Image objects cross back to the
-    // message thread, where FlowerAnimationComponent state is updated.
-    asyncVisualLoadState = std::make_shared<AsyncVisualLoadState>();
-    const auto loadState = asyncVisualLoadState;
-    std::thread ([loadState]
-    {
-        loadState->atlas = juce::ImageFileFormat::loadFrom (
-            BinaryData::flower_embedded_atlas_png,
-            static_cast<size_t> (BinaryData::flower_embedded_atlas_pngSize));
-
-        loadState->walkStrip = juce::ImageFileFormat::loadFrom (
-            BinaryData::flower_actor_v3_walk_student01_png,
-            static_cast<size_t> (BinaryData::flower_actor_v3_walk_student01_pngSize));
-
-        loadState->ready.store (true, std::memory_order_release);
-    }).detach();
-   #else
+   #if ! JUCE_ANDROID
     const bool atlasLoaded = flowerAnimation.loadEmbeddedAtlas (
         BinaryData::flower_embedded_atlas_png,
         static_cast<size_t> (BinaryData::flower_embedded_atlas_pngSize));
@@ -642,16 +622,29 @@ void FlowerStandaloneAudioProcessorEditor::resized()
 void FlowerStandaloneAudioProcessorEditor::timerCallback()
 {
    #if JUCE_ANDROID
-    if (! asyncVisualsApplied
-        && asyncVisualLoadState != nullptr
-        && asyncVisualLoadState->ready.load (std::memory_order_acquire))
+    // Let StandaloneFilterWindow finish attaching a visible Android window
+    // before doing any PNG decoding on the message thread. This avoids both
+    // the pre-window startup stall and the unsafe detached-thread decoder path.
+    if (! androidVisualLoadAttempted)
     {
-        const bool atlasLoaded = flowerAnimation.loadDecodedAtlas (asyncVisualLoadState->atlas);
-        if (atlasLoaded)
-            flowerAnimation.loadDecodedHighResWalkStrip (asyncVisualLoadState->walkStrip, 0, true);
+        ++androidStartupTicks;
 
-        asyncVisualsApplied = true;
-        asyncVisualLoadState.reset();
+        if (androidStartupTicks >= 4 && isShowing())
+        {
+            androidVisualLoadAttempted = true;
+
+            const bool atlasLoaded = flowerAnimation.loadEmbeddedAtlas (
+                BinaryData::flower_embedded_atlas_png,
+                static_cast<size_t> (BinaryData::flower_embedded_atlas_pngSize));
+
+            if (atlasLoaded)
+            {
+                flowerAnimation.loadHighResWalkStrip (
+                    BinaryData::flower_actor_v3_walk_student01_png,
+                    static_cast<size_t> (BinaryData::flower_actor_v3_walk_student01_pngSize),
+                    0, true);
+            }
+        }
     }
    #endif
 
