@@ -13,42 +13,116 @@ jobs:
     steps:
       - checkout
 
+      - run:
+          name: Static dependency audit
+          command: |
+            python3 scripts/static_dependency_audit.py
+
       - restore_cache:
           keys:
-            - gradle-v1-{{ checksum "build.gradle.kts" }}-{{ checksum "app/build.gradle.kts" }}
-            - gradle-v1-
+            - juce-9.0.2-projucer-v1
+            - gradle-flower-v1-
 
       - run:
-          name: Toolchain check
+          name: Install Projucer Linux dependencies
           command: |
-            java -version
-            chmod +x ./ci/gradle-bootstrap.sh
-            ./ci/gradle-bootstrap.sh --version
+            sudo apt-get update
+            sudo apt-get install -y \
+              git cmake ninja-build \
+              libasound2-dev libjack-jackd2-dev libcurl4-openssl-dev \
+              libfreetype6-dev libx11-dev libxcomposite-dev libxcursor-dev \
+              libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+              libwebkit2gtk-4.1-dev libglu1-mesa-dev mesa-common-dev
 
       - run:
-          name: Static checks and unit tests
+          name: Prepare JUCE 9.0.2 and Projucer
           command: |
-            ./ci/gradle-bootstrap.sh --no-daemon lint testDebugUnitTest
+            set -euo pipefail
+            if [ ! -d JUCE/.git ]; then
+              rm -rf JUCE
+              git clone --depth 1 --branch 9.0.2 https://github.com/juce-framework/JUCE.git JUCE
+            fi
 
-      - run:
-          name: Build debug APK
-          command: |
-            ./ci/gradle-bootstrap.sh --no-daemon assembleDebug
+            PROJUCER="$(find JUCE/build -type f -name Projucer -perm -111 2>/dev/null | head -n 1 || true)"
+            if [ -z "$PROJUCER" ]; then
+              cmake -S JUCE -B JUCE/build \
+                -DJUCE_BUILD_EXTRAS=ON \
+                -DJUCE_BUILD_EXAMPLES=OFF \
+                -DCMAKE_BUILD_TYPE=Release
+              cmake --build JUCE/build --target Projucer -j2
+              PROJUCER="$(find JUCE/build -type f -name Projucer -perm -111 | head -n 1)"
+            fi
+            test -n "$PROJUCER"
+            echo "export PROJUCER=$PROJUCER" >> "$BASH_ENV"
 
       - save_cache:
-          key: gradle-v1-{{ checksum "build.gradle.kts" }}-{{ checksum "app/build.gradle.kts" }}
+          key: juce-9.0.2-projucer-v1
+          paths:
+            - JUCE
+
+      - run:
+          name: Install Android SDK components
+          command: |
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+              "platforms;android-35" \
+              "build-tools;35.0.0" \
+              "ndk;26.1.10909125"
+
+      - run:
+          name: Generate Android Studio project
+          command: |
+            set -euo pipefail
+            "$PROJUCER" --resave FLOWER_Standalone.jucer
+            test -d Builds/Android
+            printf 'sdk.dir=%s\n' "$ANDROID_HOME" > Builds/Android/local.properties
+
+      - run:
+          name: Create Android debug signing keystore
+          command: |
+            set -euo pipefail
+            mkdir -p "$HOME/.android"
+            rm -f "$HOME/.android/debug.keystore"
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -alias androiddebugkey -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA -keysize 2048 -validity 10000
+
+      - restore_cache:
+          keys:
+            - gradle-flower-v1-
+
+      - run:
+          name: Build optimized installable APK
+          command: |
+            set -euo pipefail
+            export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
+            cd Builds/Android
+            chmod +x gradlew
+            ./gradlew assembleRelease --stacktrace --no-daemon
+
+      - save_cache:
+          key: gradle-flower-v1-{{ epoch }}
           paths:
             - ~/.gradle/caches
             - ~/.gradle/wrapper
-            - ~/.cache/androidapp
+
+      - run:
+          name: Collect APK and checksum
+          command: |
+            set -euo pipefail
+            mkdir -p android-artifact
+            APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1)"
+            test -n "$APK"
+            cp "$APK" android-artifact/Flower-Standalone-Android.apk
+            sha256sum android-artifact/Flower-Standalone-Android.apk \
+              | tee android-artifact/SHA256.txt
+            git rev-parse HEAD | tee android-artifact/SOURCE_COMMIT.txt
 
       - store_artifacts:
-          path: app/build/outputs/apk/debug
-          destination: apk
-
-      - store_artifacts:
-          path: app/build/reports
-          destination: reports
+          path: android-artifact
+          destination: android-artifact
 
 workflows:
   manual_android_build:

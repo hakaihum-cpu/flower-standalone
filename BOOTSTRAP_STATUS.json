@@ -1,26 +1,27 @@
 {
-  "project": "androidapp",
-  "description": "Android application development",
-  "status": "CI_VERIFIED",
+  "project": "flower-standalone",
+  "description": "Standalone Android extraction of Flower Actor v3",
+  "status": "FLOWER_PORT_STATIC_PREBUILD",
   "remote_provisioning": {
     "source_repository": "hakaihum-cpu/flower-standalone",
     "jira_project": "AN",
     "confluence_space_pages": "PENDING_ATLASSIAN_SERVICE_RECOVERY",
     "circleci_project_connection": "CONNECTED_AND_VERIFIED"
   },
+  "upstream_reference": {
+    "repository": "hakaihum-cpu/Vstplugin",
+    "branch": "feature/flower-actor-v3",
+    "access_mode": "READ_ONLY"
+  },
   "baseline": {
     "branch": "main",
     "golden_baseline": "NOT_YET_DECLARED",
-    "version": "0.0.1-bootstrap"
+    "version": "0.1.0-extraction"
   },
   "ci": {
     "automatic_build_on_push": false,
     "manual_parameter": "run_build=true",
-    "first_verified_build": {
-      "pipeline": "circleci-pipeline-2",
-      "branch": "feature/AN-4-project-bootstrap",
-      "source_commit": "1955eb556a2b090702bbc30b9e9d9d6e235cee2e",
-      "result": "SUCCESS"
-    }
+    "last_verified_bootstrap_build": "circleci-pipeline-2",
+    "flower_port_build": "NOT_RUN"
   }
 }
