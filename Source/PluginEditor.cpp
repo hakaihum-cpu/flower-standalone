@@ -1,6 +1,11 @@
 #include "PluginEditor.h"
 #include "ParameterIDs.h"
 #include "BinaryData.h"
+
+#if JUCE_ANDROID
+ #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#endif
+
 #include <cmath>
 
 LabelledKnob::LabelledKnob (juce::String name)
