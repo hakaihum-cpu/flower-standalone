@@ -131,6 +131,7 @@ print("[PASS] Actor v3/LookAndFeel/resources remain byte-identical to extraction
 print("[PASS] obsolete Java bootstrap removed")
 editor_text = (ROOT / "Source/PluginEditor.cpp").read_text(encoding="utf-8")
 for required_android_startup in [
+    "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
     "juce::Desktop::getInstance().setOrientationsEnabled",
     "getDisplays().getPrimaryDisplay()",
     "setResizable (true, true)",
