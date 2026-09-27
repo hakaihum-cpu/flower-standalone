@@ -6,15 +6,18 @@ GoldenMaster base:
 `df2378f584f155349c33fea5e7ae212a29027049`
 
 Target:
-- Android editor: exactly 720 x 720 logical pixels.
-- Non-resizable on Android.
+- Android target panel: 720 x 720 physical pixels.
+- JUCE editor/component bounds are logical pixels and must be derived from `Display::scale`; do not force 720 logical pixels on high-density Android displays.
+- Non-resizable by the user on Android; the standalone wrapper may resize the editor to the fullscreen logical client bounds.
 - Desktop layout remains separate and is not reflowed by this specification.
 - This is a Flower Standalone requirement; it does not import MIYAKO Compact 720, RG Rotate or any MIYAKO page/control system.
 
 ## Flower page geometry
 
-Root editor:
-- 720 x 720.
+Reference canvas:
+- 720 x 720 physical-pixel design space.
+- Runtime logical side = approximately `720 / Display::scale`, clamped to the available fullscreen `userBounds`.
+- All AN-22 layout constants below are reference-pixel values and are multiplied by the runtime `ui` scale before assigning JUCE bounds.
 
 Flower panel:
 - x=8, y=8, width=704, height=704.
@@ -47,9 +50,10 @@ Flower controls:
 - row 2: HOLD / PITCH / MIX / FEEDBACK.
 
 Android knob readability:
-- label font: 11 px bold.
-- label area: 16 px.
-- value box: 72 x 20.
+- reference label font: 11 px bold.
+- reference label area: 16 px.
+- reference value box: 72 x 20.
+- these metrics are converted to logical pixels with the same physical-720 scale so they do not overflow high-density displays.
 - desktop knob metrics remain unchanged.
 
 ## Synth page geometry
@@ -87,7 +91,8 @@ AN-22 must not alter:
 ## Static verification before build
 
 Required:
-- fixed 720 x 720 constructor markers remain present,
+- 720-physical-pixel to JUCE-logical-pixel conversion markers remain present,
+- the old fixed-720-logical `setResizeLimits` path remains absent,
 - Android square-layout markers match this document,
 - desktop `resized()` branch remains present,
 - no detached PNG worker path is reintroduced,
