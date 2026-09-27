@@ -53,6 +53,7 @@ juce::Image decodeAndroidPngWithStb (const void* data, size_t size)
                 line + static_cast<ptrdiff_t> (x) * bitmap.pixelStride);
             const auto* p = src + static_cast<size_t> (x) * 4u;
             pixel->setARGB (p[3], p[0], p[1], p[2]);
+            pixel->premultiply();
         }
     }
 
