@@ -11,22 +11,41 @@ Working branch: `feature/AN-33-flower-visual-actor-v3`
 - Do not modify or merge `main` without explicit user instruction.
 
 ## Current task
-Replace the current people artwork with the previously approved Flower visual source and revise the live animation grammar so the eight identities do not read as one synchronised group.
+Replace the current legacy-atlas people artwork with the latest approved Flower actor quality and revise the live animation grammar so the eight identities do not read as one synchronised group.
 
 This is not an "animation is stopped" task. The current animation moves.
 
-## Approved visual source
-- Canonical cast appearance: exact approved `flower_lofi_level_4.png`.
-- Do not redraw it, re-pixelate it, add a new Level-4-style filter, or approximate it with newly generated art.
-- Preserve the approved low-resolution monochrome treatment, body proportions, low facial information and identity differences.
-- Pose/action artwork must come from previously approved/recoverable source material. Missing production art is not to be invented.
+## Latest approved visual baseline
+The authoritative restart contract is the MIYAKO Flower read-only checkpoint:
+- repository: `hakaihum-cpu/Vstplugin`
+- branch/checkpoint: `feature/flower-actor-v3`
+- checkpoint commit: `820c4dcd08789cbe2fcefd481628e988622fd091`
+- document: `docs/FLOWER_PAUSE_CHECKPOINT_2026-09-26.md`
 
-Reference-role contract:
-1. first reference: finished-screen composition/staging,
-2. second reference: eight identities, individual variation, placement/effects,
-3. third reference: pose/body-proportion/walk standard.
+That checkpoint supersedes the older Level-4 cast as the production visual baseline.
 
-## Static source findings from Golden
+Approved:
+- current high-resolution monochrome photographic character quality,
+- accepted motion/cutout QA reference: `MIYAKO_Flower_8Actor_Motion_QA_v3_DEFRINGE.mp4`,
+- accepted variation QA reference: `MIYAKO_Flower_8Actor_Variation_QA_v1.mp4`,
+- `student_01` walking motion is the authoritative motion/quality reference,
+- runtime display 16 fps with the 8-frame walk source held for two display ticks (effective 8 fps pose cadence),
+- no artificial vertical bobbing,
+- facing direction always matches travel direction,
+- opposite travel direction derived by exact geometric mirror,
+- actor-local occasional variation rather than global effects,
+- no high-resolution/legacy artwork mixing in one runtime scene.
+
+Explicitly retired / do not reintroduce:
+- Level-4 degradation as the final production look,
+- low-resolution 32x60 artwork as final source,
+- low-resolution compositing followed by NEAREST enlargement,
+- chibi/anime proportions,
+- uninspected generated student assets.
+
+Historical `flower_lofi_level_4.png` and `flower_level4_cast.zip` remain provenance/reference material only; they are not the latest production visual baseline.
+
+## Static source findings from Flower standalone Golden
 - `FlowerAnimationComponent::timerCallback()` currently advances only `advanceActors()`.
 - The older scene system (`chooseNextScene`, `configureScene`, `updateAmbientBehaviours`, `updateStudentActions`, `advanceSceneIfNeeded`) remains in source but is not on the live timer path.
 - Live Actor-v3 currently performs independent X-target movement and per-actor variation.
@@ -35,15 +54,42 @@ Reference-role contract:
 - The existing scene code already contains conversation, hand-holding, sitting, staggered jump, push, disperse and mixed-tableau logic, but it is not currently driving the live animation.
 - Current `paint()` uses `state.currentX`; scene `xOffset` values are not part of the current Actor-v3 draw position. Re-enabling scene selection alone would therefore not be sufficient.
 
+## Asset state carried forward from the 2026-09-26 checkpoint
+Committed and approved:
+- `Resources/flower_actor_v3_walk_student01.png`
+
+Student 02–08:
+- candidate right-facing 8-frame strips had been generated externally,
+- they were not visually QA-approved at the pause point,
+- they were not committed as production assets,
+- do not assume they are valid,
+- do not regenerate them merely to fill the bank before checking recoverable prior assets.
+
+High-resolution activation rule:
+- all eight students need approved source walk strips before the high-resolution Actor-v3 core is used,
+- left/right counterpart may be derived by exact mirror as already approved.
+
 ## Required animation behaviour
 - Eight identities remain persistent.
-- Each actor has independent timing/state.
-- No all-eight same pose, same timing, same horizontal move or same spacing-change cue.
-- Ordinary rooftop scenes dominate; strange/impossible events are occasional.
-- Support scene-like combinations such as conversation, sitting/standing, one actor walking or looking back, hand holding, staggered jump/float, push/recoil, disappear/remain, disperse/odd/overlap.
-- Preserve actor identity, relation and position continuity between scene changes.
-- Walking remains restrained: low pose cadence, minimal vertical bounce, direction/facing consistent with travel.
+- Each actor owns independent movement, decision and variation timing.
+- No synchronised marching, shared pose clock, global scene reset, all-eight same pose, same timing, same horizontal move or same spacing-change cue.
+- Normal quiet independent movement is the baseline.
+- Strange events happen only sometimes and per actor.
+- Preserve actor identity, relation and position continuity.
 - Do not fake ordinary poses by stretching/squashing a standing image.
+- Multi-actor actions must use independently selected participants/start delays.
+- Scene changes must not cancel an unrelated actor's in-progress local action.
+
+Approved/basic actor-local variation:
+- Fade
+- Disperse
+- Overlap
+- UpperBodyWrong
+- Distant
+- Silhouette
+- Invert
+- Noise
+- Freeze
 
 ## Protected / out of scope for AN-33
 Do not change unless a visual asset loader addition is strictly required:
@@ -56,12 +102,21 @@ Do not change unless a visual asset loader addition is strictly required:
 - synth controls,
 - CI configuration.
 
+## Recovery evidence already verified on 2026-09-28
+Library contains:
+- historical `flower_level4_cast.zip` with eight extracted standing figures,
+- `MIYAKO_Flower_actual_atlas_extracted.png` / `flower_embedded_atlas_v24_q32.png` matching the current legacy multi-pose atlas lineage,
+- accepted/near-accepted Flower motion QA artifacts around the Actor-v3 work,
+- `MIYAKO_Flower_student01_direction_QA_v2.gif`,
+- the final repository checkpoint above, which resolves the Level-4-vs-high-resolution ambiguity in favour of the later high-resolution approved baseline.
+
 ## Next actions
-1. Recover the exact previously approved Level-4-derived cast/pose assets from Library, prior APK/archive, or read-only historical MIYAKO Flower source.
-2. Verify recovered assets visually and by file/hash provenance before using them.
-3. Define the smallest resource + Actor-v3 patch required to use those assets and wire independent scene grammar into the live path.
-4. Audit the full diff against Golden.
-5. Build only after the source/resource diff is fixed and audited.
+1. Search recoverable Library/prior artifacts specifically for the previously generated student_02–08 high-resolution walk candidates or their source cutouts.
+2. Inspect any recovered candidates against the accepted student_01 / v3 DEFRINGE quality before committing anything.
+3. If the exact candidates cannot be recovered, do not silently regenerate or substitute them; record the missing-bank boundary and continue only with code work that does not falsely mark the bank complete.
+4. Define the smallest Actor-v3 scene/state patch needed to preserve independent actor motion while adding the desired scene variety.
+5. Audit the full resource/source diff against Golden.
+6. Build only after source/resource diff is fixed and audited.
 
 ## Build gate
 No CircleCI build at this checkpoint.
