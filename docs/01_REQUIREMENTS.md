@@ -38,6 +38,8 @@ REQ-008: MIYAKO-only systems are not part of the standalone baseline unless expl
 - MIYAKO-specific pages unrelated to Flower
 - MIYAKO project/release state
 
+REQ-009: The Android standalone UI target is a fixed 720 x 720 canvas. The Android editor is non-resizable and the Flower/Synth pages must be laid out specifically for that square target rather than reusing the desktop landscape geometry.
+
 ## Isolation rule
 The two repositories are independent products.
 - Read MIYAKO source when necessary.
@@ -51,7 +53,6 @@ The two repositories are independent products.
 - Final app/package name shown to users
 - Final applicationId
 - Minimum supported Android version
-- Exact standalone main-screen arrangement after the reused Flower UI baseline
 - Whether CONFIG/MIDI setup remains a separate page or is simplified
 - Audio/MIDI device policy beyond the first working baseline
 - Distribution/signing/store policy
