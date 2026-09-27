@@ -129,9 +129,16 @@ for required_emulator_ci in [
     "screencap -p",
     "smoke-exit-code.txt",
     "requires:\n            - android_build",
+    "publish_verified_apk:",
+    "release-artifact/Flower-Standalone-Android.apk",
+    "destination: verified-release",
+    "requires:\n            - android_emulator_smoke",
 ]:
     if required_emulator_ci not in circle:
         fail(f"Android emulator smoke gate missing: {required_emulator_ci}")
+
+if "android-artifact/Flower-Standalone-Android.apk" in circle:
+    fail("unverified ARM64 APK is exposed from the build job")
 
 smoke_patcher = (ROOT / "scripts/patch_android_smoke_abi.py").read_text(encoding="utf-8")
 if 'abiFilters("x86_64")' not in smoke_patcher or 'abiFilters\\("arm64-v8a"\\)' not in smoke_patcher:
