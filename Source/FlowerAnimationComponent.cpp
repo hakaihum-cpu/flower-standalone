@@ -181,6 +181,31 @@ bool FlowerAnimationComponent::loadEmbeddedAtlas (const void* data, size_t size)
         return false;
     }
 
+    return loadDecodedAtlas (atlas);
+}
+
+bool FlowerAnimationComponent::loadDecodedAtlas (const juce::Image& atlas)
+{
+    background = {};
+    students = {};
+    loadedStudentCount = 0;
+    poseCoverageReady = false;
+    resetStudentStates();
+
+    if (! atlas.isValid())
+    {
+        repaint();
+        return false;
+    }
+
+    const bool legacyAtlas = atlas.getWidth() == 256 && atlas.getHeight() == 624;
+    const bool recoveredAtlas = atlas.getWidth() == 256 && atlas.getHeight() == 1584;
+    if (! legacyAtlas && ! recoveredAtlas)
+    {
+        repaint();
+        return false;
+    }
+
     const int atlasRows = recoveredAtlas ? 24 : 8;
     const int atlasWidth = atlas.getWidth();
     const int atlasHeight = atlas.getHeight();
@@ -415,6 +440,7 @@ bool FlowerAnimationComponent::loadEmbeddedAtlas (const void* data, size_t size)
     poseCoverageReady = validatePoseCoverage();
     repaint();
     return hasVisualBank();
+
 }
 
 bool FlowerAnimationComponent::loadHighResWalkStrip (const void* data,
@@ -426,7 +452,15 @@ bool FlowerAnimationComponent::loadHighResWalkStrip (const void* data,
         return false;
 
     auto strip = juce::ImageFileFormat::loadFrom (data, size);
-    if (! strip.isValid() || strip.getWidth() % walkFrameCount != 0)
+    return loadDecodedHighResWalkStrip (strip, studentIndex, walksRight);
+}
+
+bool FlowerAnimationComponent::loadDecodedHighResWalkStrip (const juce::Image& strip,
+                                                                     int studentIndex,
+                                                                     bool walksRight)
+{
+    if (studentIndex < 0 || studentIndex >= studentCount
+        || ! strip.isValid() || strip.getWidth() % walkFrameCount != 0)
         return false;
 
     const int frameWidth = strip.getWidth() / walkFrameCount;
@@ -487,6 +521,7 @@ bool FlowerAnimationComponent::loadHighResWalkStrip (const void* data,
 
     repaint();
     return true;
+
 }
 
 bool FlowerAnimationComponent::loadHighResStand (const void* data,
