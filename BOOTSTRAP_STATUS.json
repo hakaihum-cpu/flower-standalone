@@ -1,7 +1,7 @@
 {
   "project": "flower-standalone",
   "description": "Standalone Android extraction of Flower Actor v3",
-  "status": "FLOWER_ANDROID_STARTUP_BUILD_SUCCESS_DEVICE_SMOKE_PENDING",
+  "status": "FLOWER_ANDROID_ANR_TRACE_READY",
   "remote_provisioning": {
     "source_repository": "hakaihum-cpu/flower-standalone",
     "jira_project": "AN",
@@ -38,15 +38,22 @@
       ],
       "artifact_verification": "PENDING",
       "golden_baseline": false
+    },
+    "emulator_gate": {
+      "issue": "AN-17",
+      "branch": "feature/AN-17-ci-emulator-smoke",
+      "policy": "arm64 APK is published only after Android emulator startup smoke passes",
+      "unverified_apk_publication": false
     }
   },
   "device_smoke": {
     "source_commit": "7fb73d646267c052db751ef815fcf0d5da7f93e8",
     "ci_result": "SUCCESS",
-    "ci_job": "0831ac31-19f8-41ae-b022-9bb4a9096e8e",
-    "issue": "AN-16",
-    "symptom_under_test": "black screen followed by Android ANR",
-    "verification": "PENDING_SAME_DEVICE_LAUNCH_SMOKE",
+    "device_result": "FAILURE",
+    "symptom": "black screen followed by Android ANR after roughly 10+ seconds",
+    "issue": "AN-18",
+    "conclusion": "AN-16 MIYAKO-derived display/audio startup patch did not resolve the runtime ANR.",
+    "next_verification": "CircleCI Android emulator startup trace on fix/AN-18-android-startup-trace",
     "golden_baseline": false
   }
 }
