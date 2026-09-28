@@ -272,10 +272,6 @@ juce::Rectangle<int> ConfigScreenComponent::getRowBounds (int row) const
     return { 72, firstY + row * rowHeight, getWidth() - 144, 78 };
 }
 
-juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
-{
-    return { getWidth() - 204, getHeight() - 92, 132, 52 };
-}
 
 void ConfigScreenComponent::setValues (int newRootKey,
                                        int newScale,
@@ -361,7 +357,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
 
     g.setColour (juce::Colour (0xff8f8776));
     g.setFont (juce::FontOptions (16.0f));
-    g.drawText ("SELECT: BACK    UP/DOWN: ITEM    LEFT/RIGHT: CHANGE    B: OK",
+    g.drawText ("SELECT: BACK    UP/DOWN: ITEM    LEFT/RIGHT: CHANGE",
                 72, 124, getWidth() - 144, 34,
                 juce::Justification::centredLeft);
 
@@ -407,13 +403,6 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
                     juce::Justification::centredRight);
     }
 
-    const auto closeBounds = getCloseBounds();
-    g.setColour (juce::Colour (0xffd8ccb0));
-    g.fillRoundedRectangle (closeBounds.toFloat(), 8.0f);
-    g.setColour (juce::Colour (0xff11110f));
-    g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
-    g.drawText ("CLOSE", closeBounds, juce::Justification::centred);
-
     g.setColour (juce::Colour (0xff77705f));
     g.setFont (juce::FontOptions (15.0f));
     g.drawFittedText (
@@ -425,13 +414,6 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
 
 void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
 {
-    if (getCloseBounds().contains (e.getPosition()))
-    {
-        if (onCloseRequested)
-            onCloseRequested();
-        return;
-    }
-
     for (int row = 0; row < 3; ++row)
     {
         const auto bounds = getRowBounds (row);
@@ -538,13 +520,6 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             delayEnabled = enabled;
             granularEnabled = enabled;
             processor.setDefaultEffectsEnabled (enabled);
-        };
-
-    configScreen.onCloseRequested =
-        [this]
-        {
-            if (configVisible)
-                toggleConfig();
         };
 
     processor.setConfiguredRoot (rootClass);
@@ -879,7 +854,7 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
             return true;
         }
 
-        if (code == juce::KeyPress::F14Key || ch == 'b' || ch == 'B')
+        if (code == juce::KeyPress::F13Key || ch == 'a' || ch == 'A')
         {
             configScreen.activateSelected();
             return true;
