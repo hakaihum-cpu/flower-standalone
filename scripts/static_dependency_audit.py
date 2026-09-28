@@ -164,6 +164,8 @@ for required_visual_ui in [
     "physicalPointerVisible",
     "destWidth",
     "destHeight",
+    "faceZoom = 1.15f",
+    "onTapStopRequested",
 ]:
     if required_visual_ui not in editor_text and required_visual_ui not in editor_header:
         fail(f"XY tile visual contract missing: {required_visual_ui}")
@@ -183,6 +185,17 @@ for required_xy_ui in [
     "endDpadControl",
     "keyStateChanged",
     "nudgeFromPhysicalKey",
+    "juce::KeyPress::F13Key",
+    "juce::KeyPress::F14Key",
+    "juce::KeyPress::F15Key",
+    "juce::KeyPress::F16Key",
+    "juce::KeyPress::F17Key",
+    "juce::KeyPress::F18Key",
+    "beginBpmAdjust",
+    "beginLooperButton",
+    "toggleArp",
+    "toggleDelay",
+    "toggleGranular",
 ]:
     if required_xy_ui not in editor_text:
         fail(f"XY fullscreen/physical-key contract missing: {required_xy_ui}")
@@ -218,6 +231,16 @@ for required_engine in [
     "processPerformanceDelay (buffer)",
     "setPerformancePad",
     "setPerformanceHold",
+    "setPerformanceArpEnabled",
+    "setPerformanceDelayEnabled",
+    "setPerformanceGranularEnabled",
+    "cycleFlowerTransport",
+    "performanceArpEnabled",
+    "performanceDelayEnabled",
+    "performanceGranularEnabled",
+    "flowerTransportState",
+    "constexpr int stepsPerBeat = 2",
+    "juce::jlimit (50.0f, 200.0f, bpm)",
 ]:
     if required_engine not in processor_text:
         fail(f"XY performance engine contract missing: {required_engine}")
@@ -236,7 +259,11 @@ print("[PASS] animation code/resources excluded from generated MVP target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
 print("[PASS] 10x10 XY contact-sheet visual contract present")
 print("[PASS] visual asset materializer is wired before Projucer")
-print("[PASS] dpad XY/gate/pointer contract present")
+print("[PASS] face-centred fullscreen visual contract present")
+print("[PASS] dpad XY latch / tap-stop / pointer contract present")
+print("[PASS] A/B/X/Y/L/R gamepad assignment contract present")
+print("[PASS] X looper transport REC->STOP->OVERDUB and long-clear contract present")
+print("[PASS] L/R BPM hold-repeat contract present (max 200 BPM)")
 print("[PASS] Android physical-key down/up bridge patch present")
 print("[PASS] Android standalone startup safeguards present")
 print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
