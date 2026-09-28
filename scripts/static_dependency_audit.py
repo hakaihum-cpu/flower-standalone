@@ -23,7 +23,6 @@ REQUIRED = [
     "Source/RetroLookAndFeel.cpp",
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_juce_android_gamepad_keys.py",
-    "Resources/flower_xy_source_exact.jpg",
 ]
 
 FORBIDDEN_SOURCE_TOKENS = [
@@ -93,7 +92,6 @@ for required_ref in [
     "Source/RetroLookAndFeel.cpp",
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.cpp",
-    "Resources/flower_xy_source_exact.jpg",
 ]:
     if required_ref not in jucer_text:
         fail(f"JUCER reference missing: {required_ref}")
@@ -108,7 +106,6 @@ if "default: false" not in circle or "run_build" not in circle:
 
 for required_ci in [
     "patch_juce_android_gamepad_keys.py JUCE",
-    "test -s Resources/flower_xy_source_exact.jpg",
     "patch_android_native_parallelism.py",
     "CMAKE_BUILD_PARALLEL_LEVEL=2",
     "ActiveProcessorCount=2",
@@ -307,7 +304,7 @@ if any(position < 0 for position in order) or order != sorted(order):
     fail("XY audio order must be arp MIDI -> synth -> granular -> delay")
 
 print("[PASS] Flower XY standalone static dependency audit")
-print("[PASS] animation code/resources excluded from generated MVP target")
+print("[PASS] obsolete contact-sheet resource excluded from generated target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
 print("[PASS] exact 100 user-cut JPEG frame bank embedded")
 print("[PASS] runtime does not use the old contact sheet")
