@@ -62,7 +62,7 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int sampl
     limiterSpec.numChannels =
         static_cast<juce::uint32> (juce::jmax (1, getTotalNumOutputChannels()));
     performanceOutputLimiter.prepare (limiterSpec);
-    performanceOutputLimiter.setThreshold (-1.0f);
+    performanceOutputLimiter.setThreshold (-0.5f);
     performanceOutputLimiter.setRelease (80.0f);
     performanceOutputLimiter.reset();
 
@@ -152,9 +152,14 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
     // synthesis, granulation and echo as one performance surface.
     processPerformanceDelay (buffer);
 
+    // Raise the final listening level without sacrificing the internal
+    // headroom that removed the earlier crackle.  Make-up gain is applied only
+    // after synth/granular/delay, immediately before the peak limiter.
+    buffer.applyGain (juce::Decibels::decibelsToGain (4.0f));
+
     // Final peak protection only.  It is intentionally after the complete FX
     // chain so the Android output cannot receive > 0 dBFS bursts from stacked
-    // arp tails or feedback.  Normal signals below the threshold are untouched.
+    // arp tails or feedback.
     juce::dsp::AudioBlock<float> outputBlock (buffer);
     juce::dsp::ProcessContextReplacing<float> outputContext (outputBlock);
     performanceOutputLimiter.process (outputContext);
