@@ -231,10 +231,21 @@ jobs:
             set -euo pipefail
             if [ ! -f android-artifact/gradle-exit-code.txt ]; then
               echo "Gradle exit code file is missing; runner may have terminated unexpectedly."
+              if [ -f android-artifact/gradle-build.log ]; then
+                echo "===== Gradle log tail ====="
+                tail -n 250 android-artifact/gradle-build.log || true
+              fi
               exit 97
             fi
+
             STATUS="$(cat android-artifact/gradle-exit-code.txt)"
             echo "Gradle exit code: $STATUS"
+
+            if [ "$STATUS" != "0" ] && [ -f android-artifact/gradle-build.log ]; then
+              echo "===== Gradle failure log tail ====="
+              tail -n 250 android-artifact/gradle-build.log || true
+            fi
+
             exit "$STATUS"
 
 workflows:
