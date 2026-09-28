@@ -87,8 +87,10 @@ void PerformancePadComponent::paint (juce::Graphics& g)
         return;
     }
 
-    // Strict 10 x 10 mapping.  No cell is filtered or skipped:
-    // visualTileIndex 0..99 maps row-major to every source-sheet cell.
+    // The embedded atlas is already preprocessed as 10 x 10 square frames.
+    // Runtime does not fit, letterbox, zoom, centre-crop or stretch a
+    // landscape source.  It only selects one exact square frame and enlarges
+    // that square to the square 720 x 720 canvas.
     const int column = juce::jlimit (
         0, tileColumns - 1,
         static_cast<int> (std::floor (
@@ -112,75 +114,22 @@ void PerformancePadComponent::paint (juce::Graphics& g)
     const int tileTop = (visualRow * imageHeight) / tileRows;
     const int tileBottom = ((visualRow + 1) * imageHeight) / tileRows;
 
-    // Remove only the contact-sheet separator itself.  Do not crop the
-    // photograph: the girl's complete face/head must remain visible.
-    constexpr int separatorInset = 2;
-    const int sourceX = tileLeft + separatorInset;
-    const int sourceY = tileTop + separatorInset;
+    // The generated square atlas reserves a 2 px separator around each
+    // 100 x 100 cell.  The remaining 96 x 96 content is the complete
+    // pre-cropped square frame.
+    constexpr int atlasInset = 2;
+    const int sourceX = tileLeft + atlasInset;
+    const int sourceY = tileTop + atlasInset;
     const int sourceWidth = juce::jmax (
-        1, tileRight - tileLeft - separatorInset * 2);
+        1, tileRight - tileLeft - atlasInset * 2);
     const int sourceHeight = juce::jmax (
-        1, tileBottom - tileTop - separatorInset * 2);
+        1, tileBottom - tileTop - atlasInset * 2);
 
-    // Preserve the entire landscape tile and its original aspect ratio.
-    // It is centred in the 720 x 720 canvas.  The otherwise-empty top/bottom
-    // areas are filled by extending the source edge pixels rather than black
-    // letterbox bars, so no part of the face is lost and no black band appears.
-    const float scale = juce::jmin (
-        static_cast<float> (getWidth()) / static_cast<float> (sourceWidth),
-        static_cast<float> (getHeight()) / static_cast<float> (sourceHeight));
-
-    const int destWidth = juce::jmax (
-        1, juce::roundToInt (static_cast<float> (sourceWidth) * scale));
-    const int destHeight = juce::jmax (
-        1, juce::roundToInt (static_cast<float> (sourceHeight) * scale));
-    const int destX = (getWidth() - destWidth) / 2;
-    const int destY = (getHeight() - destHeight) / 2;
+    jassert (sourceWidth == sourceHeight);
 
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-
-    if (destY > 0)
-    {
-        constexpr int edgeSampleHeight = 2;
-
-        // Extend top edge into the upper square margin.
-        g.drawImage (tileSheetImage,
-                     destX, 0, destWidth, destY,
-                     sourceX, sourceY, sourceWidth, edgeSampleHeight,
-                     false);
-
-        // Extend bottom edge into the lower square margin.
-        g.drawImage (tileSheetImage,
-                     destX, destY + destHeight,
-                     destWidth, getHeight() - (destY + destHeight),
-                     sourceX,
-                     sourceY + juce::jmax (0, sourceHeight - edgeSampleHeight),
-                     sourceWidth, edgeSampleHeight,
-                     false);
-    }
-
-    if (destX > 0)
-    {
-        constexpr int edgeSampleWidth = 2;
-
-        // This is normally unnecessary for the supplied landscape cells, but
-        // keeps the same no-black-border rule if the asset aspect changes.
-        g.drawImage (tileSheetImage,
-                     0, destY, destX, destHeight,
-                     sourceX, sourceY, edgeSampleWidth, sourceHeight,
-                     false);
-        g.drawImage (tileSheetImage,
-                     destX + destWidth, destY,
-                     getWidth() - (destX + destWidth), destHeight,
-                     sourceX + juce::jmax (0, sourceWidth - edgeSampleWidth),
-                     sourceY, edgeSampleWidth, sourceHeight,
-                     false);
-    }
-
-    // Draw the complete source cell last so the central picture is never
-    // distorted or cropped.
     g.drawImage (tileSheetImage,
-                 destX, destY, destWidth, destHeight,
+                 0, 0, getWidth(), getHeight(),
                  sourceX, sourceY, sourceWidth, sourceHeight,
                  false);
 
