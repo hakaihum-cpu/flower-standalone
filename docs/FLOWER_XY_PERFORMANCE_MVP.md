@@ -99,11 +99,26 @@ The existing FLOWER 16-second rolling audio buffer is reused for granulation.
 
 ## UI
 
-Animation is intentionally absent.
+The entire 720 × 720 screen remains the XY touch surface. There are **no on-screen buttons, knobs, combo boxes or footer controls**.
 
-The entire screen is the touch surface.
+### XY contact-sheet visual (first implementation)
 
-There are **no on-screen buttons, knobs, combo boxes or footer controls** in the MVP. The 720 × 720 canvas is occupied by the XY performance pad itself. Only subtle in-pad grid/zone/readout graphics are allowed; they are not separate controls.
+The first supplied contact sheet is used as a 10 × 10 visual bank.
+
+- one sheet cell = one static visual state,
+- X selects one of 10 columns,
+- Y selects one of 10 rows,
+- Y is inverted for image coordinates so the top of the touch surface selects the top sheet row,
+- moving across a cell boundary hard-switches to the adjacent tile,
+- the selected tile fills the 720 × 720 display,
+- each tile is centre-cropped to square rather than stretched,
+- separator lines in the supplied contact sheet are excluded with a small source inset,
+- audio XY and visual XY use the same `xValue / yValue`,
+- crossfade/interpolation and multiple visual banks are intentionally not part of this first implementation.
+
+The former grid, zone labels, cursor graphics and HOLD text are not drawn over the photograph. If the embedded sheet cannot be decoded, the UI shows `VISUAL ASSET ERROR`.
+
+The supplied JPEG is tracked as deterministic base64 parts and reconstructed by `scripts/materialize_xy_visual_asset.py` before Projucer runs in CircleCI. The reconstructed binary is SHA-256 checked before it is embedded as JUCE BinaryData.
 
 Physical-key defaults:
 - LEFT / RIGHT: root note - / + 1 semitone
@@ -131,11 +146,15 @@ Completed:
 - STOP behavior,
 - static diff review,
 - animation source/resources excluded from the MVP build,
-- HOLD/touch latch separation verified.
+- HOLD/touch latch separation verified,
+- Android APK built and tested for audio/touch,
+- crackle reduction pass tested successfully by the user,
+- first 10 × 10 XY contact-sheet visual implemented in source.
 
 Not yet performed:
-- Android APK build,
-- device audio/touch test,
+- Android APK build/test of the new contact-sheet visual,
+- final output-level tuning,
+- final physical-button mapping,
 - tuning of musical mappings after listening.
 
 A build should be run only after static review is complete because unnecessary CI/GitHub build minutes are explicitly avoided.
