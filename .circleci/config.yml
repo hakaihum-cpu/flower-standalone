@@ -43,6 +43,8 @@ jobs:
               git clone --depth 1 --branch 9.0.2 https://github.com/juce-framework/JUCE.git JUCE
             fi
 
+            python3 scripts/patch_juce_android_gamepad_keys.py JUCE
+
             PROJUCER="$(find JUCE/build -type f -name Projucer -perm -111 2>/dev/null | head -n 1 || true)"
             if [ -z "$PROJUCER" ]; then
               cmake -S JUCE -B JUCE/build \
