@@ -177,8 +177,11 @@ void PerformancePadComponent::updateFromEvent (const juce::MouseEvent& e, bool i
 
 void PerformancePadComponent::notify()
 {
+    // HOLD is managed separately by the processor.  The pad callback reports
+    // actual touch state only; otherwise releasing a held touch would leave
+    // performanceActive latched even after HOLD was later turned off.
     if (onPadChanged)
-        onPadChanged (xValue, yValue, speedValue, horizontalDirection, active || held);
+        onPadChanged (xValue, yValue, speedValue, horizontalDirection, active);
 }
 
 FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
