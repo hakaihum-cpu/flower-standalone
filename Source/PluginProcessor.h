@@ -40,6 +40,13 @@ public:
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
     juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
 
+    void setPerformancePad (float x, float y, float speed, float horizontalDirection, bool active) noexcept;
+    void setPerformanceHold (bool shouldHold) noexcept;
+    void setPerformanceRoot (int noteClass) noexcept;
+    void setPerformanceScale (int scaleIndex) noexcept;
+    void setPerformanceBpm (float bpm) noexcept;
+    void stopPerformance() noexcept;
+
     void getFlowerWaveform (std::array<float, flowerWaveformBins>& destination) const noexcept;
     bool hasFlowerLoop() const noexcept { return flowerLoopLengthSamples.load (std::memory_order_relaxed) > 0; }
     bool isFlowerRecording() const noexcept { return flowerRecordingActive.load (std::memory_order_relaxed); }
@@ -57,6 +64,14 @@ private:
     void processFlower (juce::AudioBuffer<float>& buffer);
     void resetFlowerState() noexcept;
     float nextFlowerRandomBipolar() noexcept;
+
+    void generatePerformanceMidi (juce::MidiBuffer& midi, int numSamples);
+    void processPerformanceDelay (juce::AudioBuffer<float>& buffer);
+    bool isPerformanceGateOpen() const noexcept;
+    int nextPerformanceNote (int patternIndex);
+    int performanceScaleLength() const noexcept;
+    int performanceScaleSemitone (int degree) const noexcept;
+    uint32_t nextPerformanceRandom() noexcept;
 
     juce::AudioProcessorValueTreeState apvts;
     juce::Synthesiser synthesiser;
@@ -90,6 +105,24 @@ private:
     std::atomic<float> flowerBasePosition { 0.0f };
     std::atomic<int> flowerActiveGrains { 0 };
     std::atomic<bool> flowerClearRequested { false };
+
+    std::atomic<float> performanceX { 0.28f };
+    std::atomic<float> performanceY { 0.28f };
+    std::atomic<float> performanceSpeed { 0.0f };
+    std::atomic<float> performanceDirection { 0.0f };
+    std::atomic<bool> performanceActive { false };
+    std::atomic<bool> performanceHold { false };
+    std::atomic<int> performanceRootClass { 0 };
+    std::atomic<int> performanceScaleIndex { 0 };
+    std::atomic<float> performanceBpm { 112.0f };
+    std::atomic<bool> performanceStopRequested { false };
+
+    juce::AudioBuffer<float> performanceDelayBuffer;
+    int performanceDelayWritePosition = 0;
+    double performanceSamplesUntilStep = 0.0;
+    int performanceStep = 0;
+    int performanceCurrentNote = -1;
+    uint32_t performanceRandomState = 0x46574C52u;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FlowerStandaloneAudioProcessor)
 };
