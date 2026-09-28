@@ -87,25 +87,33 @@ void PerformancePadComponent::paint (juce::Graphics& g)
         return;
     }
 
+    // Strict 10 x 10 mapping.  No cell is filtered or skipped:
+    // visualTileIndex 0..99 maps row-major to every source-sheet cell.
     const int column = juce::jlimit (
         0, tileColumns - 1,
-        static_cast<int> (std::floor (xValue * static_cast<float> (tileColumns))));
+        static_cast<int> (std::floor (
+            xValue * static_cast<float> (tileColumns))));
     const int row = juce::jlimit (
         0, tileRows - 1,
         static_cast<int> (std::floor (
             (1.0f - yValue) * static_cast<float> (tileRows))));
+    const int visualTileIndex = row * tileColumns + column;
+
+    jassert (visualTileIndex >= 0 && visualTileIndex < tileCount);
+
+    const int visualRow = visualTileIndex / tileColumns;
+    const int visualColumn = visualTileIndex % tileColumns;
 
     const int imageWidth = tileSheetImage.getWidth();
     const int imageHeight = tileSheetImage.getHeight();
 
-    const int tileLeft = (column * imageWidth) / tileColumns;
-    const int tileRight = ((column + 1) * imageWidth) / tileColumns;
-    const int tileTop = (row * imageHeight) / tileRows;
-    const int tileBottom = ((row + 1) * imageHeight) / tileRows;
+    const int tileLeft = (visualColumn * imageWidth) / tileColumns;
+    const int tileRight = ((visualColumn + 1) * imageWidth) / tileColumns;
+    const int tileTop = (visualRow * imageHeight) / tileRows;
+    const int tileBottom = ((visualRow + 1) * imageHeight) / tileRows;
 
-    // Keep almost all source pixels.  The previous implementation centre-
-    // cropped every landscape tile to square, throwing away roughly a quarter
-    // of the already-small source image before enlarging it.
+    // Remove only the contact-sheet separator itself.  Do not crop the
+    // photograph: the girl's complete face/head must remain visible.
     constexpr int separatorInset = 2;
     const int sourceX = tileLeft + separatorInset;
     const int sourceY = tileTop + separatorInset;
@@ -114,23 +122,63 @@ void PerformancePadComponent::paint (juce::Graphics& g)
     const int sourceHeight = juce::jmax (
         1, tileBottom - tileTop - separatorInset * 2);
 
-    // Fill the square canvas instead of letterboxing.  A small extra zoom is
-    // top-aligned so the subject's face lands closer to screen centre while
-    // the dark separator/empty band at the top cannot become visible.
-    constexpr float faceZoom = 1.15f;
-    const float scale = juce::jmax (
+    // Preserve the entire landscape tile and its original aspect ratio.
+    // It is centred in the 720 x 720 canvas.  The otherwise-empty top/bottom
+    // areas are filled by extending the source edge pixels rather than black
+    // letterbox bars, so no part of the face is lost and no black band appears.
+    const float scale = juce::jmin (
         static_cast<float> (getWidth()) / static_cast<float> (sourceWidth),
-        static_cast<float> (getHeight()) / static_cast<float> (sourceHeight))
-        * faceZoom;
+        static_cast<float> (getHeight()) / static_cast<float> (sourceHeight));
 
     const int destWidth = juce::jmax (
         1, juce::roundToInt (static_cast<float> (sourceWidth) * scale));
     const int destHeight = juce::jmax (
         1, juce::roundToInt (static_cast<float> (sourceHeight) * scale));
     const int destX = (getWidth() - destWidth) / 2;
-    const int destY = 0;
+    const int destY = (getHeight() - destHeight) / 2;
 
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+
+    if (destY > 0)
+    {
+        constexpr int edgeSampleHeight = 2;
+
+        // Extend top edge into the upper square margin.
+        g.drawImage (tileSheetImage,
+                     destX, 0, destWidth, destY,
+                     sourceX, sourceY, sourceWidth, edgeSampleHeight,
+                     false);
+
+        // Extend bottom edge into the lower square margin.
+        g.drawImage (tileSheetImage,
+                     destX, destY + destHeight,
+                     destWidth, getHeight() - (destY + destHeight),
+                     sourceX,
+                     sourceY + juce::jmax (0, sourceHeight - edgeSampleHeight),
+                     sourceWidth, edgeSampleHeight,
+                     false);
+    }
+
+    if (destX > 0)
+    {
+        constexpr int edgeSampleWidth = 2;
+
+        // This is normally unnecessary for the supplied landscape cells, but
+        // keeps the same no-black-border rule if the asset aspect changes.
+        g.drawImage (tileSheetImage,
+                     0, destY, destX, destHeight,
+                     sourceX, sourceY, edgeSampleWidth, sourceHeight,
+                     false);
+        g.drawImage (tileSheetImage,
+                     destX + destWidth, destY,
+                     getWidth() - (destX + destWidth), destHeight,
+                     sourceX + juce::jmax (0, sourceWidth - edgeSampleWidth),
+                     sourceY, edgeSampleWidth, sourceHeight,
+                     false);
+    }
+
+    // Draw the complete source cell last so the central picture is never
+    // distorted or cropped.
     g.drawImage (tileSheetImage,
                  destX, destY, destWidth, destHeight,
                  sourceX, sourceY, sourceWidth, sourceHeight,
