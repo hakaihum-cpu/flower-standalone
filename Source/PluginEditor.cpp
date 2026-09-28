@@ -647,6 +647,12 @@ void FlowerStandaloneAudioProcessorEditor::toggleConfig()
             scaleIndex,
             processor.getDefaultEffectsEnabled());
 
+        // SELECT-opened CONFIG must use the exact same fullscreen bounds as
+        // the performance surface. The CONFIG UI itself is authored in a
+        // 720x720 design space and scaled inside ConfigScreenComponent::paint().
+        configScreen.setBounds (getLocalBounds());
+        configScreen.repaint();
+
         performancePad.setVisible (false);
         configScreen.setVisible (true);
         configScreen.toFront (false);
