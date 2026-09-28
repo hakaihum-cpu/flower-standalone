@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "asset": "student_01",
+  "status": "prototype_gate",
+  "authoritative_references": {
+    "motion_pose_sheet": {
+      "library_path": "/MIYAKOProject/FLOWER_3D_REFERENCE/REFERENCE_A_motion_pose_sheet_1000005621.png",
+      "sha256": "a2cf73dbf157ca6a02e3af18bf721f9c52def9192221ad78b4c94e0057a13bb1"
+    },
+    "cast_scene_sheet": {
+      "library_path": "/MIYAKOProject/FLOWER_3D_REFERENCE/REFERENCE_B_cast_scene_sheet_1000005616.png",
+      "sha256": "01ccf84be7382bfdf81a2520d11cece678ed53ac2f242422769c8f81452b9a1d"
+    }
+  },
+  "render": {
+    "width": 384,
+    "height": 640,
+    "fps": 16,
+    "pose_cadence_fps": 8,
+    "transparent_background": true,
+    "color_mode": "RGBA",
+    "camera": "orthographic",
+    "vertical_bob_max_fraction_of_actor_height": 0.035
+  },
+  "required_walk_frames": [
+    "student01_walk_01.png",
+    "student01_walk_02.png",
+    "student01_walk_03.png",
+    "student01_walk_04.png",
+    "student01_walk_05.png",
+    "student01_walk_06.png",
+    "student01_walk_07.png",
+    "student01_walk_08.png"
+  ],
+  "later_required_poses": [
+    "neutral_front",
+    "neutral_side",
+    "turn_front",
+    "turn_diagonal_front",
+    "turn_side",
+    "turn_diagonal_back",
+    "turn_back",
+    "sit_01",
+    "sit_02",
+    "crouch_01",
+    "crouch_02",
+    "knees_up",
+    "lie_side",
+    "walk_start_01",
+    "walk_start_02",
+    "walk_stop_01",
+    "walk_stop_02"
+  ],
+  "visual_invariants": [
+    "photographic/real-human proportions rather than anime/chibi proportions",
+    "monochrome or near-monochrome",
+    "long dark hair, white blouse, dark skirt, dark footwear, bag identity retained",
+    "quiet restrained body language",
+    "travel direction and facing direction agree",
+    "no artificial whole-body vertical bob",
+    "no white matte / white halo on alpha edges",
+    "do not treat technical proxy geometry as approved final art"
+  ],
+  "runtime_boundary": {
+    "output": "2D transparent PNG frame banks",
+    "realtime_3d": false,
+    "actor_v3_runtime_unchanged_until_asset_gate_passes": true
+  }
+}
