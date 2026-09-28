@@ -215,9 +215,39 @@ jobs:
               cp "$APK" android-artifact/Flower-Standalone-Android.apk
               sha256sum android-artifact/Flower-Standalone-Android.apk \
                 | tee android-artifact/SHA256.txt
+
+              # CircleCI/browser combinations may try to display an APK inline
+              # because APK is a ZIP container.  Publish an explicit ZIP wrapper
+              # as the user-facing download artifact so clicking it always
+              # initiates a normal file download.
+              python3 - <<'PY'
+              from pathlib import Path
+              import zipfile
+
+              root = Path("android-artifact")
+              apk = root / "Flower-Standalone-Android.apk"
+              out = root / "DOWNLOAD_Flower-Standalone-Android.zip"
+
+              with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_STORED) as zf:
+                  zf.write(apk, arcname=apk.name)
+
+              with zipfile.ZipFile(out, "r") as zf:
+                  bad = zf.testzip()
+                  if bad is not None:
+                      raise SystemExit(f"ZIP verification failed: {bad}")
+
+              print(f"Created download wrapper: {out} ({out.stat().st_size} bytes)")
+              PY
+
+              sha256sum android-artifact/DOWNLOAD_Flower-Standalone-Android.zip \
+                | tee android-artifact/DOWNLOAD_SHA256.txt
             else
               echo "No release APK produced." | tee android-artifact/NO_APK.txt
             fi
+
+      - store_artifacts:
+          path: android-artifact/DOWNLOAD_Flower-Standalone-Android.zip
+          destination: DOWNLOAD_Flower-Standalone-Android.zip
 
       - store_artifacts:
           path: android-artifact
