@@ -1,5 +1,9 @@
 #include "PluginEditor.h"
 
+#if JUCE_ANDROID
+ #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#endif
+
 #include <cmath>
 
 namespace
