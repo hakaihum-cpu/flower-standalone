@@ -37,6 +37,8 @@ public:
 private:
     static constexpr int tileColumns = 10;
     static constexpr int tileRows = 10;
+    static constexpr int tileCount = tileColumns * tileRows;
+    static_assert (tileCount == 100, "FLOWER visual bank must contain all 100 cells");
 
     void updateFromEvent (const juce::MouseEvent& e, bool isActive);
     void notify();
