@@ -21,6 +21,11 @@ REQUIRED = [
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
     "scripts/patch_android_native_parallelism.py",
+    "scripts/materialize_xy_visual_asset.py",
+    "Resources/xy_sheet_01.b64.part00",
+    "Resources/xy_sheet_01.b64.part01",
+    "Resources/xy_sheet_01.b64.part02",
+    "Resources/xy_sheet_01.b64.part03",
 ]
 
 FORBIDDEN_SOURCE_TOKENS = [
@@ -83,6 +88,7 @@ for required_ref in [
     "Source/RetroLookAndFeel.cpp",
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.cpp",
+    "Resources/flower_xy_sheet_01.jpg",
 ]:
     if required_ref not in jucer_text:
         fail(f"JUCER reference missing: {required_ref}")
@@ -96,6 +102,8 @@ if "default: false" not in circle or "run_build" not in circle:
     fail("CircleCI manual build gate is missing")
 
 for required_ci in [
+    "materialize_xy_visual_asset.py",
+    "test -s Resources/flower_xy_sheet_01.jpg",
     "patch_android_native_parallelism.py",
     "CMAKE_BUILD_PARALLEL_LEVEL=2",
     "ActiveProcessorCount=2",
@@ -124,7 +132,6 @@ if "juce::Desktop::getInstance().setOrientationsEnabled" in editor_text:
 for forbidden_visual_token in [
     "FlowerAnimationComponent",
     "flowerAnimation",
-    "BinaryData",
     "decodeAndroidPngWithStb",
     "STB_IMAGE_IMPLEMENTATION",
 ]:
@@ -138,6 +145,18 @@ for forbidden_visible_control in [
 ]:
     if forbidden_visible_control in editor_header:
         fail(f"fullscreen XY MVP contains visible control declaration: {forbidden_visible_control}")
+
+for required_visual_ui in [
+    "BinaryData::flower_xy_sheet_01_jpg",
+    "BinaryData::flower_xy_sheet_01_jpgSize",
+    "tileColumns = 10",
+    "tileRows = 10",
+    "(1.0f - yValue)",
+    "VISUAL ASSET ERROR",
+    "highResamplingQuality",
+]:
+    if required_visual_ui not in editor_text and required_visual_ui not in editor_header:
+        fail(f"XY tile visual contract missing: {required_visual_ui}")
 
 for required_xy_ui in [
     "constexpr int canvasSize = 720",
@@ -187,6 +206,8 @@ if any(position < 0 for position in order) or order != sorted(order):
 print("[PASS] Flower XY standalone static dependency audit")
 print("[PASS] animation code/resources excluded from generated MVP target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
+print("[PASS] 10x10 XY contact-sheet visual contract present")
+print("[PASS] visual asset materializer is wired before Projucer")
 print("[PASS] physical-key control contract present")
 print("[PASS] Android standalone startup safeguards present")
 print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
