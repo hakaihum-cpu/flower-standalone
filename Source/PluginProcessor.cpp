@@ -431,7 +431,6 @@ void FlowerStandaloneAudioProcessor::setPerformanceRoot (int noteClass) noexcept
 void FlowerStandaloneAudioProcessor::setPerformanceScale (int scaleIndex) noexcept
 {
     performanceScaleIndex.store (juce::jlimit (0, 3, scaleIndex), std::memory_order_relaxed);
-    performanceStep = 0;
 }
 
 void FlowerStandaloneAudioProcessor::setPerformanceBpm (float bpm) noexcept
