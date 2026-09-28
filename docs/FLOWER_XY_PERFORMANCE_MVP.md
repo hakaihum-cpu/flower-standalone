@@ -211,3 +211,19 @@ CONFIG interaction:
 - Touch: tap left/right half of ROOT/SCALE rows to decrement/increment; tap DEFAULT EFFECT to toggle.
 
 ROOT, SCALE and DEFAULT EFFECT are stored as APVTS parameters so the JUCE standalone state save/restore path retains them across application sessions.
+
+
+## CURRENT VISUAL SOURCE CONTRACT — supersedes earlier visual experiments
+
+The runtime now uses the exact user-supplied 1191 x 896 contact sheet directly. The previously generated square atlas and all base64/materializer intermediates have been removed.
+
+The sheet is **not** an evenly spaced 10 x 10 grid vertically. Runtime therefore uses explicit source separator coordinates instead of arithmetic division:
+
+- X starts: 0, 121, 241, 361, 481, 601, 721, 841, 961, 1081
+- X ends: 118, 238, 358, 478, 598, 718, 838, 958, 1078, 1191
+- Y starts: 0, 86, 175, 264, 355, 449, 544, 641, 733, 812
+- Y ends: 84, 172, 261, 353, 447, 542, 638, 730, 809, 896
+
+Frame 0 is therefore exactly source rectangle `x=[0,118), y=[0,84)`. Pixel inspection confirmed that this crop is identical to the user's supplied single-frame reference image.
+
+Each selected source rectangle is drawn directly to the 720 x 720 display. There is no square pre-crop, inset, zoom, cover, letterbox compensation, edge extension, or intermediate atlas. All 100 frame indices remain reachable.
