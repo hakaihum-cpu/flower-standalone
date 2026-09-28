@@ -188,3 +188,26 @@ The selected source tile now fills the 720x720 canvas with no letterbox. A small
 - The complete tile keeps its original aspect ratio and is centred in 720x720.
 - The square margin is filled by extending the tile's edge pixels instead of black letterbox bars.
 - This prioritises showing the complete face/head, matching the user's reference tile.
+
+
+## CONFIG screen
+
+SELECT opens/closes a dedicated 720 x 720 CONFIG screen.
+
+Settings:
+- ROOT KEY: C / C# / D / D# / E / F / F# / G / G# / A / A# / B
+- SCALE: MINOR PENT / NATURAL MINOR / MAJOR / DORIAN / RANDOM
+- DEFAULT EFFECT: OFF / ON
+
+RANDOM scale chooses a chromatic semitone (0-11 relative to ROOT) independently for each generated step.
+
+DEFAULT EFFECT controls the startup/default state of both DELAY and GRANULAR. During performance, A and Y can still toggle DELAY and GRANULAR independently without rewriting the stored default.
+
+CONFIG interaction:
+- SELECT: open/close
+- D-pad UP/DOWN: select setting
+- D-pad LEFT/RIGHT: change value
+- A: advance/toggle selected value
+- Touch: tap left/right half of ROOT/SCALE rows to decrement/increment; tap DEFAULT EFFECT to toggle.
+
+ROOT, SCALE and DEFAULT EFFECT are stored as APVTS parameters so the JUCE standalone state save/restore path retains them across application sessions.
