@@ -209,7 +209,7 @@ for required_xy_ui in [
     "toggleConfig",
     "onCloseRequested",
     "getCloseBounds",
-    "g.drawText (\\\"CLOSE\\\"",
+    'g.drawText ("CLOSE"',
     "beginBpmAdjust",
     "beginLooperButton",
     "toggleArp",
