@@ -23,6 +23,8 @@ public:
     void mouseUp (const juce::MouseEvent& e) override;
 
     void setHeld (bool shouldHold);
+    void nudgeFromPhysicalKey (float deltaX, float deltaY);
+    void endPhysicalKeyControl();
     float getXValue() const noexcept { return xValue; }
     float getYValue() const noexcept { return yValue; }
     int getPatternIndex() const noexcept;
@@ -45,6 +47,7 @@ private:
     float horizontalDirection = 0.0f;
     bool active = false;
     bool held = false;
+    bool physicalPointerVisible = false;
 
     juce::Point<float> lastPoint;
     double lastEventMs = 0.0;
@@ -52,7 +55,8 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PerformancePadComponent)
 };
 
-class FlowerStandaloneAudioProcessorEditor final : public juce::AudioProcessorEditor
+class FlowerStandaloneAudioProcessorEditor final : public juce::AudioProcessorEditor,
+                                                   private juce::Timer
 {
 public:
     explicit FlowerStandaloneAudioProcessorEditor (FlowerStandaloneAudioProcessor&);
@@ -61,6 +65,7 @@ public:
     void paint (juce::Graphics& g) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress& key) override;
+    bool keyStateChanged (bool isKeyDown) override;
 
 private:
     void applyRootDelta (int delta);
@@ -68,6 +73,9 @@ private:
     void cycleScale (int delta);
     void toggleHold();
     void stopAll();
+    void beginDpadControl (int keyCode);
+    void endDpadControl();
+    void timerCallback() override;
 
     FlowerStandaloneAudioProcessor& processor;
     RetroLookAndFeel retroLookAndFeel;
@@ -77,6 +85,11 @@ private:
     int scaleIndex = 0;
     float bpm = 112.0f;
     bool hold = false;
+
+    bool dpadActive = false;
+    int dpadKeyCode = 0;
+    float dpadDeltaX = 0.0f;
+    float dpadDeltaY = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FlowerStandaloneAudioProcessorEditor)
 };
