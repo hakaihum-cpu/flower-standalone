@@ -31,6 +31,8 @@ public:
     juce::String getPatternName() const;
 
     PadCallback onPadChanged;
+    std::function<void()> onTouchStarted;
+    std::function<void()> onTapStopRequested;
 
 private:
     static constexpr int tileColumns = 10;
@@ -50,6 +52,8 @@ private:
     bool physicalPointerVisible = false;
 
     juce::Point<float> lastPoint;
+    juce::Point<float> touchDownPoint;
+    bool touchDragged = false;
     double lastEventMs = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PerformancePadComponent)
@@ -72,9 +76,17 @@ private:
     void applyBpmDelta (float delta);
     void cycleScale (int delta);
     void toggleHold();
+    void toggleArp();
+    void toggleDelay();
+    void toggleGranular();
     void stopAll();
     void beginDpadControl (int keyCode);
     void endDpadControl();
+    void beginBpmAdjust (int direction);
+    void endBpmAdjust();
+    void beginLooperButton();
+    void endLooperButton();
+    void refreshControlTimer();
     void timerCallback() override;
 
     FlowerStandaloneAudioProcessor& processor;
@@ -85,11 +97,25 @@ private:
     int scaleIndex = 0;
     float bpm = 112.0f;
     bool hold = false;
+    bool arpEnabled = true;
+    bool delayEnabled = true;
+    bool granularEnabled = true;
 
     bool dpadActive = false;
     int dpadKeyCode = 0;
     float dpadDeltaX = 0.0f;
     float dpadDeltaY = 0.0f;
+
+    bool bpmAdjustActive = false;
+    int bpmAdjustDirection = 0;
+    double bpmHoldStartMs = 0.0;
+    double bpmLastRepeatMs = 0.0;
+
+    bool looperButtonActive = false;
+    bool looperLongHandled = false;
+    double looperHoldStartMs = 0.0;
+
+    int toggleButtonLatchCode = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FlowerStandaloneAudioProcessorEditor)
 };
