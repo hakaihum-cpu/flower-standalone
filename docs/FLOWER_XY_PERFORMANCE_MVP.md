@@ -114,7 +114,7 @@ The screen contains:
 - root / scale / BPM controls,
 - HOLD and STOP.
 
-Android remains fixed at 720 × 720.
+The MVP uses a fixed **720 × 720** canvas as the primary design target on both Android and desktop preview.
 
 ## Current validation state
 
