@@ -22,7 +22,7 @@ REQUIRED = [
     "Source/RetroLookAndFeel.cpp",
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_juce_android_gamepad_keys.py",
-    "Resources/flower_xy_square_atlas_exact.jpg",
+    "Resources/flower_xy_source_exact.jpg",
 ]
 
 FORBIDDEN_SOURCE_TOKENS = [
@@ -85,7 +85,7 @@ for required_ref in [
     "Source/RetroLookAndFeel.cpp",
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.cpp",
-    "Resources/flower_xy_square_atlas_exact.jpg",
+    "Resources/flower_xy_source_exact.jpg",
 ]:
     if required_ref not in jucer_text:
         fail(f"JUCER reference missing: {required_ref}")
@@ -100,7 +100,7 @@ if "default: false" not in circle or "run_build" not in circle:
 
 for required_ci in [
     "patch_juce_android_gamepad_keys.py JUCE",
-    "test -s Resources/flower_xy_square_atlas_exact.jpg",
+    "test -s Resources/flower_xy_source_exact.jpg",
     "patch_android_native_parallelism.py",
     "CMAKE_BUILD_PARALLEL_LEVEL=2",
     "ActiveProcessorCount=2",
@@ -144,8 +144,8 @@ for forbidden_visible_control in [
         fail(f"fullscreen XY MVP contains visible control declaration: {forbidden_visible_control}")
 
 for required_visual_ui in [
-    "BinaryData::flower_xy_square_atlas_exact_jpg",
-    "BinaryData::flower_xy_square_atlas_exact_jpgSize",
+    "BinaryData::flower_xy_source_exact_jpg",
+    "BinaryData::flower_xy_source_exact_jpgSize",
     "tileColumns = 10",
     "tileRows = 10",
     "(1.0f - yValue)",
@@ -155,10 +155,19 @@ for required_visual_ui in [
     "tileCount = tileColumns * tileRows",
     "static_assert (tileCount == 100",
     "visualTileIndex = row * tileColumns + column",
-    "imageWidth != 960 || imageHeight != 960",
-    "constexpr int frameSize = 96",
-    "sourceX = visualColumn * frameSize",
-    "sourceY = visualRow * frameSize",
+    "imageWidth != 1191 || imageHeight != 896",
+    "xStarts[tileColumns]",
+    "{ 0, 121, 241, 361, 481, 601, 721, 841, 961, 1081 }",
+    "xEnds[tileColumns]",
+    "{ 118, 238, 358, 478, 598, 718, 838, 958, 1078, 1191 }",
+    "yStarts[tileRows]",
+    "{ 0, 86, 175, 264, 355, 449, 544, 641, 733, 812 }",
+    "yEnds[tileRows]",
+    "{ 84, 172, 261, 353, 447, 542, 638, 730, 809, 896 }",
+    
+    
+    
+    
     "0, 0, getWidth(), getHeight()",
     "onTapStopRequested",
 ]:
@@ -262,9 +271,10 @@ print("[PASS] Flower XY standalone static dependency audit")
 print("[PASS] animation code/resources excluded from generated MVP target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
 print("[PASS] 10x10 XY contact-sheet visual contract present")
-print("[PASS] verified square atlas is tracked directly and embedded by Projucer")
-print("[PASS] exact 960x960 / 96px-cell visual atlas contract present")
-print("[PASS] runtime visual path performs no fit/letterbox/zoom/crop logic")
+print("[PASS] exact original contact sheet is tracked directly and embedded by Projucer")
+print("[PASS] non-uniform source separator coordinates are fixed explicitly")
+print("[PASS] frame 0 source crop is exactly [0,118) x [0,84)")
+print("[PASS] runtime performs one source crop only; no intermediate square atlas")
 print("[PASS] all 100 contact-sheet cells are mapped with no skip list")
 print("[PASS] dpad XY latch / tap-stop / pointer contract present")
 print("[PASS] A/B/X/Y/L/R gamepad assignment contract present")
