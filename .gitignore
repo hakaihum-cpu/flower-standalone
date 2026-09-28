@@ -10,3 +10,5 @@ captures/
 *.jks
 *.keystore
 secrets.properties
+
+tools/diagnostics/logs/
