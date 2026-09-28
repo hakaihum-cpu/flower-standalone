@@ -40,6 +40,15 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int)
     flowerLoopBuffer.clear();
     resetFlowerState();
 
+    const int delaySamples = juce::jmax (2048, juce::roundToInt (currentSampleRate * 2.0));
+    performanceDelayBuffer.setSize (2, delaySamples, false, true, false);
+    performanceDelayBuffer.clear();
+    performanceDelayWritePosition = 0;
+    performanceSamplesUntilStep = 0.0;
+    performanceStep = 0;
+    performanceCurrentNote = -1;
+    performanceRandomState = 0x46574C52u;
+
     const auto initialise = [this] (juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>& value,
                                     const char* id,
                                     double seconds)
@@ -72,6 +81,27 @@ void FlowerStandaloneAudioProcessor::updateSynthParams()
     params.lfoDepth = apvts.getRawParameterValue (ParamIDs::lfoDepth)->load();
     params.lfoTarget = juce::roundToInt (apvts.getRawParameterValue (ParamIDs::lfoTarget)->load());
 
+    if (isPerformanceGateOpen())
+    {
+        const float x = performanceX.load (std::memory_order_relaxed);
+        const float y = performanceY.load (std::memory_order_relaxed);
+
+        params.level = 0.26f;
+        params.attack = 0.003f;
+        params.decay = 0.10f + (1.0f - y) * 0.18f;
+        params.sustain = 0.58f;
+        params.release = 0.055f + (1.0f - y) * 0.24f;
+
+        const float filterCurve = std::pow (juce::jlimit (0.0f, 1.0f, y), 1.35f);
+        params.cutoff = juce::jlimit (120.0f, 18000.0f,
+                                     240.0f + filterCurve * 14500.0f + x * 1200.0f);
+        params.resonance = 0.72f + y * 4.2f;
+
+        params.lfoRate = 0.35f + x * 5.5f;
+        params.lfoDepth = y * 0.10f;
+        params.lfoTarget = static_cast<int> (LfoTarget::Cutoff);
+    }
+
     for (int i = 0; i < synthesiser.getNumVoices(); ++i)
         if (auto* voice = dynamic_cast<SineVoice*> (synthesiser.getVoice (i)))
             voice->setParams (params);
@@ -83,15 +113,19 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
 
+    generatePerformanceMidi (midiMessages, buffer.getNumSamples());
+
     updateSynthParams();
     keyboardState.processNextMidiBuffer (midiMessages, 0, buffer.getNumSamples(), true);
     synthesiser.renderNextBlock (buffer, midiMessages, 0, buffer.getNumSamples());
 
-    // Actor-v3 parity: Flower always maintains the latest 16 seconds of the
-    // generated standalone synth audio. The visible REC/DUB workflow from the
-    // older written spec was no longer active in the current MIYAKO Actor-v3
-    // implementation, so it is intentionally not reintroduced here.
+    // The XY performance path reuses FLOWER's proven granular core, but maps
+    // pad gesture state directly to position/size/density/spread/hold/mix.
     processFlower (buffer);
+
+    // Delay is deliberately after the granular stage so one gesture moves
+    // synthesis, granulation and echo as one performance surface.
+    processPerformanceDelay (buffer);
 }
 
 void FlowerStandaloneAudioProcessor::resetFlowerState() noexcept
@@ -164,27 +198,58 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
         resetFlowerState();
     }
 
-    const bool enabled = apvts.getRawParameterValue (ParamIDs::flowerEnabled)->load() > 0.5f;
+    const bool performanceGate = isPerformanceGateOpen();
+    const float performancePadX = performanceX.load (std::memory_order_relaxed);
+    const float performancePadY = performanceY.load (std::memory_order_relaxed);
+    const float gestureSpeed = performanceSpeed.load (std::memory_order_relaxed);
+    const float gestureDirection = performanceDirection.load (std::memory_order_relaxed);
+
+    const bool legacyEnabled =
+        apvts.getRawParameterValue (ParamIDs::flowerEnabled)->load() > 0.5f;
+    const bool enabled = legacyEnabled || (performanceGate && performancePadY > 0.025f);
 
     flowerRecordingActive.store (false, std::memory_order_relaxed);
     flowerOverdubActive = false;
 
-    flowerPositionSmoothed.setTargetValue (
-        juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue (ParamIDs::flowerPosition)->load()));
-    flowerSizeSmoothed.setTargetValue (
-        juce::jlimit (0.008f, 0.50f, apvts.getRawParameterValue (ParamIDs::flowerSize)->load()));
-    flowerDensitySmoothed.setTargetValue (
-        juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue (ParamIDs::flowerDensity)->load()));
-    flowerSpreadSmoothed.setTargetValue (
-        juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue (ParamIDs::flowerSpread)->load()));
-    flowerHoldSmoothed.setTargetValue (
-        juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue (ParamIDs::flowerHold)->load()));
-    flowerPitchSmoothed.setTargetValue (
-        juce::jlimit (-12.0f, 12.0f, apvts.getRawParameterValue (ParamIDs::flowerPitch)->load()));
-    flowerMixSmoothed.setTargetValue (
-        enabled ? juce::jlimit (0.0f, 1.0f, apvts.getRawParameterValue (ParamIDs::flowerMix)->load()) : 0.0f);
+    const float positionTarget = performanceGate
+        ? performancePadX
+        : apvts.getRawParameterValue (ParamIDs::flowerPosition)->load();
 
-    const bool reverse = apvts.getRawParameterValue (ParamIDs::flowerReverse)->load() > 0.5f;
+    const float sizeTarget = performanceGate
+        ? juce::jmap (juce::jlimit (0.0f, 1.0f, gestureSpeed), 0.18f, 0.022f)
+        : apvts.getRawParameterValue (ParamIDs::flowerSize)->load();
+
+    const float densityTarget = performanceGate
+        ? performancePadY
+        : apvts.getRawParameterValue (ParamIDs::flowerDensity)->load();
+
+    const float spreadTarget = performanceGate
+        ? juce::jlimit (0.0f, 1.0f, 0.04f + performancePadY * 0.86f)
+        : apvts.getRawParameterValue (ParamIDs::flowerSpread)->load();
+
+    const float holdTarget = performanceGate
+        ? juce::jlimit (0.0f, 1.0f, 0.10f + performancePadY * 0.82f)
+        : apvts.getRawParameterValue (ParamIDs::flowerHold)->load();
+
+    const float pitchTarget = performanceGate
+        ? 0.0f
+        : apvts.getRawParameterValue (ParamIDs::flowerPitch)->load();
+
+    const float mixTarget = performanceGate
+        ? juce::jlimit (0.0f, 0.88f, performancePadY * performancePadY * 0.88f)
+        : apvts.getRawParameterValue (ParamIDs::flowerMix)->load();
+
+    flowerPositionSmoothed.setTargetValue (juce::jlimit (0.0f, 1.0f, positionTarget));
+    flowerSizeSmoothed.setTargetValue (juce::jlimit (0.008f, 0.50f, sizeTarget));
+    flowerDensitySmoothed.setTargetValue (juce::jlimit (0.0f, 1.0f, densityTarget));
+    flowerSpreadSmoothed.setTargetValue (juce::jlimit (0.0f, 1.0f, spreadTarget));
+    flowerHoldSmoothed.setTargetValue (juce::jlimit (0.0f, 1.0f, holdTarget));
+    flowerPitchSmoothed.setTargetValue (juce::jlimit (-12.0f, 12.0f, pitchTarget));
+    flowerMixSmoothed.setTargetValue (enabled ? mixTarget : 0.0f);
+
+    const bool reverse = performanceGate
+        ? (gestureSpeed > 0.12f && gestureDirection < -0.10f)
+        : (apvts.getRawParameterValue (ParamIDs::flowerReverse)->load() > 0.5f);
 
     auto* outL = buffer.getWritePointer (0);
     auto* outR = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : nullptr;
@@ -336,6 +401,275 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
         outL[i] = dryL + (wetL - dryL) * mix;
         if (outR != nullptr)
             outR[i] = dryR + (wetR - dryR) * mix;
+    }
+}
+
+void FlowerStandaloneAudioProcessor::setPerformancePad (float x,
+                                                              float y,
+                                                              float speed,
+                                                              float horizontalDirection,
+                                                              bool active) noexcept
+{
+    performanceX.store (juce::jlimit (0.0f, 1.0f, x), std::memory_order_relaxed);
+    performanceY.store (juce::jlimit (0.0f, 1.0f, y), std::memory_order_relaxed);
+    performanceSpeed.store (juce::jlimit (0.0f, 1.0f, speed), std::memory_order_relaxed);
+    performanceDirection.store (
+        juce::jlimit (-1.0f, 1.0f, horizontalDirection), std::memory_order_relaxed);
+    performanceActive.store (active, std::memory_order_release);
+}
+
+void FlowerStandaloneAudioProcessor::setPerformanceHold (bool shouldHold) noexcept
+{
+    performanceHold.store (shouldHold, std::memory_order_release);
+}
+
+void FlowerStandaloneAudioProcessor::setPerformanceRoot (int noteClass) noexcept
+{
+    performanceRootClass.store (juce::jlimit (0, 11, noteClass), std::memory_order_relaxed);
+}
+
+void FlowerStandaloneAudioProcessor::setPerformanceScale (int scaleIndex) noexcept
+{
+    performanceScaleIndex.store (juce::jlimit (0, 3, scaleIndex), std::memory_order_relaxed);
+    performanceStep = 0;
+}
+
+void FlowerStandaloneAudioProcessor::setPerformanceBpm (float bpm) noexcept
+{
+    performanceBpm.store (juce::jlimit (50.0f, 190.0f, bpm), std::memory_order_relaxed);
+}
+
+void FlowerStandaloneAudioProcessor::stopPerformance() noexcept
+{
+    performanceActive.store (false, std::memory_order_release);
+    performanceHold.store (false, std::memory_order_release);
+    performanceStopRequested.store (true, std::memory_order_release);
+}
+
+bool FlowerStandaloneAudioProcessor::isPerformanceGateOpen() const noexcept
+{
+    return performanceActive.load (std::memory_order_acquire)
+        || performanceHold.load (std::memory_order_acquire);
+}
+
+uint32_t FlowerStandaloneAudioProcessor::nextPerformanceRandom() noexcept
+{
+    uint32_t x = performanceRandomState;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    performanceRandomState = x;
+    return x;
+}
+
+int FlowerStandaloneAudioProcessor::performanceScaleLength() const noexcept
+{
+    switch (performanceScaleIndex.load (std::memory_order_relaxed))
+    {
+        case 0: return 5; // minor pentatonic
+        default: return 7;
+    }
+}
+
+int FlowerStandaloneAudioProcessor::performanceScaleSemitone (int degree) const noexcept
+{
+    static constexpr int minorPent[] { 0, 3, 5, 7, 10 };
+    static constexpr int naturalMinor[] { 0, 2, 3, 5, 7, 8, 10 };
+    static constexpr int major[] { 0, 2, 4, 5, 7, 9, 11 };
+    static constexpr int dorian[] { 0, 2, 3, 5, 7, 9, 10 };
+
+    const int scale = performanceScaleIndex.load (std::memory_order_relaxed);
+    const int length = performanceScaleLength();
+    const int wrapped = ((degree % length) + length) % length;
+
+    switch (scale)
+    {
+        case 1: return naturalMinor[wrapped];
+        case 2: return major[wrapped];
+        case 3: return dorian[wrapped];
+        default: return minorPent[wrapped];
+    }
+}
+
+int FlowerStandaloneAudioProcessor::nextPerformanceNote (int patternIndex)
+{
+    const int scaleLength = performanceScaleLength();
+    int degree = 0;
+    int octave = 0;
+
+    switch (patternIndex)
+    {
+        case 0: // SINGLE
+            degree = 0;
+            break;
+
+        case 1: // UP
+            degree = performanceStep % scaleLength;
+            break;
+
+        case 2: // DOWN
+            degree = scaleLength - 1 - (performanceStep % scaleLength);
+            break;
+
+        case 3: // UP / DOWN
+        {
+            const int span = juce::jmax (2, scaleLength * 2 - 2);
+            const int p = performanceStep % span;
+            degree = p < scaleLength ? p : span - p;
+            break;
+        }
+
+        case 4: // SKIP
+            degree = (performanceStep * 2) % scaleLength;
+            octave = ((performanceStep / juce::jmax (1, scaleLength)) & 1);
+            break;
+
+        case 5: // OCTAVE
+            degree = performanceStep % scaleLength;
+            octave = (performanceStep / scaleLength) & 1;
+            break;
+
+        case 6: // RANDOM
+            degree = static_cast<int> (nextPerformanceRandom() % static_cast<uint32_t> (scaleLength));
+            octave = static_cast<int> ((nextPerformanceRandom() >> 8) & 1u);
+            break;
+
+        default: // CHAOS
+            degree = static_cast<int> (nextPerformanceRandom() % static_cast<uint32_t> (scaleLength));
+            octave = static_cast<int> ((nextPerformanceRandom() >> 8) % 3u) - 1;
+            break;
+    }
+
+    const float y = performanceY.load (std::memory_order_relaxed);
+    if (y > 0.72f && (performanceStep & 1) != 0 && patternIndex >= 4)
+        ++octave;
+
+    const int root = 48 + performanceRootClass.load (std::memory_order_relaxed);
+    const int note = root + performanceScaleSemitone (degree) + octave * 12;
+
+    ++performanceStep;
+    return juce::jlimit (24, 96, note);
+}
+
+void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& midi,
+                                                               int numSamples)
+{
+    if (numSamples <= 0)
+        return;
+
+    if (performanceStopRequested.exchange (false, std::memory_order_acq_rel))
+    {
+        if (performanceCurrentNote >= 0)
+            midi.addEvent (juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
+
+        performanceCurrentNote = -1;
+        performanceSamplesUntilStep = 0.0;
+        performanceStep = 0;
+    }
+
+    if (! isPerformanceGateOpen())
+    {
+        if (performanceCurrentNote >= 0)
+            midi.addEvent (juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
+
+        performanceCurrentNote = -1;
+        performanceSamplesUntilStep = 0.0;
+        performanceStep = 0;
+        return;
+    }
+
+    const float x = performanceX.load (std::memory_order_relaxed);
+    const int patternIndex = juce::jlimit (
+        0, 7, static_cast<int> (std::floor (x * 8.0f)));
+
+    static constexpr int stepsPerBeatTable[] { 1, 2, 4, 8 };
+    const int rateIndex = juce::jlimit (
+        0, 3, static_cast<int> (std::floor (x * 4.0f)));
+    const int stepsPerBeat = stepsPerBeatTable[rateIndex];
+
+    const double bpm = static_cast<double> (
+        performanceBpm.load (std::memory_order_relaxed));
+    const double stepSamples = currentSampleRate * 60.0
+                             / juce::jmax (1.0, bpm)
+                             / static_cast<double> (stepsPerBeat);
+
+    double eventPosition = performanceSamplesUntilStep;
+
+    while (eventPosition < static_cast<double> (numSamples))
+    {
+        const int sampleOffset = juce::jlimit (
+            0, numSamples - 1, juce::roundToInt (eventPosition));
+
+        if (performanceCurrentNote >= 0)
+            midi.addEvent (
+                juce::MidiMessage::noteOff (1, performanceCurrentNote),
+                sampleOffset);
+
+        performanceCurrentNote = nextPerformanceNote (patternIndex);
+        const float velocity = juce::jlimit (
+            0.25f, 1.0f,
+            0.58f + performanceY.load (std::memory_order_relaxed) * 0.32f);
+
+        midi.addEvent (
+            juce::MidiMessage::noteOn (1, performanceCurrentNote, velocity),
+            sampleOffset);
+
+        eventPosition += stepSamples;
+    }
+
+    performanceSamplesUntilStep = eventPosition - static_cast<double> (numSamples);
+}
+
+void FlowerStandaloneAudioProcessor::processPerformanceDelay (
+    juce::AudioBuffer<float>& buffer)
+{
+    const int capacity = performanceDelayBuffer.getNumSamples();
+    const int numSamples = buffer.getNumSamples();
+    const int channels = juce::jmin (buffer.getNumChannels(),
+                                     performanceDelayBuffer.getNumChannels());
+
+    if (capacity <= 16 || numSamples <= 0 || channels <= 0)
+        return;
+
+    const bool gate = isPerformanceGateOpen();
+    const float x = performanceX.load (std::memory_order_relaxed);
+    const float y = performanceY.load (std::memory_order_relaxed);
+    const float speed = performanceSpeed.load (std::memory_order_relaxed);
+
+    const float delaySeconds = juce::jlimit (
+        0.04f, 0.65f,
+        0.075f + (1.0f - speed) * 0.27f + x * 0.14f);
+    const int delaySamples = juce::jlimit (
+        1, capacity - 1,
+        juce::roundToInt (delaySeconds * static_cast<float> (currentSampleRate)));
+
+    const float feedback = gate
+        ? juce::jlimit (0.0f, 0.82f, 0.12f + y * 0.70f)
+        : 0.0f;
+    const float wet = gate
+        ? juce::jlimit (0.0f, 0.52f, 0.025f + y * 0.48f)
+        : 0.0f;
+
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        int readPosition = performanceDelayWritePosition - delaySamples;
+        if (readPosition < 0)
+            readPosition += capacity;
+
+        for (int channel = 0; channel < channels; ++channel)
+        {
+            auto* output = buffer.getWritePointer (channel);
+            auto* delay = performanceDelayBuffer.getWritePointer (channel);
+
+            const float input = output[sample];
+            const float delayed = delay[readPosition];
+
+            delay[performanceDelayWritePosition] =
+                juce::jlimit (-2.0f, 2.0f, input + delayed * feedback);
+            output[sample] = input + (delayed - input) * wet;
+        }
+
+        performanceDelayWritePosition = (performanceDelayWritePosition + 1) % capacity;
     }
 }
 
