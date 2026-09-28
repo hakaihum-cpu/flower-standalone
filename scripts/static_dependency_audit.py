@@ -21,15 +21,8 @@ REQUIRED = [
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
     "scripts/patch_android_native_parallelism.py",
-    "scripts/materialize_xy_visual_asset.py",
     "scripts/patch_juce_android_gamepad_keys.py",
-    "Resources/xy_sheet_01.b64.part00",
-    "Resources/xy_sheet_01.b64.part01",
-    "Resources/xy_sheet_01.b64.part02",
-    "Resources/xy_sheet_01.b64.part03",
-    "Resources/xy_sheet_01.b64.part04",
-    "Resources/xy_sheet_01.b64.part05",
-    "Resources/xy_sheet_01.b64.part06",
+    "Resources/flower_xy_square_atlas_exact.jpg",
 ]
 
 FORBIDDEN_SOURCE_TOKENS = [
@@ -92,7 +85,7 @@ for required_ref in [
     "Source/RetroLookAndFeel.cpp",
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.cpp",
-    "Resources/flower_xy_sheet_01.jpg",
+    "Resources/flower_xy_square_atlas_exact.jpg",
 ]:
     if required_ref not in jucer_text:
         fail(f"JUCER reference missing: {required_ref}")
@@ -107,8 +100,7 @@ if "default: false" not in circle or "run_build" not in circle:
 
 for required_ci in [
     "patch_juce_android_gamepad_keys.py JUCE",
-    "materialize_xy_visual_asset.py",
-    "test -s Resources/flower_xy_sheet_01.jpg",
+    "test -s Resources/flower_xy_square_atlas_exact.jpg",
     "patch_android_native_parallelism.py",
     "CMAKE_BUILD_PARALLEL_LEVEL=2",
     "ActiveProcessorCount=2",
@@ -152,8 +144,8 @@ for forbidden_visible_control in [
         fail(f"fullscreen XY MVP contains visible control declaration: {forbidden_visible_control}")
 
 for required_visual_ui in [
-    "BinaryData::flower_xy_sheet_01_jpg",
-    "BinaryData::flower_xy_sheet_01_jpgSize",
+    "BinaryData::flower_xy_square_atlas_exact_jpg",
+    "BinaryData::flower_xy_square_atlas_exact_jpgSize",
     "tileColumns = 10",
     "tileRows = 10",
     "(1.0f - yValue)",
@@ -163,8 +155,10 @@ for required_visual_ui in [
     "tileCount = tileColumns * tileRows",
     "static_assert (tileCount == 100",
     "visualTileIndex = row * tileColumns + column",
-    "atlasInset = 2",
-    "sourceWidth == sourceHeight",
+    "imageWidth != 960 || imageHeight != 960",
+    "constexpr int frameSize = 96",
+    "sourceX = visualColumn * frameSize",
+    "sourceY = visualRow * frameSize",
     "0, 0, getWidth(), getHeight()",
     "onTapStopRequested",
 ]:
@@ -268,8 +262,8 @@ print("[PASS] Flower XY standalone static dependency audit")
 print("[PASS] animation code/resources excluded from generated MVP target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
 print("[PASS] 10x10 XY contact-sheet visual contract present")
-print("[PASS] visual asset materializer is wired before Projucer")
-print("[PASS] pre-squared visual atlas contract present")
+print("[PASS] verified square atlas is tracked directly and embedded by Projucer")
+print("[PASS] exact 960x960 / 96px-cell visual atlas contract present")
 print("[PASS] runtime visual path performs no fit/letterbox/zoom/crop logic")
 print("[PASS] all 100 contact-sheet cells are mapped with no skip list")
 print("[PASS] dpad XY latch / tap-stop / pointer contract present")
