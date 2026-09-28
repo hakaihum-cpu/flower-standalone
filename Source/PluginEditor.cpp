@@ -33,8 +33,8 @@ PerformancePadComponent::PerformancePadComponent()
     setWantsKeyboardFocus (false);
 
     tileSheetImage = juce::ImageFileFormat::loadFrom (
-        BinaryData::flower_xy_sheet_01_jpg,
-        static_cast<size_t> (BinaryData::flower_xy_sheet_01_jpgSize));
+        BinaryData::flower_xy_square_atlas_exact_jpg,
+        static_cast<size_t> (BinaryData::flower_xy_square_atlas_exact_jpgSize));
 }
 
 int PerformancePadComponent::getPatternIndex() const noexcept
@@ -120,28 +120,28 @@ void PerformancePadComponent::paint (juce::Graphics& g)
     const int imageWidth = tileSheetImage.getWidth();
     const int imageHeight = tileSheetImage.getHeight();
 
-    const int tileLeft = (visualColumn * imageWidth) / tileColumns;
-    const int tileRight = ((visualColumn + 1) * imageWidth) / tileColumns;
-    const int tileTop = (visualRow * imageHeight) / tileRows;
-    const int tileBottom = ((visualRow + 1) * imageHeight) / tileRows;
+    // This resource is a verified 960 x 960 atlas containing exactly
+    // 10 x 10 square frames.  Each frame is exactly 96 x 96 pixels.
+    // Do not add inset/crop/fit compensation here: doing so caused the
+    // earlier coordinate/scale drift and partial-face display.
+    if (imageWidth != 960 || imageHeight != 960)
+    {
+        g.setColour (juce::Colours::white);
+        g.setFont (juce::FontOptions (16.0f).withStyle ("Bold"));
+        g.drawFittedText ("VISUAL ATLAS SIZE ERROR",
+                          getLocalBounds().reduced (24),
+                          juce::Justification::centred, 2);
+        return;
+    }
 
-    // The generated square atlas reserves a 2 px separator around each
-    // 100 x 100 cell.  The remaining 96 x 96 content is the complete
-    // pre-cropped square frame.
-    constexpr int atlasInset = 2;
-    const int sourceX = tileLeft + atlasInset;
-    const int sourceY = tileTop + atlasInset;
-    const int sourceWidth = juce::jmax (
-        1, tileRight - tileLeft - atlasInset * 2);
-    const int sourceHeight = juce::jmax (
-        1, tileBottom - tileTop - atlasInset * 2);
-
-    jassert (sourceWidth == sourceHeight);
+    constexpr int frameSize = 96;
+    const int sourceX = visualColumn * frameSize;
+    const int sourceY = visualRow * frameSize;
 
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
     g.drawImage (tileSheetImage,
                  0, 0, getWidth(), getHeight(),
-                 sourceX, sourceY, sourceWidth, sourceHeight,
+                 sourceX, sourceY, frameSize, frameSize,
                  false);
 
     if (physicalPointerVisible)
