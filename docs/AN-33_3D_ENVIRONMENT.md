@@ -80,3 +80,28 @@ Current working rule:
 - Do not hand the execution burden to the user by default.
 - Because the current ChatGPT host cannot execute Blender, the real Blender-rendered visual gate remains blocked unless a separate executable Blender host becomes available or the user explicitly chooses to run the portable local path.
 - Do not substitute AI image generation and call it a real 3D render.
+
+
+## Current-host 3D renderer unlocked — 2026-09-28
+The current ChatGPT host was re-audited and contains VTK 9.6.2 with working offscreen OpenGL rendering.
+
+This removes Blender as a hard blocker for **technical 3D iteration**:
+- procedural geometry can be generated with trimesh,
+- actual 3D geometry can be rendered offscreen through VTK,
+- transparent RGBA frame banks can be produced in this host,
+- alpha/matte validation can run here,
+- no user-side Blender installation or execution is required for this blocking stage.
+
+New repository tools:
+- `tools/flower3d/student01_blocking_v3.py`
+- `tools/flower3d/render_vtk_blocking.py`
+
+Verified in the host:
+- real GLB geometry produced for neutral, walk-8 and basic pose sets,
+- VTK offscreen rendering works,
+- 8 walk frames render from actual geometry,
+- all eight rendered PNGs have `transparent_rgb_max=0`.
+
+This does **not** mean the current procedural blocking model is visually approved. It is deliberately crude. Reference A/B remain the authority, and the model must still be refined before runtime integration.
+
+Blender remains an optional later authoring path for higher-detail mesh/rig work. It is no longer required to continue the current 3D prototype.
