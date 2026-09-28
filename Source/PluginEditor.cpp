@@ -181,16 +181,6 @@ void PerformancePadComponent::notify()
         onPadChanged (xValue, yValue, speedValue, horizontalDirection, active || held);
 }
 
-void FlowerStandaloneAudioProcessorEditor::styleLabel (juce::Label& label,
-                                                        float size,
-                                                        bool bold)
-{
-    label.setColour (juce::Label::textColourId, textMain());
-    label.setFont (bold
-        ? juce::FontOptions (size).withStyle ("Bold")
-        : juce::FontOptions (size));
-}
-
 FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     FlowerStandaloneAudioProcessor& p)
     : juce::AudioProcessorEditor (&p),
@@ -198,14 +188,14 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
 {
     setLookAndFeel (&retroLookAndFeel);
     setOpaque (true);
+    setWantsKeyboardFocus (true);
+
+    constexpr int canvasSize = 720;
+    setSize (canvasSize, canvasSize);
+    setResizable (false, false);
+    setResizeLimits (canvasSize, canvasSize, canvasSize, canvasSize);
 
    #if JUCE_ANDROID
-    constexpr int androidCanvasSize = 720;
-    setSize (androidCanvasSize, androidCanvasSize);
-    setResizable (false, false);
-    setResizeLimits (androidCanvasSize, androidCanvasSize,
-                     androidCanvasSize, androidCanvasSize);
-
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
     {
         holder->stopPlaying();
@@ -220,104 +210,22 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
 
         holder->startPlaying();
     }
-   #else
-    constexpr int desktopCanvasSize = 720;
-    setSize (desktopCanvasSize, desktopCanvasSize);
-    setResizable (false, false);
-    setResizeLimits (desktopCanvasSize, desktopCanvasSize,
-                     desktopCanvasSize, desktopCanvasSize);
    #endif
 
-    titleLabel.setText ("FLOWER", juce::dontSendNotification);
-    styleLabel (titleLabel, 22.0f, true);
-    titleLabel.setJustificationType (juce::Justification::centredLeft);
-    addAndMakeVisible (titleLabel);
-
-    subtitleLabel.setText ("XY PERFORMANCE SYNTH / SEQUENCER / FX",
-                           juce::dontSendNotification);
-    subtitleLabel.setColour (juce::Label::textColourId, textMuted());
-    subtitleLabel.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
-    subtitleLabel.setJustificationType (juce::Justification::centredLeft);
-    addAndMakeVisible (subtitleLabel);
-
-    padReadout.setJustificationType (juce::Justification::centredRight);
-    padReadout.setColour (juce::Label::textColourId, textMain());
-    padReadout.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
-    addAndMakeVisible (padReadout);
-
     addAndMakeVisible (performancePad);
-
-    rootLabel.setText ("ROOT", juce::dontSendNotification);
-    scaleLabel.setText ("SCALE", juce::dontSendNotification);
-    tempoLabel.setText ("BPM", juce::dontSendNotification);
-    for (auto* label : { &rootLabel, &scaleLabel, &tempoLabel })
-    {
-        styleLabel (*label, 9.0f, true);
-        label->setJustificationType (juce::Justification::centred);
-        addAndMakeVisible (*label);
-    }
-
-    rootBox.addItemList (
-        juce::StringArray { "C", "C#", "D", "D#", "E", "F",
-                            "F#", "G", "G#", "A", "A#", "B" }, 1);
-    rootBox.setSelectedId (1, juce::dontSendNotification);
-    rootBox.onChange = [this]
-    {
-        processor.setPerformanceRoot (juce::jmax (0, rootBox.getSelectedId() - 1));
-    };
-    addAndMakeVisible (rootBox);
-
-    scaleBox.addItemList (
-        juce::StringArray { "MIN PENT", "MINOR", "MAJOR", "DORIAN" }, 1);
-    scaleBox.setSelectedId (1, juce::dontSendNotification);
-    scaleBox.onChange = [this]
-    {
-        processor.setPerformanceScale (juce::jmax (0, scaleBox.getSelectedId() - 1));
-    };
-    addAndMakeVisible (scaleBox);
-
-    tempoSlider.setSliderStyle (juce::Slider::LinearHorizontal);
-    tempoSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 54, 28);
-    tempoSlider.setRange (50.0, 190.0, 1.0);
-    tempoSlider.setValue (112.0, juce::dontSendNotification);
-    tempoSlider.onValueChange = [this]
-    {
-        processor.setPerformanceBpm (static_cast<float> (tempoSlider.getValue()));
-    };
-    addAndMakeVisible (tempoSlider);
-
-    holdButton.setClickingTogglesState (true);
-    holdButton.onClick = [this]
-    {
-        const bool held = holdButton.getToggleState();
-        performancePad.setHeld (held);
-        processor.setPerformanceHold (held);
-        updatePadReadout();
-    };
-    addAndMakeVisible (holdButton);
-
-    panicButton.onClick = [this]
-    {
-        holdButton.setToggleState (false, juce::dontSendNotification);
-        performancePad.setHeld (false);
-        processor.setPerformanceHold (false);
-        processor.stopPerformance();
-        updatePadReadout();
-    };
-    addAndMakeVisible (panicButton);
 
     performancePad.onPadChanged =
         [this] (float x, float y, float speed, float horizontalDirection, bool active)
         {
             processor.setPerformancePad (x, y, speed, horizontalDirection, active);
-            updatePadReadout();
         };
 
-    processor.setPerformanceRoot (0);
-    processor.setPerformanceScale (0);
-    processor.setPerformanceBpm (112.0f);
-    processor.setPerformanceHold (false);
-    updatePadReadout();
+    processor.setPerformanceRoot (rootClass);
+    processor.setPerformanceScale (scaleIndex);
+    processor.setPerformanceBpm (bpm);
+    processor.setPerformanceHold (hold);
+
+    grabKeyboardFocus();
 }
 
 FlowerStandaloneAudioProcessorEditor::~FlowerStandaloneAudioProcessorEditor()
@@ -329,54 +237,106 @@ FlowerStandaloneAudioProcessorEditor::~FlowerStandaloneAudioProcessorEditor()
 void FlowerStandaloneAudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff080807));
-
-    auto panel = getLocalBounds().toFloat().reduced (18.0f);
-    g.setColour (panelBackground());
-    g.fillRoundedRectangle (panel, 13.0f);
-    g.setColour (panelLine());
-    g.drawRoundedRectangle (panel, 13.0f, 1.2f);
 }
 
 void FlowerStandaloneAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds().reduced (30, 24);
-
-    auto header = area.removeFromTop (54);
-    titleLabel.setBounds (header.removeFromLeft (112));
-    subtitleLabel.setBounds (header.removeFromLeft (260));
-    padReadout.setBounds (header);
-
-    area.removeFromTop (4);
-
-    auto footer = area.removeFromBottom (88);
-    area.removeFromBottom (8);
-    performancePad.setBounds (area);
-
-    const int buttonWidth = 72;
-    panicButton.setBounds (footer.removeFromRight (buttonWidth).reduced (4, 19));
-    holdButton.setBounds (footer.removeFromRight (buttonWidth).reduced (4, 19));
-
-    auto bpm = footer.removeFromRight (190);
-    tempoLabel.setBounds (bpm.removeFromTop (18));
-    tempoSlider.setBounds (bpm.reduced (2, 5));
-
-    auto scale = footer.removeFromRight (130);
-    scaleLabel.setBounds (scale.removeFromTop (18));
-    scaleBox.setBounds (scale.reduced (4, 9));
-
-    auto root = footer.removeFromRight (92);
-    rootLabel.setBounds (root.removeFromTop (18));
-    rootBox.setBounds (root.reduced (4, 9));
+    performancePad.setBounds (getLocalBounds());
 }
 
-void FlowerStandaloneAudioProcessorEditor::updatePadReadout()
+void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
 {
-    const auto x = performancePad.getXValue();
-    const auto y = performancePad.getYValue();
+    rootClass = (rootClass + delta) % 12;
+    if (rootClass < 0)
+        rootClass += 12;
 
-    padReadout.setText (
-        performancePad.getPatternName()
-        + "   X " + juce::String (x, 2)
-        + "   FX " + juce::String (y, 2),
-        juce::dontSendNotification);
+    processor.setPerformanceRoot (rootClass);
+}
+
+void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
+{
+    bpm = juce::jlimit (50.0f, 190.0f, bpm + delta);
+    processor.setPerformanceBpm (bpm);
+}
+
+void FlowerStandaloneAudioProcessorEditor::cycleScale (int delta)
+{
+    scaleIndex = (scaleIndex + delta) % 4;
+    if (scaleIndex < 0)
+        scaleIndex += 4;
+
+    processor.setPerformanceScale (scaleIndex);
+}
+
+void FlowerStandaloneAudioProcessorEditor::toggleHold()
+{
+    hold = ! hold;
+    performancePad.setHeld (hold);
+    processor.setPerformanceHold (hold);
+}
+
+void FlowerStandaloneAudioProcessorEditor::stopAll()
+{
+    hold = false;
+    performancePad.setHeld (false);
+    processor.setPerformanceHold (false);
+    processor.stopPerformance();
+}
+
+bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
+{
+    const int code = key.getKeyCode();
+
+    if (code == juce::KeyPress::leftKey)
+    {
+        applyRootDelta (-1);
+        return true;
+    }
+
+    if (code == juce::KeyPress::rightKey)
+    {
+        applyRootDelta (1);
+        return true;
+    }
+
+    if (code == juce::KeyPress::upKey)
+    {
+        applyBpmDelta (2.0f);
+        return true;
+    }
+
+    if (code == juce::KeyPress::downKey)
+    {
+        applyBpmDelta (-2.0f);
+        return true;
+    }
+
+    const juce::juce_wchar ch = key.getTextCharacter();
+
+    if (ch == 'h' || ch == 'H')
+    {
+        toggleHold();
+        return true;
+    }
+
+    if (ch == 's' || ch == 'S')
+    {
+        cycleScale (1);
+        return true;
+    }
+
+    if (ch >= '1' && ch <= '4')
+    {
+        scaleIndex = static_cast<int> (ch - '1');
+        processor.setPerformanceScale (scaleIndex);
+        return true;
+    }
+
+    if (ch == ' ' || code == juce::KeyPress::escapeKey)
+    {
+        stopAll();
+        return true;
+    }
+
+    return false;
 }
