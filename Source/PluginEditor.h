@@ -55,31 +55,23 @@ public:
 
     void paint (juce::Graphics& g) override;
     void resized() override;
+    bool keyPressed (const juce::KeyPress& key) override;
 
 private:
-    void updatePadReadout();
-    static void styleLabel (juce::Label& label, float size, bool bold = false);
+    void applyRootDelta (int delta);
+    void applyBpmDelta (float delta);
+    void cycleScale (int delta);
+    void toggleHold();
+    void stopAll();
 
     FlowerStandaloneAudioProcessor& processor;
     RetroLookAndFeel retroLookAndFeel;
-
     PerformancePadComponent performancePad;
 
-    juce::Label titleLabel;
-    juce::Label subtitleLabel;
-    juce::Label padReadout;
-
-    juce::Label rootLabel;
-    juce::ComboBox rootBox;
-
-    juce::Label scaleLabel;
-    juce::ComboBox scaleBox;
-
-    juce::Label tempoLabel;
-    juce::Slider tempoSlider;
-
-    juce::TextButton holdButton { "HOLD" };
-    juce::TextButton panicButton { "STOP" };
+    int rootClass = 0;
+    int scaleIndex = 0;
+    float bpm = 112.0f;
+    bool hold = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FlowerStandaloneAudioProcessorEditor)
 };
