@@ -14,19 +14,16 @@ constexpr const char* patternNames[]
     "SKIP", "OCTAVE", "RANDOM", "CHAOS"
 };
 
-juce::Colour panelBackground() { return juce::Colour (0xff16130f); }
-juce::Colour panelLine()       { return juce::Colour (0xff75684f); }
-juce::Colour textMain()        { return juce::Colour (0xffddd0a5); }
-juce::Colour textMuted()       { return juce::Colour (0xff8f846d); }
-juce::Colour padBackground()   { return juce::Colour (0xff090908); }
-juce::Colour padLine()         { return juce::Colour (0xff39352d); }
-juce::Colour padHot()          { return juce::Colour (0xffd9d0b4); }
 }
 
 PerformancePadComponent::PerformancePadComponent()
 {
     setMouseCursor (juce::MouseCursor::CrosshairCursor);
     setWantsKeyboardFocus (false);
+
+    tileSheetImage = juce::ImageFileFormat::loadFrom (
+        BinaryData::flower_xy_sheet_01_jpg,
+        static_cast<size_t> (BinaryData::flower_xy_sheet_01_jpgSize));
 }
 
 int PerformancePadComponent::getPatternIndex() const noexcept
@@ -49,74 +46,60 @@ void PerformancePadComponent::setHeld (bool shouldHold)
 
 void PerformancePadComponent::paint (juce::Graphics& g)
 {
-    auto area = getLocalBounds().toFloat().reduced (1.0f);
-    g.setColour (padBackground());
-    g.fillRoundedRectangle (area, 9.0f);
+    g.fillAll (juce::Colours::black);
 
-    g.setColour (panelLine());
-    g.drawRoundedRectangle (area, 9.0f, 1.3f);
-
-    auto grid = area.reduced (14.0f, 14.0f);
-
-    for (int i = 1; i < 8; ++i)
+    if (! tileSheetImage.isValid())
     {
-        const float x = grid.getX() + grid.getWidth() * static_cast<float> (i) / 8.0f;
-        g.setColour (padLine().withAlpha (i == 4 ? 0.85f : 0.52f));
-        g.drawVerticalLine (juce::roundToInt (x), grid.getY(), grid.getBottom());
-    }
-
-    for (int i = 1; i < 5; ++i)
-    {
-        const float y = grid.getY() + grid.getHeight() * static_cast<float> (i) / 5.0f;
-        g.setColour (padLine().withAlpha (0.48f));
-        g.drawHorizontalLine (juce::roundToInt (y), grid.getX(), grid.getRight());
-    }
-
-    g.setFont (juce::FontOptions (8.5f).withStyle ("Bold"));
-    for (int i = 0; i < 8; ++i)
-    {
-        auto zone = juce::Rectangle<float> (
-            grid.getX() + grid.getWidth() * static_cast<float> (i) / 8.0f,
-            grid.getY(),
-            grid.getWidth() / 8.0f,
-            20.0f);
-
-        g.setColour (i == getPatternIndex() ? textMain() : textMuted().withAlpha (0.72f));
-        g.drawFittedText (patternNames[i], zone.toNearestInt(),
+        g.setColour (juce::Colours::white);
+        g.setFont (juce::FontOptions (16.0f).withStyle ("Bold"));
+        g.drawFittedText ("VISUAL ASSET ERROR",
+                          getLocalBounds().reduced (24),
                           juce::Justification::centred, 1);
+        return;
     }
 
-    g.setColour (textMuted());
-    g.setFont (juce::FontOptions (8.0f));
-    g.drawText ("CLEAN", grid.toNearestInt().removeFromBottom (18),
-                juce::Justification::bottomLeft);
+    // One contact-sheet tile is one visual state.  X selects the column and
+    // musical Y (bottom=0, top=1) selects the row in the same direction as the
+    // visible image: top of the pad -> top sheet row.
+    const int column = juce::jlimit (
+        0, tileColumns - 1,
+        static_cast<int> (std::floor (xValue * static_cast<float> (tileColumns))));
+    const int row = juce::jlimit (
+        0, tileRows - 1,
+        static_cast<int> (std::floor (
+            (1.0f - yValue) * static_cast<float> (tileRows))));
 
-    auto fxText = grid.toNearestInt();
-    fxText.removeFromLeft (6);
-    fxText.removeFromBottom (26);
-    g.drawText ("GRAIN  •  DELAY  •  FILTER",
-                fxText.removeFromTop (18),
-                juce::Justification::topRight);
+    const int imageWidth = tileSheetImage.getWidth();
+    const int imageHeight = tileSheetImage.getHeight();
 
-    const float px = grid.getX() + xValue * grid.getWidth();
-    const float py = grid.getBottom() - yValue * grid.getHeight();
+    const int tileLeft = (column * imageWidth) / tileColumns;
+    const int tileRight = ((column + 1) * imageWidth) / tileColumns;
+    const int tileTop = (row * imageHeight) / tileRows;
+    const int tileBottom = ((row + 1) * imageHeight) / tileRows;
 
-    g.setColour (padHot().withAlpha (0.25f));
-    g.drawVerticalLine (juce::roundToInt (px), grid.getY(), grid.getBottom());
-    g.drawHorizontalLine (juce::roundToInt (py), grid.getX(), grid.getRight());
+    // The supplied sheet has dark separator lines.  Inset each cell before
+    // cropping so those separators do not appear in the fullscreen image.
+    constexpr int separatorInset = 2;
+    const int innerLeft = tileLeft + separatorInset;
+    const int innerTop = tileTop + separatorInset;
+    const int innerWidth = juce::jmax (
+        1, tileRight - tileLeft - separatorInset * 2);
+    const int innerHeight = juce::jmax (
+        1, tileBottom - tileTop - separatorInset * 2);
 
-    const float radius = 12.0f + speedValue * 8.0f;
-    g.setColour (padHot().withAlpha ((active || held) ? 0.96f : 0.60f));
-    g.drawEllipse (px - radius, py - radius, radius * 2.0f, radius * 2.0f, 2.0f);
-    g.fillEllipse (px - 3.0f, py - 3.0f, 6.0f, 6.0f);
+    // The app canvas is square.  Centre-crop each source tile to square rather
+    // than stretching the face image.
+    const int sourceSide = juce::jmax (1, juce::jmin (innerWidth, innerHeight));
+    const int sourceX = innerLeft + (innerWidth - sourceSide) / 2;
+    const int sourceY = innerTop + (innerHeight - sourceSide) / 2;
 
-    if (held && ! active)
-    {
-        g.setColour (textMain());
-        g.setFont (juce::FontOptions (9.0f).withStyle ("Bold"));
-        g.drawText ("HOLD", area.toNearestInt().reduced (12).removeFromBottom (20),
-                    juce::Justification::bottomRight);
-    }
+    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+    g.drawImage (tileSheetImage,
+                 0.0f, 0.0f,
+                 static_cast<float> (getWidth()),
+                 static_cast<float> (getHeight()),
+                 sourceX, sourceY, sourceSide, sourceSide,
+                 false);
 }
 
 void PerformancePadComponent::mouseDown (const juce::MouseEvent& e)
