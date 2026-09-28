@@ -13,6 +13,10 @@ namespace ParamIDs
     inline constexpr auto lfoDepth = "lfoDepth";
     inline constexpr auto lfoTarget = "lfoTarget";
 
+    inline constexpr auto performanceRootConfig = "performanceRootConfig";
+    inline constexpr auto performanceScaleConfig = "performanceScaleConfig";
+    inline constexpr auto defaultEffectsEnabled = "defaultEffectsEnabled";
+
     inline constexpr auto flowerEnabled = "flowerEnabled";
     inline constexpr auto flowerRecord = "flowerRecord";
     inline constexpr auto flowerOverdub = "flowerOverdub";
