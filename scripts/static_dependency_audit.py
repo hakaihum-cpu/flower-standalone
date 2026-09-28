@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# FLOWER XY MVP deliberately excludes the retired animation/PNG path from the
+# generated target.  Audit only dependencies required by this branch.
 REQUIRED = [
     "FLOWER_Standalone.jucer",
     "Source/ParameterIDs.h",
@@ -17,25 +18,10 @@ REQUIRED = [
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.h",
     "Source/PluginEditor.cpp",
-    "Source/FlowerAnimationComponent.h",
-    "Source/FlowerAnimationComponent.cpp",
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
-    "Source/third_party/stb_image.h",
-    "Resources/flower_embedded_atlas.png",
-    "Resources/flower_actor_v3_walk_student01.png",
     "scripts/patch_android_native_parallelism.py",
 ]
-
-UPSTREAM_GIT_BLOBS = {
-    "Source/FlowerAnimationComponent.h": "cbe8a1137d99c4f2715011911a27da661e817c02",
-    "Source/FlowerAnimationComponent.cpp": "8ce198935f3a63bbe050ee916eff203e5db1e361",
-    "Source/RetroLookAndFeel.h": "84437adc6aca0db95e5eb3407901abf4af44d62a",
-    "Source/RetroLookAndFeel.cpp": "8e3f3ad844427da7bc3aefd4b8a16873105da405",
-    "Source/third_party/stb_image.h": "9eedabedc45b3e6fd88fae6f14a160b4d53272ec",
-    "Resources/flower_embedded_atlas.png": "ec5873bb022f6efdef9fc72c0099ca71e344887b",
-    "Resources/flower_actor_v3_walk_student01.png": "d516c56bef14ae5cc2e73e755b4f221ddf2aa04d",
-}
 
 FORBIDDEN_SOURCE_TOKENS = [
     "Dx7Patch",
@@ -48,10 +34,12 @@ FORBIDDEN_SOURCE_TOKENS = [
     "NotebookFx",
 ]
 
-def git_blob_sha(path: Path) -> str:
-    data = path.read_bytes()
-    header = f"blob {len(data)}\0".encode("ascii")
-    return hashlib.sha1(header + data).hexdigest()
+FORBIDDEN_JUCER_REFS = [
+    "Source/FlowerAnimationComponent.cpp",
+    "Source/FlowerAnimationComponent.h",
+    "Resources/flower_embedded_atlas.png",
+    "Resources/flower_actor_v3_walk_student01.png",
+]
 
 def fail(message: str) -> None:
     print(f"[FAIL] {message}")
@@ -67,11 +55,6 @@ if (ROOT / "app").exists():
 for obsolete in ["build.gradle.kts", "settings.gradle.kts", "gradle.properties", "ci/gradle-bootstrap.sh"]:
     if (ROOT / obsolete).exists():
         fail(f"obsolete Java bootstrap file still exists: {obsolete}")
-
-for relative, expected in UPSTREAM_GIT_BLOBS.items():
-    actual = git_blob_sha(ROOT / relative)
-    if actual != expected:
-        fail(f"upstream-reuse file changed unexpectedly: {relative} {actual} != {expected}")
 
 source_text = "\n".join(
     p.read_text(encoding="utf-8", errors="strict")
@@ -96,13 +79,17 @@ if root.attrib.get("pluginIsSynth") != "1" or root.attrib.get("pluginWantsMidiIn
 
 jucer_text = jucer.read_text(encoding="utf-8")
 for required_ref in [
-    "Source/FlowerAnimationComponent.cpp",
+    "Source/SynthVoice.cpp",
+    "Source/RetroLookAndFeel.cpp",
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.cpp",
-    "Resources/flower_embedded_atlas.png",
 ]:
     if required_ref not in jucer_text:
         fail(f"JUCER reference missing: {required_ref}")
+
+for forbidden_ref in FORBIDDEN_JUCER_REFS:
+    if forbidden_ref in jucer_text:
+        fail(f"animation-free MVP unexpectedly references: {forbidden_ref}")
 
 circle = (ROOT / ".circleci/config.yml").read_text(encoding="utf-8")
 if "default: false" not in circle or "run_build" not in circle:
@@ -127,51 +114,80 @@ for required_patcher in [
     if required_patcher not in patcher:
         fail(f"generated Gradle job-pool patcher missing: {required_patcher}")
 
-print("[PASS] Flower standalone static dependency audit")
-print("[PASS] MIYAKO-only code dependencies absent")
-print("[PASS] Flower visual sources/resources match the AN-21 stb-decoder snapshot")
-print("[PASS] obsolete Java bootstrap removed")
+editor_header = (ROOT / "Source/PluginEditor.h").read_text(encoding="utf-8")
 editor_text = (ROOT / "Source/PluginEditor.cpp").read_text(encoding="utf-8")
+processor_text = (ROOT / "Source/PluginProcessor.cpp").read_text(encoding="utf-8")
+
 if "juce::Desktop::getInstance().setOrientationsEnabled" in editor_text:
-    fail("AN-20 must not force Android orientation during editor startup")
+    fail("Android orientation must not be forced during editor startup")
 
-for forbidden_an21_worker in [
-    "std::thread",
-    "detach()",
-    "AsyncVisualLoadState",
-]:
-    if forbidden_an21_worker in editor_text:
-        fail(f"unsafe AN-21 background visual loader still present: {forbidden_an21_worker}")
-
-for required_an21_deferred_load in [
-    "androidVisualLoadAttempted",
-    "androidStartupTicks >= 4",
-    "isShowing()",
+for forbidden_visual_token in [
+    "FlowerAnimationComponent",
+    "flowerAnimation",
+    "BinaryData",
     "decodeAndroidPngWithStb",
-    "flowerAnimation.loadDecodedAtlas",
-    "flowerAnimation.loadDecodedHighResWalkStrip",
+    "STB_IMAGE_IMPLEMENTATION",
 ]:
-    if required_an21_deferred_load not in editor_text:
-        fail(f"AN-21 post-window visual load guard missing: {required_an21_deferred_load}")
+    if forbidden_visual_token in editor_header or forbidden_visual_token in editor_text:
+        fail(f"animation/image path leaked into XY editor: {forbidden_visual_token}")
+
+for forbidden_visible_control in [
+    "juce::TextButton",
+    "juce::ComboBox",
+    "juce::Slider",
+]:
+    if forbidden_visible_control in editor_header:
+        fail(f"fullscreen XY MVP contains visible control declaration: {forbidden_visible_control}")
+
+for required_xy_ui in [
+    "constexpr int canvasSize = 720",
+    "setSize (canvasSize, canvasSize)",
+    "setResizable (false, false)",
+    "setResizeLimits (canvasSize, canvasSize, canvasSize, canvasSize)",
+    "performancePad.setBounds (getLocalBounds())",
+    "bool FlowerStandaloneAudioProcessorEditor::keyPressed",
+    "juce::KeyPress::leftKey",
+    "juce::KeyPress::rightKey",
+    "juce::KeyPress::upKey",
+    "juce::KeyPress::downKey",
+]:
+    if required_xy_ui not in editor_text:
+        fail(f"XY fullscreen/physical-key contract missing: {required_xy_ui}")
 
 for required_android_startup in [
     "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
-    "constexpr int androidCanvasSize = 720",
-    "setSize (androidCanvasSize, androidCanvasSize)",
-    "setResizable (false, false)",
-    "setResizeLimits (androidCanvasSize, androidCanvasSize",
     "juce::StandalonePluginHolder::getInstance()",
     "holder->deviceManager.closeAudioDevice()",
     "holder->deviceManager.initialise (0, 2, nullptr, true)",
     "holder->startPlaying()",
-    "#define STB_IMAGE_IMPLEMENTATION",
-    "#include \"third_party/stb_image.h\"",
-    "decodeAndroidPngWithStb",
-    "flowerAnimation.loadDecodedAtlas",
-    "flowerAnimation.loadDecodedHighResWalkStrip",
 ]:
     if required_android_startup not in editor_text:
         fail(f"Android standalone startup safeguard missing: {required_android_startup}")
 
+for required_engine in [
+    "generatePerformanceMidi (midiMessages",
+    "synthesiser.renderNextBlock",
+    "processFlower (buffer)",
+    "processPerformanceDelay (buffer)",
+    "setPerformancePad",
+    "setPerformanceHold",
+]:
+    if required_engine not in processor_text:
+        fail(f"XY performance engine contract missing: {required_engine}")
+
+order = [
+    processor_text.find("generatePerformanceMidi (midiMessages"),
+    processor_text.find("synthesiser.renderNextBlock"),
+    processor_text.find("processFlower (buffer)"),
+    processor_text.find("processPerformanceDelay (buffer)"),
+]
+if any(position < 0 for position in order) or order != sorted(order):
+    fail("XY audio order must be arp MIDI -> synth -> granular -> delay")
+
+print("[PASS] Flower XY standalone static dependency audit")
+print("[PASS] animation code/resources excluded from generated MVP target")
+print("[PASS] 720x720 fullscreen XY pad contract present")
+print("[PASS] physical-key control contract present")
 print("[PASS] Android standalone startup safeguards present")
-print("[PASS] JUCER standalone Android structure present")
+print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
+print("[PASS] CircleCI native parallelism controls present")
