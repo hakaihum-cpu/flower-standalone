@@ -218,6 +218,8 @@ for required_xy_ui in [
     "ConfigScreenComponent",
     "ConfigScreenComponent() = default",
     "toggleConfig",
+    "configScreen.setBounds (getLocalBounds())",
+    "AffineTransform::scale (scaleX, scaleY)",
     "onCloseRequested",
     "getCloseBounds",
     'g.drawText ("CLOSE"',
