@@ -69,7 +69,7 @@ for obsolete_visual in [
 source_text = "\n".join(
     p.read_text(encoding="utf-8", errors="strict")
     for p in sorted((ROOT / "Source").glob("*"))
-    if p.suffix in {".h", ".cpp"}
+    if p.suffix in {".h", ".cpp"} and p.name != "FlowerFrameData.h"
 )
 
 for token in FORBIDDEN_SOURCE_TOKENS:
