@@ -416,11 +416,19 @@ void FlowerStandaloneAudioProcessor::setPerformancePad (float x,
     performanceDirection.store (
         juce::jlimit (-1.0f, 1.0f, horizontalDirection), std::memory_order_relaxed);
     performanceActive.store (active, std::memory_order_release);
+
+    if (active)
+        performanceLatched.store (true, std::memory_order_release);
+    else if (! performanceHold.load (std::memory_order_acquire))
+        performanceLatched.store (false, std::memory_order_release);
 }
 
 void FlowerStandaloneAudioProcessor::setPerformanceHold (bool shouldHold) noexcept
 {
     performanceHold.store (shouldHold, std::memory_order_release);
+
+    if (! shouldHold && ! performanceActive.load (std::memory_order_acquire))
+        performanceLatched.store (false, std::memory_order_release);
 }
 
 void FlowerStandaloneAudioProcessor::setPerformanceRoot (int noteClass) noexcept
@@ -442,13 +450,15 @@ void FlowerStandaloneAudioProcessor::stopPerformance() noexcept
 {
     performanceActive.store (false, std::memory_order_release);
     performanceHold.store (false, std::memory_order_release);
+    performanceLatched.store (false, std::memory_order_release);
     performanceStopRequested.store (true, std::memory_order_release);
 }
 
 bool FlowerStandaloneAudioProcessor::isPerformanceGateOpen() const noexcept
 {
     return performanceActive.load (std::memory_order_acquire)
-        || performanceHold.load (std::memory_order_acquire);
+        || (performanceHold.load (std::memory_order_acquire)
+            && performanceLatched.load (std::memory_order_acquire));
 }
 
 uint32_t FlowerStandaloneAudioProcessor::nextPerformanceRandom() noexcept
