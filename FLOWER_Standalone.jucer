@@ -18,8 +18,6 @@
       <FILE id="modu01" name="Modulation.h" compile="0" resource="0" file="Source/Modulation.h"/>
       <FILE id="svh001" name="SynthVoice.h" compile="0" resource="0" file="Source/SynthVoice.h"/>
       <FILE id="svc001" name="SynthVoice.cpp" compile="1" resource="0" file="Source/SynthVoice.cpp"/>
-      <FILE id="flah01" name="FlowerAnimationComponent.h" compile="0" resource="0" file="Source/FlowerAnimationComponent.h"/>
-      <FILE id="flac01" name="FlowerAnimationComponent.cpp" compile="1" resource="0" file="Source/FlowerAnimationComponent.cpp"/>
       <FILE id="retroh" name="RetroLookAndFeel.h" compile="0" resource="0" file="Source/RetroLookAndFeel.h"/>
       <FILE id="retroc" name="RetroLookAndFeel.cpp" compile="1" resource="0" file="Source/RetroLookAndFeel.cpp"/>
       <FILE id="proch1" name="PluginProcessor.h" compile="0" resource="0" file="Source/PluginProcessor.h"/>
@@ -28,8 +26,6 @@
       <FILE id="edcpp1" name="PluginEditor.cpp" compile="1" resource="0" file="Source/PluginEditor.cpp"/>
     </GROUP>
     <GROUP id="{2A5BDAC1-080F-4B6A-9A8E-000000000002}" name="Resources">
-      <FILE id="floweratlas" name="flower_embedded_atlas.png" compile="0" resource="1" file="Resources/flower_embedded_atlas.png"/>
-      <FILE id="flowerv3w1" name="flower_actor_v3_walk_student01.png" compile="0" resource="1" file="Resources/flower_actor_v3_walk_student01.png"/>
     </GROUP>
   </MAINGROUP>
 
