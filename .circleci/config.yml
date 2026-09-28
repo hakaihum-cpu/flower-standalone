@@ -75,7 +75,7 @@ jobs:
           name: Generate Android Studio project
           command: |
             set -euo pipefail
-            test -s Resources/flower_xy_square_atlas_exact.jpg
+            test -s Resources/flower_xy_source_exact.jpg
             "$PROJUCER" --resave FLOWER_Standalone.jucer
             test -d Builds/Android
             python3 scripts/patch_android_native_parallelism.py Builds/Android/app/build.gradle
