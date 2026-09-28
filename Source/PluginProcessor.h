@@ -119,6 +119,10 @@ private:
     std::atomic<bool> performanceStopRequested { false };
 
     juce::AudioBuffer<float> performanceDelayBuffer;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> performanceDelaySamplesSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> performanceDelayFeedbackSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> performanceDelayWetSmoothed;
+    juce::dsp::Limiter<float> performanceOutputLimiter;
     int performanceDelayWritePosition = 0;
     double performanceSamplesUntilStep = 0.0;
     int performanceStep = 0;
