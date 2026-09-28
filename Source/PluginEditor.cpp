@@ -241,7 +241,7 @@ juce::Rectangle<int> ConfigScreenComponent::getRowBounds (int row) const
 {
     constexpr int rowHeight = 104;
     constexpr int firstY = 188;
-    return { 72, firstY + row * rowHeight, getWidth() - 144, 78 };
+    return { 72, firstY + row * rowHeight, 576, 78 };
 }
 
 juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
@@ -327,15 +327,22 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff0b0b0a));
 
+    constexpr float designSize = 720.0f;
+    const float scaleX = static_cast<float> (getWidth()) / designSize;
+    const float scaleY = static_cast<float> (getHeight()) / designSize;
+
+    juce::Graphics::ScopedSaveState savedState (g);
+    g.addTransform (juce::AffineTransform::scale (scaleX, scaleY));
+
     g.setColour (juce::Colour (0xffe1d7ba));
     g.setFont (juce::FontOptions (34.0f).withStyle ("Bold"));
-    g.drawText ("CONFIG", 72, 64, getWidth() - 144, 54,
+    g.drawText ("CONFIG", 72, 64, 576, 54,
                 juce::Justification::centredLeft);
 
     g.setColour (juce::Colour (0xff8f8776));
     g.setFont (juce::FontOptions (16.0f));
     g.drawText ("SELECT: CONFIG    UP/DOWN: ITEM    LEFT/RIGHT: CHANGE    B: OK",
-                72, 124, getWidth() - 144, 34,
+                72, 124, 576, 34,
                 juce::Justification::centredLeft);
 
     for (int row = 0; row < 3; ++row)
@@ -392,13 +399,25 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
     g.drawFittedText (
         "DEFAULT EFFECT applies to DELAY and GRANULAR at startup. "
         "A / Y can still toggle them independently during performance.",
-        72, 530, getWidth() - 144, 80,
+        72, 530, 576, 80,
         juce::Justification::topLeft, 3);
 }
 
 void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
 {
-    if (getCloseBounds().contains (e.getPosition()))
+    constexpr float designSize = 720.0f;
+    const float scaleX = static_cast<float> (getWidth()) / designSize;
+    const float scaleY = static_cast<float> (getHeight()) / designSize;
+
+    if (scaleX <= 0.0f || scaleY <= 0.0f)
+        return;
+
+    const juce::Point<int> designPoint {
+        juce::roundToInt (e.position.x / scaleX),
+        juce::roundToInt (e.position.y / scaleY)
+    };
+
+    if (getCloseBounds().contains (designPoint))
     {
         if (onCloseRequested)
             onCloseRequested();
@@ -408,7 +427,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
     for (int row = 0; row < 3; ++row)
     {
         const auto bounds = getRowBounds (row);
-        if (! bounds.contains (e.getPosition()))
+        if (! bounds.contains (designPoint))
             continue;
 
         selectedRow = row;
@@ -419,7 +438,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
         }
         else
         {
-            const int delta = e.position.x < static_cast<float> (bounds.getCentreX())
+            const int delta = designPoint.x < bounds.getCentreX()
                 ? -1
                 : 1;
             adjustSelected (delta);
@@ -438,10 +457,18 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     setOpaque (true);
     setWantsKeyboardFocus (true);
 
+   #if JUCE_ANDROID
+    // Android fullscreen uses density-independent logical coordinates.
+    // A fixed 720x720 logical editor can therefore be larger than a physical
+    // 720x720 panel and gets clipped. Let the standalone host size the editor
+    // to the actual fullscreen content bounds instead.
+    setResizable (true, false);
+   #else
     constexpr int canvasSize = 720;
     setSize (canvasSize, canvasSize);
     setResizable (false, false);
     setResizeLimits (canvasSize, canvasSize, canvasSize, canvasSize);
+   #endif
 
    #if JUCE_ANDROID
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
@@ -545,8 +572,8 @@ void FlowerStandaloneAudioProcessorEditor::paint (juce::Graphics& g)
 
 void FlowerStandaloneAudioProcessorEditor::resized()
 {
-    performancePad.setBounds (0, 0, 720, 720);
-    configScreen.setBounds (0, 0, 720, 720);
+    performancePad.setBounds (getLocalBounds());
+    configScreen.setBounds (getLocalBounds());
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
