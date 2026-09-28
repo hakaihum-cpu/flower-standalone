@@ -192,6 +192,9 @@ for required_xy_ui in [
     "juce::KeyPress::F16Key",
     "juce::KeyPress::F17Key",
     "juce::KeyPress::F18Key",
+    "juce::KeyPress::F19Key",
+    "ConfigScreenComponent",
+    "toggleConfig",
     "beginBpmAdjust",
     "beginLooperButton",
     "toggleArp",
@@ -219,6 +222,7 @@ for required_key_patch in [
     "KEYCODE_BUTTON_Y",
     "KEYCODE_BUTTON_L1",
     "KEYCODE_BUTTON_R1",
+    "KEYCODE_BUTTON_SELECT",
     "handleKeyUpOrDown (true)",
     "handleKeyUpOrDown (false)",
 ]:
@@ -242,6 +246,10 @@ for required_engine in [
     "flowerTransportState",
     "constexpr int stepsPerBeat = 2",
     "juce::jlimit (50.0f, 200.0f, bpm)",
+    "performanceRootConfig",
+    "performanceScaleConfig",
+    "defaultEffectsEnabled",
+    "randomScale",
 ]:
     if required_engine not in processor_text:
         fail(f"XY performance engine contract missing: {required_engine}")
@@ -265,6 +273,8 @@ print("[PASS] runtime visual path performs no fit/letterbox/zoom/crop logic")
 print("[PASS] all 100 contact-sheet cells are mapped with no skip list")
 print("[PASS] dpad XY latch / tap-stop / pointer contract present")
 print("[PASS] A/B/X/Y/L/R gamepad assignment contract present")
+print("[PASS] SELECT CONFIG screen contract present")
+print("[PASS] persistent ROOT/SCALE/RANDOM/default-effect config contract present")
 print("[PASS] X looper transport REC->STOP->OVERDUB and long-clear contract present")
 print("[PASS] L/R BPM hold-repeat contract present (max 200 BPM)")
 print("[PASS] Android physical-key down/up bridge patch present")
