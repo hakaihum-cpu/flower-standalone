@@ -61,6 +61,33 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PerformancePadComponent)
 };
 
+class ConfigScreenComponent final : public juce::Component
+{
+public:
+    void paint (juce::Graphics& g) override;
+    void mouseDown (const juce::MouseEvent& e) override;
+
+    void setValues (int rootKey, int scale, bool effectsEnabled);
+    void moveSelection (int delta);
+    void adjustSelected (int delta);
+    void activateSelected();
+
+    std::function<void(int)> onRootChanged;
+    std::function<void(int)> onScaleChanged;
+    std::function<void(bool)> onEffectsChanged;
+
+private:
+    int rootKey = 0;
+    int scaleIndex = 0;
+    bool effectsEnabled = true;
+    int selectedRow = 0;
+
+    void notifyCurrentRow();
+    juce::Rectangle<int> getRowBounds (int row) const;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ConfigScreenComponent)
+};
+
 class FlowerStandaloneAudioProcessorEditor final : public juce::AudioProcessorEditor,
                                                    private juce::Timer
 {
@@ -81,6 +108,7 @@ private:
     void toggleArp();
     void toggleDelay();
     void toggleGranular();
+    void toggleConfig();
     void stopAll();
     void beginDpadControl (int keyCode);
     void endDpadControl();
@@ -94,6 +122,7 @@ private:
     FlowerStandaloneAudioProcessor& processor;
     RetroLookAndFeel retroLookAndFeel;
     PerformancePadComponent performancePad;
+    ConfigScreenComponent configScreen;
 
     int rootClass = 0;
     int scaleIndex = 0;
@@ -102,6 +131,7 @@ private:
     bool arpEnabled = true;
     bool delayEnabled = true;
     bool granularEnabled = true;
+    bool configVisible = false;
 
     bool dpadActive = false;
     int dpadKeyCode = 0;
