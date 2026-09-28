@@ -79,12 +79,7 @@ Immediately unlatches the pad and schedules an internal note-off.
 
 The MVP uses the existing FLOWER standalone sine synth voice.
 
-Controls exposed outside the pad:
-- root note,
-- scale,
-- BPM,
-- HOLD,
-- STOP.
+There are no visible controls outside the pad. Root, scale, BPM, HOLD and STOP are assigned to physical-key input only in this MVP.
 
 Scales:
 - minor pentatonic,
@@ -134,7 +129,9 @@ Completed:
 - swipe-direction reverse mapping,
 - HOLD latch behavior,
 - STOP behavior,
-- static diff review.
+- static diff review,
+- animation source/resources excluded from the MVP build,
+- HOLD/touch latch separation verified.
 
 Not yet performed:
 - Android APK build,
