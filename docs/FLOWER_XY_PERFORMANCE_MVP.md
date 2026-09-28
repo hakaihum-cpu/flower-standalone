@@ -106,13 +106,19 @@ The existing FLOWER 16-second rolling audio buffer is reused for granulation.
 
 Animation is intentionally absent.
 
-The screen contains:
-- FLOWER header,
-- one large touch XY pad,
-- eight vertical arp-algorithm zones,
-- simple effect-depth indication,
-- root / scale / BPM controls,
-- HOLD and STOP.
+The entire screen is the touch surface.
+
+There are **no on-screen buttons, knobs, combo boxes or footer controls** in the MVP. The 720 × 720 canvas is occupied by the XY performance pad itself. Only subtle in-pad grid/zone/readout graphics are allowed; they are not separate controls.
+
+Physical-key defaults:
+- LEFT / RIGHT: root note - / + 1 semitone
+- UP / DOWN: BPM - / + 2
+- S: cycle scale
+- 1 / 2 / 3 / 4: select minor pentatonic / natural minor / major / dorian
+- H: HOLD toggle
+- SPACE or ESC: STOP / panic
+
+The key mapping is implementation-level and can later be redirected to dedicated hardware buttons or MIDI control without changing the touch UI.
 
 The MVP uses a fixed **720 × 720** canvas as the primary design target on both Android and desktop preview.
 
