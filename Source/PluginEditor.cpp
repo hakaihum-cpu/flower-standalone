@@ -221,7 +221,11 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
         holder->startPlaying();
     }
    #else
-    setSize (760, 720);
+    constexpr int desktopCanvasSize = 720;
+    setSize (desktopCanvasSize, desktopCanvasSize);
+    setResizable (false, false);
+    setResizeLimits (desktopCanvasSize, desktopCanvasSize,
+                     desktopCanvasSize, desktopCanvasSize);
    #endif
 
     titleLabel.setText ("FLOWER", juce::dontSendNotification);
