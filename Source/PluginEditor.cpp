@@ -21,13 +21,6 @@ juce::Colour textMuted()       { return juce::Colour (0xff8f846d); }
 juce::Colour padBackground()   { return juce::Colour (0xff090908); }
 juce::Colour padLine()         { return juce::Colour (0xff39352d); }
 juce::Colour padHot()          { return juce::Colour (0xffd9d0b4); }
-
-void flowerDiag (const juce::String& message)
-{
-    // Intentionally used only from the message/UI thread at low frequency.
-    // Never call this from processBlock or any per-sample/per-audio-block path.
-    juce::Logger::writeToLog ("[FLOWER_DIAG] " + message);
-}
 }
 
 PerformancePadComponent::PerformancePadComponent()
@@ -131,10 +124,6 @@ void PerformancePadComponent::mouseDown (const juce::MouseEvent& e)
     lastPoint = e.position;
     lastEventMs = juce::Time::getMillisecondCounterHiRes();
     updateFromEvent (e, true);
-
-    flowerDiag ("touch_down x=" + juce::String (xValue, 3)
-              + " y=" + juce::String (yValue, 3)
-              + " pattern=" + getPatternName());
 }
 
 void PerformancePadComponent::mouseDrag (const juce::MouseEvent& e)
@@ -145,11 +134,6 @@ void PerformancePadComponent::mouseDrag (const juce::MouseEvent& e)
 void PerformancePadComponent::mouseUp (const juce::MouseEvent& e)
 {
     updateFromEvent (e, false);
-
-    flowerDiag ("touch_up x=" + juce::String (xValue, 3)
-              + " y=" + juce::String (yValue, 3)
-              + " speed=" + juce::String (speedValue, 3)
-              + " pattern=" + getPatternName());
 }
 
 void PerformancePadComponent::updateFromEvent (const juce::MouseEvent& e, bool isActive)
@@ -245,7 +229,6 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     processor.setPerformanceHold (hold);
 
     grabKeyboardFocus();
-    flowerDiag ("editor_ready canvas=720x720");
 }
 
 FlowerStandaloneAudioProcessorEditor::~FlowerStandaloneAudioProcessorEditor()
@@ -271,14 +254,12 @@ void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
         rootClass += 12;
 
     processor.setPerformanceRoot (rootClass);
-    flowerDiag ("root=" + juce::String (rootClass));
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
 {
     bpm = juce::jlimit (50.0f, 190.0f, bpm + delta);
     processor.setPerformanceBpm (bpm);
-    flowerDiag ("bpm=" + juce::String (bpm, 0));
 }
 
 void FlowerStandaloneAudioProcessorEditor::cycleScale (int delta)
@@ -288,7 +269,6 @@ void FlowerStandaloneAudioProcessorEditor::cycleScale (int delta)
         scaleIndex += 4;
 
     processor.setPerformanceScale (scaleIndex);
-    flowerDiag ("scale=" + juce::String (scaleIndex));
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleHold()
@@ -296,7 +276,6 @@ void FlowerStandaloneAudioProcessorEditor::toggleHold()
     hold = ! hold;
     performancePad.setHeld (hold);
     processor.setPerformanceHold (hold);
-    flowerDiag (hold ? "hold=on" : "hold=off");
 }
 
 void FlowerStandaloneAudioProcessorEditor::stopAll()
@@ -305,7 +284,6 @@ void FlowerStandaloneAudioProcessorEditor::stopAll()
     performancePad.setHeld (false);
     processor.setPerformanceHold (false);
     processor.stopPerformance();
-    flowerDiag ("stop");
 }
 
 bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
@@ -354,7 +332,6 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
     {
         scaleIndex = static_cast<int> (ch - '1');
         processor.setPerformanceScale (scaleIndex);
-        flowerDiag ("scale=" + juce::String (scaleIndex));
         return true;
     }
 
