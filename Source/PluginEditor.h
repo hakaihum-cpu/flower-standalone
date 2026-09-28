@@ -31,8 +31,13 @@ public:
     PadCallback onPadChanged;
 
 private:
+    static constexpr int tileColumns = 10;
+    static constexpr int tileRows = 10;
+
     void updateFromEvent (const juce::MouseEvent& e, bool isActive);
     void notify();
+
+    juce::Image tileSheetImage;
 
     float xValue = 0.28f;
     float yValue = 0.28f;
