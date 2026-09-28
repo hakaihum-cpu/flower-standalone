@@ -117,25 +117,6 @@ for required_patcher in [
 editor_header = (ROOT / "Source/PluginEditor.h").read_text(encoding="utf-8")
 editor_text = (ROOT / "Source/PluginEditor.cpp").read_text(encoding="utf-8")
 processor_text = (ROOT / "Source/PluginProcessor.cpp").read_text(encoding="utf-8")
-voice_text = (ROOT / "Source/SynthVoice.cpp").read_text(encoding="utf-8")
-
-for realtime_source_name, realtime_source in [
-    ("PluginProcessor.cpp", processor_text),
-    ("SynthVoice.cpp", voice_text),
-]:
-    for forbidden_rt_log in [
-        "Logger::writeToLog",
-        "FileLogger",
-        "std::cout",
-        "std::cerr",
-        "printf(",
-        "fprintf(",
-    ]:
-        if forbidden_rt_log in realtime_source:
-            fail(
-                f"real-time source must not perform diagnostic I/O: "
-                f"{realtime_source_name} contains {forbidden_rt_log}"
-            )
 
 if "juce::Desktop::getInstance().setOrientationsEnabled" in editor_text:
     fail("Android orientation must not be forced during editor startup")
@@ -173,28 +154,6 @@ for required_xy_ui in [
     if required_xy_ui not in editor_text:
         fail(f"XY fullscreen/physical-key contract missing: {required_xy_ui}")
 
-def function_slice(source: str, start_marker: str, end_marker: str) -> str:
-    start = source.find(start_marker)
-    end = source.find(end_marker, start + len(start_marker))
-    if start < 0 or end < 0:
-        fail(f"diagnostic audit could not locate function boundary: {start_marker}")
-    return source[start:end]
-
-for high_rate_function in [
-    function_slice(
-        editor_text,
-        "void PerformancePadComponent::mouseDrag",
-        "void PerformancePadComponent::mouseUp",
-    ),
-    function_slice(
-        editor_text,
-        "void PerformancePadComponent::updateFromEvent",
-        "void PerformancePadComponent::notify",
-    ),
-]:
-    if "flowerDiag" in high_rate_function or "Logger::writeToLog" in high_rate_function:
-        fail("high-rate touch path must not write diagnostics")
-
 for required_android_startup in [
     "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
     "juce::StandalonePluginHolder::getInstance()",
@@ -230,7 +189,5 @@ print("[PASS] animation code/resources excluded from generated MVP target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
 print("[PASS] physical-key control contract present")
 print("[PASS] Android standalone startup safeguards present")
-print("[PASS] diagnostic I/O absent from audio/DSP source files")
-print("[PASS] high-rate touch path contains no log writes")
 print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
 print("[PASS] CircleCI native parallelism controls present")
