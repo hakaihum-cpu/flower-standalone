@@ -33,8 +33,8 @@ PerformancePadComponent::PerformancePadComponent()
     setWantsKeyboardFocus (false);
 
     tileSheetImage = juce::ImageFileFormat::loadFrom (
-        BinaryData::flower_xy_square_atlas_exact_jpg,
-        static_cast<size_t> (BinaryData::flower_xy_square_atlas_exact_jpgSize));
+        BinaryData::flower_xy_source_exact_jpg,
+        static_cast<size_t> (BinaryData::flower_xy_source_exact_jpgSize));
 }
 
 int PerformancePadComponent::getPatternIndex() const noexcept
@@ -120,28 +120,48 @@ void PerformancePadComponent::paint (juce::Graphics& g)
     const int imageWidth = tileSheetImage.getWidth();
     const int imageHeight = tileSheetImage.getHeight();
 
-    // This resource is a verified 960 x 960 atlas containing exactly
-    // 10 x 10 square frames.  Each frame is exactly 96 x 96 pixels.
-    // Do not add inset/crop/fit compensation here: doing so caused the
-    // earlier coordinate/scale drift and partial-face display.
-    if (imageWidth != 960 || imageHeight != 960)
+    // IMPORTANT: this is the original user-supplied contact sheet, not an
+    // evenly-divided/generated atlas.  Its horizontal separators are not
+    // uniformly spaced, so dividing 1191 x 896 into ten equal rows caused the
+    // visible coordinate drift.  These bounds follow the actual separator
+    // positions in the source image.
+    if (imageWidth != 1191 || imageHeight != 896)
     {
         g.setColour (juce::Colours::white);
         g.setFont (juce::FontOptions (16.0f).withStyle ("Bold"));
-        g.drawFittedText ("VISUAL ATLAS SIZE ERROR",
+        g.drawFittedText ("VISUAL SOURCE SIZE ERROR",
                           getLocalBounds().reduced (24),
                           juce::Justification::centred, 2);
         return;
     }
 
-    constexpr int frameSize = 96;
-    const int sourceX = visualColumn * frameSize;
-    const int sourceY = visualRow * frameSize;
+    // Exclusive [start, end) source bounds for all ten columns/rows.
+    // Frame 0 is therefore exactly x=[0,118), y=[0,84), which is pixel-for-
+    // pixel the user's supplied reference crop.  No square crop, inset, zoom,
+    // fit, or intermediate atlas is applied.
+    static constexpr int xStarts[tileColumns]
+        { 0, 121, 241, 361, 481, 601, 721, 841, 961, 1081 };
+    static constexpr int xEnds[tileColumns]
+        { 118, 238, 358, 478, 598, 718, 838, 958, 1078, 1191 };
+    static constexpr int yStarts[tileRows]
+        { 0, 86, 175, 264, 355, 449, 544, 641, 733, 812 };
+    static constexpr int yEnds[tileRows]
+        { 84, 172, 261, 353, 447, 542, 638, 730, 809, 896 };
 
+    const int sourceX = xStarts[visualColumn];
+    const int sourceY = yStarts[visualRow];
+    const int sourceWidth = xEnds[visualColumn] - sourceX;
+    const int sourceHeight = yEnds[visualRow] - sourceY;
+
+    jassert (sourceWidth > 0 && sourceHeight > 0);
+
+    // The requested behaviour is: select the exact source frame and display
+    // that complete frame.  Therefore the rectangular crop is scaled directly
+    // to the 720 x 720 canvas; there is no secondary crop.
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
     g.drawImage (tileSheetImage,
                  0, 0, getWidth(), getHeight(),
-                 sourceX, sourceY, frameSize, frameSize,
+                 sourceX, sourceY, sourceWidth, sourceHeight,
                  false);
 
     if (physicalPointerVisible)
