@@ -194,12 +194,11 @@ for required_visual_ui in [
         fail(f"XY direct-frame visual contract missing: {required_visual_ui}")
 
 for required_xy_ui in [
-    "constexpr int canvasSize = 720",
-    "setSize (canvasSize, canvasSize)",
-    "setResizable (false, false)",
-    "setResizeLimits (canvasSize, canvasSize, canvasSize, canvasSize)",
-    "performancePad.setBounds (0, 0, 720, 720)",
-    "configScreen.setBounds (0, 0, 720, 720)",
+    "setResizable (true, false)",
+    "performancePad.setBounds (getLocalBounds())",
+    "configScreen.setBounds (getLocalBounds())",
+    "AffineTransform::scale (scaleX, scaleY)",
+    "designPoint",
     "bool FlowerStandaloneAudioProcessorEditor::keyPressed",
     "juce::KeyPress::leftKey",
     "juce::KeyPress::rightKey",
@@ -305,7 +304,7 @@ if any(position < 0 for position in order) or order != sorted(order):
 
 print("[PASS] Flower XY standalone static dependency audit")
 print("[PASS] obsolete contact-sheet resource excluded from generated target")
-print("[PASS] 720x720 fullscreen XY pad contract present")
+print("[PASS] Android fullscreen editor follows actual logical bounds (physical panel no longer clipped)")
 print("[PASS] exact 100 user-cut JPEG frame bank embedded")
 print("[PASS] runtime does not use the old contact sheet")
 print("[PASS] selected pre-cut JPEG is loaded as an independent frame")
