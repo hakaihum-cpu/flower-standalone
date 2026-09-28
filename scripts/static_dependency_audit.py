@@ -22,10 +22,16 @@ REQUIRED = [
     "Source/RetroLookAndFeel.cpp",
     "scripts/patch_android_native_parallelism.py",
     "scripts/materialize_xy_visual_asset.py",
+    "scripts/patch_juce_android_gamepad_keys.py",
     "Resources/xy_sheet_01.b64.part00",
     "Resources/xy_sheet_01.b64.part01",
     "Resources/xy_sheet_01.b64.part02",
     "Resources/xy_sheet_01.b64.part03",
+    "Resources/xy_sheet_01.b64.part04",
+    "Resources/xy_sheet_01.b64.part05",
+    "Resources/xy_sheet_01.b64.part06",
+    "Resources/xy_sheet_01.b64.part07",
+    "Resources/xy_sheet_01.b64.part08",
 ]
 
 FORBIDDEN_SOURCE_TOKENS = [
@@ -102,6 +108,7 @@ if "default: false" not in circle or "run_build" not in circle:
     fail("CircleCI manual build gate is missing")
 
 for required_ci in [
+    "patch_juce_android_gamepad_keys.py JUCE",
     "materialize_xy_visual_asset.py",
     "test -s Resources/flower_xy_sheet_01.jpg",
     "patch_android_native_parallelism.py",
@@ -154,6 +161,9 @@ for required_visual_ui in [
     "(1.0f - yValue)",
     "VISUAL ASSET ERROR",
     "highResamplingQuality",
+    "physicalPointerVisible",
+    "destWidth",
+    "destHeight",
 ]:
     if required_visual_ui not in editor_text and required_visual_ui not in editor_header:
         fail(f"XY tile visual contract missing: {required_visual_ui}")
@@ -169,6 +179,10 @@ for required_xy_ui in [
     "juce::KeyPress::rightKey",
     "juce::KeyPress::upKey",
     "juce::KeyPress::downKey",
+    "beginDpadControl",
+    "endDpadControl",
+    "keyStateChanged",
+    "nudgeFromPhysicalKey",
 ]:
     if required_xy_ui not in editor_text:
         fail(f"XY fullscreen/physical-key contract missing: {required_xy_ui}")
@@ -182,6 +196,20 @@ for required_android_startup in [
 ]:
     if required_android_startup not in editor_text:
         fail(f"Android standalone startup safeguard missing: {required_android_startup}")
+
+android_key_patch = (ROOT / "scripts/patch_juce_android_gamepad_keys.py").read_text(encoding="utf-8")
+for required_key_patch in [
+    "KEYCODE_BUTTON_A",
+    "KEYCODE_BUTTON_B",
+    "KEYCODE_BUTTON_X",
+    "KEYCODE_BUTTON_Y",
+    "KEYCODE_BUTTON_L1",
+    "KEYCODE_BUTTON_R1",
+    "handleKeyUpOrDown (true)",
+    "handleKeyUpOrDown (false)",
+]:
+    if required_key_patch not in android_key_patch:
+        fail(f"Android physical-key bridge patch missing: {required_key_patch}")
 
 for required_engine in [
     "generatePerformanceMidi (midiMessages",
@@ -208,7 +236,8 @@ print("[PASS] animation code/resources excluded from generated MVP target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
 print("[PASS] 10x10 XY contact-sheet visual contract present")
 print("[PASS] visual asset materializer is wired before Projucer")
-print("[PASS] physical-key control contract present")
+print("[PASS] dpad XY/gate/pointer contract present")
+print("[PASS] Android physical-key down/up bridge patch present")
 print("[PASS] Android standalone startup safeguards present")
 print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
 print("[PASS] CircleCI native parallelism controls present")
