@@ -10,3 +10,6 @@ captures/
 *.jks
 *.keystore
 secrets.properties
+
+# Generated from tracked base64 parts by scripts/materialize_xy_visual_asset.py
+Resources/flower_xy_sheet_01.jpg
