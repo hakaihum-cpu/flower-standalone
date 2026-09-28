@@ -194,6 +194,7 @@ for required_xy_ui in [
     "juce::KeyPress::F18Key",
     "juce::KeyPress::F19Key",
     "ConfigScreenComponent",
+    "ConfigScreenComponent() = default",
     "toggleConfig",
     "beginBpmAdjust",
     "beginLooperButton",
