@@ -77,7 +77,6 @@ public:
     std::function<void(int)> onRootChanged;
     std::function<void(int)> onScaleChanged;
     std::function<void(bool)> onEffectsChanged;
-    std::function<void()> onCloseRequested;
 
 private:
     int rootKey = 0;
@@ -87,7 +86,6 @@ private:
 
     void notifyCurrentRow();
     juce::Rectangle<int> getRowBounds (int row) const;
-    juce::Rectangle<int> getCloseBounds() const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ConfigScreenComponent)
 };
