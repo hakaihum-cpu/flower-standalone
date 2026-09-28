@@ -26,6 +26,7 @@
       <FILE id="edcpp1" name="PluginEditor.cpp" compile="1" resource="0" file="Source/PluginEditor.cpp"/>
     </GROUP>
     <GROUP id="{2A5BDAC1-080F-4B6A-9A8E-000000000002}" name="Resources">
+      <FILE id="xyvis01" name="flower_xy_sheet_01.jpg" compile="0" resource="1" file="Resources/flower_xy_sheet_01.jpg"/>
     </GROUP>
   </MAINGROUP>
 
