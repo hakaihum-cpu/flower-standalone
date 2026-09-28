@@ -64,6 +64,8 @@ private:
 class ConfigScreenComponent final : public juce::Component
 {
 public:
+    ConfigScreenComponent() = default;
+
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
 
