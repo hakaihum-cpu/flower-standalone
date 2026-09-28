@@ -220,8 +220,12 @@ for required_xy_ui in [
         fail(f"XY fullscreen/physical-key contract missing: {required_xy_ui}")
 
 
-config_block_start = editor_text.find("if (configVisible)")
-config_block_end = editor_text.find("if (code == juce::KeyPress::leftKey", config_block_start + 1)
+key_pressed_start = editor_text.find("bool FlowerStandaloneAudioProcessorEditor::keyPressed")
+config_block_start = editor_text.find("if (configVisible)", key_pressed_start)
+config_block_end = editor_text.find(
+    "if (code == juce::KeyPress::leftKey\n        || code == juce::KeyPress::rightKey",
+    config_block_start
+)
 config_block = editor_text[config_block_start:config_block_end] if config_block_start >= 0 and config_block_end >= 0 else ""
 if "juce::KeyPress::F14Key" not in config_block or "configScreen.activateSelected()" not in config_block:
     fail("CONFIG confirm must be B/F14")
