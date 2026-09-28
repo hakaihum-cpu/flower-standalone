@@ -164,7 +164,11 @@ for required_visual_ui in [
     "physicalPointerVisible",
     "destWidth",
     "destHeight",
-    "faceZoom = 1.15f",
+    "tileCount = tileColumns * tileRows",
+    "static_assert (tileCount == 100",
+    "visualTileIndex = row * tileColumns + column",
+    "sourceWidth, sourceHeight",
+    "edgeSampleHeight = 2",
     "onTapStopRequested",
 ]:
     if required_visual_ui not in editor_text and required_visual_ui not in editor_header:
@@ -259,7 +263,8 @@ print("[PASS] animation code/resources excluded from generated MVP target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
 print("[PASS] 10x10 XY contact-sheet visual contract present")
 print("[PASS] visual asset materializer is wired before Projucer")
-print("[PASS] face-centred fullscreen visual contract present")
+print("[PASS] complete-face visual framing contract present")
+print("[PASS] all 100 contact-sheet cells are mapped with no skip list")
 print("[PASS] dpad XY latch / tap-stop / pointer contract present")
 print("[PASS] A/B/X/Y/L/R gamepad assignment contract present")
 print("[PASS] X looper transport REC->STOP->OVERDUB and long-clear contract present")
