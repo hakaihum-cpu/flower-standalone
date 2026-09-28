@@ -45,6 +45,10 @@ public:
     void setPerformanceRoot (int noteClass) noexcept;
     void setPerformanceScale (int scaleIndex) noexcept;
     void setPerformanceBpm (float bpm) noexcept;
+    void setPerformanceArpEnabled (bool enabled) noexcept;
+    void setPerformanceDelayEnabled (bool enabled) noexcept;
+    void setPerformanceGranularEnabled (bool enabled) noexcept;
+    void cycleFlowerTransport() noexcept;
     void stopPerformance() noexcept;
 
     void getFlowerWaveform (std::array<float, flowerWaveformBins>& destination) const noexcept;
@@ -105,6 +109,8 @@ private:
     std::atomic<float> flowerBasePosition { 0.0f };
     std::atomic<int> flowerActiveGrains { 0 };
     std::atomic<bool> flowerClearRequested { false };
+    std::atomic<int> flowerTransportRequest { 0 }; // 1=cycle, 2=clear
+    std::atomic<int> flowerTransportState { 0 };   // 0=empty, 1=record, 2=stop, 3=overdub
 
     std::atomic<float> performanceX { 0.28f };
     std::atomic<float> performanceY { 0.28f };
@@ -116,6 +122,9 @@ private:
     std::atomic<int> performanceRootClass { 0 };
     std::atomic<int> performanceScaleIndex { 0 };
     std::atomic<float> performanceBpm { 112.0f };
+    std::atomic<bool> performanceArpEnabled { true };
+    std::atomic<bool> performanceDelayEnabled { true };
+    std::atomic<bool> performanceGranularEnabled { true };
     std::atomic<bool> performanceStopRequested { false };
 
     juce::AudioBuffer<float> performanceDelayBuffer;
