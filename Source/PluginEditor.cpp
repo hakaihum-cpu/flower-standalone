@@ -1,385 +1,207 @@
 #include "PluginEditor.h"
-#include "ParameterIDs.h"
-#include "BinaryData.h"
-
-#if JUCE_ANDROID
- #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
- #define STBI_ONLY_PNG
- #define STBI_NO_STDIO
- #define STB_IMAGE_IMPLEMENTATION
- #include "third_party/stb_image.h"
-#endif
 
 #include <cmath>
-#include <limits>
 
-#if JUCE_ANDROID
 namespace
 {
-juce::Image decodeAndroidPngWithStb (const void* data, size_t size)
+constexpr const char* patternNames[]
 {
-    if (data == nullptr || size == 0 || size > static_cast<size_t> (std::numeric_limits<int>::max()))
-        return {};
+    "SINGLE", "UP", "DOWN", "UP/DOWN",
+    "SKIP", "OCTAVE", "RANDOM", "CHAOS"
+};
 
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-    auto* rgba = stbi_load_from_memory (
-        static_cast<const stbi_uc*> (data),
-        static_cast<int> (size),
-        &width,
-        &height,
-        &channels,
-        STBI_rgb_alpha);
-
-    if (rgba == nullptr || width <= 0 || height <= 0)
-    {
-        if (rgba != nullptr)
-            stbi_image_free (rgba);
-        return {};
-    }
-
-    juce::Image image (juce::Image::ARGB, width, height, true);
-    juce::Image::BitmapData bitmap (image, juce::Image::BitmapData::writeOnly);
-
-    for (int y = 0; y < height; ++y)
-    {
-        auto* line = bitmap.getLinePointer (y);
-        const auto* src = rgba + static_cast<size_t> (y) * static_cast<size_t> (width) * 4u;
-
-        for (int x = 0; x < width; ++x)
-        {
-            auto* pixel = reinterpret_cast<juce::PixelARGB*> (
-                line + static_cast<ptrdiff_t> (x) * bitmap.pixelStride);
-            const auto* p = src + static_cast<size_t> (x) * 4u;
-            pixel->setARGB (p[3], p[0], p[1], p[2]);
-            pixel->premultiply();
-        }
-    }
-
-    stbi_image_free (rgba);
-    return image;
-}
-}
-#endif
-
-LabelledKnob::LabelledKnob (juce::String name)
-{
-    control.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-   #if JUCE_ANDROID
-    control.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 52, 15);
-   #else
-    control.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 62, 17);
-   #endif
-    addAndMakeVisible (control);
-
-    label.setText (std::move (name), juce::dontSendNotification);
-    label.setJustificationType (juce::Justification::centred);
-   #if JUCE_ANDROID
-    label.setFont (juce::FontOptions (8.5f).withStyle ("Bold"));
-   #else
-    label.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
-   #endif
-    label.setColour (juce::Label::textColourId, juce::Colour (0xffd6cba5));
-    addAndMakeVisible (label);
+juce::Colour panelBackground() { return juce::Colour (0xff16130f); }
+juce::Colour panelLine()       { return juce::Colour (0xff75684f); }
+juce::Colour textMain()        { return juce::Colour (0xffddd0a5); }
+juce::Colour textMuted()       { return juce::Colour (0xff8f846d); }
+juce::Colour padBackground()   { return juce::Colour (0xff090908); }
+juce::Colour padLine()         { return juce::Colour (0xff39352d); }
+juce::Colour padHot()          { return juce::Colour (0xffd9d0b4); }
 }
 
-void LabelledKnob::resized()
+PerformancePadComponent::PerformancePadComponent()
 {
-    auto area = getLocalBounds();
-   #if JUCE_ANDROID
-    label.setBounds (area.removeFromTop (11));
-   #else
-    label.setBounds (area.removeFromTop (15));
-   #endif
-    control.setBounds (area);
+    setMouseCursor (juce::MouseCursor::CrosshairCursor);
+    setWantsKeyboardFocus (false);
 }
 
-RetroToggleSwitch::RetroToggleSwitch (const juce::String& name)
-    : juce::Button (name)
+int PerformancePadComponent::getPatternIndex() const noexcept
 {
-    setClickingTogglesState (true);
-    setTooltip (name);
+    return juce::jlimit (0, 7, static_cast<int> (std::floor (xValue * 8.0f)));
 }
 
-void RetroToggleSwitch::paintButton (juce::Graphics& g, bool isMouseOverButton, bool isButtonDown)
+juce::String PerformancePadComponent::getPatternName() const
 {
-    const bool on = getToggleState();
-    auto area = getLocalBounds().toFloat().reduced (2.0f);
-
-    g.setColour (juce::Colour (0x33000000));
-    g.fillRoundedRectangle (area.translated (1.5f, 2.0f), 4.0f);
-
-    g.setColour (juce::Colour (0xffded4b6));
-    g.fillRoundedRectangle (area, 4.0f);
-    g.setColour (juce::Colour (0xff8e846c));
-    g.drawRoundedRectangle (area, 4.0f, 1.0f);
-
-    auto rocker = area.reduced (9.0f, 7.0f);
-    juce::ColourGradient face (on ? juce::Colour (0xfff5edd7) : juce::Colour (0xffc8bea5),
-                               rocker.getX(), rocker.getY(),
-                               on ? juce::Colour (0xffc8bea5) : juce::Colour (0xfff5edd7),
-                               rocker.getX(), rocker.getBottom(), false);
-    g.setGradientFill (face);
-    g.fillRoundedRectangle (rocker, 2.0f);
-    g.setColour (juce::Colour (0xff746b59));
-    g.drawRoundedRectangle (rocker, 2.0f, 1.0f);
-
-    if (isMouseOverButton || isButtonDown)
-    {
-        g.setColour (juce::Colour (0x16000000));
-        g.fillRoundedRectangle (rocker, 2.0f);
-    }
-
-    g.setColour (on ? juce::Colour (0xffb3443f) : juce::Colour (0xff777064));
-    const auto led = juce::Rectangle<float> (5.0f, 5.0f)
-                         .withCentre ({ area.getRight() - 8.0f, area.getY() + 8.0f });
-    g.fillEllipse (led);
-
-    if (namedStateStyle)
-    {
-        auto textArea = rocker.toNearestInt().reduced (2, 0);
-        auto nameArea = textArea.removeFromTop (juce::jmax (8, textArea.getHeight() / 2));
-
-        g.setColour (juce::Colour (0xff273249));
-        g.setFont (juce::FontOptions ("Comic Sans MS", 7.2f, juce::Font::bold));
-        g.drawFittedText (getButtonText(), nameArea, juce::Justification::centred, 1);
-
-        g.setColour (on ? juce::Colour (0xffa33b36) : juce::Colour (0xff777064));
-        g.setFont (juce::FontOptions ("Comic Sans MS", 7.8f, juce::Font::bold));
-        g.drawFittedText (on ? "ON" : "OFF", textArea, juce::Justification::centred, 1);
-    }
-    else
-    {
-        g.setColour (juce::Colour (0xff273249));
-        g.setFont (juce::FontOptions ("Comic Sans MS", 8.0f, juce::Font::bold));
-        g.drawFittedText (on ? "ON" : "OFF", rocker.toNearestInt(), juce::Justification::centred, 1);
-    }
+    return patternNames[getPatternIndex()];
 }
 
-void FlowerPanel::paint (juce::Graphics& g)
+void PerformancePadComponent::setHeld (bool shouldHold)
 {
-    g.fillAll (juce::Colour (0xff1b1713));
-
-    auto bounds = getLocalBounds().toFloat().reduced (1.0f);
-    g.setColour (juce::Colour (0xff7c6d52));
-    g.drawRoundedRectangle (bounds, 12.0f, 1.2f);
-
-    g.setColour (juce::Colour (0xffddd0a5));
-    g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
-    g.drawText ("FLOWER", getLocalBounds().removeFromTop (34).reduced (12, 0),
-                juce::Justification::centredLeft);
-
-    g.setColour (juce::Colour (0xff91866e));
-    g.setFont (juce::FontOptions (10.0f));
-    g.drawText ("LOOPER / GRANULAR",
-                getLocalBounds().removeFromTop (34).reduced (94, 0),
-                juce::Justification::centredLeft);
-}
-
-void SynthPanel::paint (juce::Graphics& g)
-{
-    g.fillAll (juce::Colour (0xff1b1713));
-    auto bounds = getLocalBounds().toFloat().reduced (1.0f);
-    g.setColour (juce::Colour (0xff7c6d52));
-    g.drawRoundedRectangle (bounds, 12.0f, 1.2f);
-
-    g.setColour (juce::Colour (0xffddd0a5));
-    g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
-    g.drawText ("SYNTH", getLocalBounds().removeFromTop (34).reduced (12, 0),
-                juce::Justification::centredLeft);
-
-    g.setColour (juce::Colour (0xff91866e));
-    g.setFont (juce::FontOptions (10.0f));
-    g.drawText ("SINE / ADSR / FILTER / LFO",
-                getLocalBounds().removeFromTop (34).reduced (78, 0),
-                juce::Justification::centredLeft);
-}
-
-void FlowerWaveformComponent::setState (
-    const std::array<float, FlowerStandaloneAudioProcessor::flowerWaveformBins>& newWaveform,
-    float validFraction,
-    float recordProgress,
-    bool isRecording,
-    float basePosition,
-    const std::array<float, FlowerStandaloneAudioProcessor::flowerGrainCount>& grainPositions,
-    int activeGrains,
-    float spread,
-    float grainSize)
-{
-    waveform = newWaveform;
-    grains = grainPositions;
-    valid = juce::jlimit (0.0f, 1.0f, validFraction);
-    progress = juce::jlimit (0.0f, 1.0f, recordProgress);
-    recording = isRecording;
-    position = juce::jlimit (0.0f, 1.0f, basePosition);
-    grainCount = juce::jlimit (0, FlowerStandaloneAudioProcessor::flowerGrainCount, activeGrains);
-    spreadAmount = juce::jlimit (0.0f, 1.0f, spread);
-    sizeAmount = juce::jlimit (0.008f, 0.50f, grainSize);
+    held = shouldHold;
+    if (! held && ! active)
+        notify();
     repaint();
 }
 
-void FlowerWaveformComponent::paint (juce::Graphics& g)
+void PerformancePadComponent::paint (juce::Graphics& g)
 {
-    auto bounds = getLocalBounds().reduced (8);
-    g.setColour (juce::Colour (0xff080808));
-    g.fillRoundedRectangle (bounds.toFloat(), 4.0f);
-    g.setColour (juce::Colour (0xff8e8e89));
-    g.drawRoundedRectangle (bounds.toFloat(), 4.0f, 1.0f);
+    auto area = getLocalBounds().toFloat().reduced (1.0f);
+    g.setColour (padBackground());
+    g.fillRoundedRectangle (area, 9.0f);
 
-    auto graph = bounds.reduced (10, 13);
-    const int centreY = graph.getCentreY();
+    g.setColour (panelLine());
+    g.drawRoundedRectangle (area, 9.0f, 1.3f);
 
-    g.setColour (juce::Colour (0xff3b3b38));
-    g.drawHorizontalLine (centreY, static_cast<float> (graph.getX()),
-                          static_cast<float> (graph.getRight()));
+    auto grid = area.reduced (14.0f, 14.0f);
 
-    const int validBins = juce::jlimit (
-        1, FlowerStandaloneAudioProcessor::flowerWaveformBins,
-        juce::roundToInt (juce::jmax (
-            valid, 1.0f / FlowerStandaloneAudioProcessor::flowerWaveformBins)
-            * FlowerStandaloneAudioProcessor::flowerWaveformBins));
-
-    juce::Path upper;
-    juce::Path lower;
-
-    for (int x = 0; x < graph.getWidth(); ++x)
+    for (int i = 1; i < 8; ++i)
     {
-        const float nx = graph.getWidth() > 1
-            ? static_cast<float> (x) / static_cast<float> (graph.getWidth() - 1)
-            : 0.0f;
-        const int bin = juce::jlimit (
-            0, validBins - 1,
-            juce::roundToInt (nx * static_cast<float> (validBins - 1)));
-        const float magnitude = juce::jlimit (
-            0.0f, 1.0f, waveform[static_cast<size_t> (bin)]);
-        const float xPos = static_cast<float> (graph.getX() + x);
-        const float topY = static_cast<float> (centreY)
-            - magnitude * static_cast<float> (graph.getHeight()) * 0.43f;
-        const float bottomY = static_cast<float> (centreY)
-            + magnitude * static_cast<float> (graph.getHeight()) * 0.43f;
-
-        if (x == 0)
-        {
-            upper.startNewSubPath (xPos, topY);
-            lower.startNewSubPath (xPos, bottomY);
-        }
-        else
-        {
-            upper.lineTo (xPos, topY);
-            lower.lineTo (xPos, bottomY);
-        }
+        const float x = grid.getX() + grid.getWidth() * static_cast<float> (i) / 8.0f;
+        g.setColour (padLine().withAlpha (i == 4 ? 0.85f : 0.52f));
+        g.drawVerticalLine (juce::roundToInt (x), grid.getY(), grid.getBottom());
     }
 
-    g.setColour (juce::Colour (0xffd9d9d3));
-    g.strokePath (upper, juce::PathStrokeType (1.3f));
-    g.setColour (juce::Colour (0xff777774));
-    g.strokePath (lower, juce::PathStrokeType (0.8f));
-
-    const float spreadHalf = spreadAmount * 0.5f;
-    const float spreadStart = juce::jlimit (0.0f, 1.0f, position - spreadHalf);
-    const float spreadEnd = juce::jlimit (0.0f, 1.0f, position + spreadHalf);
-    const float sx = graph.getX() + spreadStart * graph.getWidth();
-    const float ex = graph.getX() + spreadEnd * graph.getWidth();
-    g.setColour (juce::Colour (0x22ffffff));
-    g.fillRect (juce::Rectangle<float> (
-        sx, static_cast<float> (graph.getY()),
-        juce::jmax (1.0f, ex - sx), static_cast<float> (graph.getHeight())));
-
-    const float px = graph.getX() + position * graph.getWidth();
-    g.setColour (juce::Colour (0xfff0f0e9));
-    g.drawVerticalLine (juce::roundToInt (px),
-                        static_cast<float> (graph.getY()),
-                        static_cast<float> (graph.getBottom()));
-
-    for (int i = 0; i < grainCount; ++i)
+    for (int i = 1; i < 5; ++i)
     {
-        const float gx = graph.getX()
-            + juce::jlimit (0.0f, 1.0f, grains[static_cast<size_t> (i)]) * graph.getWidth();
-        const float radius = 3.0f + static_cast<float> (i % 2);
-        g.setColour (juce::Colour (0xffbcbcb7).withAlpha (0.92f - i * 0.12f));
-        g.fillEllipse (gx - radius, graph.getY() + 5.0f + i * 7.0f,
-                       radius * 2.0f, radius * 2.0f);
+        const float y = grid.getY() + grid.getHeight() * static_cast<float> (i) / 5.0f;
+        g.setColour (padLine().withAlpha (0.48f));
+        g.drawHorizontalLine (juce::roundToInt (y), grid.getX(), grid.getRight());
     }
 
-    if (recording)
+    g.setFont (juce::FontOptions (8.5f).withStyle ("Bold"));
+    for (int i = 0; i < 8; ++i)
     {
-        const float rx = graph.getX() + progress * graph.getWidth();
-        g.setColour (juce::Colour (0xffd6d6cf));
-        g.drawVerticalLine (juce::roundToInt (rx),
-                            static_cast<float> (graph.getY()),
-                            static_cast<float> (graph.getBottom()));
+        auto zone = juce::Rectangle<float> (
+            grid.getX() + grid.getWidth() * static_cast<float> (i) / 8.0f,
+            grid.getY(),
+            grid.getWidth() / 8.0f,
+            20.0f);
+
+        g.setColour (i == getPatternIndex() ? textMain() : textMuted().withAlpha (0.72f));
+        g.drawFittedText (patternNames[i], zone.toNearestInt(),
+                          juce::Justification::centred, 1);
     }
 
-    g.setColour (juce::Colour (0xff6b6b67));
-    g.setFont (juce::FontOptions (8.5f));
-    g.drawText ("SIZE " + juce::String (sizeAmount * 1000.0f, 0) + " ms",
-                bounds.removeFromBottom (13), juce::Justification::centredRight);
+    g.setColour (textMuted());
+    g.setFont (juce::FontOptions (8.0f));
+    g.drawText ("CLEAN", grid.toNearestInt().removeFromBottom (18),
+                juce::Justification::bottomLeft);
+
+    auto fxText = grid.toNearestInt();
+    fxText.removeFromLeft (6);
+    fxText.removeFromBottom (26);
+    g.drawText ("GRAIN  •  DELAY  •  FILTER",
+                fxText.removeFromTop (18),
+                juce::Justification::topRight);
+
+    const float px = grid.getX() + xValue * grid.getWidth();
+    const float py = grid.getBottom() - yValue * grid.getHeight();
+
+    g.setColour (padHot().withAlpha (0.25f));
+    g.drawVerticalLine (juce::roundToInt (px), grid.getY(), grid.getBottom());
+    g.drawHorizontalLine (juce::roundToInt (py), grid.getX(), grid.getRight());
+
+    const float radius = 12.0f + speedValue * 8.0f;
+    g.setColour (padHot().withAlpha ((active || held) ? 0.96f : 0.60f));
+    g.drawEllipse (px - radius, py - radius, radius * 2.0f, radius * 2.0f, 2.0f);
+    g.fillEllipse (px - 3.0f, py - 3.0f, 6.0f, 6.0f);
+
+    if (held && ! active)
+    {
+        g.setColour (textMain());
+        g.setFont (juce::FontOptions (9.0f).withStyle ("Bold"));
+        g.drawText ("HOLD", area.toNearestInt().reduced (12).removeFromBottom (20),
+                    juce::Justification::bottomRight);
+    }
 }
 
-void FlowerWaveformComponent::mouseDown (const juce::MouseEvent& e)
+void PerformancePadComponent::mouseDown (const juce::MouseEvent& e)
 {
-    mouseDrag (e);
+    lastPoint = e.position;
+    lastEventMs = juce::Time::getMillisecondCounterHiRes();
+    updateFromEvent (e, true);
 }
 
-void FlowerWaveformComponent::mouseDrag (const juce::MouseEvent& e)
+void PerformancePadComponent::mouseDrag (const juce::MouseEvent& e)
 {
-    if (! onPositionChanged)
+    updateFromEvent (e, true);
+}
+
+void PerformancePadComponent::mouseUp (const juce::MouseEvent& e)
+{
+    updateFromEvent (e, false);
+}
+
+void PerformancePadComponent::updateFromEvent (const juce::MouseEvent& e, bool isActive)
+{
+    auto grid = getLocalBounds().toFloat().reduced (15.0f);
+    if (grid.getWidth() <= 1.0f || grid.getHeight() <= 1.0f)
         return;
 
-    auto graph = getLocalBounds().reduced (8).reduced (10, 13);
-    if (graph.getWidth() <= 0)
-        return;
-
-    const float normalized = juce::jlimit (
+    const float newX = juce::jlimit (
         0.0f, 1.0f,
-        static_cast<float> (e.x - graph.getX()) / static_cast<float> (graph.getWidth()));
-    onPositionChanged (normalized);
+        (e.position.x - grid.getX()) / grid.getWidth());
+    const float newY = juce::jlimit (
+        0.0f, 1.0f,
+        (grid.getBottom() - e.position.y) / grid.getHeight());
+
+    const double nowMs = juce::Time::getMillisecondCounterHiRes();
+    const double elapsedSeconds = juce::jmax (0.001, (nowMs - lastEventMs) / 1000.0);
+    const auto delta = e.position - lastPoint;
+    const float normDistance = std::sqrt (
+        std::pow (delta.x / juce::jmax (1.0f, grid.getWidth()), 2.0f)
+      + std::pow (delta.y / juce::jmax (1.0f, grid.getHeight()), 2.0f));
+
+    speedValue = juce::jlimit (
+        0.0f, 1.0f,
+        static_cast<float> (normDistance / elapsedSeconds) * 0.55f);
+
+    if (std::abs (delta.x) > 0.5f)
+        horizontalDirection = juce::jlimit (-1.0f, 1.0f,
+            delta.x / juce::jmax (12.0f, grid.getWidth() * 0.16f));
+
+    xValue = newX;
+    yValue = newY;
+    active = isActive;
+
+    lastPoint = e.position;
+    lastEventMs = nowMs;
+
+    notify();
+    repaint();
 }
 
-void FlowerStandaloneAudioProcessorEditor::configureSlider (
-    LabelledKnob& knob, double min, double max, double step)
+void PerformancePadComponent::notify()
 {
-    knob.slider().setRange (min, max, step);
+    if (onPadChanged)
+        onPadChanged (xValue, yValue, speedValue, horizontalDirection, active || held);
 }
 
-void FlowerStandaloneAudioProcessorEditor::setParameterNormalized (
-    juce::RangedAudioParameter* parameter, float normalized)
+void FlowerStandaloneAudioProcessorEditor::styleLabel (juce::Label& label,
+                                                        float size,
+                                                        bool bold)
 {
-    if (parameter == nullptr)
-        return;
-
-    parameter->beginChangeGesture();
-    parameter->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, normalized));
-    parameter->endChangeGesture();
+    label.setColour (juce::Label::textColourId, textMain());
+    label.setFont (bold
+        ? juce::FontOptions (size).withStyle ("Bold")
+        : juce::FontOptions (size));
 }
 
 FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     FlowerStandaloneAudioProcessor& p)
     : juce::AudioProcessorEditor (&p),
-      processor (p),
-      keyboard (processor.getKeyboardState(),
-                juce::MidiKeyboardComponent::horizontalKeyboard)
+      processor (p)
 {
     setLookAndFeel (&retroLookAndFeel);
     setOpaque (true);
 
    #if JUCE_ANDROID
-    // Keep the standalone editor inside the actual Android display bounds.
-    // This mirrors the proven MIYAKO Android startup path rather than keeping
-    // the desktop-only fixed 960x720 editor size.
-    // Do not force orientation during startup. On the target 720x720 Android
-    // device this can tear down the JUCE activity window before it is drawn.
-
     constexpr int androidCanvasSize = 720;
     setSize (androidCanvasSize, androidCanvasSize);
     setResizable (false, false);
     setResizeLimits (androidCanvasSize, androidCanvasSize,
                      androidCanvasSize, androidCanvasSize);
 
-    // MIYAKO's proven Android standalone path explicitly discards any device
-    // setup chosen by the generic standalone holder and reopens the default
-    // Android stereo output as 0-in / 2-out. Keep the sequence identical.
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
     {
         holder->stopPlaying();
@@ -390,344 +212,163 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
 
         if (audioError.isNotEmpty())
             juce::Logger::writeToLog (
-                "FLOWER Android audio initialise failed: " + audioError);
+                "FLOWER XY Android audio initialise failed: " + audioError);
 
         holder->startPlaying();
     }
    #else
-    setSize (960, 720);
+    setSize (760, 720);
    #endif
 
-    addAndMakeVisible (flowerPanel);
-    flowerPanel.addAndMakeVisible (flowerWaveform);
-    flowerPanel.addAndMakeVisible (flowerAnimation);
-    flowerPanel.addAndMakeVisible (flowerOn);
-    flowerPanel.addAndMakeVisible (flowerReverse);
-    flowerPanel.addAndMakeVisible (flowerClear);
-    flowerPanel.addAndMakeVisible (synthButton);
+    titleLabel.setText ("FLOWER", juce::dontSendNotification);
+    styleLabel (titleLabel, 22.0f, true);
+    titleLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (titleLabel);
 
-    flowerOn.setNamedStateStyle (true);
-    flowerReverse.setNamedStateStyle (true);
-    flowerOn.setTooltip ("FLOWER EFFECT ON / OFF");
-    flowerReverse.setTooltip ("REVERSE PLAYBACK ON / OFF");
+    subtitleLabel.setText ("XY PERFORMANCE SYNTH / SEQUENCER / FX",
+                           juce::dontSendNotification);
+    subtitleLabel.setColour (juce::Label::textColourId, textMuted());
+    subtitleLabel.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
+    subtitleLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (subtitleLabel);
 
-    const auto addFlowerKnob = [this] (LabelledKnob& knob)
+    padReadout.setJustificationType (juce::Justification::centredRight);
+    padReadout.setColour (juce::Label::textColourId, textMain());
+    padReadout.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
+    addAndMakeVisible (padReadout);
+
+    addAndMakeVisible (performancePad);
+
+    rootLabel.setText ("ROOT", juce::dontSendNotification);
+    scaleLabel.setText ("SCALE", juce::dontSendNotification);
+    tempoLabel.setText ("BPM", juce::dontSendNotification);
+    for (auto* label : { &rootLabel, &scaleLabel, &tempoLabel })
     {
-        flowerPanel.addAndMakeVisible (knob);
-    };
-    addFlowerKnob (flowerPosition);
-    addFlowerKnob (flowerSize);
-    addFlowerKnob (flowerDensity);
-    addFlowerKnob (flowerSpread);
-    addFlowerKnob (flowerHold);
-    addFlowerKnob (flowerPitch);
-    addFlowerKnob (flowerMix);
-    addFlowerKnob (flowerFeedback);
-
-    addAndMakeVisible (synthPanel);
-    synthPanel.setVisible (false);
-    synthPanel.addAndMakeVisible (closeSynthButton);
-    synthPanel.addAndMakeVisible (synthLevel);
-    synthPanel.addAndMakeVisible (synthAttack);
-    synthPanel.addAndMakeVisible (synthDecay);
-    synthPanel.addAndMakeVisible (synthSustain);
-    synthPanel.addAndMakeVisible (synthRelease);
-    synthPanel.addAndMakeVisible (synthCutoff);
-    synthPanel.addAndMakeVisible (synthResonance);
-    synthPanel.addAndMakeVisible (synthLfoRate);
-    synthPanel.addAndMakeVisible (synthLfoDepth);
-    synthPanel.addAndMakeVisible (synthLfoTarget);
-    synthPanel.addAndMakeVisible (synthLfoTargetLabel);
-    synthPanel.addAndMakeVisible (keyboard);
-
-    synthLfoTargetLabel.setText ("LFO TARGET", juce::dontSendNotification);
-    synthLfoTargetLabel.setJustificationType (juce::Justification::centred);
-    synthLfoTargetLabel.setFont (juce::FontOptions (9.0f).withStyle ("Bold"));
-    synthLfoTargetLabel.setColour (juce::Label::textColourId, juce::Colour (0xffd6cba5));
-    synthLfoTarget.addItemList (
-        juce::StringArray { "OFF", "PITCH", "CUTOFF", "RESONANCE", "LEVEL" }, 1);
-
-    configureSlider (synthLevel, 0.0, 1.0, 0.001);
-    configureSlider (synthAttack, 0.001, 5.0, 0.001);
-    configureSlider (synthDecay, 0.001, 5.0, 0.001);
-    configureSlider (synthSustain, 0.0, 1.0, 0.001);
-    configureSlider (synthRelease, 0.001, 8.0, 0.001);
-    configureSlider (synthCutoff, 20.0, 20000.0, 1.0);
-    synthCutoff.slider().setSkewFactorFromMidPoint (3000.0);
-    configureSlider (synthResonance, 0.1, 12.0, 0.001);
-    configureSlider (synthLfoRate, 0.01, 20.0, 0.001);
-    synthLfoRate.slider().setSkewFactorFromMidPoint (1.0);
-    configureSlider (synthLfoDepth, 0.0, 1.0, 0.001);
-
-    configureSlider (flowerPosition, 0.0, 1.0, 0.001);
-    configureSlider (flowerSize, 0.008, 0.50, 0.001);
-    flowerSize.slider().setSkewFactorFromMidPoint (0.08);
-    configureSlider (flowerDensity, 0.0, 1.0, 0.001);
-    configureSlider (flowerSpread, 0.0, 1.0, 0.001);
-    configureSlider (flowerHold, 0.0, 1.0, 0.001);
-    configureSlider (flowerPitch, -12.0, 12.0, 0.01);
-    configureSlider (flowerMix, 0.0, 1.0, 0.001);
-    configureSlider (flowerFeedback, 0.0, 1.0, 0.001);
-
-    auto& state = processor.getAPVTS();
-    const auto attachSlider = [&] (LabelledKnob& knob, const char* id)
-    {
-        sliderAttachments.push_back (
-            std::make_unique<SliderAttachment> (state, id, knob.slider()));
-    };
-    const auto attachButton = [&] (juce::Button& button, const char* id)
-    {
-        buttonAttachments.push_back (
-            std::make_unique<ButtonAttachment> (state, id, button));
-    };
-
-    attachSlider (flowerPosition, ParamIDs::flowerPosition);
-    attachSlider (flowerSize, ParamIDs::flowerSize);
-    attachSlider (flowerDensity, ParamIDs::flowerDensity);
-    attachSlider (flowerSpread, ParamIDs::flowerSpread);
-    attachSlider (flowerHold, ParamIDs::flowerHold);
-    attachSlider (flowerPitch, ParamIDs::flowerPitch);
-    attachSlider (flowerMix, ParamIDs::flowerMix);
-    attachSlider (flowerFeedback, ParamIDs::flowerFeedback);
-    attachButton (flowerOn, ParamIDs::flowerEnabled);
-    attachButton (flowerReverse, ParamIDs::flowerReverse);
-
-    attachSlider (synthLevel, ParamIDs::level);
-    attachSlider (synthAttack, ParamIDs::attack);
-    attachSlider (synthDecay, ParamIDs::decay);
-    attachSlider (synthSustain, ParamIDs::sustain);
-    attachSlider (synthRelease, ParamIDs::release);
-    attachSlider (synthCutoff, ParamIDs::cutoff);
-    attachSlider (synthResonance, ParamIDs::resonance);
-    attachSlider (synthLfoRate, ParamIDs::lfoRate);
-    attachSlider (synthLfoDepth, ParamIDs::lfoDepth);
-    comboAttachments.push_back (
-        std::make_unique<ComboAttachment> (state, ParamIDs::lfoTarget, synthLfoTarget));
-
-    flowerClear.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff302a22));
-    flowerClear.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffd6cba5));
-    synthButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff302a22));
-    synthButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffd6cba5));
-    closeSynthButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff302a22));
-    closeSynthButton.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffd6cba5));
-
-    flowerClear.onClick = [this] { processor.clearFlowerLoop(); };
-    synthButton.onClick = [this] { showSynth (true); };
-    closeSynthButton.onClick = [this] { showSynth (false); };
-
-    flowerWaveform.onPositionChanged = [this] (float position)
-    {
-        if (auto* parameter = processor.getAPVTS().getParameter (ParamIDs::flowerPosition))
-            setParameterNormalized (parameter, position);
-    };
-
-   #if ! JUCE_ANDROID
-    const bool atlasLoaded = flowerAnimation.loadEmbeddedAtlas (
-        BinaryData::flower_embedded_atlas_png,
-        static_cast<size_t> (BinaryData::flower_embedded_atlas_pngSize));
-
-    if (atlasLoaded)
-    {
-        flowerAnimation.loadHighResWalkStrip (
-            BinaryData::flower_actor_v3_walk_student01_png,
-            static_cast<size_t> (BinaryData::flower_actor_v3_walk_student01_pngSize),
-            0, true);
+        styleLabel (*label, 9.0f, true);
+        label->setJustificationType (juce::Justification::centred);
+        addAndMakeVisible (*label);
     }
-   #endif
 
-    startTimerHz (20);
+    rootBox.addItemList (
+        juce::StringArray { "C", "C#", "D", "D#", "E", "F",
+                            "F#", "G", "G#", "A", "A#", "B" }, 1);
+    rootBox.setSelectedId (1, juce::dontSendNotification);
+    rootBox.onChange = [this]
+    {
+        processor.setPerformanceRoot (juce::jmax (0, rootBox.getSelectedId() - 1));
+    };
+    addAndMakeVisible (rootBox);
+
+    scaleBox.addItemList (
+        juce::StringArray { "MIN PENT", "MINOR", "MAJOR", "DORIAN" }, 1);
+    scaleBox.setSelectedId (1, juce::dontSendNotification);
+    scaleBox.onChange = [this]
+    {
+        processor.setPerformanceScale (juce::jmax (0, scaleBox.getSelectedId() - 1));
+    };
+    addAndMakeVisible (scaleBox);
+
+    tempoSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+    tempoSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 54, 28);
+    tempoSlider.setRange (50.0, 190.0, 1.0);
+    tempoSlider.setValue (112.0, juce::dontSendNotification);
+    tempoSlider.onValueChange = [this]
+    {
+        processor.setPerformanceBpm (static_cast<float> (tempoSlider.getValue()));
+    };
+    addAndMakeVisible (tempoSlider);
+
+    holdButton.setClickingTogglesState (true);
+    holdButton.onClick = [this]
+    {
+        const bool held = holdButton.getToggleState();
+        performancePad.setHeld (held);
+        processor.setPerformanceHold (held);
+        updatePadReadout();
+    };
+    addAndMakeVisible (holdButton);
+
+    panicButton.onClick = [this]
+    {
+        holdButton.setToggleState (false, juce::dontSendNotification);
+        performancePad.setHeld (false);
+        processor.setPerformanceHold (false);
+        processor.stopPerformance();
+        updatePadReadout();
+    };
+    addAndMakeVisible (panicButton);
+
+    performancePad.onPadChanged =
+        [this] (float x, float y, float speed, float horizontalDirection, bool active)
+        {
+            processor.setPerformancePad (x, y, speed, horizontalDirection, active);
+            updatePadReadout();
+        };
+
+    processor.setPerformanceRoot (0);
+    processor.setPerformanceScale (0);
+    processor.setPerformanceBpm (112.0f);
+    processor.setPerformanceHold (false);
+    updatePadReadout();
 }
 
 FlowerStandaloneAudioProcessorEditor::~FlowerStandaloneAudioProcessorEditor()
 {
-    stopTimer();
+    processor.stopPerformance();
     setLookAndFeel (nullptr);
 }
 
 void FlowerStandaloneAudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff080807));
-}
 
-void FlowerStandaloneAudioProcessorEditor::showSynth (bool shouldShow)
-{
-    synthPanel.setVisible (shouldShow);
-    if (shouldShow)
-        synthPanel.toFront (true);
+    auto panel = getLocalBounds().toFloat().reduced (18.0f);
+    g.setColour (panelBackground());
+    g.fillRoundedRectangle (panel, 13.0f);
+    g.setColour (panelLine());
+    g.drawRoundedRectangle (panel, 13.0f, 1.2f);
 }
 
 void FlowerStandaloneAudioProcessorEditor::resized()
 {
-    flowerPanel.setBounds (getLocalBounds().reduced (28, 22));
+    auto area = getLocalBounds().reduced (30, 24);
 
-    auto flower = flowerPanel.getLocalBounds().reduced (14);
-    auto flowerHeader = flower.removeFromTop (44);
+    auto header = area.removeFromTop (54);
+    titleLabel.setBounds (header.removeFromLeft (112));
+    subtitleLabel.setBounds (header.removeFromLeft (260));
+    padReadout.setBounds (header);
 
-    synthButton.setBounds (flowerHeader.removeFromRight (66).reduced (2, 7));
-    flowerClear.setBounds (flowerHeader.removeFromRight (64).reduced (2, 7));
-    flowerReverse.setBounds (flowerHeader.removeFromRight (82).reduced (2, 5));
-    flowerOn.setBounds (flowerHeader.removeFromRight (74).reduced (2, 5));
+    area.removeFromTop (4);
 
-    flower.removeFromTop (5);
+    auto footer = area.removeFromBottom (88);
+    area.removeFromBottom (8);
+    performancePad.setBounds (area);
 
-    const float layoutAspect = static_cast<float> (juce::jmax (1, getWidth()))
-                             / static_cast<float> (juce::jmax (1, getHeight()));
-    const bool stackedLayout = layoutAspect < 1.45f;
+    const int buttonWidth = 72;
+    panicButton.setBounds (footer.removeFromRight (buttonWidth).reduced (4, 19));
+    holdButton.setBounds (footer.removeFromRight (buttonWidth).reduced (4, 19));
 
-    juce::Rectangle<int> flowerControls;
-    juce::Rectangle<int> flowerVisuals;
+    auto bpm = footer.removeFromRight (190);
+    tempoLabel.setBounds (bpm.removeFromTop (18));
+    tempoSlider.setBounds (bpm.reduced (2, 5));
 
-    if (stackedLayout)
-    {
-        const int controlsHeight = juce::jlimit (
-            168, 240,
-            juce::roundToInt (static_cast<float> (flower.getHeight()) * 0.38f));
-        flowerControls = flower.removeFromBottom (controlsHeight);
-        flower.removeFromBottom (6);
-        flowerVisuals = flower.reduced (4, 2);
+    auto scale = footer.removeFromRight (130);
+    scaleLabel.setBounds (scale.removeFromTop (18));
+    scaleBox.setBounds (scale.reduced (4, 9));
 
-        const int waveHeight = juce::jlimit (
-            62, 110,
-            juce::roundToInt (static_cast<float> (flowerVisuals.getHeight()) * 0.28f));
-        auto waveformArea = flowerVisuals.removeFromBottom (waveHeight);
-        flowerVisuals.removeFromBottom (5);
-        flowerAnimation.setBounds (flowerVisuals.reduced (2));
-        flowerWaveform.setBounds (waveformArea.reduced (2));
-    }
-    else
-    {
-        flowerControls = flower.removeFromRight (juce::jmax (240, flower.getWidth() / 3));
-        flowerVisuals = flower.reduced (5);
-
-        auto animationArea = flowerVisuals.removeFromTop (
-            juce::roundToInt (static_cast<float> (flowerVisuals.getHeight()) * 0.59f));
-        flowerAnimation.setBounds (animationArea.reduced (2));
-        flowerVisuals.removeFromTop (6);
-        flowerWaveform.setBounds (flowerVisuals.reduced (2));
-    }
-
-    flowerControls = flowerControls.reduced (8, 2);
-    const int flowerRowH = juce::jmax (1, flowerControls.getHeight() / 4);
-
-    const auto placePair = [] (juce::Rectangle<int> row, LabelledKnob& a, LabelledKnob& b)
-    {
-        const int half = row.getWidth() / 2;
-        a.setBounds (row.removeFromLeft (half).reduced (3));
-        b.setBounds (row.reduced (3));
-    };
-
-    placePair (flowerControls.removeFromTop (flowerRowH), flowerPosition, flowerSize);
-    placePair (flowerControls.removeFromTop (flowerRowH), flowerDensity, flowerSpread);
-    placePair (flowerControls.removeFromTop (flowerRowH), flowerHold, flowerPitch);
-    placePair (flowerControls, flowerMix, flowerFeedback);
-
-    synthPanel.setBounds (flowerPanel.getBounds());
-    auto synth = synthPanel.getLocalBounds().reduced (14);
-    auto synthHeader = synth.removeFromTop (44);
-    closeSynthButton.setBounds (synthHeader.removeFromRight (64).reduced (2, 7));
-    synth.removeFromTop (8);
-
-    auto keyboardArea = synth.removeFromBottom (juce::jlimit (72, 120, synth.getHeight() / 4));
-    keyboard.setBounds (keyboardArea.reduced (4, 6));
-    synth.removeFromBottom (8);
-
-    const int rowH = juce::jmax (1, synth.getHeight() / 3);
-    auto row1 = synth.removeFromTop (rowH);
-    auto row2 = synth.removeFromTop (rowH);
-    auto row3 = synth;
-
-    const auto placeThree = [] (juce::Rectangle<int> row,
-                                LabelledKnob& a, LabelledKnob& b, LabelledKnob& c)
-    {
-        const int third = juce::jmax (1, row.getWidth() / 3);
-        a.setBounds (row.removeFromLeft (third).reduced (4));
-        b.setBounds (row.removeFromLeft (third).reduced (4));
-        c.setBounds (row.reduced (4));
-    };
-
-    placeThree (row1, synthLevel, synthAttack, synthDecay);
-    placeThree (row2, synthSustain, synthRelease, synthCutoff);
-
-    const int third = juce::jmax (1, row3.getWidth() / 3);
-    synthResonance.setBounds (row3.removeFromLeft (third).reduced (4));
-    synthLfoRate.setBounds (row3.removeFromLeft (third).reduced (4));
-
-    auto lfoCell = row3.reduced (4);
-    auto lfoTop = lfoCell.removeFromTop (lfoCell.getHeight() * 2 / 3);
-    synthLfoDepth.setBounds (lfoTop);
-    synthLfoTargetLabel.setBounds (lfoCell.removeFromTop (14));
-    synthLfoTarget.setBounds (lfoCell.reduced (3, 1));
+    auto root = footer.removeFromRight (92);
+    rootLabel.setBounds (root.removeFromTop (18));
+    rootBox.setBounds (root.reduced (4, 9));
 }
 
-void FlowerStandaloneAudioProcessorEditor::timerCallback()
+void FlowerStandaloneAudioProcessorEditor::updatePadReadout()
 {
-   #if JUCE_ANDROID
-    // Let StandaloneFilterWindow finish attaching a visible Android window
-    // before doing any PNG decoding on the message thread. This avoids both
-    // the pre-window startup stall and the unsafe detached-thread decoder path.
-    if (! androidVisualLoadAttempted)
-    {
-        ++androidStartupTicks;
+    const auto x = performancePad.getXValue();
+    const auto y = performancePad.getYValue();
 
-        if (androidStartupTicks >= 4 && isShowing())
-        {
-            androidVisualLoadAttempted = true;
-
-            const auto atlas = decodeAndroidPngWithStb (
-                BinaryData::flower_embedded_atlas_png,
-                static_cast<size_t> (BinaryData::flower_embedded_atlas_pngSize));
-            const bool atlasLoaded = flowerAnimation.loadDecodedAtlas (atlas);
-
-            if (atlasLoaded)
-            {
-                const auto walkStrip = decodeAndroidPngWithStb (
-                    BinaryData::flower_actor_v3_walk_student01_png,
-                    static_cast<size_t> (BinaryData::flower_actor_v3_walk_student01_pngSize));
-                flowerAnimation.loadDecodedHighResWalkStrip (walkStrip, 0, true);
-            }
-        }
-    }
-   #endif
-
-    std::array<float, FlowerStandaloneAudioProcessor::flowerWaveformBins> waveform {};
-    std::array<float, FlowerStandaloneAudioProcessor::flowerGrainCount> grainPositions {};
-
-    processor.getFlowerWaveform (waveform);
-    for (int i = 0; i < FlowerStandaloneAudioProcessor::flowerGrainCount; ++i)
-        grainPositions[static_cast<size_t> (i)] = processor.getFlowerGrainPosition (i);
-
-    auto& state = processor.getAPVTS();
-    const float spread = state.getRawParameterValue (ParamIDs::flowerSpread)->load();
-    const float size = state.getRawParameterValue (ParamIDs::flowerSize)->load();
-    const float density = state.getRawParameterValue (ParamIDs::flowerDensity)->load();
-    const float hold = state.getRawParameterValue (ParamIDs::flowerHold)->load();
-    const float pitch = state.getRawParameterValue (ParamIDs::flowerPitch)->load();
-    const float mix = state.getRawParameterValue (ParamIDs::flowerMix)->load();
-    const float feedback = state.getRawParameterValue (ParamIDs::flowerFeedback)->load();
-    const bool reverse = state.getRawParameterValue (ParamIDs::flowerReverse)->load() > 0.5f;
-
-    flowerWaveform.setState (
-        waveform,
-        processor.getFlowerLoopValidFraction(),
-        processor.getFlowerRecordProgress(),
-        processor.isFlowerRecording(),
-        processor.getFlowerBasePosition(),
-        grainPositions,
-        processor.getFlowerActiveGrains(),
-        spread,
-        size);
-
-    flowerAnimation.setState (
-        density,
-        processor.getFlowerBasePosition(),
-        spread,
-        hold,
-        size,
-        pitch,
-        mix,
-        feedback,
-        reverse,
-        processor.isFlowerRecording(),
-        processor.getFlowerRecordProgress(),
-        processor.hasFlowerLoop());
+    padReadout.setText (
+        performancePad.getPatternName()
+        + "   X " + juce::String (x, 2)
+        + "   FX " + juce::String (y, 2),
+        juce::dontSendNotification);
 }
