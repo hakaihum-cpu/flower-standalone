@@ -18,6 +18,7 @@ REQUIRED = [
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.h",
     "Source/PluginEditor.cpp",
+    "Source/FlowerFrameData.h",
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
     "scripts/patch_android_native_parallelism.py",
@@ -150,36 +151,50 @@ for forbidden_visible_control in [
     if forbidden_visible_control in editor_header:
         fail(f"fullscreen XY MVP contains visible control declaration: {forbidden_visible_control}")
 
-for required_visual_ui in [
+for forbidden_old_visual in [
     "BinaryData::flower_xy_source_exact_jpg",
-    "BinaryData::flower_xy_source_exact_jpgSize",
-    "tileColumns = 10",
-    "tileRows = 10",
-    "(1.0f - yValue)",
-    "VISUAL ASSET ERROR",
+    "tileSheetImage",
+    "xStarts[tileColumns]",
+    "xEnds[tileColumns]",
+    "yStarts[tileRows]",
+    "yEnds[tileRows]",
+]:
+    if forbidden_old_visual in editor_text or forbidden_old_visual in editor_header:
+        fail(f"old contact-sheet path still present in editor: {forbidden_old_visual}")
+
+frame_data_text = (ROOT / "Source/FlowerFrameData.h").read_text(encoding="utf-8")
+
+for required_frame_data in [
+    "frameCount = 100",
+    "decodedPayloadSize = 1138410",
+    "encodedPayload",
+    "offsets",
+    "sizes",
+]:
+    if required_frame_data not in frame_data_text:
+        fail(f"exact 100-frame payload contract missing: {required_frame_data}")
+
+for required_visual_ui in [
+    '#include "FlowerFrameData.h"',
+    "juce::Base64::convertFromBase64",
+    "FlowerFrameData::encodedPayload",
+    "FlowerFrameData::decodedPayloadSize",
+    "FlowerFrameData::frameCount",
+    "FlowerFrameData::offsets",
+    "FlowerFrameData::sizes",
+    "std::array<juce::Image, 100> frameImages",
+    "frameImages[index]",
+    "visualTileIndex = row * tileColumns + column",
+    "frameImages[static_cast<size_t> (visualTileIndex)]",
+    "0, 0, frame.getWidth(), frame.getHeight()",
     "highResamplingQuality",
     "physicalPointerVisible",
     "tileCount = tileColumns * tileRows",
     "static_assert (tileCount == 100",
-    "visualTileIndex = row * tileColumns + column",
-    "imageWidth != 1191 || imageHeight != 896",
-    "xStarts[tileColumns]",
-    "{ 0, 120, 240, 360, 480, 600, 720, 840, 960, 1080 }",
-    "xEnds[tileColumns]",
-    "{ 120, 240, 360, 480, 600, 720, 840, 960, 1080, 1191 }",
-    "yStarts[tileRows]",
-    "{ 0, 86, 174, 263, 355, 449, 544, 640, 733, 811 }",
-    "yEnds[tileRows]",
-    "{ 86, 174, 263, 355, 449, 544, 640, 733, 811, 896 }",
-    
-    
-    
-    
-    "0, 0, getWidth(), getHeight()",
     "onTapStopRequested",
 ]:
     if required_visual_ui not in editor_text and required_visual_ui not in editor_header:
-        fail(f"XY tile visual contract missing: {required_visual_ui}")
+        fail(f"XY direct-frame visual contract missing: {required_visual_ui}")
 
 for required_xy_ui in [
     "constexpr int canvasSize = 720",
@@ -294,12 +309,12 @@ if any(position < 0 for position in order) or order != sorted(order):
 print("[PASS] Flower XY standalone static dependency audit")
 print("[PASS] animation code/resources excluded from generated MVP target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
-print("[PASS] 10x10 XY contact-sheet visual contract present")
-print("[PASS] exact original contact sheet is tracked directly and embedded by Projucer")
-print("[PASS] user-cut frame dimensions map exactly to contiguous source cells")
-print("[PASS] frame 0 source crop is exactly [0,120) x [0,86)")
-print("[PASS] runtime performs one source crop only; no intermediate square atlas")
-print("[PASS] all 100 contact-sheet cells are mapped with no skip list")
+print("[PASS] exact 100 user-cut JPEG frame bank embedded")
+print("[PASS] runtime does not use the old contact sheet")
+print("[PASS] selected pre-cut JPEG is loaded as an independent frame")
+print("[PASS] source frame is drawn in full with no coordinate crop")
+print("[PASS] runtime performs no source crop and no atlas lookup")
+print("[PASS] all 100 direct JPEG frames are addressable with no skip list")
 print("[PASS] dpad XY latch / tap-stop / pointer contract present")
 print("[PASS] A/B/X/Y/L/R gamepad assignment contract present")
 print("[PASS] SELECT CONFIG screen contract present")
