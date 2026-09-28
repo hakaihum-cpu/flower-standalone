@@ -202,7 +202,7 @@ for required_xy_ui in [
     "toggleDelay",
     "toggleGranular",
 ]:
-    if required_xy_ui not in editor_text:
+    if required_xy_ui not in editor_text and required_xy_ui not in editor_header:
         fail(f"XY fullscreen/physical-key contract missing: {required_xy_ui}")
 
 for required_android_startup in [
