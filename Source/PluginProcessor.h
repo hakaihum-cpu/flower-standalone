@@ -51,6 +51,13 @@ public:
     void cycleFlowerTransport() noexcept;
     void stopPerformance() noexcept;
 
+    int getConfiguredRoot() const noexcept;
+    int getConfiguredScale() const noexcept;
+    bool getDefaultEffectsEnabled() const noexcept;
+    void setConfiguredRoot (int noteClass);
+    void setConfiguredScale (int scaleIndex);
+    void setDefaultEffectsEnabled (bool enabled);
+
     void getFlowerWaveform (std::array<float, flowerWaveformBins>& destination) const noexcept;
     bool hasFlowerLoop() const noexcept { return flowerLoopLengthSamples.load (std::memory_order_relaxed) > 0; }
     bool isFlowerRecording() const noexcept { return flowerRecordingActive.load (std::memory_order_relaxed); }
