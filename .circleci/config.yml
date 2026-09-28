@@ -242,8 +242,10 @@ jobs:
             echo "Gradle exit code: $STATUS"
 
             if [ "$STATUS" != "0" ] && [ -f android-artifact/gradle-build.log ]; then
+              echo "===== Gradle failure highlights ====="
+              grep -nE '(^|[^A-Za-z])(error:|fatal error:|FAILURE:|FAILED|Exception|undefined reference|ninja: build stopped|Execution failed for task)'                 android-artifact/gradle-build.log | tail -n 120 || true
               echo "===== Gradle failure log tail ====="
-              tail -n 250 android-artifact/gradle-build.log || true
+              tail -n 300 android-artifact/gradle-build.log || true
             fi
 
             exit "$STATUS"
