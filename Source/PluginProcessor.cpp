@@ -179,6 +179,8 @@ void FlowerStandaloneAudioProcessor::resetFlowerState() noexcept
     flowerBasePosition.store (0.0f, std::memory_order_relaxed);
     flowerActiveGrains.store (0, std::memory_order_relaxed);
     flowerClearRequested.store (false, std::memory_order_relaxed);
+    flowerTransportRequest.store (0, std::memory_order_relaxed);
+    flowerTransportState.store (0, std::memory_order_relaxed);
 
     for (auto& bin : flowerWaveform)
         bin.store (0.0f, std::memory_order_relaxed);
@@ -230,6 +232,48 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
         resetFlowerState();
     }
 
+    int transportState = flowerTransportState.load (std::memory_order_relaxed);
+    const int transportRequest =
+        flowerTransportRequest.exchange (0, std::memory_order_acq_rel);
+
+    if (transportRequest == 1)
+    {
+        if (transportState == 0) // EMPTY -> REC
+        {
+            flowerLoopBuffer.clear();
+            flowerRecordWritePosition = 0;
+            flowerLoopReadLength = 0;
+            flowerLoopLengthSamples.store (0, std::memory_order_relaxed);
+            flowerLoopValidFraction.store (0.0f, std::memory_order_relaxed);
+            flowerRecordProgress.store (0.0f, std::memory_order_relaxed);
+            flowerAnchorsInitialised = false;
+            for (auto& bin : flowerWaveform)
+                bin.store (0.0f, std::memory_order_relaxed);
+            transportState = 1;
+        }
+        else if (transportState == 1) // REC -> STOP
+        {
+            transportState =
+                flowerLoopLengthSamples.load (std::memory_order_relaxed) > 64 ? 2 : 0;
+            flowerRecordWritePosition = 0;
+        }
+        else if (transportState == 2) // STOP -> OVERDUB
+        {
+            if (flowerLoopLengthSamples.load (std::memory_order_relaxed) > 64)
+            {
+                transportState = 3;
+                flowerRecordWritePosition = 0;
+            }
+        }
+        else if (transportState == 3) // OVERDUB -> STOP
+        {
+            transportState = 2;
+            flowerRecordWritePosition = 0;
+        }
+
+        flowerTransportState.store (transportState, std::memory_order_relaxed);
+    }
+
     const bool performanceGate = isPerformanceGateOpen();
     const float performancePadX = performanceX.load (std::memory_order_relaxed);
     const float performancePadY = performanceY.load (std::memory_order_relaxed);
@@ -238,10 +282,15 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
 
     const bool legacyEnabled =
         apvts.getRawParameterValue (ParamIDs::flowerEnabled)->load() > 0.5f;
-    const bool enabled = legacyEnabled || (performanceGate && performancePadY > 0.025f);
+    const bool granularEnabled =
+        performanceGranularEnabled.load (std::memory_order_relaxed);
+    const bool enabled =
+        legacyEnabled || (granularEnabled && performanceGate && performancePadY > 0.025f);
 
-    flowerRecordingActive.store (false, std::memory_order_relaxed);
-    flowerOverdubActive = false;
+    flowerRecordingActive.store (
+        transportState == 1 || transportState == 3,
+        std::memory_order_relaxed);
+    flowerOverdubActive = transportState == 3;
 
     const float positionTarget = performanceGate
         ? performancePadX
@@ -301,30 +350,68 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
         const float dryL = outL[i];
         const float dryR = outR != nullptr ? outR[i] : dryL;
 
-        const int writePos = flowerRecordWritePosition;
-        loopL[writePos] = dryL;
-        loopR[writePos] = dryR;
-
-        const int waveformBin = juce::jlimit (
-            0, flowerWaveformBins - 1,
-            static_cast<int> ((static_cast<int64_t> (writePos) * flowerWaveformBins) / capacity));
-        const float magnitude = juce::jlimit (
-            0.0f, 1.0f, juce::jmax (std::abs (dryL), std::abs (dryR)));
-        flowerWaveform[static_cast<size_t> (waveformBin)].store (magnitude, std::memory_order_relaxed);
-
-        flowerRecordWritePosition = (flowerRecordWritePosition + 1) % capacity;
-
         int loopLength = flowerLoopLengthSamples.load (std::memory_order_relaxed);
-        if (loopLength < capacity)
-            ++loopLength;
-        flowerLoopLengthSamples.store (loopLength, std::memory_order_relaxed);
-        flowerLoopReadLength = loopLength;
+
+        if (transportState == 1)
+        {
+            const int writePos = flowerRecordWritePosition;
+            loopL[writePos] = dryL;
+            loopR[writePos] = dryR;
+
+            const int waveformBin = juce::jlimit (
+                0, flowerWaveformBins - 1,
+                static_cast<int> (
+                    (static_cast<int64_t> (writePos) * flowerWaveformBins) / capacity));
+            flowerWaveform[static_cast<size_t> (waveformBin)].store (
+                juce::jlimit (0.0f, 1.0f,
+                    juce::jmax (std::abs (dryL), std::abs (dryR))),
+                std::memory_order_relaxed);
+
+            ++flowerRecordWritePosition;
+            loopLength = juce::jmin (capacity, juce::jmax (loopLength, flowerRecordWritePosition));
+            flowerLoopLengthSamples.store (loopLength, std::memory_order_relaxed);
+            flowerLoopReadLength = loopLength;
+
+            if (flowerRecordWritePosition >= capacity)
+            {
+                flowerRecordWritePosition = 0;
+                transportState = 2;
+                flowerTransportState.store (transportState, std::memory_order_relaxed);
+                flowerRecordingActive.store (false, std::memory_order_relaxed);
+            }
+        }
+        else if (transportState == 3 && loopLength > 64)
+        {
+            const int writePos = flowerRecordWritePosition % loopLength;
+
+            // Stable overdub: retain most of the previous loop while adding
+            // the live synth at a lower gain so repeated passes do not run away.
+            loopL[writePos] = loopL[writePos] * 0.82f + dryL * 0.58f;
+            loopR[writePos] = loopR[writePos] * 0.82f + dryR * 0.58f;
+
+            const int waveformBin = juce::jlimit (
+                0, flowerWaveformBins - 1,
+                static_cast<int> (
+                    (static_cast<int64_t> (writePos) * flowerWaveformBins)
+                    / juce::jmax (1, loopLength)));
+            flowerWaveform[static_cast<size_t> (waveformBin)].store (
+                juce::jlimit (0.0f, 1.0f,
+                    juce::jmax (std::abs (loopL[writePos]), std::abs (loopR[writePos]))),
+                std::memory_order_relaxed);
+
+            flowerRecordWritePosition = (writePos + 1) % loopLength;
+        }
+
+        loopLength = flowerLoopLengthSamples.load (std::memory_order_relaxed);
 
         flowerLoopValidFraction.store (
             static_cast<float> (loopLength) / static_cast<float> (capacity),
             std::memory_order_relaxed);
         flowerRecordProgress.store (
-            static_cast<float> (flowerRecordWritePosition) / static_cast<float> (capacity),
+            loopLength > 0
+                ? static_cast<float> (flowerRecordWritePosition)
+                    / static_cast<float> (juce::jmax (1, loopLength))
+                : 0.0f,
             std::memory_order_relaxed);
 
         if (! enabled || loopLength <= 64)
@@ -333,30 +420,28 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
             continue;
         }
 
-        const int oldest = loopLength >= capacity ? flowerRecordWritePosition : 0;
-
         const auto readLinear = [&] (const float* data, float logicalPosition)
         {
             logicalPosition = wrapPosition (logicalPosition, loopLength);
-            const int i0 = juce::jlimit (0, loopLength - 1, static_cast<int> (logicalPosition));
+            const int i0 = juce::jlimit (
+                0, loopLength - 1, static_cast<int> (logicalPosition));
             const int i1 = (i0 + 1) % loopLength;
             const float frac = logicalPosition - static_cast<float> (i0);
-
-            const int p0 = (oldest + i0) % capacity;
-            const int p1 = (oldest + i1) % capacity;
-            return data[p0] + (data[p1] - data[p0]) * frac;
+            return data[i0] + (data[i1] - data[i0]) * frac;
         };
 
         const float position = flowerPositionSmoothed.getNextValue();
         const float sizeSeconds = flowerSizeSmoothed.getNextValue();
         const float density = flowerDensitySmoothed.getNextValue();
         const float spread = flowerSpreadSmoothed.getNextValue();
-        const float hold = flowerHoldSmoothed.getNextValue();
+        const float holdAmount = flowerHoldSmoothed.getNextValue();
         const float pitch = flowerPitchSmoothed.getNextValue();
         const float mix = flowerMixSmoothed.getNextValue();
 
-        const int activeGrains = juce::jlimit (1, flowerGrainCount,
-            1 + juce::roundToInt (density * static_cast<float> (flowerGrainCount - 1)));
+        const int activeGrains = juce::jlimit (
+            1, flowerGrainCount,
+            1 + juce::roundToInt (
+                density * static_cast<float> (flowerGrainCount - 1)));
         flowerActiveGrains.store (activeGrains, std::memory_order_relaxed);
 
         const float grainSamples = juce::jlimit (
@@ -364,7 +449,7 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
             sizeSeconds * static_cast<float> (currentSampleRate));
         const float pitchRatio = std::pow (2.0f, pitch / 12.0f);
         const float direction = reverse ? -1.0f : 1.0f;
-        const int repeats = 1 + juce::roundToInt (hold * 15.0f);
+        const int repeats = 1 + juce::roundToInt (holdAmount * 15.0f);
         const float centreSample = position * static_cast<float> (loopLength - 1);
         const float grainTravel = direction * grainSamples * pitchRatio;
 
@@ -375,7 +460,8 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
                 const float scatter = nextFlowerRandomBipolar()
                                     * spread * 0.5f * static_cast<float> (loopLength);
                 flowerAnchor[static_cast<size_t> (grain)] =
-                    wrapPosition (centreSample + scatter - 0.5f * grainTravel, loopLength);
+                    wrapPosition (
+                        centreSample + scatter - 0.5f * grainTravel, loopLength);
             }
             flowerAnchorsInitialised = true;
         }
@@ -389,19 +475,23 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
         for (int grain = 0; grain < activeGrains; ++grain)
         {
             auto& phaseValue = flowerPhase[static_cast<size_t> (grain)];
-            const float window = std::sin (juce::MathConstants<float>::pi * phaseValue);
+            const float window =
+                std::sin (juce::MathConstants<float>::pi * phaseValue);
             const float weight = window * window;
-            const float readPos = flowerAnchor[static_cast<size_t> (grain)]
-                                + direction * phaseValue * grainSamples * pitchRatio;
+            const float readPos =
+                flowerAnchor[static_cast<size_t> (grain)]
+                + direction * phaseValue * grainSamples * pitchRatio;
 
             wetL += readLinear (loopL, readPos) * weight;
             wetR += readLinear (loopR, readPos) * weight;
             weightSum += weight;
 
-            const float normalizedRead = wrapPosition (readPos, loopLength)
-                                       / static_cast<float> (juce::jmax (1, loopLength - 1));
+            const float normalizedRead =
+                wrapPosition (readPos, loopLength)
+                / static_cast<float> (juce::jmax (1, loopLength - 1));
             flowerGrainPositions[static_cast<size_t> (grain)].store (
-                juce::jlimit (0.0f, 1.0f, normalizedRead), std::memory_order_relaxed);
+                juce::jlimit (0.0f, 1.0f, normalizedRead),
+                std::memory_order_relaxed);
 
             phaseValue += 1.0f / grainSamples;
             if (phaseValue >= 1.0f)
@@ -414,15 +504,19 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
                 {
                     repeat = 0;
                     const float scatter = nextFlowerRandomBipolar()
-                                        * spread * 0.5f * static_cast<float> (loopLength);
+                                        * spread * 0.5f
+                                        * static_cast<float> (loopLength);
                     flowerAnchor[static_cast<size_t> (grain)] =
-                        wrapPosition (centreSample + scatter - 0.5f * grainTravel, loopLength);
+                        wrapPosition (
+                            centreSample + scatter - 0.5f * grainTravel,
+                            loopLength);
                 }
             }
         }
 
         for (int grain = activeGrains; grain < flowerGrainCount; ++grain)
-            flowerGrainPositions[static_cast<size_t> (grain)].store (position, std::memory_order_relaxed);
+            flowerGrainPositions[static_cast<size_t> (grain)].store (
+                position, std::memory_order_relaxed);
 
         if (weightSum > 0.0001f)
         {
@@ -435,6 +529,7 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
             outR[i] = dryR + (wetR - dryR) * mix;
     }
 }
+
 
 void FlowerStandaloneAudioProcessor::setPerformancePad (float x,
                                                               float y,
@@ -475,7 +570,28 @@ void FlowerStandaloneAudioProcessor::setPerformanceScale (int scaleIndex) noexce
 
 void FlowerStandaloneAudioProcessor::setPerformanceBpm (float bpm) noexcept
 {
-    performanceBpm.store (juce::jlimit (50.0f, 190.0f, bpm), std::memory_order_relaxed);
+    performanceBpm.store (juce::jlimit (50.0f, 200.0f, bpm), std::memory_order_relaxed);
+}
+
+void FlowerStandaloneAudioProcessor::setPerformanceArpEnabled (bool enabled) noexcept
+{
+    performanceArpEnabled.store (enabled, std::memory_order_release);
+    performanceStopRequested.store (true, std::memory_order_release);
+}
+
+void FlowerStandaloneAudioProcessor::setPerformanceDelayEnabled (bool enabled) noexcept
+{
+    performanceDelayEnabled.store (enabled, std::memory_order_release);
+}
+
+void FlowerStandaloneAudioProcessor::setPerformanceGranularEnabled (bool enabled) noexcept
+{
+    performanceGranularEnabled.store (enabled, std::memory_order_release);
+}
+
+void FlowerStandaloneAudioProcessor::cycleFlowerTransport() noexcept
+{
+    flowerTransportRequest.store (1, std::memory_order_release);
 }
 
 void FlowerStandaloneAudioProcessor::stopPerformance() noexcept
@@ -601,7 +717,8 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& 
     if (performanceStopRequested.exchange (false, std::memory_order_acq_rel))
     {
         if (performanceCurrentNote >= 0)
-            midi.addEvent (juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
+            midi.addEvent (
+                juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
 
         performanceCurrentNote = -1;
         performanceSamplesUntilStep = 0.0;
@@ -611,9 +728,37 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& 
     if (! isPerformanceGateOpen())
     {
         if (performanceCurrentNote >= 0)
-            midi.addEvent (juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
+            midi.addEvent (
+                juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
 
         performanceCurrentNote = -1;
+        performanceSamplesUntilStep = 0.0;
+        performanceStep = 0;
+        return;
+    }
+
+    const float velocity = juce::jlimit (
+        0.25f, 1.0f,
+        0.58f + performanceY.load (std::memory_order_relaxed) * 0.32f);
+
+    if (! performanceArpEnabled.load (std::memory_order_acquire))
+    {
+        // ARP OFF keeps the instrument playable as one sustained mono note.
+        const int desiredNote = juce::jlimit (
+            24, 96, 48 + performanceRootClass.load (std::memory_order_relaxed));
+
+        if (performanceCurrentNote != desiredNote)
+        {
+            if (performanceCurrentNote >= 0)
+                midi.addEvent (
+                    juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
+
+            performanceCurrentNote = desiredNote;
+            midi.addEvent (
+                juce::MidiMessage::noteOn (1, performanceCurrentNote, velocity),
+                0);
+        }
+
         performanceSamplesUntilStep = 0.0;
         performanceStep = 0;
         return;
@@ -623,16 +768,16 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& 
     const int patternIndex = juce::jlimit (
         0, 7, static_cast<int> (std::floor (x * 8.0f)));
 
-    static constexpr int stepsPerBeatTable[] { 1, 2, 4, 8 };
-    const int rateIndex = juce::jlimit (
-        0, 3, static_cast<int> (std::floor (x * 4.0f)));
-    const int stepsPerBeat = stepsPerBeatTable[rateIndex];
+    // X selects the arp algorithm only.  L/R BPM is now the sole speed
+    // control, so subdivision is fixed at eighth-note steps.
+    constexpr int stepsPerBeat = 2;
 
     const double bpm = static_cast<double> (
         performanceBpm.load (std::memory_order_relaxed));
-    const double stepSamples = currentSampleRate * 60.0
-                             / juce::jmax (1.0, bpm)
-                             / static_cast<double> (stepsPerBeat);
+    const double stepSamples =
+        currentSampleRate * 60.0
+        / juce::jmax (1.0, bpm)
+        / static_cast<double> (stepsPerBeat);
 
     double eventPosition = performanceSamplesUntilStep;
 
@@ -647,19 +792,19 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& 
                 sampleOffset);
 
         performanceCurrentNote = nextPerformanceNote (patternIndex);
-        const float velocity = juce::jlimit (
-            0.25f, 1.0f,
-            0.58f + performanceY.load (std::memory_order_relaxed) * 0.32f);
 
         midi.addEvent (
-            juce::MidiMessage::noteOn (1, performanceCurrentNote, velocity),
+            juce::MidiMessage::noteOn (
+                1, performanceCurrentNote, velocity),
             sampleOffset);
 
         eventPosition += stepSamples;
     }
 
-    performanceSamplesUntilStep = eventPosition - static_cast<double> (numSamples);
+    performanceSamplesUntilStep =
+        eventPosition - static_cast<double> (numSamples);
 }
+
 
 void FlowerStandaloneAudioProcessor::processPerformanceDelay (
     juce::AudioBuffer<float>& buffer)
@@ -673,6 +818,8 @@ void FlowerStandaloneAudioProcessor::processPerformanceDelay (
         return;
 
     const bool gate = isPerformanceGateOpen();
+    const bool delayEnabled =
+        performanceDelayEnabled.load (std::memory_order_acquire);
     const float x = performanceX.load (std::memory_order_relaxed);
     const float y = performanceY.load (std::memory_order_relaxed);
     const float speed = performanceSpeed.load (std::memory_order_relaxed);
@@ -690,9 +837,13 @@ void FlowerStandaloneAudioProcessor::processPerformanceDelay (
     // adjacent delay samples instead.
     performanceDelaySamplesSmoothed.setTargetValue (targetDelaySamples);
     performanceDelayFeedbackSmoothed.setTargetValue (
-        gate ? juce::jlimit (0.0f, 0.65f, 0.10f + y * 0.55f) : 0.0f);
+        gate && delayEnabled
+            ? juce::jlimit (0.0f, 0.65f, 0.10f + y * 0.55f)
+            : 0.0f);
     performanceDelayWetSmoothed.setTargetValue (
-        gate ? juce::jlimit (0.0f, 0.40f, 0.02f + y * 0.38f) : 0.0f);
+        gate && delayEnabled
+            ? juce::jlimit (0.0f, 0.40f, 0.02f + y * 0.38f)
+            : 0.0f);
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
