@@ -14,6 +14,17 @@ constexpr const char* patternNames[]
     "SKIP", "OCTAVE", "RANDOM", "CHAOS"
 };
 
+constexpr const char* rootNames[]
+{
+    "C", "C#", "D", "D#", "E", "F",
+    "F#", "G", "G#", "A", "A#", "B"
+};
+
+constexpr const char* scaleNames[]
+{
+    "MINOR PENT", "NATURAL MINOR", "MAJOR", "DORIAN", "RANDOM"
+};
+
 }
 
 PerformancePadComponent::PerformancePadComponent()
@@ -234,6 +245,178 @@ void PerformancePadComponent::notify()
         onPadChanged (xValue, yValue, speedValue, horizontalDirection, active);
 }
 
+juce::Rectangle<int> ConfigScreenComponent::getRowBounds (int row) const
+{
+    constexpr int rowHeight = 104;
+    constexpr int firstY = 188;
+    return { 72, firstY + row * rowHeight, getWidth() - 144, 78 };
+}
+
+void ConfigScreenComponent::setValues (int newRootKey,
+                                       int newScale,
+                                       bool newEffectsEnabled)
+{
+    rootKey = juce::jlimit (0, 11, newRootKey);
+    scaleIndex = juce::jlimit (0, 4, newScale);
+    effectsEnabled = newEffectsEnabled;
+    repaint();
+}
+
+void ConfigScreenComponent::moveSelection (int delta)
+{
+    selectedRow = (selectedRow + delta) % 3;
+    if (selectedRow < 0)
+        selectedRow += 3;
+    repaint();
+}
+
+void ConfigScreenComponent::adjustSelected (int delta)
+{
+    if (selectedRow == 0)
+    {
+        rootKey = (rootKey + delta) % 12;
+        if (rootKey < 0)
+            rootKey += 12;
+
+        if (onRootChanged)
+            onRootChanged (rootKey);
+    }
+    else if (selectedRow == 1)
+    {
+        scaleIndex = (scaleIndex + delta) % 5;
+        if (scaleIndex < 0)
+            scaleIndex += 5;
+
+        if (onScaleChanged)
+            onScaleChanged (scaleIndex);
+    }
+    else
+    {
+        effectsEnabled = ! effectsEnabled;
+
+        if (onEffectsChanged)
+            onEffectsChanged (effectsEnabled);
+    }
+
+    repaint();
+}
+
+void ConfigScreenComponent::activateSelected()
+{
+    adjustSelected (1);
+}
+
+void ConfigScreenComponent::notifyCurrentRow()
+{
+    if (selectedRow == 0)
+    {
+        if (onRootChanged)
+            onRootChanged (rootKey);
+    }
+    else if (selectedRow == 1)
+    {
+        if (onScaleChanged)
+            onScaleChanged (scaleIndex);
+    }
+    else
+    {
+        if (onEffectsChanged)
+            onEffectsChanged (effectsEnabled);
+    }
+}
+
+void ConfigScreenComponent::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colour (0xff0b0b0a));
+
+    g.setColour (juce::Colour (0xffe1d7ba));
+    g.setFont (juce::FontOptions (34.0f).withStyle ("Bold"));
+    g.drawText ("CONFIG", 72, 64, getWidth() - 144, 54,
+                juce::Justification::centredLeft);
+
+    g.setColour (juce::Colour (0xff8f8776));
+    g.setFont (juce::FontOptions (16.0f));
+    g.drawText ("SELECT: BACK    UP/DOWN: ITEM    LEFT/RIGHT: CHANGE",
+                72, 124, getWidth() - 144, 34,
+                juce::Justification::centredLeft);
+
+    for (int row = 0; row < 3; ++row)
+    {
+        const auto bounds = getRowBounds (row);
+        const bool selected = row == selectedRow;
+
+        g.setColour (selected
+            ? juce::Colour (0xffd8ccb0)
+            : juce::Colour (0xff292722));
+        g.fillRoundedRectangle (bounds.toFloat(), 8.0f);
+
+        g.setColour (selected
+            ? juce::Colour (0xff11110f)
+            : juce::Colour (0xffd7ceb8));
+        g.setFont (juce::FontOptions (21.0f).withStyle ("Bold"));
+
+        juce::String label;
+        juce::String value;
+
+        if (row == 0)
+        {
+            label = "ROOT KEY";
+            value = rootNames[rootKey];
+        }
+        else if (row == 1)
+        {
+            label = "SCALE";
+            value = scaleNames[scaleIndex];
+        }
+        else
+        {
+            label = "DEFAULT EFFECT";
+            value = effectsEnabled ? "ON" : "OFF";
+        }
+
+        g.drawText (label,
+                    bounds.withTrimmedRight (260),
+                    juce::Justification::centredLeft);
+        g.drawText (value,
+                    bounds.withTrimmedLeft (260),
+                    juce::Justification::centredRight);
+    }
+
+    g.setColour (juce::Colour (0xff77705f));
+    g.setFont (juce::FontOptions (15.0f));
+    g.drawFittedText (
+        "DEFAULT EFFECT applies to DELAY and GRANULAR at startup. "
+        "A / Y can still toggle them independently during performance.",
+        72, 530, getWidth() - 144, 80,
+        juce::Justification::topLeft, 3);
+}
+
+void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
+{
+    for (int row = 0; row < 3; ++row)
+    {
+        const auto bounds = getRowBounds (row);
+        if (! bounds.contains (e.getPosition()))
+            continue;
+
+        selectedRow = row;
+
+        if (row == 2)
+        {
+            adjustSelected (1);
+        }
+        else
+        {
+            const int delta = e.position.x < static_cast<float> (bounds.getCentreX())
+                ? -1
+                : 1;
+            adjustSelected (delta);
+        }
+
+        return;
+    }
+}
+
 FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     FlowerStandaloneAudioProcessor& p)
     : juce::AudioProcessorEditor (&p),
@@ -266,6 +449,14 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
    #endif
 
     addAndMakeVisible (performancePad);
+    addAndMakeVisible (configScreen);
+    configScreen.setVisible (false);
+
+    rootClass = processor.getConfiguredRoot();
+    scaleIndex = processor.getConfiguredScale();
+    delayEnabled = processor.getDefaultEffectsEnabled();
+    granularEnabled = delayEnabled;
+    configScreen.setValues (rootClass, scaleIndex, delayEnabled);
 
     performancePad.onPadChanged =
         [this] (float x, float y, float speed, float horizontalDirection, bool active)
@@ -288,8 +479,30 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             stopAll();
         };
 
-    processor.setPerformanceRoot (rootClass);
-    processor.setPerformanceScale (scaleIndex);
+    configScreen.onRootChanged =
+        [this] (int value)
+        {
+            rootClass = value;
+            processor.setConfiguredRoot (rootClass);
+        };
+
+    configScreen.onScaleChanged =
+        [this] (int value)
+        {
+            scaleIndex = value;
+            processor.setConfiguredScale (scaleIndex);
+        };
+
+    configScreen.onEffectsChanged =
+        [this] (bool enabled)
+        {
+            delayEnabled = enabled;
+            granularEnabled = enabled;
+            processor.setDefaultEffectsEnabled (enabled);
+        };
+
+    processor.setConfiguredRoot (rootClass);
+    processor.setConfiguredScale (scaleIndex);
     processor.setPerformanceBpm (bpm);
     processor.setPerformanceHold (hold);
     processor.setPerformanceArpEnabled (arpEnabled);
@@ -314,6 +527,7 @@ void FlowerStandaloneAudioProcessorEditor::paint (juce::Graphics& g)
 void FlowerStandaloneAudioProcessorEditor::resized()
 {
     performancePad.setBounds (getLocalBounds());
+    configScreen.setBounds (getLocalBounds());
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
@@ -322,7 +536,9 @@ void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
     if (rootClass < 0)
         rootClass += 12;
 
-    processor.setPerformanceRoot (rootClass);
+    processor.setConfiguredRoot (rootClass);
+    configScreen.setValues (rootClass, scaleIndex,
+                            processor.getDefaultEffectsEnabled());
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
@@ -333,11 +549,13 @@ void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
 
 void FlowerStandaloneAudioProcessorEditor::cycleScale (int delta)
 {
-    scaleIndex = (scaleIndex + delta) % 4;
+    scaleIndex = (scaleIndex + delta) % 5;
     if (scaleIndex < 0)
-        scaleIndex += 4;
+        scaleIndex += 5;
 
-    processor.setPerformanceScale (scaleIndex);
+    processor.setConfiguredScale (scaleIndex);
+    configScreen.setValues (rootClass, scaleIndex,
+                            processor.getDefaultEffectsEnabled());
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleHold()
@@ -363,6 +581,37 @@ void FlowerStandaloneAudioProcessorEditor::toggleGranular()
 {
     granularEnabled = ! granularEnabled;
     processor.setPerformanceGranularEnabled (granularEnabled);
+}
+
+void FlowerStandaloneAudioProcessorEditor::toggleConfig()
+{
+    configVisible = ! configVisible;
+
+    if (configVisible)
+    {
+        stopAll();
+
+        if (dpadActive)
+            endDpadControl();
+        if (bpmAdjustActive)
+            endBpmAdjust();
+
+        configScreen.setValues (
+            rootClass,
+            scaleIndex,
+            processor.getDefaultEffectsEnabled());
+
+        performancePad.setVisible (false);
+        configScreen.setVisible (true);
+        configScreen.toFront (false);
+    }
+    else
+    {
+        configScreen.setVisible (false);
+        performancePad.setVisible (true);
+        performancePad.toFront (false);
+        grabKeyboardFocus();
+    }
 }
 
 void FlowerStandaloneAudioProcessorEditor::stopAll()
@@ -546,6 +795,53 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
     const int code = key.getKeyCode();
     const auto ch = key.getTextCharacter();
 
+    // Android gamepad bridge:
+    // SELECT=F19, A=F13, B=F14, X=F15, Y=F16, L1=F17, R1=F18.
+    if (code == juce::KeyPress::F19Key || ch == 'c' || ch == 'C')
+    {
+        if (toggleButtonLatchCode != 19)
+        {
+            toggleConfig();
+            toggleButtonLatchCode = 19;
+        }
+        return true;
+    }
+
+    if (configVisible)
+    {
+        if (code == juce::KeyPress::upKey)
+        {
+            configScreen.moveSelection (-1);
+            return true;
+        }
+
+        if (code == juce::KeyPress::downKey)
+        {
+            configScreen.moveSelection (1);
+            return true;
+        }
+
+        if (code == juce::KeyPress::leftKey)
+        {
+            configScreen.adjustSelected (-1);
+            return true;
+        }
+
+        if (code == juce::KeyPress::rightKey)
+        {
+            configScreen.adjustSelected (1);
+            return true;
+        }
+
+        if (code == juce::KeyPress::F13Key || ch == 'a' || ch == 'A')
+        {
+            configScreen.activateSelected();
+            return true;
+        }
+
+        return true;
+    }
+
     if (code == juce::KeyPress::leftKey
         || code == juce::KeyPress::rightKey
         || code == juce::KeyPress::upKey
@@ -555,8 +851,6 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
         return true;
     }
 
-    // Android gamepad bridge:
-    // A=F13, B=F14, X=F15, Y=F16, L1=F17, R1=F18.
     if (code == juce::KeyPress::F13Key || ch == 'a' || ch == 'A')
     {
         if (toggleButtonLatchCode != 1)
@@ -605,7 +899,7 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
         return true;
     }
 
-    // Desktop/debug fallbacks retained outside the six gamepad assignments.
+    // Desktop/debug fallbacks retained outside the gamepad assignments.
     if (ch == 'h' || ch == 'H')
     {
         toggleHold();
@@ -618,10 +912,12 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
         return true;
     }
 
-    if (ch >= '1' && ch <= '4')
+    if (ch >= '1' && ch <= '5')
     {
         scaleIndex = static_cast<int> (ch - '1');
-        processor.setPerformanceScale (scaleIndex);
+        processor.setConfiguredScale (scaleIndex);
+        configScreen.setValues (rootClass, scaleIndex,
+                                processor.getDefaultEffectsEnabled());
         return true;
     }
 
