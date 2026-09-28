@@ -117,6 +117,25 @@ for required_patcher in [
 editor_header = (ROOT / "Source/PluginEditor.h").read_text(encoding="utf-8")
 editor_text = (ROOT / "Source/PluginEditor.cpp").read_text(encoding="utf-8")
 processor_text = (ROOT / "Source/PluginProcessor.cpp").read_text(encoding="utf-8")
+voice_text = (ROOT / "Source/SynthVoice.cpp").read_text(encoding="utf-8")
+
+for realtime_source_name, realtime_source in [
+    ("PluginProcessor.cpp", processor_text),
+    ("SynthVoice.cpp", voice_text),
+]:
+    for forbidden_rt_log in [
+        "Logger::writeToLog",
+        "FileLogger",
+        "std::cout",
+        "std::cerr",
+        "printf(",
+        "fprintf(",
+    ]:
+        if forbidden_rt_log in realtime_source:
+            fail(
+                f"real-time source must not perform diagnostic I/O: "
+                f"{realtime_source_name} contains {forbidden_rt_log}"
+            )
 
 if "juce::Desktop::getInstance().setOrientationsEnabled" in editor_text:
     fail("Android orientation must not be forced during editor startup")
@@ -189,5 +208,6 @@ print("[PASS] animation code/resources excluded from generated MVP target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
 print("[PASS] physical-key control contract present")
 print("[PASS] Android standalone startup safeguards present")
+print("[PASS] diagnostic I/O absent from audio/DSP source files")
 print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
 print("[PASS] CircleCI native parallelism controls present")
