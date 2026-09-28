@@ -112,6 +112,7 @@ private:
     std::atomic<float> performanceDirection { 0.0f };
     std::atomic<bool> performanceActive { false };
     std::atomic<bool> performanceHold { false };
+    std::atomic<bool> performanceLatched { false };
     std::atomic<int> performanceRootClass { 0 };
     std::atomic<int> performanceScaleIndex { 0 };
     std::atomic<float> performanceBpm { 112.0f };
