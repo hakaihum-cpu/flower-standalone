@@ -529,6 +529,40 @@ bool FlowerAnimationComponent::loadHighResStand (const void* data,
 
     highResStand[static_cast<size_t> (studentIndex)] = image;
     highResStandReady[static_cast<size_t> (studentIndex)] = true;
+
+    auto& poseBank = highResPoses[static_cast<size_t> (studentIndex)];
+    poseBank.id = juce::String::formatted ("student_%02d", studentIndex + 1);
+    poseBank.poses[static_cast<size_t> (Pose::Stand)] = image;
+
+    repaint();
+    return true;
+}
+
+bool FlowerAnimationComponent::loadHighResPose (const void* data,
+                                                       size_t size,
+                                                       int studentIndex,
+                                                       int poseIndex)
+{
+    if (studentIndex < 0 || studentIndex >= studentCount
+        || poseIndex < 0 || poseIndex >= static_cast<int> (Pose::Count)
+        || data == nullptr || size == 0)
+        return false;
+
+    auto image = juce::ImageFileFormat::loadFrom (data, size);
+    if (! image.isValid())
+        return false;
+
+    const auto pose = static_cast<Pose> (poseIndex);
+    auto& poseBank = highResPoses[static_cast<size_t> (studentIndex)];
+    poseBank.id = juce::String::formatted ("student_%02d", studentIndex + 1);
+    poseBank.poses[static_cast<size_t> (pose)] = image;
+
+    if (pose == Pose::Stand)
+    {
+        highResStand[static_cast<size_t> (studentIndex)] = image;
+        highResStandReady[static_cast<size_t> (studentIndex)] = true;
+    }
+
     repaint();
     return true;
 }
@@ -2643,16 +2677,24 @@ void FlowerAnimationComponent::paint (juce::Graphics& g)
 
         if (! walking && hasCompleteHighResActorCore())
         {
-            const auto& idleImage = highResStandReady[static_cast<size_t> (i)]
-                                  ? highResStand[static_cast<size_t> (i)]
-                                  : highResWalkRight[static_cast<size_t> (i)][0];
+            const auto& poseBank = highResPoses[static_cast<size_t> (i)];
+            const auto& requestedPoseImage = poseBank.poses[static_cast<size_t> (pose)];
+
+            const juce::Image* idleImage = nullptr;
+            if (requestedPoseImage.isValid())
+                idleImage = &requestedPoseImage;
+            else if (highResStandReady[static_cast<size_t> (i)])
+                idleImage = &highResStand[static_cast<size_t> (i)];
+            else
+                idleImage = &highResWalkRight[static_cast<size_t> (i)][0];
 
             drawActorVariation (g,
-                                idleImage,
+                                *idleImage,
                                 state,
                                 i,
                                 x,
-                                studentBaseline,
+                                studentBaseline
+                                  + verticalOffsetForPose (pose, i) * studentHeight,
                                 studentHeight,
                                 stage);
             continue;
