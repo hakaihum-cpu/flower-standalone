@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <array>
 #include <functional>
 
 #include "PluginProcessor.h"
@@ -43,7 +44,7 @@ private:
     void updateFromEvent (const juce::MouseEvent& e, bool isActive);
     void notify();
 
-    juce::Image tileSheetImage;
+    std::array<juce::Image, 100> frameImages;
 
     float xValue = 0.28f;
     float yValue = 0.28f;
