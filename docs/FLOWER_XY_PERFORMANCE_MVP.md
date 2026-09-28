@@ -176,3 +176,15 @@ A build should be run only after static review is complete because unnecessary C
 ## Visual framing revision
 
 The selected source tile now fills the 720x720 canvas with no letterbox. A small top-aligned zoom is used so the dark band does not appear and the face sits closer to screen centre. The source image itself remains the corrected user-specified face-closeup contact sheet with no extra low-quality re-encode.
+
+
+## Visual bank correction: full 100 cells / full face
+
+- The supplied sheet is treated strictly as 10 columns x 10 rows = 100 cells.
+- Every cell index 0-99 is reachable; there is no exclusion/skip list.
+- Cell order is row-major: `index = row * 10 + column`.
+- Only the 2 px separator border is removed from each cell.
+- The photograph itself is not square-cropped or zoom-cropped.
+- The complete tile keeps its original aspect ratio and is centred in 720x720.
+- The square margin is filled by extending the tile's edge pixels instead of black letterbox bars.
+- This prioritises showing the complete face/head, matching the user's reference tile.
