@@ -76,7 +76,7 @@ for required in [
     "KEYCODE_BUTTON_L1",
     "KEYCODE_BUTTON_R1",
     "KEYCODE_BUTTON_SELECT",
-    "used |= t.handleKeyUpOrDown (true);"
+    "used |= t.handleKeyUpOrDown (true);",
     "t.handleKeyUpOrDown (false);",
 ]:
     if required not in text:
