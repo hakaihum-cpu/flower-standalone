@@ -19,6 +19,7 @@ public:
     bool loadHighResWalkStrip (const void* data, size_t size, int studentIndex, bool walksRight);
     bool loadDecodedHighResWalkStrip (const juce::Image& strip, int studentIndex, bool walksRight);
     bool loadHighResStand (const void* data, size_t size, int studentIndex);
+    bool loadHighResPose (const void* data, size_t size, int studentIndex, int poseIndex);
     bool hasCompleteHighResActorCore() const noexcept;
     bool hasVisualBank() const noexcept
     {
@@ -281,6 +282,7 @@ private:
     std::array<std::array<juce::Image, walkFrameCount>, studentCount> highResWalkRight {};
     std::array<std::array<juce::Image, walkFrameCount>, studentCount> highResWalkLeft {};
     std::array<juce::Image, studentCount> highResStand {};
+    std::array<StudentAsset, studentCount> highResPoses {};
     std::array<bool, studentCount> highResWalkRightReady {};
     std::array<bool, studentCount> highResWalkLeftReady {};
     std::array<bool, studentCount> highResStandReady {};
