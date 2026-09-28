@@ -65,3 +65,18 @@ Important:
 - it proves geometry/export/alpha handling only.
 - the approved look still comes exclusively from Reference A/B.
 - the next visual-quality gate still requires the Blender/artist-refined student_01 model.
+
+
+## Execution responsibility correction — 2026-09-28
+The user is **not required to install Blender** and no assumption should be made that Blender already exists on the user's PC.
+
+The Windows bootstrap is only an optional portable path for future use:
+- it downloads Blender into the project-local `.flower3d-tools` directory,
+- it does not require a system-wide Blender installation,
+- it must not be presented as a required user action unless the user explicitly agrees to run it.
+
+Current working rule:
+- ChatGPT continues all preparation, source generation, validation logic, reference locking and branch management itself.
+- Do not hand the execution burden to the user by default.
+- Because the current ChatGPT host cannot execute Blender, the real Blender-rendered visual gate remains blocked unless a separate executable Blender host becomes available or the user explicitly chooses to run the portable local path.
+- Do not substitute AI image generation and call it a real 3D render.
