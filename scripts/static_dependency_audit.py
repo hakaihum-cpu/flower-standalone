@@ -58,6 +58,13 @@ for obsolete in ["build.gradle.kts", "settings.gradle.kts", "gradle.properties",
     if (ROOT / obsolete).exists():
         fail(f"obsolete Java bootstrap file still exists: {obsolete}")
 
+for obsolete_visual in [
+    "Resources/flower_xy_square_atlas_exact.jpg",
+    "scripts/materialize_xy_visual_asset.py",
+]:
+    if (ROOT / obsolete_visual).exists():
+        fail(f"obsolete generated XY visual path reintroduced: {obsolete_visual}")
+
 source_text = "\n".join(
     p.read_text(encoding="utf-8", errors="strict")
     for p in sorted((ROOT / "Source").glob("*"))
