@@ -44,6 +44,35 @@ void PerformancePadComponent::setHeld (bool shouldHold)
     repaint();
 }
 
+void PerformancePadComponent::nudgeFromPhysicalKey (float deltaX, float deltaY)
+{
+    xValue = juce::jlimit (0.0f, 1.0f, xValue + deltaX);
+    yValue = juce::jlimit (0.0f, 1.0f, yValue + deltaY);
+
+    const float magnitude = std::sqrt (deltaX * deltaX + deltaY * deltaY);
+    speedValue = juce::jlimit (0.0f, 1.0f, magnitude * 18.0f);
+
+    if (std::abs (deltaX) > 0.0001f)
+        horizontalDirection = deltaX < 0.0f ? -1.0f : 1.0f;
+    else
+        horizontalDirection = 0.0f;
+
+    active = true;
+    physicalPointerVisible = true;
+    notify();
+    repaint();
+}
+
+void PerformancePadComponent::endPhysicalKeyControl()
+{
+    active = false;
+    physicalPointerVisible = false;
+    speedValue = 0.0f;
+    horizontalDirection = 0.0f;
+    notify();
+    repaint();
+}
+
 void PerformancePadComponent::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colours::black);
@@ -58,9 +87,6 @@ void PerformancePadComponent::paint (juce::Graphics& g)
         return;
     }
 
-    // One contact-sheet tile is one visual state.  X selects the column and
-    // musical Y (bottom=0, top=1) selects the row in the same direction as the
-    // visible image: top of the pad -> top sheet row.
     const int column = juce::jlimit (
         0, tileColumns - 1,
         static_cast<int> (std::floor (xValue * static_cast<float> (tileColumns))));
@@ -77,27 +103,55 @@ void PerformancePadComponent::paint (juce::Graphics& g)
     const int tileTop = (row * imageHeight) / tileRows;
     const int tileBottom = ((row + 1) * imageHeight) / tileRows;
 
-    // The supplied sheet has dark separator lines.  Inset each cell before
-    // cropping so those separators do not appear in the fullscreen image.
-    constexpr int separatorInset = 2;
-    const int innerLeft = tileLeft + separatorInset;
-    const int innerTop = tileTop + separatorInset;
-    const int innerWidth = juce::jmax (
+    // Keep almost all source pixels.  The previous implementation centre-
+    // cropped every landscape tile to square, throwing away roughly a quarter
+    // of the already-small source image before enlarging it.
+    constexpr int separatorInset = 1;
+    const int sourceX = tileLeft + separatorInset;
+    const int sourceY = tileTop + separatorInset;
+    const int sourceWidth = juce::jmax (
         1, tileRight - tileLeft - separatorInset * 2);
-    const int innerHeight = juce::jmax (
+    const int sourceHeight = juce::jmax (
         1, tileBottom - tileTop - separatorInset * 2);
 
-    // The app canvas is square.  Centre-crop each source tile to square rather
-    // than stretching the face image.
-    const int sourceSide = juce::jmax (1, juce::jmin (innerWidth, innerHeight));
-    const int sourceX = innerLeft + (innerWidth - sourceSide) / 2;
-    const int sourceY = innerTop + (innerHeight - sourceSide) / 2;
+    // Fit the complete tile inside the 720 x 720 canvas without distortion or
+    // cropping.  The source cells are landscape, so black letterbox space is
+    // expected above/below rather than losing part of the photograph.
+    const float scale = juce::jmin (
+        static_cast<float> (getWidth()) / static_cast<float> (sourceWidth),
+        static_cast<float> (getHeight()) / static_cast<float> (sourceHeight));
+
+    const int destWidth = juce::jmax (
+        1, juce::roundToInt (static_cast<float> (sourceWidth) * scale));
+    const int destHeight = juce::jmax (
+        1, juce::roundToInt (static_cast<float> (sourceHeight) * scale));
+    const int destX = (getWidth() - destWidth) / 2;
+    const int destY = (getHeight() - destHeight) / 2;
 
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
     g.drawImage (tileSheetImage,
-                 0, 0, getWidth(), getHeight(),
-                 sourceX, sourceY, sourceSide, sourceSide,
+                 destX, destY, destWidth, destHeight,
+                 sourceX, sourceY, sourceWidth, sourceHeight,
                  false);
+
+    if (physicalPointerVisible)
+    {
+        const float px = xValue * static_cast<float> (getWidth());
+        const float py = (1.0f - yValue) * static_cast<float> (getHeight());
+
+        constexpr float outerRadius = 13.0f;
+        constexpr float innerRadius = 10.0f;
+
+        g.setColour (juce::Colours::black.withAlpha (0.90f));
+        g.drawEllipse (px - outerRadius, py - outerRadius,
+                       outerRadius * 2.0f, outerRadius * 2.0f, 5.0f);
+
+        g.setColour (juce::Colours::white.withAlpha (0.98f));
+        g.drawEllipse (px - innerRadius, py - innerRadius,
+                       innerRadius * 2.0f, innerRadius * 2.0f, 2.5f);
+        g.drawLine (px - 17.0f, py, px + 17.0f, py, 2.0f);
+        g.drawLine (px, py - 17.0f, px, py + 17.0f, 2.0f);
+    }
 }
 
 void PerformancePadComponent::mouseDown (const juce::MouseEvent& e)
@@ -119,7 +173,8 @@ void PerformancePadComponent::mouseUp (const juce::MouseEvent& e)
 
 void PerformancePadComponent::updateFromEvent (const juce::MouseEvent& e, bool isActive)
 {
-    auto grid = getLocalBounds().toFloat().reduced (15.0f);
+    physicalPointerVisible = false;
+    auto grid = getLocalBounds().toFloat();
     if (grid.getWidth() <= 1.0f || grid.getHeight() <= 1.0f)
         return;
 
@@ -214,6 +269,7 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
 
 FlowerStandaloneAudioProcessorEditor::~FlowerStandaloneAudioProcessorEditor()
 {
+    stopTimer();
     processor.stopPerformance();
     setLookAndFeel (nullptr);
 }
@@ -267,36 +323,87 @@ void FlowerStandaloneAudioProcessorEditor::stopAll()
     processor.stopPerformance();
 }
 
+void FlowerStandaloneAudioProcessorEditor::beginDpadControl (int keyCode)
+{
+    float dx = 0.0f;
+    float dy = 0.0f;
+
+    if (keyCode == juce::KeyPress::leftKey)       dx = -0.025f;
+    else if (keyCode == juce::KeyPress::rightKey) dx =  0.025f;
+    else if (keyCode == juce::KeyPress::upKey)    dy =  0.025f;
+    else if (keyCode == juce::KeyPress::downKey)  dy = -0.025f;
+    else
+        return;
+
+    const bool directionChanged = ! dpadActive || dpadKeyCode != keyCode;
+
+    dpadActive = true;
+    dpadKeyCode = keyCode;
+    dpadDeltaX = dx;
+    dpadDeltaY = dy;
+
+    if (directionChanged)
+        performancePad.nudgeFromPhysicalKey (dpadDeltaX, dpadDeltaY);
+
+    if (! isTimerRunning())
+        startTimer (40);
+}
+
+void FlowerStandaloneAudioProcessorEditor::endDpadControl()
+{
+    if (! dpadActive)
+        return;
+
+    dpadActive = false;
+    dpadKeyCode = 0;
+    dpadDeltaX = 0.0f;
+    dpadDeltaY = 0.0f;
+    stopTimer();
+    performancePad.endPhysicalKeyControl();
+}
+
+void FlowerStandaloneAudioProcessorEditor::timerCallback()
+{
+    if (! dpadActive)
+    {
+        stopTimer();
+        return;
+    }
+
+    performancePad.nudgeFromPhysicalKey (dpadDeltaX, dpadDeltaY);
+}
+
+bool FlowerStandaloneAudioProcessorEditor::keyStateChanged (bool isKeyDown)
+{
+    // JUCE's stock Android backend does not forward key-up state.  The build
+    // applies a tiny JUCE patch that forwards handleKeyUpOrDown(false), which
+    // lets a held D-pad gesture end cleanly and hides the temporary pointer.
+    if (! isKeyDown && dpadActive)
+    {
+        endDpadControl();
+        return true;
+    }
+
+    return dpadActive;
+}
+
 bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
     const int code = key.getKeyCode();
 
-    if (code == juce::KeyPress::leftKey)
+    if (code == juce::KeyPress::leftKey
+        || code == juce::KeyPress::rightKey
+        || code == juce::KeyPress::upKey
+        || code == juce::KeyPress::downKey)
     {
-        applyRootDelta (-1);
-        return true;
-    }
-
-    if (code == juce::KeyPress::rightKey)
-    {
-        applyRootDelta (1);
-        return true;
-    }
-
-    if (code == juce::KeyPress::upKey)
-    {
-        applyBpmDelta (2.0f);
-        return true;
-    }
-
-    if (code == juce::KeyPress::downKey)
-    {
-        applyBpmDelta (-2.0f);
+        beginDpadControl (code);
         return true;
     }
 
     const auto ch = key.getTextCharacter();
 
+    // These non-gamepad mappings are retained only as desktop/debug fallbacks.
+    // A/B/X/Y/L/R gamepad assignments are not activated in this change.
     if (ch == 'h' || ch == 'H')
     {
         toggleHold();
