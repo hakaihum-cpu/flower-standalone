@@ -164,13 +164,13 @@ for required_visual_ui in [
     "visualTileIndex = row * tileColumns + column",
     "imageWidth != 1191 || imageHeight != 896",
     "xStarts[tileColumns]",
-    "{ 0, 121, 241, 361, 481, 601, 721, 841, 961, 1081 }",
+    "{ 0, 120, 240, 360, 480, 600, 720, 840, 960, 1080 }",
     "xEnds[tileColumns]",
-    "{ 118, 238, 358, 478, 598, 718, 838, 958, 1078, 1191 }",
+    "{ 120, 240, 360, 480, 600, 720, 840, 960, 1080, 1191 }",
     "yStarts[tileRows]",
-    "{ 0, 86, 175, 264, 355, 449, 544, 641, 733, 812 }",
+    "{ 0, 86, 174, 263, 355, 449, 544, 640, 733, 811 }",
     "yEnds[tileRows]",
-    "{ 84, 172, 261, 353, 447, 542, 638, 730, 809, 896 }",
+    "{ 86, 174, 263, 355, 449, 544, 640, 733, 811, 896 }",
     
     
     
@@ -186,7 +186,8 @@ for required_xy_ui in [
     "setSize (canvasSize, canvasSize)",
     "setResizable (false, false)",
     "setResizeLimits (canvasSize, canvasSize, canvasSize, canvasSize)",
-    "performancePad.setBounds (getLocalBounds())",
+    "performancePad.setBounds (0, 0, 720, 720)",
+    "configScreen.setBounds (0, 0, 720, 720)",
     "bool FlowerStandaloneAudioProcessorEditor::keyPressed",
     "juce::KeyPress::leftKey",
     "juce::KeyPress::rightKey",
@@ -206,6 +207,9 @@ for required_xy_ui in [
     "ConfigScreenComponent",
     "ConfigScreenComponent() = default",
     "toggleConfig",
+    "onCloseRequested",
+    "getCloseBounds",
+    "g.drawText (\\\"CLOSE\\\"",
     "beginBpmAdjust",
     "beginLooperButton",
     "toggleArp",
@@ -214,6 +218,15 @@ for required_xy_ui in [
 ]:
     if required_xy_ui not in editor_text and required_xy_ui not in editor_header:
         fail(f"XY fullscreen/physical-key contract missing: {required_xy_ui}")
+
+
+config_block_start = editor_text.find("if (configVisible)")
+config_block_end = editor_text.find("if (code == juce::KeyPress::leftKey", config_block_start + 1)
+config_block = editor_text[config_block_start:config_block_end] if config_block_start >= 0 and config_block_end >= 0 else ""
+if "juce::KeyPress::F14Key" not in config_block or "configScreen.activateSelected()" not in config_block:
+    fail("CONFIG confirm must be B/F14")
+if "juce::KeyPress::F13Key" in config_block:
+    fail("CONFIG confirm must not remain on A/F13")
 
 for required_android_startup in [
     "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
@@ -279,8 +292,8 @@ print("[PASS] animation code/resources excluded from generated MVP target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
 print("[PASS] 10x10 XY contact-sheet visual contract present")
 print("[PASS] exact original contact sheet is tracked directly and embedded by Projucer")
-print("[PASS] non-uniform source separator coordinates are fixed explicitly")
-print("[PASS] frame 0 source crop is exactly [0,118) x [0,84)")
+print("[PASS] user-cut frame dimensions map exactly to contiguous source cells")
+print("[PASS] frame 0 source crop is exactly [0,120) x [0,86)")
 print("[PASS] runtime performs one source crop only; no intermediate square atlas")
 print("[PASS] all 100 contact-sheet cells are mapped with no skip list")
 print("[PASS] dpad XY latch / tap-stop / pointer contract present")
