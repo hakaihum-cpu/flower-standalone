@@ -3,9 +3,10 @@ set -euo pipefail
 
 BLENDER_VERSION="4.5.14"
 ARCHIVE="blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+EXTRACTED="blender-${BLENDER_VERSION}-linux-x64"
 URL="https://download.blender.org/release/Blender4.5/${ARCHIVE}"
 ROOT="${1:-$PWD/.flower3d-tools}"
-DEST="${ROOT}/blender-${BLENDER_VERSION}"
+DEST="${ROOT}/${EXTRACTED}"
 
 mkdir -p "${ROOT}"
 
@@ -14,6 +15,7 @@ if [ ! -x "${DEST}/blender" ]; then
   if [ ! -f "${ARCHIVE}" ]; then
     curl -fL --retry 3 --retry-delay 3 -o "${ARCHIVE}" "${URL}"
   fi
+  rm -rf "${DEST}"
   tar -xf "${ARCHIVE}"
 fi
 
