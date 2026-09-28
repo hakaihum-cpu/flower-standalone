@@ -135,18 +135,17 @@ void PerformancePadComponent::paint (juce::Graphics& g)
         return;
     }
 
-    // Exclusive [start, end) source bounds for all ten columns/rows.
-    // Frame 0 is therefore exactly x=[0,118), y=[0,84), which is pixel-for-
-    // pixel the user's supplied reference crop.  No square crop, inset, zoom,
-    // fit, or intermediate atlas is applied.
+    // Exact contiguous frame bounds recovered from the user's already-cut
+    // 01.jpg..100.jpg set.  Those supplied cuts are exactly 2x these source
+    // cells, so no separator inset/gap is removed at runtime.
     static constexpr int xStarts[tileColumns]
-        { 0, 121, 241, 361, 481, 601, 721, 841, 961, 1081 };
+        { 0, 120, 240, 360, 480, 600, 720, 840, 960, 1080 };
     static constexpr int xEnds[tileColumns]
-        { 118, 238, 358, 478, 598, 718, 838, 958, 1078, 1191 };
+        { 120, 240, 360, 480, 600, 720, 840, 960, 1080, 1191 };
     static constexpr int yStarts[tileRows]
-        { 0, 86, 175, 264, 355, 449, 544, 641, 733, 812 };
+        { 0, 86, 174, 263, 355, 449, 544, 640, 733, 811 };
     static constexpr int yEnds[tileRows]
-        { 84, 172, 261, 353, 447, 542, 638, 730, 809, 896 };
+        { 86, 174, 263, 355, 449, 544, 640, 733, 811, 896 };
 
     const int sourceX = xStarts[visualColumn];
     const int sourceY = yStarts[visualRow];
@@ -272,6 +271,11 @@ juce::Rectangle<int> ConfigScreenComponent::getRowBounds (int row) const
     return { 72, firstY + row * rowHeight, getWidth() - 144, 78 };
 }
 
+juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
+{
+    return { 516, 636, 132, 52 };
+}
+
 
 void ConfigScreenComponent::setValues (int newRootKey,
                                        int newScale,
@@ -357,7 +361,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
 
     g.setColour (juce::Colour (0xff8f8776));
     g.setFont (juce::FontOptions (16.0f));
-    g.drawText ("SELECT: BACK    UP/DOWN: ITEM    LEFT/RIGHT: CHANGE",
+    g.drawText ("SELECT: CONFIG    UP/DOWN: ITEM    LEFT/RIGHT: CHANGE    B: OK",
                 72, 124, getWidth() - 144, 34,
                 juce::Justification::centredLeft);
 
@@ -403,6 +407,13 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
                     juce::Justification::centredRight);
     }
 
+    const auto closeBounds = getCloseBounds();
+    g.setColour (juce::Colour (0xffd8ccb0));
+    g.fillRoundedRectangle (closeBounds.toFloat(), 8.0f);
+    g.setColour (juce::Colour (0xff11110f));
+    g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
+    g.drawText ("CLOSE", closeBounds, juce::Justification::centred);
+
     g.setColour (juce::Colour (0xff77705f));
     g.setFont (juce::FontOptions (15.0f));
     g.drawFittedText (
@@ -414,6 +425,13 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
 
 void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
 {
+    if (getCloseBounds().contains (e.getPosition()))
+    {
+        if (onCloseRequested)
+            onCloseRequested();
+        return;
+    }
+
     for (int row = 0; row < 3; ++row)
     {
         const auto bounds = getRowBounds (row);
@@ -522,6 +540,13 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             processor.setDefaultEffectsEnabled (enabled);
         };
 
+    configScreen.onCloseRequested =
+        [this]
+        {
+            if (configVisible)
+                toggleConfig();
+        };
+
     processor.setConfiguredRoot (rootClass);
     processor.setConfiguredScale (scaleIndex);
     processor.setPerformanceBpm (bpm);
@@ -547,8 +572,8 @@ void FlowerStandaloneAudioProcessorEditor::paint (juce::Graphics& g)
 
 void FlowerStandaloneAudioProcessorEditor::resized()
 {
-    performancePad.setBounds (getLocalBounds());
-    configScreen.setBounds (getLocalBounds());
+    performancePad.setBounds (0, 0, 720, 720);
+    configScreen.setBounds (0, 0, 720, 720);
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
@@ -854,7 +879,7 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
             return true;
         }
 
-        if (code == juce::KeyPress::F13Key || ch == 'a' || ch == 'A')
+        if (code == juce::KeyPress::F14Key || ch == 'b' || ch == 'B')
         {
             configScreen.activateSelected();
             return true;
