@@ -95,9 +95,7 @@ void PerformancePadComponent::paint (juce::Graphics& g)
 
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
     g.drawImage (tileSheetImage,
-                 0.0f, 0.0f,
-                 static_cast<float> (getWidth()),
-                 static_cast<float> (getHeight()),
+                 0, 0, getWidth(), getHeight(),
                  sourceX, sourceY, sourceSide, sourceSide,
                  false);
 }
