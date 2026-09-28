@@ -30,8 +30,6 @@ REQUIRED = [
     "Resources/xy_sheet_01.b64.part04",
     "Resources/xy_sheet_01.b64.part05",
     "Resources/xy_sheet_01.b64.part06",
-    "Resources/xy_sheet_01.b64.part07",
-    "Resources/xy_sheet_01.b64.part08",
 ]
 
 FORBIDDEN_SOURCE_TOKENS = [
@@ -162,13 +160,12 @@ for required_visual_ui in [
     "VISUAL ASSET ERROR",
     "highResamplingQuality",
     "physicalPointerVisible",
-    "destWidth",
-    "destHeight",
     "tileCount = tileColumns * tileRows",
     "static_assert (tileCount == 100",
     "visualTileIndex = row * tileColumns + column",
-    "sourceWidth, sourceHeight",
-    "edgeSampleHeight = 2",
+    "atlasInset = 2",
+    "sourceWidth == sourceHeight",
+    "0, 0, getWidth(), getHeight()",
     "onTapStopRequested",
 ]:
     if required_visual_ui not in editor_text and required_visual_ui not in editor_header:
@@ -263,7 +260,8 @@ print("[PASS] animation code/resources excluded from generated MVP target")
 print("[PASS] 720x720 fullscreen XY pad contract present")
 print("[PASS] 10x10 XY contact-sheet visual contract present")
 print("[PASS] visual asset materializer is wired before Projucer")
-print("[PASS] complete-face visual framing contract present")
+print("[PASS] pre-squared visual atlas contract present")
+print("[PASS] runtime visual path performs no fit/letterbox/zoom/crop logic")
 print("[PASS] all 100 contact-sheet cells are mapped with no skip list")
 print("[PASS] dpad XY latch / tap-stop / pointer contract present")
 print("[PASS] A/B/X/Y/L/R gamepad assignment contract present")
