@@ -30,7 +30,7 @@ bool FlowerStandaloneAudioProcessor::isBusesLayoutSupported (const BusesLayout& 
         || output == juce::AudioChannelSet::stereo();
 }
 
-void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int)
+void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
     synthesiser.setCurrentPlaybackSampleRate (currentSampleRate);
@@ -44,6 +44,28 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int)
     performanceDelayBuffer.setSize (2, delaySamples, false, true, false);
     performanceDelayBuffer.clear();
     performanceDelayWritePosition = 0;
+
+    performanceDelaySamplesSmoothed.reset (currentSampleRate, 0.035);
+    performanceDelayFeedbackSmoothed.reset (currentSampleRate, 0.025);
+    performanceDelayWetSmoothed.reset (currentSampleRate, 0.025);
+
+    const float initialDelaySeconds = 0.075f + 0.27f + 0.28f * 0.14f;
+    performanceDelaySamplesSmoothed.setCurrentAndTargetValue (
+        initialDelaySeconds * static_cast<float> (currentSampleRate));
+    performanceDelayFeedbackSmoothed.setCurrentAndTargetValue (0.0f);
+    performanceDelayWetSmoothed.setCurrentAndTargetValue (0.0f);
+
+    juce::dsp::ProcessSpec limiterSpec;
+    limiterSpec.sampleRate = currentSampleRate;
+    limiterSpec.maximumBlockSize =
+        static_cast<juce::uint32> (juce::jmax (1, samplesPerBlock));
+    limiterSpec.numChannels =
+        static_cast<juce::uint32> (juce::jmax (1, getTotalNumOutputChannels()));
+    performanceOutputLimiter.prepare (limiterSpec);
+    performanceOutputLimiter.setThreshold (-1.0f);
+    performanceOutputLimiter.setRelease (80.0f);
+    performanceOutputLimiter.reset();
+
     performanceSamplesUntilStep = 0.0;
     performanceStep = 0;
     performanceCurrentNote = -1;
@@ -86,16 +108,19 @@ void FlowerStandaloneAudioProcessor::updateSynthParams()
         const float x = performanceX.load (std::memory_order_relaxed);
         const float y = performanceY.load (std::memory_order_relaxed);
 
-        params.level = 0.26f;
+        // Keep enough headroom for arp release tails, granular wet signal and
+        // feedback delay.  The previous 0.26 level could stack several release
+        // tails above 0 dBFS at the faster arp divisions.
+        params.level = 0.18f;
         params.attack = 0.003f;
-        params.decay = 0.10f + (1.0f - y) * 0.18f;
+        params.decay = 0.10f + (1.0f - y) * 0.16f;
         params.sustain = 0.58f;
-        params.release = 0.055f + (1.0f - y) * 0.24f;
+        params.release = 0.045f + (1.0f - y) * 0.16f;
 
         const float filterCurve = std::pow (juce::jlimit (0.0f, 1.0f, y), 1.35f);
         params.cutoff = juce::jlimit (120.0f, 18000.0f,
                                      240.0f + filterCurve * 14500.0f + x * 1200.0f);
-        params.resonance = 0.72f + y * 4.2f;
+        params.resonance = 0.72f + y * 2.30f;
 
         params.lfoRate = 0.35f + x * 5.5f;
         params.lfoDepth = y * 0.10f;
@@ -126,6 +151,13 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
     // Delay is deliberately after the granular stage so one gesture moves
     // synthesis, granulation and echo as one performance surface.
     processPerformanceDelay (buffer);
+
+    // Final peak protection only.  It is intentionally after the complete FX
+    // chain so the Android output cannot receive > 0 dBFS bursts from stacked
+    // arp tails or feedback.  Normal signals below the threshold are untouched.
+    juce::dsp::AudioBlock<float> outputBlock (buffer);
+    juce::dsp::ProcessContextReplacing<float> outputContext (outputBlock);
+    performanceOutputLimiter.process (outputContext);
 }
 
 void FlowerStandaloneAudioProcessor::resetFlowerState() noexcept
@@ -648,22 +680,36 @@ void FlowerStandaloneAudioProcessor::processPerformanceDelay (
     const float delaySeconds = juce::jlimit (
         0.04f, 0.65f,
         0.075f + (1.0f - speed) * 0.27f + x * 0.14f);
-    const int delaySamples = juce::jlimit (
-        1, capacity - 1,
-        juce::roundToInt (delaySeconds * static_cast<float> (currentSampleRate)));
+    const float targetDelaySamples = juce::jlimit (
+        1.0f, static_cast<float> (capacity - 2),
+        delaySeconds * static_cast<float> (currentSampleRate));
 
-    const float feedback = gate
-        ? juce::jlimit (0.0f, 0.82f, 0.12f + y * 0.70f)
-        : 0.0f;
-    const float wet = gate
-        ? juce::jlimit (0.0f, 0.52f, 0.025f + y * 0.48f)
-        : 0.0f;
+    // The original MVP jumped the delay read head to a new integer sample
+    // whenever swipe speed/X changed.  That produces a discontinuity (zipper/
+    // crackle) during movement.  Smooth the read head and interpolate between
+    // adjacent delay samples instead.
+    performanceDelaySamplesSmoothed.setTargetValue (targetDelaySamples);
+    performanceDelayFeedbackSmoothed.setTargetValue (
+        gate ? juce::jlimit (0.0f, 0.65f, 0.10f + y * 0.55f) : 0.0f);
+    performanceDelayWetSmoothed.setTargetValue (
+        gate ? juce::jlimit (0.0f, 0.40f, 0.02f + y * 0.38f) : 0.0f);
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        int readPosition = performanceDelayWritePosition - delaySamples;
-        if (readPosition < 0)
-            readPosition += capacity;
+        const float delaySamples = performanceDelaySamplesSmoothed.getNextValue();
+        const float feedback = performanceDelayFeedbackSmoothed.getNextValue();
+        const float wet = performanceDelayWetSmoothed.getNextValue();
+
+        float readPosition =
+            static_cast<float> (performanceDelayWritePosition) - delaySamples;
+        while (readPosition < 0.0f)
+            readPosition += static_cast<float> (capacity);
+        while (readPosition >= static_cast<float> (capacity))
+            readPosition -= static_cast<float> (capacity);
+
+        const int read0 = static_cast<int> (std::floor (readPosition));
+        const int read1 = (read0 + 1) % capacity;
+        const float fraction = readPosition - static_cast<float> (read0);
 
         for (int channel = 0; channel < channels; ++channel)
         {
@@ -671,10 +717,12 @@ void FlowerStandaloneAudioProcessor::processPerformanceDelay (
             auto* delay = performanceDelayBuffer.getWritePointer (channel);
 
             const float input = output[sample];
-            const float delayed = delay[readPosition];
+            const float delayed =
+                delay[read0] + (delay[read1] - delay[read0]) * fraction;
 
-            delay[performanceDelayWritePosition] =
-                juce::jlimit (-2.0f, 2.0f, input + delayed * feedback);
+            // feedback < 1.0 keeps the delay stable.  Do not hard-clip the
+            // feedback buffer; hard clipping was another source of harshness.
+            delay[performanceDelayWritePosition] = input + delayed * feedback;
             output[sample] = input + (delayed - input) * wet;
         }
 
