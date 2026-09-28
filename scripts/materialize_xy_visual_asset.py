@@ -17,10 +17,9 @@ PARTS = [
     RESOURCE_DIR / "xy_sheet_01.b64.part06",
     RESOURCE_DIR / "xy_sheet_01.b64.part07",
     RESOURCE_DIR / "xy_sheet_01.b64.part08",
-    RESOURCE_DIR / "xy_sheet_01.b64.part09",
 ]
 OUTPUT = RESOURCE_DIR / "flower_xy_sheet_01.jpg"
-EXPECTED_SHA256 = "d79d2b6fba89360b2e5d5773e0c61ef607efabea541cf7f873d9a148a529af0a"
+EXPECTED_SHA256 = "db0b56f17e8cfb272a461f29b60ab83f573058da2fd2c0500f1a7f007225f9cb"
 
 for part in PARTS:
     if not part.is_file():
