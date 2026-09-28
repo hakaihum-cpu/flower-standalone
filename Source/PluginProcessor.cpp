@@ -570,7 +570,7 @@ void FlowerStandaloneAudioProcessor::setPerformanceRoot (int noteClass) noexcept
 
 void FlowerStandaloneAudioProcessor::setPerformanceScale (int scaleIndex) noexcept
 {
-    performanceScaleIndex.store (juce::jlimit (0, 3, scaleIndex), std::memory_order_relaxed);
+    performanceScaleIndex.store (juce::jlimit (0, 4, scaleIndex), std::memory_order_relaxed);
 }
 
 void FlowerStandaloneAudioProcessor::setPerformanceBpm (float bpm) noexcept
@@ -605,6 +605,56 @@ void FlowerStandaloneAudioProcessor::stopPerformance() noexcept
     performanceHold.store (false, std::memory_order_release);
     performanceLatched.store (false, std::memory_order_release);
     performanceStopRequested.store (true, std::memory_order_release);
+}
+
+int FlowerStandaloneAudioProcessor::getConfiguredRoot() const noexcept
+{
+    return juce::jlimit (
+        0, 11,
+        juce::roundToInt (
+            apvts.getRawParameterValue (ParamIDs::performanceRootConfig)->load()));
+}
+
+int FlowerStandaloneAudioProcessor::getConfiguredScale() const noexcept
+{
+    return juce::jlimit (
+        0, 4,
+        juce::roundToInt (
+            apvts.getRawParameterValue (ParamIDs::performanceScaleConfig)->load()));
+}
+
+bool FlowerStandaloneAudioProcessor::getDefaultEffectsEnabled() const noexcept
+{
+    return apvts.getRawParameterValue (ParamIDs::defaultEffectsEnabled)->load() > 0.5f;
+}
+
+void FlowerStandaloneAudioProcessor::setConfiguredRoot (int noteClass)
+{
+    noteClass = juce::jlimit (0, 11, noteClass);
+    setPerformanceRoot (noteClass);
+
+    if (auto* parameter = apvts.getParameter (ParamIDs::performanceRootConfig))
+        parameter->setValueNotifyingHost (
+            parameter->convertTo0to1 (static_cast<float> (noteClass)));
+}
+
+void FlowerStandaloneAudioProcessor::setConfiguredScale (int scaleIndex)
+{
+    scaleIndex = juce::jlimit (0, 4, scaleIndex);
+    setPerformanceScale (scaleIndex);
+
+    if (auto* parameter = apvts.getParameter (ParamIDs::performanceScaleConfig))
+        parameter->setValueNotifyingHost (
+            parameter->convertTo0to1 (static_cast<float> (scaleIndex)));
+}
+
+void FlowerStandaloneAudioProcessor::setDefaultEffectsEnabled (bool enabled)
+{
+    setPerformanceDelayEnabled (enabled);
+    setPerformanceGranularEnabled (enabled);
+
+    if (auto* parameter = apvts.getParameter (ParamIDs::defaultEffectsEnabled))
+        parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
 }
 
 bool FlowerStandaloneAudioProcessor::isPerformanceGateOpen() const noexcept
@@ -707,7 +757,12 @@ int FlowerStandaloneAudioProcessor::nextPerformanceNote (int patternIndex)
         ++octave;
 
     const int root = 48 + performanceRootClass.load (std::memory_order_relaxed);
-    const int note = root + performanceScaleSemitone (degree) + octave * 12;
+    const bool randomScale =
+        performanceScaleIndex.load (std::memory_order_relaxed) == 4;
+    const int semitone = randomScale
+        ? static_cast<int> (nextPerformanceRandom() % 12u)
+        : performanceScaleSemitone (degree);
+    const int note = root + semitone + octave * 12;
 
     ++performanceStep;
     return juce::jlimit (24, 96, note);
@@ -911,6 +966,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout FlowerStandaloneAudioProcess
     parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParamIDs::lfoTarget, 1 }, "LFO Target",
         juce::StringArray { "OFF", "PITCH", "CUTOFF", "RESONANCE", "LEVEL" }, 0));
+
+    parameters.push_back (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParamIDs::performanceRootConfig, 1 },
+        "Performance Root", 0, 11, 0));
+    parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParamIDs::performanceScaleConfig, 1 },
+        "Performance Scale",
+        juce::StringArray { "MINOR PENT", "NATURAL MINOR", "MAJOR", "DORIAN", "RANDOM" },
+        0));
+    parameters.push_back (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParamIDs::defaultEffectsEnabled, 1 },
+        "Default Effects", true));
 
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamIDs::flowerEnabled, 1 }, "Flower On", false));
