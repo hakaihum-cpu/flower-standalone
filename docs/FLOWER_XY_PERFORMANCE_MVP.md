@@ -158,3 +158,21 @@ Not yet performed:
 - tuning of musical mappings after listening.
 
 A build should be run only after static review is complete because unnecessary CI/GitHub build minutes are explicitly avoided.
+
+
+## Physical-control contract (2026-09-28 combined revision)
+
+- D-pad: moves the same XY coordinates used by touch. A single temporary pointer is shown only while a D-pad direction is held.
+- D-pad release: pointer disappears, but the last XY sound remains latched.
+- Screen tap: explicit performance stop. A touch drag/swipe takes over the XY surface; a simple tap stops.
+- L / R: BPM down / up. Immediate 2 BPM step, then hold-repeat after 350 ms at roughly 80 ms intervals. Range 50-200 BPM.
+- B: ARP ON/OFF. ARP OFF holds one mono root note while the performance gate is open.
+- A: Delay ON/OFF with the existing delay smoothing retained.
+- Y: Granular ON/OFF.
+- X short press: looper transport EMPTY->REC->STOP->OVERDUB->STOP->OVERDUB...
+- X long press (800 ms): CLEAR.
+- X position no longer changes arp subdivision; arp speed is controlled by BPM only. The internal subdivision is fixed at 2 steps/beat.
+
+## Visual framing revision
+
+The selected source tile now fills the 720x720 canvas with no letterbox. A small top-aligned zoom is used so the dark band does not appear and the face sits closer to screen centre. The source image itself remains the corrected user-specified face-closeup contact sheet with no extra low-quality re-encode.
