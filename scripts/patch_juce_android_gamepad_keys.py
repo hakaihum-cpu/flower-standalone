@@ -24,6 +24,7 @@ case_insert = """        case 22:  return KeyPress::rightKey;          // KEYCOD
         case 100: return KeyPress::F16Key;            // KEYCODE_BUTTON_Y
         case 102: return KeyPress::F17Key;            // KEYCODE_BUTTON_L1
         case 103: return KeyPress::F18Key;            // KEYCODE_BUTTON_R1
+        case 109: return KeyPress::F19Key;            // KEYCODE_BUTTON_SELECT
 """
 
 if "KEYCODE_BUTTON_A" not in text:
@@ -74,7 +75,8 @@ for required in [
     "KEYCODE_BUTTON_Y",
     "KEYCODE_BUTTON_L1",
     "KEYCODE_BUTTON_R1",
-    "used |= t.handleKeyUpOrDown (true);",
+    "KEYCODE_BUTTON_SELECT",
+    "used |= t.handleKeyUpOrDown (true);"
     "t.handleKeyUpOrDown (false);",
 ]:
     if required not in text:
