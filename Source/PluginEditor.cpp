@@ -106,7 +106,7 @@ void PerformancePadComponent::paint (juce::Graphics& g)
     // Keep almost all source pixels.  The previous implementation centre-
     // cropped every landscape tile to square, throwing away roughly a quarter
     // of the already-small source image before enlarging it.
-    constexpr int separatorInset = 1;
+    constexpr int separatorInset = 2;
     const int sourceX = tileLeft + separatorInset;
     const int sourceY = tileTop + separatorInset;
     const int sourceWidth = juce::jmax (
@@ -114,19 +114,21 @@ void PerformancePadComponent::paint (juce::Graphics& g)
     const int sourceHeight = juce::jmax (
         1, tileBottom - tileTop - separatorInset * 2);
 
-    // Fit the complete tile inside the 720 x 720 canvas without distortion or
-    // cropping.  The source cells are landscape, so black letterbox space is
-    // expected above/below rather than losing part of the photograph.
-    const float scale = juce::jmin (
+    // Fill the square canvas instead of letterboxing.  A small extra zoom is
+    // top-aligned so the subject's face lands closer to screen centre while
+    // the dark separator/empty band at the top cannot become visible.
+    constexpr float faceZoom = 1.15f;
+    const float scale = juce::jmax (
         static_cast<float> (getWidth()) / static_cast<float> (sourceWidth),
-        static_cast<float> (getHeight()) / static_cast<float> (sourceHeight));
+        static_cast<float> (getHeight()) / static_cast<float> (sourceHeight))
+        * faceZoom;
 
     const int destWidth = juce::jmax (
         1, juce::roundToInt (static_cast<float> (sourceWidth) * scale));
     const int destHeight = juce::jmax (
         1, juce::roundToInt (static_cast<float> (sourceHeight) * scale));
     const int destX = (getWidth() - destWidth) / 2;
-    const int destY = (getHeight() - destHeight) / 2;
+    const int destY = 0;
 
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
     g.drawImage (tileSheetImage,
@@ -156,19 +158,34 @@ void PerformancePadComponent::paint (juce::Graphics& g)
 
 void PerformancePadComponent::mouseDown (const juce::MouseEvent& e)
 {
+    physicalPointerVisible = false;
+    touchDownPoint = e.position;
     lastPoint = e.position;
     lastEventMs = juce::Time::getMillisecondCounterHiRes();
-    updateFromEvent (e, true);
+    touchDragged = false;
+
+    if (onTouchStarted)
+        onTouchStarted();
 }
 
 void PerformancePadComponent::mouseDrag (const juce::MouseEvent& e)
 {
-    updateFromEvent (e, true);
+    if (! touchDragged
+        && e.position.getDistanceFrom (touchDownPoint) >= 4.0f)
+        touchDragged = true;
+
+    if (touchDragged)
+        updateFromEvent (e, true);
 }
 
 void PerformancePadComponent::mouseUp (const juce::MouseEvent& e)
 {
-    updateFromEvent (e, false);
+    if (touchDragged)
+        updateFromEvent (e, false);
+    else if (onTapStopRequested)
+        onTapStopRequested();
+
+    touchDragged = false;
 }
 
 void PerformancePadComponent::updateFromEvent (const juce::MouseEvent& e, bool isActive)
@@ -259,10 +276,28 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             processor.setPerformancePad (x, y, speed, horizontalDirection, active);
         };
 
+    performancePad.onTouchStarted =
+        [this]
+        {
+            // Touch takes over from a latched D-pad performance.
+            hold = false;
+            processor.setPerformanceHold (false);
+            performancePad.setHeld (false);
+        };
+
+    performancePad.onTapStopRequested =
+        [this]
+        {
+            stopAll();
+        };
+
     processor.setPerformanceRoot (rootClass);
     processor.setPerformanceScale (scaleIndex);
     processor.setPerformanceBpm (bpm);
     processor.setPerformanceHold (hold);
+    processor.setPerformanceArpEnabled (arpEnabled);
+    processor.setPerformanceDelayEnabled (delayEnabled);
+    processor.setPerformanceGranularEnabled (granularEnabled);
 
     grabKeyboardFocus();
 }
@@ -295,7 +330,7 @@ void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
 
 void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
 {
-    bpm = juce::jlimit (50.0f, 190.0f, bpm + delta);
+    bpm = juce::jlimit (50.0f, 200.0f, bpm + delta);
     processor.setPerformanceBpm (bpm);
 }
 
@@ -315,6 +350,24 @@ void FlowerStandaloneAudioProcessorEditor::toggleHold()
     processor.setPerformanceHold (hold);
 }
 
+void FlowerStandaloneAudioProcessorEditor::toggleArp()
+{
+    arpEnabled = ! arpEnabled;
+    processor.setPerformanceArpEnabled (arpEnabled);
+}
+
+void FlowerStandaloneAudioProcessorEditor::toggleDelay()
+{
+    delayEnabled = ! delayEnabled;
+    processor.setPerformanceDelayEnabled (delayEnabled);
+}
+
+void FlowerStandaloneAudioProcessorEditor::toggleGranular()
+{
+    granularEnabled = ! granularEnabled;
+    processor.setPerformanceGranularEnabled (granularEnabled);
+}
+
 void FlowerStandaloneAudioProcessorEditor::stopAll()
 {
     hold = false;
@@ -328,7 +381,7 @@ void FlowerStandaloneAudioProcessorEditor::beginDpadControl (int keyCode)
     float dx = 0.0f;
     float dy = 0.0f;
 
-    if (keyCode == juce::KeyPress::leftKey)       dx = -0.025f;
+    if (keyCode == juce::KeyPress::leftKey)        dx = -0.025f;
     else if (keyCode == juce::KeyPress::rightKey) dx =  0.025f;
     else if (keyCode == juce::KeyPress::upKey)    dy =  0.025f;
     else if (keyCode == juce::KeyPress::downKey)  dy = -0.025f;
@@ -336,6 +389,12 @@ void FlowerStandaloneAudioProcessorEditor::beginDpadControl (int keyCode)
         return;
 
     const bool directionChanged = ! dpadActive || dpadKeyCode != keyCode;
+
+    // D-pad performance is latched.  Releasing the D-pad only hides the
+    // pointer; a screen tap is the explicit stop gesture.
+    hold = true;
+    processor.setPerformanceHold (true);
+    performancePad.setHeld (true);
 
     dpadActive = true;
     dpadKeyCode = keyCode;
@@ -345,8 +404,7 @@ void FlowerStandaloneAudioProcessorEditor::beginDpadControl (int keyCode)
     if (directionChanged)
         performancePad.nudgeFromPhysicalKey (dpadDeltaX, dpadDeltaY);
 
-    if (! isTimerRunning())
-        startTimer (40);
+    refreshControlTimer();
 }
 
 void FlowerStandaloneAudioProcessorEditor::endDpadControl()
@@ -358,38 +416,138 @@ void FlowerStandaloneAudioProcessorEditor::endDpadControl()
     dpadKeyCode = 0;
     dpadDeltaX = 0.0f;
     dpadDeltaY = 0.0f;
-    stopTimer();
+
+    // active=false is reported to the processor, but performanceHold remains
+    // true, so the last D-pad position keeps sounding.
     performancePad.endPhysicalKeyControl();
+    refreshControlTimer();
+}
+
+void FlowerStandaloneAudioProcessorEditor::beginBpmAdjust (int direction)
+{
+    direction = direction < 0 ? -1 : 1;
+
+    if (bpmAdjustActive && bpmAdjustDirection == direction)
+        return;
+
+    bpmAdjustActive = true;
+    bpmAdjustDirection = direction;
+    bpmHoldStartMs = juce::Time::getMillisecondCounterHiRes();
+    bpmLastRepeatMs = bpmHoldStartMs;
+
+    applyBpmDelta (2.0f * static_cast<float> (direction));
+    refreshControlTimer();
+}
+
+void FlowerStandaloneAudioProcessorEditor::endBpmAdjust()
+{
+    bpmAdjustActive = false;
+    bpmAdjustDirection = 0;
+    refreshControlTimer();
+}
+
+void FlowerStandaloneAudioProcessorEditor::beginLooperButton()
+{
+    if (looperButtonActive)
+        return;
+
+    looperButtonActive = true;
+    looperLongHandled = false;
+    looperHoldStartMs = juce::Time::getMillisecondCounterHiRes();
+    refreshControlTimer();
+}
+
+void FlowerStandaloneAudioProcessorEditor::endLooperButton()
+{
+    if (! looperButtonActive)
+        return;
+
+    if (! looperLongHandled)
+        processor.cycleFlowerTransport();
+
+    looperButtonActive = false;
+    looperLongHandled = false;
+    refreshControlTimer();
+}
+
+void FlowerStandaloneAudioProcessorEditor::refreshControlTimer()
+{
+    if (dpadActive || bpmAdjustActive || looperButtonActive)
+    {
+        if (! isTimerRunning())
+            startTimer (40);
+    }
+    else
+    {
+        stopTimer();
+    }
 }
 
 void FlowerStandaloneAudioProcessorEditor::timerCallback()
 {
-    if (! dpadActive)
+    const double nowMs = juce::Time::getMillisecondCounterHiRes();
+
+    if (dpadActive)
+        performancePad.nudgeFromPhysicalKey (dpadDeltaX, dpadDeltaY);
+
+    if (bpmAdjustActive
+        && nowMs - bpmHoldStartMs >= 350.0
+        && nowMs - bpmLastRepeatMs >= 80.0)
     {
-        stopTimer();
-        return;
+        applyBpmDelta (
+            2.0f * static_cast<float> (bpmAdjustDirection));
+        bpmLastRepeatMs = nowMs;
     }
 
-    performancePad.nudgeFromPhysicalKey (dpadDeltaX, dpadDeltaY);
+    if (looperButtonActive
+        && ! looperLongHandled
+        && nowMs - looperHoldStartMs >= 800.0)
+    {
+        processor.clearFlowerLoop();
+        looperLongHandled = true;
+    }
+
+    refreshControlTimer();
 }
 
 bool FlowerStandaloneAudioProcessorEditor::keyStateChanged (bool isKeyDown)
 {
-    // JUCE's stock Android backend does not forward key-up state.  The build
-    // applies a tiny JUCE patch that forwards handleKeyUpOrDown(false), which
-    // lets a held D-pad gesture end cleanly and hides the temporary pointer.
-    if (! isKeyDown && dpadActive)
+    if (isKeyDown)
+        return dpadActive || bpmAdjustActive || looperButtonActive;
+
+    bool used = false;
+
+    if (dpadActive)
     {
         endDpadControl();
-        return true;
+        used = true;
     }
 
-    return dpadActive;
+    if (bpmAdjustActive)
+    {
+        endBpmAdjust();
+        used = true;
+    }
+
+    if (looperButtonActive)
+    {
+        endLooperButton();
+        used = true;
+    }
+
+    if (toggleButtonLatchCode != 0)
+    {
+        toggleButtonLatchCode = 0;
+        used = true;
+    }
+
+    return used;
 }
 
 bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
     const int code = key.getKeyCode();
+    const auto ch = key.getTextCharacter();
 
     if (code == juce::KeyPress::leftKey
         || code == juce::KeyPress::rightKey
@@ -400,10 +558,57 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
         return true;
     }
 
-    const auto ch = key.getTextCharacter();
+    // Android gamepad bridge:
+    // A=F13, B=F14, X=F15, Y=F16, L1=F17, R1=F18.
+    if (code == juce::KeyPress::F13Key || ch == 'a' || ch == 'A')
+    {
+        if (toggleButtonLatchCode != 1)
+        {
+            toggleDelay();
+            toggleButtonLatchCode = 1;
+        }
+        return true;
+    }
 
-    // These non-gamepad mappings are retained only as desktop/debug fallbacks.
-    // A/B/X/Y/L/R gamepad assignments are not activated in this change.
+    if (code == juce::KeyPress::F14Key || ch == 'b' || ch == 'B')
+    {
+        if (toggleButtonLatchCode != 2)
+        {
+            toggleArp();
+            toggleButtonLatchCode = 2;
+        }
+        return true;
+    }
+
+    if (code == juce::KeyPress::F15Key || ch == 'x' || ch == 'X')
+    {
+        beginLooperButton();
+        return true;
+    }
+
+    if (code == juce::KeyPress::F16Key || ch == 'y' || ch == 'Y')
+    {
+        if (toggleButtonLatchCode != 4)
+        {
+            toggleGranular();
+            toggleButtonLatchCode = 4;
+        }
+        return true;
+    }
+
+    if (code == juce::KeyPress::F17Key || ch == 'l' || ch == 'L')
+    {
+        beginBpmAdjust (-1);
+        return true;
+    }
+
+    if (code == juce::KeyPress::F18Key || ch == 'r' || ch == 'R')
+    {
+        beginBpmAdjust (1);
+        return true;
+    }
+
+    // Desktop/debug fallbacks retained outside the six gamepad assignments.
     if (ch == 'h' || ch == 'H')
     {
         toggleHold();
