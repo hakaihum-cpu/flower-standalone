@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "FlowerFrameData.h"
 
 #if JUCE_ANDROID
  #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
@@ -32,9 +33,24 @@ PerformancePadComponent::PerformancePadComponent()
     setMouseCursor (juce::MouseCursor::CrosshairCursor);
     setWantsKeyboardFocus (false);
 
-    tileSheetImage = juce::ImageFileFormat::loadFrom (
-        BinaryData::flower_xy_source_exact_jpg,
-        static_cast<size_t> (BinaryData::flower_xy_source_exact_jpgSize));
+    juce::MemoryOutputStream decodedFrames;
+    if (! juce::Base64::convertFromBase64 (
+            decodedFrames, FlowerFrameData::encodedPayload))
+        return;
+
+    const auto& frameBytes = decodedFrames.getMemoryBlock();
+    if (frameBytes.getSize() != FlowerFrameData::decodedPayloadSize)
+        return;
+
+    const auto* bytes = static_cast<const unsigned char*> (frameBytes.getData());
+
+    for (int i = 0; i < FlowerFrameData::frameCount; ++i)
+    {
+        const auto index = static_cast<size_t> (i);
+        frameImages[index] = juce::ImageFileFormat::loadFrom (
+            bytes + FlowerFrameData::offsets[index],
+            FlowerFrameData::sizes[index]);
+    }
 }
 
 int PerformancePadComponent::getPatternIndex() const noexcept
@@ -88,20 +104,6 @@ void PerformancePadComponent::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colours::black);
 
-    if (! tileSheetImage.isValid())
-    {
-        g.setColour (juce::Colours::white);
-        g.setFont (juce::FontOptions (16.0f).withStyle ("Bold"));
-        g.drawFittedText ("VISUAL ASSET ERROR",
-                          getLocalBounds().reduced (24),
-                          juce::Justification::centred, 1);
-        return;
-    }
-
-    // The embedded atlas is already preprocessed as 10 x 10 square frames.
-    // Runtime does not fit, letterbox, zoom, centre-crop or stretch a
-    // landscape source.  It only selects one exact square frame and enlarges
-    // that square to the square 720 x 720 canvas.
     const int column = juce::jlimit (
         0, tileColumns - 1,
         static_cast<int> (std::floor (
@@ -114,53 +116,24 @@ void PerformancePadComponent::paint (juce::Graphics& g)
 
     jassert (visualTileIndex >= 0 && visualTileIndex < tileCount);
 
-    const int visualRow = visualTileIndex / tileColumns;
-    const int visualColumn = visualTileIndex % tileColumns;
-
-    const int imageWidth = tileSheetImage.getWidth();
-    const int imageHeight = tileSheetImage.getHeight();
-
-    // IMPORTANT: this is the original user-supplied contact sheet, not an
-    // evenly-divided/generated atlas.  Its horizontal separators are not
-    // uniformly spaced, so dividing 1191 x 896 into ten equal rows caused the
-    // visible coordinate drift.  These bounds follow the actual separator
-    // positions in the source image.
-    if (imageWidth != 1191 || imageHeight != 896)
+    const auto& frame = frameImages[static_cast<size_t> (visualTileIndex)];
+    if (! frame.isValid())
     {
         g.setColour (juce::Colours::white);
         g.setFont (juce::FontOptions (16.0f).withStyle ("Bold"));
-        g.drawFittedText ("VISUAL SOURCE SIZE ERROR",
+        g.drawFittedText ("VISUAL FRAME ERROR",
                           getLocalBounds().reduced (24),
-                          juce::Justification::centred, 2);
+                          juce::Justification::centred, 1);
         return;
     }
 
-    // Exact contiguous frame bounds recovered from the user's already-cut
-    // 01.jpg..100.jpg set.  Those supplied cuts are exactly 2x these source
-    // cells, so no separator inset/gap is removed at runtime.
-    static constexpr int xStarts[tileColumns]
-        { 0, 120, 240, 360, 480, 600, 720, 840, 960, 1080 };
-    static constexpr int xEnds[tileColumns]
-        { 120, 240, 360, 480, 600, 720, 840, 960, 1080, 1191 };
-    static constexpr int yStarts[tileRows]
-        { 0, 86, 174, 263, 355, 449, 544, 640, 733, 811 };
-    static constexpr int yEnds[tileRows]
-        { 86, 174, 263, 355, 449, 544, 640, 733, 811, 896 };
-
-    const int sourceX = xStarts[visualColumn];
-    const int sourceY = yStarts[visualRow];
-    const int sourceWidth = xEnds[visualColumn] - sourceX;
-    const int sourceHeight = yEnds[visualRow] - sourceY;
-
-    jassert (sourceWidth > 0 && sourceHeight > 0);
-
-    // The requested behaviour is: select the exact source frame and display
-    // that complete frame.  Therefore the rectangular crop is scaled directly
-    // to the 720 x 720 canvas; there is no secondary crop.
+    // 01.jpg..100.jpg are already the final user-cut frames.
+    // Use every pixel of the selected frame and stretch the whole image
+    // directly to the full 720 x 720 canvas. No crop, inset, cover or atlas.
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-    g.drawImage (tileSheetImage,
+    g.drawImage (frame,
                  0, 0, getWidth(), getHeight(),
-                 sourceX, sourceY, sourceWidth, sourceHeight,
+                 0, 0, frame.getWidth(), frame.getHeight(),
                  false);
 
     if (physicalPointerVisible)
