@@ -311,7 +311,7 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
         return true;
     }
 
-    const juce::juce_wchar ch = key.getTextCharacter();
+    const auto ch = key.getTextCharacter();
 
     if (ch == 'h' || ch == 'H')
     {
