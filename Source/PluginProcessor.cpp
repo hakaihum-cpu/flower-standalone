@@ -152,6 +152,7 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
 
+    handlePerformanceMidiCC (midiMessages);
     generatePerformanceMidi (midiMessages, buffer.getNumSamples());
 
     updateSynthParams();
@@ -657,6 +658,14 @@ bool FlowerStandaloneAudioProcessor::getConfiguredYEffectDreamy() const noexcept
     return apvts.getRawParameterValue (ParamIDs::performanceYEffectConfig)->load() > 0.5f;
 }
 
+int FlowerStandaloneAudioProcessor::getConfiguredMidiChannel() const noexcept
+{
+    return juce::jlimit (
+        1, 16,
+        juce::roundToInt (
+            apvts.getRawParameterValue (ParamIDs::performanceMidiChannelConfig)->load()));
+}
+
 void FlowerStandaloneAudioProcessor::setConfiguredRoot (int noteClass)
 {
     noteClass = juce::jlimit (0, 11, noteClass);
@@ -692,6 +701,109 @@ void FlowerStandaloneAudioProcessor::setConfiguredYEffectDreamy (bool enabled)
 
     if (auto* parameter = apvts.getParameter (ParamIDs::performanceYEffectConfig))
         parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
+}
+
+void FlowerStandaloneAudioProcessor::setConfiguredMidiChannel (int channel)
+{
+    channel = juce::jlimit (1, 16, channel);
+
+    if (auto* parameter = apvts.getParameter (ParamIDs::performanceMidiChannelConfig))
+        parameter->setValueNotifyingHost (
+            parameter->convertTo0to1 (static_cast<float> (channel)));
+}
+
+void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC (juce::MidiBuffer& midi)
+{
+    const int configuredChannel = getConfiguredMidiChannel();
+
+    for (const auto metadata : midi)
+    {
+        const auto message = metadata.getMessage();
+
+        if (! message.isController()
+            || message.getChannel() != configuredChannel)
+            continue;
+
+        const int cc = message.getControllerNumber();
+        const int value = message.getControllerValue();
+        const float normalized = static_cast<float> (value) / 127.0f;
+        const bool on = value >= 64;
+
+        // FLOWER fixed MIDI CC map:
+        // CC10 Y, CC11 X, CC22 DELAY, CC23 ARP, CC24 Y EFFECT,
+        // CC25 LOOPER CYCLE, CC26 BPM, CC27 HOLD, CC28 STOP,
+        // CC29 LOOPER CLEAR.
+        switch (cc)
+        {
+            case 10:
+                setPerformancePad (
+                    performanceX.load (std::memory_order_relaxed),
+                    normalized,
+                    0.0f,
+                    0.0f,
+                    true);
+                break;
+
+            case 11:
+            {
+                const float previousX =
+                    performanceX.load (std::memory_order_relaxed);
+                const float direction =
+                    normalized < previousX ? -1.0f
+                    : normalized > previousX ? 1.0f
+                    : 0.0f;
+
+                setPerformancePad (
+                    normalized,
+                    performanceY.load (std::memory_order_relaxed),
+                    0.0f,
+                    direction,
+                    true);
+                break;
+            }
+
+            case 22:
+                setPerformanceDelayEnabled (on);
+                break;
+
+            case 23:
+                setPerformanceArpEnabled (on);
+                break;
+
+            case 24:
+                setPerformanceGranularEnabled (on);
+                break;
+
+            case 25:
+                if (on && ! performanceCcGate[25])
+                    cycleFlowerTransport();
+                performanceCcGate[25] = on;
+                break;
+
+            case 26:
+                setPerformanceBpm (50.0f + normalized * 150.0f);
+                break;
+
+            case 27:
+                setPerformanceHold (on);
+                break;
+
+            case 28:
+                if (on && ! performanceCcGate[28])
+                    stopPerformance();
+                performanceCcGate[28] = on;
+                break;
+
+            case 29:
+                if (on && ! performanceCcGate[29])
+                    clearFlowerLoop();
+                performanceCcGate[29] = on;
+                break;
+
+            default:
+                break;
+        }
+    }
 }
 
 bool FlowerStandaloneAudioProcessor::isPerformanceGateOpen() const noexcept
@@ -1196,6 +1308,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout FlowerStandaloneAudioProcess
         juce::ParameterID { ParamIDs::performanceYEffectConfig, 1 },
         "Y Effect",
         juce::StringArray { "GRANULAR", "DREAMY" }, 0));
+    parameters.push_back (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { ParamIDs::performanceMidiChannelConfig, 1 },
+        "MIDI Channel", 1, 16, 1));
 
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamIDs::flowerEnabled, 1 }, "Flower On", false));
