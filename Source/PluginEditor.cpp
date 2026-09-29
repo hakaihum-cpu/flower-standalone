@@ -178,9 +178,12 @@ void PerformancePadComponent::paint (juce::Graphics& g)
         for (int ring = 0; ring < 3; ++ring)
         {
             const float radius = (8.0f + ring * 7.0f) * unit;
-            g.drawArc (cx - radius, cy - radius,
-                       radius * 2.0f, radius * 2.0f,
-                       -1.25f, 1.05f, 1.15f * unit);
+            juce::Path arc;
+            arc.addCentredArc (
+                cx, cy, radius, radius, 0.0f,
+                -1.25f, 1.05f, true);
+            g.strokePath (
+                arc, juce::PathStrokeType (1.15f * unit));
         }
     }
 
