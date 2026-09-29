@@ -535,8 +535,8 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (13.0f));
     g.drawFittedText (
         visualMode200Available
-            ? "A/Y toggle performance effects. VISUAL MODE selects 100 or 200 frames."
-            : "A/Y toggle performance effects. 200 VISUAL MODE becomes available when 200 frames are embedded.",
+            ? "A/B/Y toggle performance functions. VISUAL MODE selects 100 or 200 frames."
+            : "A/B/Y toggle performance functions. 200 VISUAL MODE becomes available when 200 frames are embedded.",
         72, 590, 576, 34,
         juce::Justification::topLeft, 2);
 }
