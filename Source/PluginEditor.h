@@ -27,6 +27,7 @@ public:
     void setHeld (bool shouldHold);
     void nudgeFromPhysicalKey (float deltaX, float deltaY);
     void endPhysicalKeyControl();
+    void setExternalPosition (float x, float y);
     void setEffectState (bool arpOn, bool delayOn, bool yEffectOn, bool dreamyMode);
     float getXValue() const noexcept { return xValue; }
     float getYValue() const noexcept { return yValue; }
@@ -82,7 +83,8 @@ public:
     void setValues (int rootKey,
                     int scale,
                     bool effectsEnabled,
-                    bool yEffectDreamy);
+                    bool yEffectDreamy,
+                    int midiChannel);
     void moveSelection (int delta);
     void adjustSelected (int delta);
     void activateSelected();
@@ -91,6 +93,7 @@ public:
     std::function<void(int)> onScaleChanged;
     std::function<void(bool)> onEffectsChanged;
     std::function<void(bool)> onYEffectModeChanged;
+    std::function<void(int)> onMidiChannelChanged;
     std::function<void()> onCloseRequested;
 
 private:
@@ -98,6 +101,7 @@ private:
     int scaleIndex = 0;
     bool effectsEnabled = true;
     bool yEffectDreamy = false;
+    int midiChannel = 1;
     int selectedRow = 0;
 
     void notifyCurrentRow();
@@ -151,6 +155,7 @@ private:
     bool delayEnabled = true;
     bool granularEnabled = true;
     bool yEffectDreamy = false;
+    int midiChannel = 1;
     bool configVisible = false;
 
     bool dpadActive = false;
