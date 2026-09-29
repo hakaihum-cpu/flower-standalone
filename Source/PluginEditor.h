@@ -26,6 +26,9 @@ public:
     void setHeld (bool shouldHold);
     void nudgeFromPhysicalKey (float deltaX, float deltaY);
     void endPhysicalKeyControl();
+    void setEffectState (bool arpOn, bool delayOn, bool yEffectOn, bool mosaicMode);
+    bool setVisualMode200 (bool enabled);
+    bool isVisualMode200Available() const noexcept { return loadedFrameCount >= 200; }
     float getXValue() const noexcept { return xValue; }
     float getYValue() const noexcept { return yValue; }
     int getPatternIndex() const noexcept;
@@ -36,15 +39,18 @@ public:
     std::function<void()> onTapStopRequested;
 
 private:
-    static constexpr int tileColumns = 10;
-    static constexpr int tileRows = 10;
-    static constexpr int tileCount = tileColumns * tileRows;
-    static_assert (tileCount == 100, "FLOWER visual bank must contain all 100 cells");
+    static constexpr int maxVisualFrames = 200;
 
     void updateFromEvent (const juce::MouseEvent& e, bool isActive);
     void notify();
 
-    std::array<juce::Image, 100> frameImages;
+    std::array<juce::Image, maxVisualFrames> frameImages;
+    int loadedFrameCount = 0;
+    bool visualMode200 = false;
+    bool arpIndicatorOn = true;
+    bool delayIndicatorOn = true;
+    bool yEffectIndicatorOn = true;
+    bool mosaicIndicatorMode = false;
 
     float xValue = 0.28f;
     float yValue = 0.28f;
@@ -70,7 +76,12 @@ public:
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
 
-    void setValues (int rootKey, int scale, bool effectsEnabled);
+    void setValues (int rootKey,
+                    int scale,
+                    bool effectsEnabled,
+                    bool yEffectMosaic,
+                    bool visualMode200,
+                    bool visualMode200Available);
     void moveSelection (int delta);
     void adjustSelected (int delta);
     void activateSelected();
@@ -78,12 +89,17 @@ public:
     std::function<void(int)> onRootChanged;
     std::function<void(int)> onScaleChanged;
     std::function<void(bool)> onEffectsChanged;
+    std::function<void(bool)> onYEffectModeChanged;
+    std::function<void(bool)> onVisualModeChanged;
     std::function<void()> onCloseRequested;
 
 private:
     int rootKey = 0;
     int scaleIndex = 0;
     bool effectsEnabled = true;
+    bool yEffectMosaic = false;
+    bool visualMode200 = false;
+    bool visualMode200Available = false;
     int selectedRow = 0;
 
     void notifyCurrentRow();
@@ -136,6 +152,8 @@ private:
     bool arpEnabled = true;
     bool delayEnabled = true;
     bool granularEnabled = true;
+    bool yEffectMosaic = false;
+    bool visualMode200 = false;
     bool configVisible = false;
 
     bool dpadActive = false;
