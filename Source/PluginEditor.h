@@ -7,7 +7,8 @@
 #include "PluginProcessor.h"
 #include "RetroLookAndFeel.h"
 
-class PerformancePadComponent final : public juce::Component
+class PerformancePadComponent final : public juce::Component,
+                                      private juce::Timer
 {
 public:
     using PadCallback = std::function<void(float x,
@@ -44,12 +45,15 @@ private:
 
     void updateFromEvent (const juce::MouseEvent& e, bool isActive);
     void notify();
+    void updateVisualTimer();
+    void timerCallback() override;
 
     std::array<juce::Image, 100> frameImages;
     bool arpIndicatorOn = true;
     bool delayIndicatorOn = true;
     bool yEffectIndicatorOn = true;
     bool dreamyIndicatorMode = false;
+    float visualPhase = 0.0f;
 
     float xValue = 0.28f;
     float yValue = 0.28f;
