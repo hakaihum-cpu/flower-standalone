@@ -56,10 +56,18 @@ public:
     int getConfiguredScale() const noexcept;
     bool getDefaultEffectsEnabled() const noexcept;
     bool getConfiguredYEffectDreamy() const noexcept;
+    int getConfiguredMidiChannel() const noexcept;
+    float getPerformanceX() const noexcept { return performanceX.load (std::memory_order_relaxed); }
+    float getPerformanceY() const noexcept { return performanceY.load (std::memory_order_relaxed); }
+    float getPerformanceBpm() const noexcept { return performanceBpm.load (std::memory_order_relaxed); }
+    bool getPerformanceArpEnabled() const noexcept { return performanceArpEnabled.load (std::memory_order_relaxed); }
+    bool getPerformanceDelayEnabled() const noexcept { return performanceDelayEnabled.load (std::memory_order_relaxed); }
+    bool getPerformanceYEffectEnabled() const noexcept { return performanceGranularEnabled.load (std::memory_order_relaxed); }
     void setConfiguredRoot (int noteClass);
     void setConfiguredScale (int scaleIndex);
     void setDefaultEffectsEnabled (bool enabled);
     void setConfiguredYEffectDreamy (bool enabled);
+    void setConfiguredMidiChannel (int channel);
 
     void getFlowerWaveform (std::array<float, flowerWaveformBins>& destination) const noexcept;
     bool hasFlowerLoop() const noexcept { return flowerLoopLengthSamples.load (std::memory_order_relaxed) > 0; }
@@ -79,6 +87,7 @@ private:
     void resetFlowerState() noexcept;
     float nextFlowerRandomBipolar() noexcept;
 
+    void handlePerformanceMidiCC (juce::MidiBuffer& midi);
     void generatePerformanceMidi (juce::MidiBuffer& midi, int numSamples);
     void processPerformanceDelay (juce::AudioBuffer<float>& buffer);
     void processPerformanceDreamy (juce::AudioBuffer<float>& buffer);
@@ -138,6 +147,7 @@ private:
     std::atomic<bool> performanceGranularEnabled { true };
     std::atomic<bool> performanceDreamyMode { false };
     std::atomic<bool> performanceStopRequested { false };
+    std::array<bool, 128> performanceCcGate {};
 
     static constexpr int performanceDreamyVoiceCount = 2;
     juce::AudioBuffer<float> performanceDreamyBuffer;
