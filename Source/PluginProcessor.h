@@ -48,15 +48,18 @@ public:
     void setPerformanceArpEnabled (bool enabled) noexcept;
     void setPerformanceDelayEnabled (bool enabled) noexcept;
     void setPerformanceGranularEnabled (bool enabled) noexcept;
+    void setPerformanceDreamyMode (bool enabled) noexcept;
     void cycleFlowerTransport() noexcept;
     void stopPerformance() noexcept;
 
     int getConfiguredRoot() const noexcept;
     int getConfiguredScale() const noexcept;
     bool getDefaultEffectsEnabled() const noexcept;
+    bool getConfiguredYEffectDreamy() const noexcept;
     void setConfiguredRoot (int noteClass);
     void setConfiguredScale (int scaleIndex);
     void setDefaultEffectsEnabled (bool enabled);
+    void setConfiguredYEffectDreamy (bool enabled);
 
     void getFlowerWaveform (std::array<float, flowerWaveformBins>& destination) const noexcept;
     bool hasFlowerLoop() const noexcept { return flowerLoopLengthSamples.load (std::memory_order_relaxed) > 0; }
@@ -78,6 +81,7 @@ private:
 
     void generatePerformanceMidi (juce::MidiBuffer& midi, int numSamples);
     void processPerformanceDelay (juce::AudioBuffer<float>& buffer);
+    void processPerformanceDreamy (juce::AudioBuffer<float>& buffer);
     bool isPerformanceGateOpen() const noexcept;
     int nextPerformanceNote (int patternIndex);
     int performanceScaleLength() const noexcept;
@@ -132,7 +136,20 @@ private:
     std::atomic<bool> performanceArpEnabled { true };
     std::atomic<bool> performanceDelayEnabled { true };
     std::atomic<bool> performanceGranularEnabled { true };
+    std::atomic<bool> performanceDreamyMode { false };
     std::atomic<bool> performanceStopRequested { false };
+
+    static constexpr int performanceDreamyVoiceCount = 2;
+    juce::AudioBuffer<float> performanceDreamyBuffer;
+    int performanceDreamyWritePosition = 0;
+    int performanceDreamySamplesFilled = 0;
+    std::array<int, performanceDreamyVoiceCount> performanceDreamyLoopStart { 0, 0 };
+    std::array<int, performanceDreamyVoiceCount> performanceDreamyLoopLength { 0, 0 };
+    std::array<int, performanceDreamyVoiceCount> performanceDreamyOutputPhase { 0, 0 };
+    std::array<float, performanceDreamyVoiceCount> performanceDreamyLocalPosition { 0.0f, 0.0f };
+    std::array<float, performanceDreamyVoiceCount> performanceDreamyPlaybackSpeed { 1.3348398f, 2.0f };
+    std::array<bool, performanceDreamyVoiceCount> performanceDreamyVoiceActive { false, false };
+    uint32_t performanceDreamyRandomState = 0x44524541u;
 
     juce::AudioBuffer<float> performanceDelayBuffer;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> performanceDelaySamplesSmoothed;
