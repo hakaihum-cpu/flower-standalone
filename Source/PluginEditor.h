@@ -26,6 +26,7 @@ public:
     void setHeld (bool shouldHold);
     void nudgeFromPhysicalKey (float deltaX, float deltaY);
     void endPhysicalKeyControl();
+    void setEffectState (bool arpOn, bool delayOn, bool yEffectOn, bool dreamyMode);
     float getXValue() const noexcept { return xValue; }
     float getYValue() const noexcept { return yValue; }
     int getPatternIndex() const noexcept;
@@ -45,6 +46,10 @@ private:
     void notify();
 
     std::array<juce::Image, 100> frameImages;
+    bool arpIndicatorOn = true;
+    bool delayIndicatorOn = true;
+    bool yEffectIndicatorOn = true;
+    bool dreamyIndicatorMode = false;
 
     float xValue = 0.28f;
     float yValue = 0.28f;
@@ -70,7 +75,10 @@ public:
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
 
-    void setValues (int rootKey, int scale, bool effectsEnabled);
+    void setValues (int rootKey,
+                    int scale,
+                    bool effectsEnabled,
+                    bool yEffectDreamy);
     void moveSelection (int delta);
     void adjustSelected (int delta);
     void activateSelected();
@@ -78,12 +86,14 @@ public:
     std::function<void(int)> onRootChanged;
     std::function<void(int)> onScaleChanged;
     std::function<void(bool)> onEffectsChanged;
+    std::function<void(bool)> onYEffectModeChanged;
     std::function<void()> onCloseRequested;
 
 private:
     int rootKey = 0;
     int scaleIndex = 0;
     bool effectsEnabled = true;
+    bool yEffectDreamy = false;
     int selectedRow = 0;
 
     void notifyCurrentRow();
@@ -136,6 +146,7 @@ private:
     bool arpEnabled = true;
     bool delayEnabled = true;
     bool granularEnabled = true;
+    bool yEffectDreamy = false;
     bool configVisible = false;
 
     bool dpadActive = false;
