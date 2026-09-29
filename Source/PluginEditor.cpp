@@ -1,5 +1,8 @@
 #include "PluginEditor.h"
 #include "FlowerFrameData.h"
+#include "CarnivalBg0.h"
+#include "CarnivalBg1.h"
+#include "CarnivalActiveData.h"
 
 #if JUCE_ANDROID
  #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
@@ -396,18 +399,18 @@ void PerformancePadComponent::notify()
         onPadChanged (xValue, yValue, speedValue, horizontalDirection, active);
 }
 
+
 juce::Rectangle<int> ConfigScreenComponent::getRowBounds (int row) const
 {
-    constexpr int rowStep = 78;
-    constexpr int firstY = 160;
-    return { 72, firstY + row * rowStep, 576, 62 };
+    constexpr int rowStep = 65;
+    constexpr int firstY = 155;
+    return { 72, firstY + row * rowStep, 576, 54 };
 }
 
 juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
 {
     return { 516, 636, 132, 52 };
 }
-
 
 void ConfigScreenComponent::setValues (int newRootKey,
                                        int newScale,
@@ -425,9 +428,9 @@ void ConfigScreenComponent::setValues (int newRootKey,
 
 void ConfigScreenComponent::moveSelection (int delta)
 {
-    selectedRow = (selectedRow + delta) % 5;
+    selectedRow = (selectedRow + delta) % 6;
     if (selectedRow < 0)
-        selectedRow += 5;
+        selectedRow += 6;
     repaint();
 }
 
@@ -454,18 +457,16 @@ void ConfigScreenComponent::adjustSelected (int delta)
     else if (selectedRow == 2)
     {
         effectsEnabled = ! effectsEnabled;
-
         if (onEffectsChanged)
             onEffectsChanged (effectsEnabled);
     }
     else if (selectedRow == 3)
     {
         yEffectDreamy = ! yEffectDreamy;
-
         if (onYEffectModeChanged)
             onYEffectModeChanged (yEffectDreamy);
     }
-    else
+    else if (selectedRow == 4)
     {
         midiChannel += delta;
         while (midiChannel < 1)
@@ -476,12 +477,23 @@ void ConfigScreenComponent::adjustSelected (int delta)
         if (onMidiChannelChanged)
             onMidiChannelChanged (midiChannel);
     }
+    else if (onCarnivalRequested)
+    {
+        onCarnivalRequested();
+    }
 
     repaint();
 }
 
 void ConfigScreenComponent::activateSelected()
 {
+    if (selectedRow == 5)
+    {
+        if (onCarnivalRequested)
+            onCarnivalRequested();
+        return;
+    }
+
     adjustSelected (1);
 }
 
@@ -507,7 +519,7 @@ void ConfigScreenComponent::notifyCurrentRow()
         if (onYEffectModeChanged)
             onYEffectModeChanged (yEffectDreamy);
     }
-    else
+    else if (selectedRow == 4)
     {
         if (onMidiChannelChanged)
             onMidiChannelChanged (midiChannel);
@@ -533,10 +545,10 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xff8f8776));
     g.setFont (juce::FontOptions (16.0f));
     g.drawText ("SELECT: CONFIG    UP/DOWN: ITEM    LEFT/RIGHT: CHANGE    B: OK",
-                72, 124, 576, 34,
+                72, 124, 576, 28,
                 juce::Justification::centredLeft);
 
-    for (int row = 0; row < 5; ++row)
+    for (int row = 0; row < 6; ++row)
     {
         const auto bounds = getRowBounds (row);
         const bool selected = row == selectedRow;
@@ -549,7 +561,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
         g.setColour (selected
             ? juce::Colour (0xff11110f)
             : juce::Colour (0xffd7ceb8));
-        g.setFont (juce::FontOptions (21.0f).withStyle ("Bold"));
+        g.setFont (juce::FontOptions (19.0f).withStyle ("Bold"));
 
         juce::String label;
         juce::String value;
@@ -574,10 +586,15 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
             label = "Y EFFECT";
             value = yEffectDreamy ? "DREAMY" : "GRANULAR";
         }
-        else
+        else if (row == 4)
         {
             label = "MIDI CHANNEL";
             value = juce::String (midiChannel);
+        }
+        else
+        {
+            label = "CARNIVAL";
+            value = "ENTER";
         }
 
         g.drawText (label,
@@ -598,10 +615,9 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xff77705f));
     g.setFont (juce::FontOptions (14.0f));
     g.drawFittedText (
-        "Y EFFECT selects GRANULAR or DREAMY. "
-        "MIDI: CC10 Y / CC11 X / CC22-29 controls.",
-        72, 548, 576, 60,
-        juce::Justification::topLeft, 3);
+        "Y EFFECT: GRANULAR / DREAMY.  CARNIVAL: drum machine mode.",
+        72, 552, 420, 52,
+        juce::Justification::topLeft, 2);
 }
 
 void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
@@ -625,7 +641,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    for (int row = 0; row < 5; ++row)
+    for (int row = 0; row < 6; ++row)
     {
         const auto bounds = getRowBounds (row);
         if (! bounds.contains (designPoint))
@@ -633,20 +649,844 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
 
         selectedRow = row;
 
-        if (row == 2 || row == 3)
+        if (row == 2 || row == 3 || row == 5)
         {
-            adjustSelected (1);
+            activateSelected();
         }
         else
         {
-            const int delta = designPoint.x < bounds.getCentreX()
-                ? -1
-                : 1;
+            const int delta = designPoint.x < bounds.getCentreX() ? -1 : 1;
             adjustSelected (delta);
         }
 
         return;
     }
+}
+
+CarnivalScreenComponent::CarnivalScreenComponent (
+    FlowerStandaloneAudioProcessor& p)
+    : processor (p)
+{
+    setOpaque (true);
+    setWantsKeyboardFocus (false);
+
+    const auto loadImageFromBase64 = [] (const juce::String& encoded)
+    {
+        juce::MemoryOutputStream decoded;
+        if (! juce::Base64::convertFromBase64 (decoded, encoded))
+            return juce::Image {};
+
+        const auto& bytes = decoded.getMemoryBlock();
+        return juce::ImageFileFormat::loadFrom (
+            bytes.getData(), bytes.getSize());
+    };
+
+    sequenceBackground = loadImageFromBase64 (
+        juce::String (CarnivalBg0::data)
+        + juce::String (CarnivalBg1::data));
+
+    activeStepImage = loadImageFromBase64 (
+        juce::String (CarnivalActiveData::data));
+
+    startTimerHz (30);
+}
+
+CarnivalScreenComponent::~CarnivalScreenComponent()
+{
+    stopTimer();
+}
+
+juce::Point<float> CarnivalScreenComponent::toDesignPoint (
+    juce::Point<float> point) const
+{
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return {};
+
+    return {
+        point.x * designSize / static_cast<float> (getWidth()),
+        point.y * designSize / static_cast<float> (getHeight())
+    };
+}
+
+void CarnivalScreenComponent::setPage (Page newPage)
+{
+    page = newPage;
+
+    if (page == Page::Parameter && ! parameterLockMode)
+        selectedTrack = cursorRow;
+
+    repaint();
+}
+
+void CarnivalScreenComponent::showSequencePage()
+{
+    parameterLockMode = false;
+    setPage (Page::Sequence);
+}
+
+void CarnivalScreenComponent::selectPageFromHeader (float x)
+{
+    if (x < 240.0f)
+        return;
+
+    if (x < 400.0f)
+    {
+        parameterLockMode = false;
+        setPage (Page::Sequence);
+    }
+    else if (x < 560.0f)
+    {
+        parameterLockMode = false;
+        selectedTrack = cursorRow;
+        setPage (Page::Parameter);
+    }
+    else
+    {
+        setPage (Page::Config);
+    }
+}
+
+juce::String CarnivalScreenComponent::getMachineName (int track) const
+{
+    switch (processor.getCarnivalInstrument (track))
+    {
+        case 0: return "KICK";
+        case 1: return "SNARE";
+        case 2: return "HIHAT";
+        case 3: return "CHORD";
+        case 4: return "TONE";
+        case 5: return "TOM";
+        case 6: return "BASS";
+        default: return "KICK";
+    }
+}
+
+juce::String CarnivalScreenComponent::getParameterName (int param) const
+{
+    static constexpr const char* names[]
+    {
+        "VOLUME", "PAN", "FILTER", "PITCH",
+        "DECAY", "LFO RATE", "LFO DEPTH"
+    };
+
+    return names[juce::jlimit (
+        0, FlowerStandaloneAudioProcessor::carnivalParamCount - 1, param)];
+}
+
+juce::String CarnivalScreenComponent::getParameterValueText (
+    int param, float value) const
+{
+    value = juce::jlimit (0.0f, 1.0f, value);
+
+    switch (param)
+    {
+        case 0:
+            return juce::String (juce::roundToInt (value * 100.0f)) + "%";
+
+        case 1:
+        {
+            const int pan = juce::roundToInt ((value - 0.5f) * 200.0f);
+            if (std::abs (pan) <= 1)
+                return "C";
+            return pan < 0
+                ? "L" + juce::String (-pan)
+                : "R" + juce::String (pan);
+        }
+
+        case 2:
+        {
+            const float hz = 180.0f + value * value * 15500.0f;
+            return hz >= 1000.0f
+                ? juce::String (hz / 1000.0f, 1) + "k"
+                : juce::String (juce::roundToInt (hz)) + "Hz";
+        }
+
+        case 3:
+            return juce::String (
+                juce::roundToInt ((value - 0.5f) * 48.0f)) + "st";
+
+        case 4:
+            return juce::String (
+                juce::roundToInt ((0.04f + value * 1.25f) * 1000.0f)) + "ms";
+
+        case 5:
+            return juce::String (0.10f + value * 15.9f, 1) + "Hz";
+
+        default:
+            return juce::String (juce::roundToInt (value * 100.0f)) + "%";
+    }
+}
+
+void CarnivalScreenComponent::paintHeader (
+    juce::Graphics& g, const juce::String& title)
+{
+    g.setColour (juce::Colours::black.withAlpha (0.78f));
+    g.fillRect (0.0f, 0.0f, 720.0f, 40.0f);
+
+    g.setColour (juce::Colour (0xffe7dcc0));
+    g.setFont (juce::FontOptions (15.0f).withStyle ("Bold"));
+    g.drawText ("CARNIVAL  " + title, 12, 0, 225, 40,
+                juce::Justification::centredLeft);
+
+    const char* labels[] { "SEQ", "PARAM", "CONFIG" };
+    const float x[] { 240.0f, 400.0f, 560.0f };
+
+    for (int i = 0; i < 3; ++i)
+    {
+        const bool selected =
+            static_cast<int> (page) == i;
+
+        g.setColour (selected
+            ? juce::Colour (0xffe0d5b9)
+            : juce::Colour (0xff292722));
+        g.fillRect (x[i], 4.0f, 154.0f, 32.0f);
+
+        g.setColour (selected
+            ? juce::Colour (0xff11110f)
+            : juce::Colour (0xffd7ceb8));
+        g.drawText (labels[i],
+                    juce::roundToInt (x[i]), 4, 154, 32,
+                    juce::Justification::centred);
+    }
+}
+
+void CarnivalScreenComponent::paintSequence (juce::Graphics& g)
+{
+    g.fillAll (juce::Colour (0xff090908));
+
+    if (sequenceBackground.isValid())
+    {
+        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+        g.drawImage (sequenceBackground,
+                     0, 0, 720, 720,
+                     0, 0,
+                     sequenceBackground.getWidth(),
+                     sequenceBackground.getHeight(),
+                     false);
+    }
+
+    for (int track = 0;
+         track < FlowerStandaloneAudioProcessor::carnivalTrackCount;
+         ++track)
+    {
+        for (int step = 0;
+             step < FlowerStandaloneAudioProcessor::carnivalStepCount;
+             ++step)
+        {
+            const float x = step * cellSize;
+            const float y = track * cellSize;
+
+            if (processor.getCarnivalStepEnabled (track, step))
+            {
+                if (activeStepImage.isValid())
+                {
+                    g.drawImage (activeStepImage,
+                                 juce::roundToInt (x),
+                                 juce::roundToInt (y),
+                                 juce::roundToInt (cellSize),
+                                 juce::roundToInt (cellSize),
+                                 0, 0,
+                                 activeStepImage.getWidth(),
+                                 activeStepImage.getHeight(),
+                                 false);
+                }
+                else
+                {
+                    g.setColour (juce::Colour (0xffd9c58f));
+                    g.fillRect (x, y, cellSize, cellSize);
+                }
+            }
+
+            if (processor.carnivalStepHasLocks (track, step))
+            {
+                g.setColour (juce::Colour (0xffffe7a5).withAlpha (0.92f));
+                g.fillEllipse (
+                    x + cellSize - 10.0f, y + 5.0f,
+                    5.0f, 5.0f);
+            }
+        }
+
+        const float y = track * cellSize;
+        g.setColour (juce::Colours::black.withAlpha (0.45f));
+        g.fillRect (8.0f * cellSize, y, 2.0f * cellSize, cellSize);
+
+        g.setColour (juce::Colour (0xffe5dcc6));
+        g.setFont (juce::FontOptions (11.5f).withStyle ("Bold"));
+        g.drawText ("<", 576, juce::roundToInt (y), 24, 72,
+                    juce::Justification::centred);
+        g.drawText (getMachineName (track),
+                    597, juce::roundToInt (y), 102, 72,
+                    juce::Justification::centred);
+        g.drawText (">", 696, juce::roundToInt (y), 24, 72,
+                    juce::Justification::centred);
+    }
+
+    const int playhead = processor.getCarnivalCurrentStep();
+    if (playhead >= 0 && playhead < 8)
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.085f));
+        g.fillRect (playhead * cellSize, 0.0f, cellSize, 720.0f);
+        g.setColour (juce::Colour (0xffffe8b4).withAlpha (0.82f));
+        g.drawRect (playhead * cellSize, 0.0f, cellSize, 720.0f, 2.0f);
+    }
+
+    g.setColour (juce::Colours::black.withAlpha (0.68f));
+    for (int column = 1; column < gridColumns; ++column)
+        g.fillRect (column * cellSize - 1.0f, 0.0f, 2.0f, 720.0f);
+    for (int row = 1; row < gridRows; ++row)
+        g.fillRect (0.0f, row * cellSize - 1.0f, 720.0f, 2.0f);
+
+    g.setColour (juce::Colour (0xffffe7a5).withAlpha (0.90f));
+    g.drawRect (cursorColumn * cellSize + 2.0f,
+                cursorRow * cellSize + 2.0f,
+                cellSize - 4.0f, cellSize - 4.0f,
+                2.0f);
+
+    paintHeader (g, processor.isCarnivalPlaying() ? "PLAY" : "STOP");
+}
+
+void CarnivalScreenComponent::paintParameter (juce::Graphics& g)
+{
+    g.fillAll (juce::Colour (0xff0a0a09));
+
+    if (sequenceBackground.isValid())
+    {
+        juce::Graphics::ScopedSaveState backgroundState (g);
+        g.setOpacity (0.10f);
+        g.drawImage (sequenceBackground,
+                     0, 0, 720, 720,
+                     0, 0,
+                     sequenceBackground.getWidth(),
+                     sequenceBackground.getHeight(),
+                     false);
+    }
+
+    g.setColour (juce::Colour (0xffe4dac0));
+    g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
+
+    juce::String context =
+        "TR " + juce::String (selectedTrack + 1)
+        + "  " + getMachineName (selectedTrack);
+
+    if (parameterLockMode)
+        context += "  STEP " + juce::String (selectedStep + 1) + "  P-LOCK";
+    else
+        context += "  TRACK";
+
+    g.drawText (context, 48, 54, 624, 42,
+                juce::Justification::centredLeft);
+
+    for (int param = 0;
+         param < FlowerStandaloneAudioProcessor::carnivalParamCount;
+         ++param)
+    {
+        const float y = 110.0f + param * 66.0f;
+        const bool locked =
+            parameterLockMode
+            && processor.getCarnivalParamLockEnabled (
+                selectedTrack, selectedStep, param);
+
+        const float value =
+            locked
+                ? processor.getCarnivalParamLockValue (
+                    selectedTrack, selectedStep, param)
+                : processor.getCarnivalBaseParam (
+                    selectedTrack, param);
+
+        g.setColour (param == selectedParam
+            ? juce::Colour (0xffd9ceb3).withAlpha (0.20f)
+            : juce::Colour (0xff1d1c19).withAlpha (0.88f));
+        g.fillRoundedRectangle (48.0f, y, 624.0f, 52.0f, 6.0f);
+
+        g.setColour (juce::Colour (0xffd9cfb8));
+        g.setFont (juce::FontOptions (15.0f).withStyle ("Bold"));
+        g.drawText (getParameterName (param),
+                    62, juce::roundToInt (y), 145, 52,
+                    juce::Justification::centredLeft);
+
+        const juce::Rectangle<float> bar (218.0f, y + 19.0f, 330.0f, 14.0f);
+        g.setColour (juce::Colour (0xff3a3730));
+        g.fillRoundedRectangle (bar, 4.0f);
+        g.setColour (locked
+            ? juce::Colour (0xffffdf91)
+            : juce::Colour (0xffc7bfa9));
+        g.fillRoundedRectangle (
+            bar.withWidth (bar.getWidth() * value), 4.0f);
+
+        g.setColour (juce::Colour (0xffe8dfcb));
+        g.setFont (juce::FontOptions (14.0f));
+        g.drawText (getParameterValueText (param, value),
+                    558, juce::roundToInt (y), 100, 52,
+                    juce::Justification::centredRight);
+
+        if (locked)
+        {
+            g.setColour (juce::Colour (0xffffdf91));
+            g.fillEllipse (204.0f, y + 22.0f, 7.0f, 7.0f);
+        }
+    }
+
+    g.setColour (juce::Colour (0xff292722));
+    g.fillRoundedRectangle (48.0f, 590.0f, 288.0f, 52.0f, 7.0f);
+    g.fillRoundedRectangle (384.0f, 590.0f, 288.0f, 52.0f, 7.0f);
+
+    g.setColour (juce::Colour (0xffded3b7));
+    g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
+    g.drawText (parameterLockMode ? "CLEAR LOCKS" : "TRACK PARAMETERS",
+                48, 590, 288, 52, juce::Justification::centred);
+    g.drawText ("BACK TO SEQUENCE",
+                384, 590, 288, 52, juce::Justification::centred);
+
+    paintHeader (g, "PARAMETER");
+}
+
+void CarnivalScreenComponent::paintConfig (juce::Graphics& g)
+{
+    g.fillAll (juce::Colour (0xff0a0a09));
+
+    static constexpr const char* labels[]
+    {
+        "CLOCK SOURCE", "BPM", "TRANSPORT",
+        "MIDI CHANNEL", "CLEAR PATTERN", "EXIT CARNIVAL"
+    };
+
+    for (int row = 0; row < 6; ++row)
+    {
+        const float y = 120.0f + row * 76.0f;
+        const bool selected = row == configRow;
+
+        g.setColour (selected
+            ? juce::Colour (0xffd9ceb3)
+            : juce::Colour (0xff24231f));
+        g.fillRoundedRectangle (64.0f, y, 592.0f, 58.0f, 7.0f);
+
+        g.setColour (selected
+            ? juce::Colour (0xff11110f)
+            : juce::Colour (0xffded5bf));
+        g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
+        g.drawText (labels[row],
+                    82, juce::roundToInt (y), 260, 58,
+                    juce::Justification::centredLeft);
+
+        juce::String value;
+
+        if (row == 0)
+            value = processor.isCarnivalClockMidi() ? "MIDI" : "INTERNAL";
+        else if (row == 1)
+            value = processor.isCarnivalClockMidi()
+                ? "EXT"
+                : juce::String (juce::roundToInt (processor.getCarnivalBpm()));
+        else if (row == 2)
+            value = processor.isCarnivalClockMidi()
+                ? (processor.isCarnivalPlaying() ? "MIDI RUN" : "WAIT MIDI")
+                : (processor.isCarnivalPlaying() ? "PLAYING" : "STOPPED");
+        else if (row == 3)
+            value = juce::String (processor.getConfiguredMidiChannel());
+        else if (row == 4)
+            value = "CLEAR";
+        else
+            value = "EXIT";
+
+        g.drawText (value,
+                    360, juce::roundToInt (y), 278, 58,
+                    juce::Justification::centredRight);
+    }
+
+    g.setColour (juce::Colour (0xff77705f));
+    g.setFont (juce::FontOptions (13.0f));
+    g.drawFittedText (
+        "MIDI clock: Start / Continue / Stop, 24 PPQN, 12 clocks per step.",
+        64, 592, 592, 42,
+        juce::Justification::centredLeft, 2);
+
+    paintHeader (g, "CONFIG");
+}
+
+void CarnivalScreenComponent::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colours::black);
+
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return;
+
+    juce::Graphics::ScopedSaveState savedState (g);
+    g.addTransform (juce::AffineTransform::scale (
+        static_cast<float> (getWidth()) / designSize,
+        static_cast<float> (getHeight()) / designSize));
+
+    if (page == Page::Sequence)
+        paintSequence (g);
+    else if (page == Page::Parameter)
+        paintParameter (g);
+    else
+        paintConfig (g);
+}
+
+void CarnivalScreenComponent::timerCallback()
+{
+    repaint();
+}
+
+void CarnivalScreenComponent::openParameterForStep (
+    int track, int step)
+{
+    selectedTrack = juce::jlimit (
+        0, FlowerStandaloneAudioProcessor::carnivalTrackCount - 1, track);
+    selectedStep = juce::jlimit (
+        0, FlowerStandaloneAudioProcessor::carnivalStepCount - 1, step);
+    selectedParam = 0;
+    parameterLockMode = true;
+    setPage (Page::Parameter);
+}
+
+void CarnivalScreenComponent::openParameterForTrack (int track)
+{
+    selectedTrack = juce::jlimit (
+        0, FlowerStandaloneAudioProcessor::carnivalTrackCount - 1, track);
+    selectedParam = 0;
+    parameterLockMode = false;
+    setPage (Page::Parameter);
+}
+
+void CarnivalScreenComponent::adjustCurrentParameter (float normalised)
+{
+    normalised = juce::jlimit (0.0f, 1.0f, normalised);
+
+    if (parameterLockMode)
+    {
+        processor.setCarnivalParamLock (
+            selectedTrack, selectedStep, selectedParam,
+            true, normalised);
+    }
+    else
+    {
+        processor.setCarnivalBaseParam (
+            selectedTrack, selectedParam, normalised);
+    }
+
+    processor.previewCarnivalTrack (selectedTrack);
+    repaint();
+}
+
+void CarnivalScreenComponent::nudgeCurrentParameter (float delta)
+{
+    float value = parameterLockMode
+        && processor.getCarnivalParamLockEnabled (
+            selectedTrack, selectedStep, selectedParam)
+        ? processor.getCarnivalParamLockValue (
+            selectedTrack, selectedStep, selectedParam)
+        : processor.getCarnivalBaseParam (
+            selectedTrack, selectedParam);
+
+    adjustCurrentParameter (value + delta);
+}
+
+void CarnivalScreenComponent::activateConfigRow (int direction)
+{
+    direction = direction < 0 ? -1 : 1;
+
+    if (configRow == 0)
+    {
+        processor.setCarnivalClockMidi (
+            ! processor.isCarnivalClockMidi());
+    }
+    else if (configRow == 1)
+    {
+        if (! processor.isCarnivalClockMidi())
+            processor.setCarnivalBpm (
+                processor.getCarnivalBpm()
+                + 2.0f * static_cast<float> (direction));
+    }
+    else if (configRow == 2)
+    {
+        if (! processor.isCarnivalClockMidi())
+            processor.setCarnivalPlaying (
+                ! processor.isCarnivalPlaying());
+    }
+    else if (configRow == 3)
+    {
+        int channel =
+            processor.getConfiguredMidiChannel() + direction;
+        if (channel < 1)
+            channel = 16;
+        if (channel > 16)
+            channel = 1;
+        processor.setConfiguredMidiChannel (channel);
+    }
+    else if (configRow == 4)
+    {
+        processor.clearCarnivalPattern();
+    }
+    else if (onExitRequested)
+    {
+        onExitRequested();
+    }
+
+    repaint();
+}
+
+void CarnivalScreenComponent::mouseDown (const juce::MouseEvent& e)
+{
+    pointerDownDesign = toDesignPoint (e.position);
+    pointerDownMs = juce::Time::getMillisecondCounterHiRes();
+    pointerDragged = false;
+}
+
+void CarnivalScreenComponent::mouseDrag (const juce::MouseEvent& e)
+{
+    const auto p = toDesignPoint (e.position);
+
+    if (p.getDistanceFrom (pointerDownDesign) > 5.0f)
+        pointerDragged = true;
+
+    if (page != Page::Parameter || p.y < 100.0f)
+        return;
+
+    const int row =
+        static_cast<int> ((p.y - 110.0f) / 66.0f);
+
+    if (row < 0
+        || row >= FlowerStandaloneAudioProcessor::carnivalParamCount)
+        return;
+
+    const float rowY = 110.0f + row * 66.0f;
+    if (p.y < rowY || p.y > rowY + 52.0f)
+        return;
+
+    selectedParam = row;
+    adjustCurrentParameter (
+        (p.x - 218.0f) / 330.0f);
+}
+
+void CarnivalScreenComponent::mouseUp (const juce::MouseEvent& e)
+{
+    const auto p = toDesignPoint (e.position);
+
+    if (p.y < 40.0f && p.x >= 240.0f)
+    {
+        selectPageFromHeader (p.x);
+        return;
+    }
+
+    const double heldMs =
+        juce::Time::getMillisecondCounterHiRes() - pointerDownMs;
+    const bool longPress =
+        heldMs >= 450.0
+        && p.getDistanceFrom (pointerDownDesign) <= 10.0f;
+
+    if (page == Page::Sequence)
+    {
+        const int column = juce::jlimit (
+            0, gridColumns - 1,
+            static_cast<int> (p.x / cellSize));
+        const int row = juce::jlimit (
+            0, gridRows - 1,
+            static_cast<int> (p.y / cellSize));
+
+        cursorColumn = column;
+        cursorRow = row;
+        selectedTrack = row;
+
+        if (column < 8)
+        {
+            selectedStep = column;
+
+            if (longPress)
+                openParameterForStep (row, column);
+            else
+                processor.toggleCarnivalStep (row, column);
+        }
+        else
+        {
+            if (longPress)
+                openParameterForTrack (row);
+            else
+                processor.cycleCarnivalInstrument (
+                    row, column == 8 ? -1 : 1);
+        }
+
+        repaint();
+        return;
+    }
+
+    if (page == Page::Parameter)
+    {
+        if (p.y >= 590.0f && p.y <= 642.0f)
+        {
+            if (p.x < 360.0f)
+            {
+                if (parameterLockMode)
+                    processor.clearCarnivalStepLocks (
+                        selectedTrack, selectedStep);
+            }
+            else
+            {
+                showSequencePage();
+            }
+
+            repaint();
+            return;
+        }
+
+        const int row =
+            static_cast<int> ((p.y - 110.0f) / 66.0f);
+
+        if (row >= 0
+            && row < FlowerStandaloneAudioProcessor::carnivalParamCount)
+        {
+            const float rowY = 110.0f + row * 66.0f;
+            if (p.y >= rowY && p.y <= rowY + 52.0f)
+            {
+                selectedParam = row;
+                adjustCurrentParameter (
+                    (p.x - 218.0f) / 330.0f);
+            }
+        }
+
+        return;
+    }
+
+    const int row =
+        static_cast<int> ((p.y - 120.0f) / 76.0f);
+
+    if (row >= 0 && row < 6)
+    {
+        const float rowY = 120.0f + row * 76.0f;
+        if (p.y >= rowY && p.y <= rowY + 58.0f)
+        {
+            configRow = row;
+            const int direction = p.x < 360.0f ? -1 : 1;
+            activateConfigRow (direction);
+        }
+    }
+}
+
+bool CarnivalScreenComponent::handleKeyPress (
+    const juce::KeyPress& key)
+{
+    const int code = key.getKeyCode();
+    const auto ch = key.getTextCharacter();
+
+    if (code == juce::KeyPress::F19Key || ch == 'c' || ch == 'C')
+    {
+        const int next =
+            (static_cast<int> (page) + 1) % 3;
+        if (next == static_cast<int> (Page::Sequence))
+            showSequencePage();
+        else
+            setPage (static_cast<Page> (next));
+        return true;
+    }
+
+    if (code == juce::KeyPress::F13Key || ch == 'a' || ch == 'A')
+    {
+        if (! processor.isCarnivalClockMidi())
+            processor.setCarnivalPlaying (
+                ! processor.isCarnivalPlaying());
+        return true;
+    }
+
+    if (page == Page::Sequence)
+    {
+        if (code == juce::KeyPress::leftKey)
+            cursorColumn = juce::jmax (0, cursorColumn - 1);
+        else if (code == juce::KeyPress::rightKey)
+            cursorColumn = juce::jmin (9, cursorColumn + 1);
+        else if (code == juce::KeyPress::upKey)
+            cursorRow = juce::jmax (0, cursorRow - 1);
+        else if (code == juce::KeyPress::downKey)
+            cursorRow = juce::jmin (9, cursorRow + 1);
+        else if (code == juce::KeyPress::F14Key || ch == 'b' || ch == 'B')
+        {
+            if (cursorColumn < 8)
+            {
+                selectedStep = cursorColumn;
+                processor.toggleCarnivalStep (
+                    cursorRow, cursorColumn);
+            }
+            else
+            {
+                processor.cycleCarnivalInstrument (
+                    cursorRow, cursorColumn == 8 ? -1 : 1);
+            }
+        }
+        else if (code == juce::KeyPress::F16Key || ch == 'y' || ch == 'Y')
+        {
+            if (cursorColumn < 8)
+                openParameterForStep (
+                    cursorRow, cursorColumn);
+            else
+                openParameterForTrack (cursorRow);
+        }
+        else
+        {
+            return false;
+        }
+
+        selectedTrack = cursorRow;
+        repaint();
+        return true;
+    }
+
+    if (page == Page::Parameter)
+    {
+        if (code == juce::KeyPress::upKey)
+            selectedParam = juce::jmax (0, selectedParam - 1);
+        else if (code == juce::KeyPress::downKey)
+            selectedParam = juce::jmin (
+                FlowerStandaloneAudioProcessor::carnivalParamCount - 1,
+                selectedParam + 1);
+        else if (code == juce::KeyPress::leftKey)
+            nudgeCurrentParameter (-0.025f);
+        else if (code == juce::KeyPress::rightKey)
+            nudgeCurrentParameter (0.025f);
+        else if ((code == juce::KeyPress::F14Key || ch == 'b' || ch == 'B')
+                 && parameterLockMode)
+        {
+            const bool enabled =
+                processor.getCarnivalParamLockEnabled (
+                    selectedTrack, selectedStep, selectedParam);
+            const float value =
+                enabled
+                    ? processor.getCarnivalParamLockValue (
+                        selectedTrack, selectedStep, selectedParam)
+                    : processor.getCarnivalBaseParam (
+                        selectedTrack, selectedParam);
+
+            processor.setCarnivalParamLock (
+                selectedTrack, selectedStep, selectedParam,
+                ! enabled, value);
+        }
+        else if (code == juce::KeyPress::F15Key || ch == 'x' || ch == 'X')
+        {
+            showSequencePage();
+        }
+        else
+        {
+            return false;
+        }
+
+        repaint();
+        return true;
+    }
+
+    if (code == juce::KeyPress::upKey)
+        configRow = juce::jmax (0, configRow - 1);
+    else if (code == juce::KeyPress::downKey)
+        configRow = juce::jmin (5, configRow + 1);
+    else if (code == juce::KeyPress::leftKey)
+        activateConfigRow (-1);
+    else if (code == juce::KeyPress::rightKey
+             || code == juce::KeyPress::F14Key
+             || ch == 'b' || ch == 'B')
+        activateConfigRow (1);
+    else if (code == juce::KeyPress::F15Key || ch == 'x' || ch == 'X')
+        showSequencePage();
+    else
+        return false;
+
+    repaint();
+    return true;
 }
 
 FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
