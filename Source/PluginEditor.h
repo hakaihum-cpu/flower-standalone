@@ -94,6 +94,7 @@ public:
     std::function<void(bool)> onEffectsChanged;
     std::function<void(bool)> onYEffectModeChanged;
     std::function<void(int)> onMidiChannelChanged;
+    std::function<void()> onCarnivalRequested;
     std::function<void()> onCloseRequested;
 
 private:
@@ -109,6 +110,74 @@ private:
     juce::Rectangle<int> getCloseBounds() const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ConfigScreenComponent)
+};
+
+
+class CarnivalScreenComponent final : public juce::Component,
+                                     private juce::Timer
+{
+public:
+    explicit CarnivalScreenComponent (FlowerStandaloneAudioProcessor&);
+    ~CarnivalScreenComponent() override;
+
+    void paint (juce::Graphics& g) override;
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp (const juce::MouseEvent& e) override;
+
+    bool handleKeyPress (const juce::KeyPress& key);
+    void showSequencePage();
+
+    std::function<void()> onExitRequested;
+
+private:
+    enum class Page
+    {
+        Sequence = 0,
+        Parameter,
+        Config
+    };
+
+    static constexpr float designSize = 720.0f;
+    static constexpr int gridColumns = 10;
+    static constexpr int gridRows = 10;
+    static constexpr float cellSize = 72.0f;
+
+    void timerCallback() override;
+    juce::Point<float> toDesignPoint (juce::Point<float> point) const;
+    void setPage (Page newPage);
+    void selectPageFromHeader (float x);
+    void paintSequence (juce::Graphics& g);
+    void paintParameter (juce::Graphics& g);
+    void paintConfig (juce::Graphics& g);
+    void paintHeader (juce::Graphics& g, const juce::String& title);
+    void adjustCurrentParameter (float normalised);
+    void nudgeCurrentParameter (float delta);
+    void activateConfigRow (int direction);
+    juce::String getMachineName (int track) const;
+    juce::String getParameterName (int param) const;
+    juce::String getParameterValueText (int param, float value) const;
+    void openParameterForStep (int track, int step);
+    void openParameterForTrack (int track);
+
+    FlowerStandaloneAudioProcessor& processor;
+    juce::Image sequenceBackground;
+    juce::Image activeStepImage;
+
+    Page page = Page::Sequence;
+    int cursorRow = 0;
+    int cursorColumn = 0;
+    int selectedTrack = 0;
+    int selectedStep = 0;
+    int selectedParam = 0;
+    int configRow = 0;
+    bool parameterLockMode = false;
+
+    juce::Point<float> pointerDownDesign;
+    double pointerDownMs = 0.0;
+    bool pointerDragged = false;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CarnivalScreenComponent)
 };
 
 class FlowerStandaloneAudioProcessorEditor final : public juce::AudioProcessorEditor,
@@ -146,6 +215,7 @@ private:
     RetroLookAndFeel retroLookAndFeel;
     PerformancePadComponent performancePad;
     ConfigScreenComponent configScreen;
+    CarnivalScreenComponent carnivalScreen;
 
     int rootClass = 0;
     int scaleIndex = 0;
@@ -157,6 +227,7 @@ private:
     bool yEffectDreamy = false;
     int midiChannel = 1;
     bool configVisible = false;
+    bool carnivalVisible = false;
 
     bool dpadActive = false;
     int dpadKeyCode = 0;
