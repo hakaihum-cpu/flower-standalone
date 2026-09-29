@@ -286,6 +286,11 @@ private:
     int carnivalMidiClockCounter = 0;
     bool carnivalMidiRunning = false;
 
+    static constexpr int carnivalMidiTriggerCapacity = 32;
+    std::array<int, carnivalMidiTriggerCapacity> carnivalMidiTriggerSamples {};
+    std::array<int, carnivalMidiTriggerCapacity> carnivalMidiTriggerSteps {};
+    int carnivalMidiTriggerCount = 0;
+
     static constexpr int performanceDreamyVoiceCount = 2;
     juce::AudioBuffer<float> performanceDreamyBuffer;
     int performanceDreamyWritePosition = 0;
