@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "FlowerFrameData.h"
+#include "FlowerFrameDataExtra.h"
 
 #if JUCE_ANDROID
  #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
@@ -44,16 +45,52 @@ PerformancePadComponent::PerformancePadComponent()
 
     const auto* bytes = static_cast<const unsigned char*> (frameBytes.getData());
 
-    loadedFrameCount = juce::jmin (
+    const int primaryFrameCount = juce::jmin (
         maxVisualFrames, static_cast<int> (FlowerFrameData::frameCount));
 
-    for (int i = 0; i < loadedFrameCount; ++i)
+    for (int i = 0; i < primaryFrameCount; ++i)
     {
         const auto index = static_cast<size_t> (i);
         frameImages[index] = juce::ImageFileFormat::loadFrom (
             bytes + FlowerFrameData::offsets[index],
             FlowerFrameData::sizes[index]);
     }
+
+    loadedFrameCount = primaryFrameCount;
+
+    // The original MASTER bank remains frameImages[0..99] unchanged.
+    // The user-supplied second bank is appended as logical frames 101..200,
+    // i.e. frameImages[100..199], without recropping or rebuilding an atlas.
+    juce::MemoryOutputStream decodedExtraFrames;
+    if (! juce::Base64::convertFromBase64 (
+            decodedExtraFrames, FlowerFrameDataExtra::encodedPayload))
+        return;
+
+    const auto& extraFrameBytes = decodedExtraFrames.getMemoryBlock();
+    if (extraFrameBytes.getSize() != FlowerFrameDataExtra::decodedPayloadSize)
+        return;
+
+    const auto* extraBytes =
+        static_cast<const unsigned char*> (extraFrameBytes.getData());
+
+    const int availableExtraSlots =
+        juce::jmax (0, maxVisualFrames - loadedFrameCount);
+    const int extraFrameCount = juce::jmin (
+        availableExtraSlots,
+        static_cast<int> (FlowerFrameDataExtra::frameCount));
+
+    for (int i = 0; i < extraFrameCount; ++i)
+    {
+        const auto sourceIndex = static_cast<size_t> (i);
+        const auto destinationIndex =
+            static_cast<size_t> (loadedFrameCount + i);
+
+        frameImages[destinationIndex] = juce::ImageFileFormat::loadFrom (
+            extraBytes + FlowerFrameDataExtra::offsets[sourceIndex],
+            FlowerFrameDataExtra::sizes[sourceIndex]);
+    }
+
+    loadedFrameCount += extraFrameCount;
 }
 
 int PerformancePadComponent::getPatternIndex() const noexcept
