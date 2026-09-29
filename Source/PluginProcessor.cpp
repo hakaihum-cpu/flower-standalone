@@ -1098,8 +1098,23 @@ void FlowerStandaloneAudioProcessor::previewCarnivalTrack (int track) noexcept
 void FlowerStandaloneAudioProcessor::handleCarnivalMidiClock (
     const juce::MidiBuffer& midi)
 {
+    carnivalMidiTriggerCount = 0;
+
     if (! carnivalClockMidi.load (std::memory_order_acquire))
         return;
+
+    const auto queueTrigger =
+        [this] (int sampleOffset, int step)
+        {
+            if (carnivalMidiTriggerCount >= carnivalMidiTriggerCapacity)
+                return;
+
+            const int index = carnivalMidiTriggerCount++;
+            carnivalMidiTriggerSamples[static_cast<size_t> (index)] =
+                juce::jmax (0, sampleOffset);
+            carnivalMidiTriggerSteps[static_cast<size_t> (index)] =
+                juce::jlimit (0, carnivalStepCount - 1, step);
+        };
 
     for (const auto metadata : midi)
     {
@@ -1111,7 +1126,7 @@ void FlowerStandaloneAudioProcessor::handleCarnivalMidiClock (
             carnivalMidiClockCounter = 0;
             carnivalPlaying.store (true, std::memory_order_release);
             carnivalCurrentStep.store (0, std::memory_order_relaxed);
-            triggerCarnivalStep (0);
+            queueTrigger (metadata.samplePosition, 0);
         }
         else if (message.isMidiContinue())
         {
@@ -1137,7 +1152,7 @@ void FlowerStandaloneAudioProcessor::handleCarnivalMidiClock (
 
                 carnivalCurrentStep.store (
                     next, std::memory_order_relaxed);
-                triggerCarnivalStep (next);
+                queueTrigger (metadata.samplePosition, next);
             }
         }
     }
@@ -1238,11 +1253,23 @@ void FlowerStandaloneAudioProcessor::processCarnival (
     const bool internalClock =
         ! carnivalClockMidi.load (std::memory_order_acquire);
 
+    int midiTriggerIndex = 0;
+
     const double sampleRate = juce::jmax (1.0, currentSampleRate);
     constexpr double twoPi = juce::MathConstants<double>::twoPi;
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
+        while (midiTriggerIndex < carnivalMidiTriggerCount
+               && carnivalMidiTriggerSamples[
+                      static_cast<size_t> (midiTriggerIndex)] <= sample)
+        {
+            triggerCarnivalStep (
+                carnivalMidiTriggerSteps[
+                    static_cast<size_t> (midiTriggerIndex)]);
+            ++midiTriggerIndex;
+        }
+
         if (internalClock
             && carnivalPlaying.load (std::memory_order_acquire))
         {
