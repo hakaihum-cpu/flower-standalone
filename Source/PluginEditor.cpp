@@ -100,6 +100,14 @@ void PerformancePadComponent::endPhysicalKeyControl()
     repaint();
 }
 
+void PerformancePadComponent::setExternalPosition (float x, float y)
+{
+    xValue = juce::jlimit (0.0f, 1.0f, x);
+    yValue = juce::jlimit (0.0f, 1.0f, y);
+    physicalPointerVisible = false;
+    repaint();
+}
+
 void PerformancePadComponent::setEffectState (
     bool arpOn, bool delayOn, bool yEffectOn, bool dreamyMode)
 {
@@ -318,9 +326,9 @@ void PerformancePadComponent::notify()
 
 juce::Rectangle<int> ConfigScreenComponent::getRowBounds (int row) const
 {
-    constexpr int rowStep = 92;
+    constexpr int rowStep = 78;
     constexpr int firstY = 160;
-    return { 72, firstY + row * rowStep, 576, 72 };
+    return { 72, firstY + row * rowStep, 576, 62 };
 }
 
 juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
@@ -332,20 +340,22 @@ juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
 void ConfigScreenComponent::setValues (int newRootKey,
                                        int newScale,
                                        bool newEffectsEnabled,
-                                       bool newYEffectDreamy)
+                                       bool newYEffectDreamy,
+                                       int newMidiChannel)
 {
     rootKey = juce::jlimit (0, 11, newRootKey);
     scaleIndex = juce::jlimit (0, 4, newScale);
     effectsEnabled = newEffectsEnabled;
     yEffectDreamy = newYEffectDreamy;
+    midiChannel = juce::jlimit (1, 16, newMidiChannel);
     repaint();
 }
 
 void ConfigScreenComponent::moveSelection (int delta)
 {
-    selectedRow = (selectedRow + delta) % 4;
+    selectedRow = (selectedRow + delta) % 5;
     if (selectedRow < 0)
-        selectedRow += 4;
+        selectedRow += 5;
     repaint();
 }
 
@@ -376,12 +386,23 @@ void ConfigScreenComponent::adjustSelected (int delta)
         if (onEffectsChanged)
             onEffectsChanged (effectsEnabled);
     }
-    else
+    else if (selectedRow == 3)
     {
         yEffectDreamy = ! yEffectDreamy;
 
         if (onYEffectModeChanged)
             onYEffectModeChanged (yEffectDreamy);
+    }
+    else
+    {
+        midiChannel += delta;
+        while (midiChannel < 1)
+            midiChannel += 16;
+        while (midiChannel > 16)
+            midiChannel -= 16;
+
+        if (onMidiChannelChanged)
+            onMidiChannelChanged (midiChannel);
     }
 
     repaint();
@@ -409,10 +430,15 @@ void ConfigScreenComponent::notifyCurrentRow()
         if (onEffectsChanged)
             onEffectsChanged (effectsEnabled);
     }
-    else
+    else if (selectedRow == 3)
     {
         if (onYEffectModeChanged)
             onYEffectModeChanged (yEffectDreamy);
+    }
+    else
+    {
+        if (onMidiChannelChanged)
+            onMidiChannelChanged (midiChannel);
     }
 }
 
@@ -438,7 +464,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
                 72, 124, 576, 34,
                 juce::Justification::centredLeft);
 
-    for (int row = 0; row < 4; ++row)
+    for (int row = 0; row < 5; ++row)
     {
         const auto bounds = getRowBounds (row);
         const bool selected = row == selectedRow;
@@ -471,10 +497,15 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
             label = "DEFAULT EFFECT";
             value = effectsEnabled ? "ON" : "OFF";
         }
-        else
+        else if (row == 3)
         {
             label = "Y EFFECT";
             value = yEffectDreamy ? "DREAMY" : "GRANULAR";
+        }
+        else
+        {
+            label = "MIDI CHANNEL";
+            value = juce::String (midiChannel);
         }
 
         g.drawText (label,
@@ -496,7 +527,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (14.0f));
     g.drawFittedText (
         "Y EFFECT selects GRANULAR or DREAMY. "
-        "A / B / Y can still toggle performance functions independently.",
+        "MIDI: CC10 Y / CC11 X / CC22-29 controls.",
         72, 548, 576, 60,
         juce::Justification::topLeft, 3);
 }
@@ -522,7 +553,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    for (int row = 0; row < 4; ++row)
+    for (int row = 0; row < 5; ++row)
     {
         const auto bounds = getRowBounds (row);
         if (! bounds.contains (designPoint))
@@ -530,7 +561,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
 
         selectedRow = row;
 
-        if (row >= 2)
+        if (row == 2 || row == 3)
         {
             adjustSelected (1);
         }
@@ -594,11 +625,12 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     delayEnabled = processor.getDefaultEffectsEnabled();
     granularEnabled = delayEnabled;
     yEffectDreamy = processor.getConfiguredYEffectDreamy();
+    midiChannel = processor.getConfiguredMidiChannel();
 
     performancePad.setEffectState (
         arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
     configScreen.setValues (
-        rootClass, scaleIndex, delayEnabled, yEffectDreamy);
+        rootClass, scaleIndex, delayEnabled, yEffectDreamy, midiChannel);
 
     performancePad.onPadChanged =
         [this] (float x, float y, float speed, float horizontalDirection, bool active)
@@ -654,6 +686,13 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
                 arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
         };
 
+    configScreen.onMidiChannelChanged =
+        [this] (int channel)
+        {
+            midiChannel = juce::jlimit (1, 16, channel);
+            processor.setConfiguredMidiChannel (midiChannel);
+        };
+
     configScreen.onCloseRequested =
         [this]
         {
@@ -669,7 +708,9 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     processor.setPerformanceDelayEnabled (delayEnabled);
     processor.setPerformanceGranularEnabled (granularEnabled);
     processor.setPerformanceDreamyMode (yEffectDreamy);
+    processor.setConfiguredMidiChannel (midiChannel);
 
+    startTimer (40);
     grabKeyboardFocus();
 }
 
@@ -701,7 +742,8 @@ void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
     configScreen.setValues (
         rootClass, scaleIndex,
         processor.getDefaultEffectsEnabled(),
-        yEffectDreamy);
+        yEffectDreamy,
+        midiChannel);
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
@@ -720,7 +762,8 @@ void FlowerStandaloneAudioProcessorEditor::cycleScale (int delta)
     configScreen.setValues (
         rootClass, scaleIndex,
         processor.getDefaultEffectsEnabled(),
-        yEffectDreamy);
+        yEffectDreamy,
+        midiChannel);
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleHold()
@@ -771,7 +814,8 @@ void FlowerStandaloneAudioProcessorEditor::toggleConfig()
             rootClass,
             scaleIndex,
             processor.getDefaultEffectsEnabled(),
-            yEffectDreamy);
+            yEffectDreamy,
+        midiChannel);
 
         // SELECT-opened CONFIG must use the exact same fullscreen bounds as
         // the performance surface. The CONFIG UI itself is authored in a
@@ -896,20 +940,48 @@ void FlowerStandaloneAudioProcessorEditor::endLooperButton()
 
 void FlowerStandaloneAudioProcessorEditor::refreshControlTimer()
 {
-    if (dpadActive || bpmAdjustActive || looperButtonActive)
-    {
-        if (! isTimerRunning())
-            startTimer (40);
-    }
-    else
-    {
-        stopTimer();
-    }
+    // Keep a lightweight 25 Hz poll alive so incoming MIDI CC changes are
+    // reflected in XY and effect-state visuals.
+    if (! isTimerRunning())
+        startTimer (40);
 }
 
 void FlowerStandaloneAudioProcessorEditor::timerCallback()
 {
     const double nowMs = juce::Time::getMillisecondCounterHiRes();
+
+    const float externalX = processor.getPerformanceX();
+    const float externalY = processor.getPerformanceY();
+    bpm = processor.getPerformanceBpm();
+
+    const bool externalArp = processor.getPerformanceArpEnabled();
+    const bool externalDelay = processor.getPerformanceDelayEnabled();
+    const bool externalYEffect = processor.getPerformanceYEffectEnabled();
+    const bool externalHold = processor.getPerformanceHold();
+
+    if (externalArp != arpEnabled
+        || externalDelay != delayEnabled
+        || externalYEffect != granularEnabled)
+    {
+        arpEnabled = externalArp;
+        delayEnabled = externalDelay;
+        granularEnabled = externalYEffect;
+        performancePad.setEffectState (
+            arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
+    }
+
+    if (externalHold != hold)
+    {
+        hold = externalHold;
+        performancePad.setHeld (hold);
+    }
+
+    if (! dpadActive
+        && (std::abs (performancePad.getXValue() - externalX) > 0.0005f
+            || std::abs (performancePad.getYValue() - externalY) > 0.0005f))
+    {
+        performancePad.setExternalPosition (externalX, externalY);
+    }
 
     if (dpadActive)
         performancePad.nudgeFromPhysicalKey (dpadDeltaX, dpadDeltaY);
@@ -1097,7 +1169,8 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
         configScreen.setValues (
             rootClass, scaleIndex,
             processor.getDefaultEffectsEnabled(),
-            yEffectDreamy);
+            yEffectDreamy,
+        midiChannel);
         return true;
     }
 
