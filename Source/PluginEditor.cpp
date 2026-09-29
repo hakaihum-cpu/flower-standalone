@@ -100,6 +100,16 @@ void PerformancePadComponent::endPhysicalKeyControl()
     repaint();
 }
 
+void PerformancePadComponent::setEffectState (
+    bool arpOn, bool delayOn, bool yEffectOn, bool dreamyMode)
+{
+    arpIndicatorOn = arpOn;
+    delayIndicatorOn = delayOn;
+    yEffectIndicatorOn = yEffectOn;
+    dreamyIndicatorMode = dreamyMode;
+    repaint();
+}
+
 void PerformancePadComponent::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colours::black);
@@ -135,6 +145,75 @@ void PerformancePadComponent::paint (juce::Graphics& g)
                  0, 0, getWidth(), getHeight(),
                  0, 0, frame.getWidth(), frame.getHeight(),
                  false);
+
+    // Effect state is shown as faint scenery-like marks instead of labels.
+    // OFF removes the corresponding mark entirely.
+    const float unit =
+        juce::jmax (0.55f, juce::jmin (getWidth(), getHeight()) / 720.0f);
+    const auto indicator =
+        juce::Colour (0xffeee5cf).withAlpha (0.20f);
+    g.setColour (indicator);
+
+    if (delayIndicatorOn)
+    {
+        const float cx = static_cast<float> (getWidth()) - 43.0f * unit;
+        const float cy = 42.0f * unit;
+        for (int ring = 0; ring < 3; ++ring)
+        {
+            const float radius = (7.0f + ring * 7.0f) * unit;
+            juce::Path arc;
+            arc.addCentredArc (
+                cx, cy, radius, radius, 0.0f,
+                -1.28f, 1.03f, true);
+            g.strokePath (
+                arc, juce::PathStrokeType (1.05f * unit));
+        }
+    }
+
+    if (yEffectIndicatorOn)
+    {
+        const float left = 25.0f * unit;
+        const float top = 25.0f * unit;
+
+        if (dreamyIndicatorMode)
+        {
+            for (int loop = 0; loop < 2; ++loop)
+            {
+                const float diameter = (12.0f + loop * 8.0f) * unit;
+                g.drawEllipse (
+                    left + loop * 9.0f * unit,
+                    top + loop * 3.0f * unit,
+                    diameter, diameter,
+                    1.0f * unit);
+            }
+        }
+        else
+        {
+            for (int grain = 0; grain < 5; ++grain)
+            {
+                const float radius = (1.5f + (grain % 2) * 0.65f) * unit;
+                g.fillEllipse (
+                    left + grain * 6.2f * unit,
+                    top + (grain % 3) * 4.0f * unit,
+                    radius * 2.0f, radius * 2.0f);
+            }
+        }
+    }
+
+    if (arpIndicatorOn)
+    {
+        const float left = 26.0f * unit;
+        const float bottom =
+            static_cast<float> (getHeight()) - 27.0f * unit;
+        for (int step = 0; step < 5; ++step)
+        {
+            const float radius = 1.7f * unit;
+            g.fillEllipse (
+                left + step * 7.0f * unit,
+                bottom - step * 2.7f * unit,
+                radius * 2.0f, radius * 2.0f);
+        }
+    }
 
     if (physicalPointerVisible)
     {
@@ -239,9 +318,9 @@ void PerformancePadComponent::notify()
 
 juce::Rectangle<int> ConfigScreenComponent::getRowBounds (int row) const
 {
-    constexpr int rowHeight = 104;
-    constexpr int firstY = 188;
-    return { 72, firstY + row * rowHeight, 576, 78 };
+    constexpr int rowStep = 92;
+    constexpr int firstY = 160;
+    return { 72, firstY + row * rowStep, 576, 72 };
 }
 
 juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
@@ -252,19 +331,21 @@ juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
 
 void ConfigScreenComponent::setValues (int newRootKey,
                                        int newScale,
-                                       bool newEffectsEnabled)
+                                       bool newEffectsEnabled,
+                                       bool newYEffectDreamy)
 {
     rootKey = juce::jlimit (0, 11, newRootKey);
     scaleIndex = juce::jlimit (0, 4, newScale);
     effectsEnabled = newEffectsEnabled;
+    yEffectDreamy = newYEffectDreamy;
     repaint();
 }
 
 void ConfigScreenComponent::moveSelection (int delta)
 {
-    selectedRow = (selectedRow + delta) % 3;
+    selectedRow = (selectedRow + delta) % 4;
     if (selectedRow < 0)
-        selectedRow += 3;
+        selectedRow += 4;
     repaint();
 }
 
@@ -288,12 +369,19 @@ void ConfigScreenComponent::adjustSelected (int delta)
         if (onScaleChanged)
             onScaleChanged (scaleIndex);
     }
-    else
+    else if (selectedRow == 2)
     {
         effectsEnabled = ! effectsEnabled;
 
         if (onEffectsChanged)
             onEffectsChanged (effectsEnabled);
+    }
+    else
+    {
+        yEffectDreamy = ! yEffectDreamy;
+
+        if (onYEffectModeChanged)
+            onYEffectModeChanged (yEffectDreamy);
     }
 
     repaint();
@@ -316,10 +404,15 @@ void ConfigScreenComponent::notifyCurrentRow()
         if (onScaleChanged)
             onScaleChanged (scaleIndex);
     }
-    else
+    else if (selectedRow == 2)
     {
         if (onEffectsChanged)
             onEffectsChanged (effectsEnabled);
+    }
+    else
+    {
+        if (onYEffectModeChanged)
+            onYEffectModeChanged (yEffectDreamy);
     }
 }
 
@@ -345,7 +438,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
                 72, 124, 576, 34,
                 juce::Justification::centredLeft);
 
-    for (int row = 0; row < 3; ++row)
+    for (int row = 0; row < 4; ++row)
     {
         const auto bounds = getRowBounds (row);
         const bool selected = row == selectedRow;
@@ -373,10 +466,15 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
             label = "SCALE";
             value = scaleNames[scaleIndex];
         }
-        else
+        else if (row == 2)
         {
             label = "DEFAULT EFFECT";
             value = effectsEnabled ? "ON" : "OFF";
+        }
+        else
+        {
+            label = "Y EFFECT";
+            value = yEffectDreamy ? "DREAMY" : "GRANULAR";
         }
 
         g.drawText (label,
@@ -395,11 +493,11 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
     g.drawText ("CLOSE", closeBounds, juce::Justification::centred);
 
     g.setColour (juce::Colour (0xff77705f));
-    g.setFont (juce::FontOptions (15.0f));
+    g.setFont (juce::FontOptions (14.0f));
     g.drawFittedText (
-        "DEFAULT EFFECT applies to DELAY and GRANULAR at startup. "
-        "A / Y can still toggle them independently during performance.",
-        72, 530, 576, 80,
+        "Y EFFECT selects GRANULAR or DREAMY. "
+        "A / B / Y can still toggle performance functions independently.",
+        72, 548, 576, 60,
         juce::Justification::topLeft, 3);
 }
 
@@ -424,7 +522,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    for (int row = 0; row < 3; ++row)
+    for (int row = 0; row < 4; ++row)
     {
         const auto bounds = getRowBounds (row);
         if (! bounds.contains (designPoint))
@@ -432,7 +530,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
 
         selectedRow = row;
 
-        if (row == 2)
+        if (row >= 2)
         {
             adjustSelected (1);
         }
@@ -495,7 +593,12 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     scaleIndex = processor.getConfiguredScale();
     delayEnabled = processor.getDefaultEffectsEnabled();
     granularEnabled = delayEnabled;
-    configScreen.setValues (rootClass, scaleIndex, delayEnabled);
+    yEffectDreamy = processor.getConfiguredYEffectDreamy();
+
+    performancePad.setEffectState (
+        arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
+    configScreen.setValues (
+        rootClass, scaleIndex, delayEnabled, yEffectDreamy);
 
     performancePad.onPadChanged =
         [this] (float x, float y, float speed, float horizontalDirection, bool active)
@@ -538,6 +641,17 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             delayEnabled = enabled;
             granularEnabled = enabled;
             processor.setDefaultEffectsEnabled (enabled);
+            performancePad.setEffectState (
+                arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
+        };
+
+    configScreen.onYEffectModeChanged =
+        [this] (bool dreamy)
+        {
+            yEffectDreamy = dreamy;
+            processor.setConfiguredYEffectDreamy (yEffectDreamy);
+            performancePad.setEffectState (
+                arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
         };
 
     configScreen.onCloseRequested =
@@ -554,6 +668,7 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     processor.setPerformanceArpEnabled (arpEnabled);
     processor.setPerformanceDelayEnabled (delayEnabled);
     processor.setPerformanceGranularEnabled (granularEnabled);
+    processor.setPerformanceDreamyMode (yEffectDreamy);
 
     grabKeyboardFocus();
 }
@@ -583,8 +698,10 @@ void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
         rootClass += 12;
 
     processor.setConfiguredRoot (rootClass);
-    configScreen.setValues (rootClass, scaleIndex,
-                            processor.getDefaultEffectsEnabled());
+    configScreen.setValues (
+        rootClass, scaleIndex,
+        processor.getDefaultEffectsEnabled(),
+        yEffectDreamy);
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
@@ -600,8 +717,10 @@ void FlowerStandaloneAudioProcessorEditor::cycleScale (int delta)
         scaleIndex += 5;
 
     processor.setConfiguredScale (scaleIndex);
-    configScreen.setValues (rootClass, scaleIndex,
-                            processor.getDefaultEffectsEnabled());
+    configScreen.setValues (
+        rootClass, scaleIndex,
+        processor.getDefaultEffectsEnabled(),
+        yEffectDreamy);
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleHold()
@@ -615,18 +734,24 @@ void FlowerStandaloneAudioProcessorEditor::toggleArp()
 {
     arpEnabled = ! arpEnabled;
     processor.setPerformanceArpEnabled (arpEnabled);
+    performancePad.setEffectState (
+        arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleDelay()
 {
     delayEnabled = ! delayEnabled;
     processor.setPerformanceDelayEnabled (delayEnabled);
+    performancePad.setEffectState (
+        arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleGranular()
 {
     granularEnabled = ! granularEnabled;
     processor.setPerformanceGranularEnabled (granularEnabled);
+    performancePad.setEffectState (
+        arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleConfig()
@@ -645,7 +770,8 @@ void FlowerStandaloneAudioProcessorEditor::toggleConfig()
         configScreen.setValues (
             rootClass,
             scaleIndex,
-            processor.getDefaultEffectsEnabled());
+            processor.getDefaultEffectsEnabled(),
+            yEffectDreamy);
 
         // SELECT-opened CONFIG must use the exact same fullscreen bounds as
         // the performance surface. The CONFIG UI itself is authored in a
@@ -968,8 +1094,10 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
     {
         scaleIndex = static_cast<int> (ch - '1');
         processor.setConfiguredScale (scaleIndex);
-        configScreen.setValues (rootClass, scaleIndex,
-                                processor.getDefaultEffectsEnabled());
+        configScreen.setValues (
+            rootClass, scaleIndex,
+            processor.getDefaultEffectsEnabled(),
+            yEffectDreamy);
         return true;
     }
 
