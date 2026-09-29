@@ -44,7 +44,10 @@ PerformancePadComponent::PerformancePadComponent()
 
     const auto* bytes = static_cast<const unsigned char*> (frameBytes.getData());
 
-    for (int i = 0; i < FlowerFrameData::frameCount; ++i)
+    loadedFrameCount = juce::jmin (
+        maxVisualFrames, static_cast<int> (FlowerFrameData::frameCount));
+
+    for (int i = 0; i < loadedFrameCount; ++i)
     {
         const auto index = static_cast<size_t> (i);
         frameImages[index] = juce::ImageFileFormat::loadFrom (
@@ -100,9 +103,30 @@ void PerformancePadComponent::endPhysicalKeyControl()
     repaint();
 }
 
+void PerformancePadComponent::setEffectState (
+    bool arpOn, bool delayOn, bool yEffectOn, bool mosaicMode)
+{
+    arpIndicatorOn = arpOn;
+    delayIndicatorOn = delayOn;
+    yEffectIndicatorOn = yEffectOn;
+    mosaicIndicatorMode = mosaicMode;
+    repaint();
+}
+
+bool PerformancePadComponent::setVisualMode200 (bool enabled)
+{
+    visualMode200 = enabled && isVisualMode200Available();
+    repaint();
+    return visualMode200 == enabled;
+}
+
 void PerformancePadComponent::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colours::black);
+
+    const int tileColumns = visualMode200 ? 20 : 10;
+    constexpr int tileRows = 10;
+    const int tileCount = tileColumns * tileRows;
 
     const int column = juce::jlimit (
         0, tileColumns - 1,
@@ -115,6 +139,7 @@ void PerformancePadComponent::paint (juce::Graphics& g)
     const int visualTileIndex = row * tileColumns + column;
 
     jassert (visualTileIndex >= 0 && visualTileIndex < tileCount);
+    jassert (visualTileIndex < loadedFrameCount);
 
     const auto& frame = frameImages[static_cast<size_t> (visualTileIndex)];
     if (! frame.isValid())
@@ -135,6 +160,72 @@ void PerformancePadComponent::paint (juce::Graphics& g)
                  0, 0, getWidth(), getHeight(),
                  0, 0, frame.getWidth(), frame.getHeight(),
                  false);
+
+    // Effect-state objects intentionally avoid text/UI badges. Each enabled
+    // performance function adds a small, low-contrast object at the edge of
+    // the artwork; OFF is represented by its absence.
+    const float unit =
+        juce::jmax (0.55f, juce::jmin (getWidth(), getHeight()) / 720.0f);
+    const auto indicatorColour =
+        juce::Colour (0xffeee5cf).withAlpha (0.24f);
+
+    g.setColour (indicatorColour);
+
+    if (delayIndicatorOn)
+    {
+        const float cx = static_cast<float> (getWidth()) - 42.0f * unit;
+        const float cy = 42.0f * unit;
+        for (int ring = 0; ring < 3; ++ring)
+        {
+            const float radius = (8.0f + ring * 7.0f) * unit;
+            g.drawArc (cx - radius, cy - radius,
+                       radius * 2.0f, radius * 2.0f,
+                       -1.25f, 1.05f, 1.15f * unit);
+        }
+    }
+
+    if (yEffectIndicatorOn)
+    {
+        const float left = 24.0f * unit;
+        const float top = 25.0f * unit;
+
+        if (mosaicIndicatorMode)
+        {
+            for (int piece = 0; piece < 3; ++piece)
+            {
+                const float size = (5.0f + piece * 2.0f) * unit;
+                g.drawRect (
+                    left + piece * 8.0f * unit,
+                    top + (piece % 2) * 7.0f * unit,
+                    size, size, 1.0f * unit);
+            }
+        }
+        else
+        {
+            for (int grain = 0; grain < 5; ++grain)
+            {
+                const float radius = (1.6f + (grain % 2) * 0.7f) * unit;
+                g.fillEllipse (
+                    left + grain * 6.5f * unit,
+                    top + (grain % 3) * 4.0f * unit,
+                    radius * 2.0f, radius * 2.0f);
+            }
+        }
+    }
+
+    if (arpIndicatorOn)
+    {
+        const float left = 26.0f * unit;
+        const float bottom = static_cast<float> (getHeight()) - 28.0f * unit;
+        for (int step = 0; step < 5; ++step)
+        {
+            const float radius = 1.8f * unit;
+            g.fillEllipse (
+                left + step * 7.0f * unit,
+                bottom - step * 2.8f * unit,
+                radius * 2.0f, radius * 2.0f);
+        }
+    }
 
     if (physicalPointerVisible)
     {
@@ -239,9 +330,9 @@ void PerformancePadComponent::notify()
 
 juce::Rectangle<int> ConfigScreenComponent::getRowBounds (int row) const
 {
-    constexpr int rowHeight = 104;
-    constexpr int firstY = 188;
-    return { 72, firstY + row * rowHeight, 576, 78 };
+    constexpr int rowStep = 86;
+    constexpr int firstY = 154;
+    return { 72, firstY + row * rowStep, 576, 64 };
 }
 
 juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
@@ -252,19 +343,25 @@ juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
 
 void ConfigScreenComponent::setValues (int newRootKey,
                                        int newScale,
-                                       bool newEffectsEnabled)
+                                       bool newEffectsEnabled,
+                                       bool newYEffectMosaic,
+                                       bool newVisualMode200,
+                                       bool newVisualMode200Available)
 {
     rootKey = juce::jlimit (0, 11, newRootKey);
     scaleIndex = juce::jlimit (0, 4, newScale);
     effectsEnabled = newEffectsEnabled;
+    yEffectMosaic = newYEffectMosaic;
+    visualMode200Available = newVisualMode200Available;
+    visualMode200 = newVisualMode200 && visualMode200Available;
     repaint();
 }
 
 void ConfigScreenComponent::moveSelection (int delta)
 {
-    selectedRow = (selectedRow + delta) % 3;
+    selectedRow = (selectedRow + delta) % 5;
     if (selectedRow < 0)
-        selectedRow += 3;
+        selectedRow += 5;
     repaint();
 }
 
@@ -288,12 +385,29 @@ void ConfigScreenComponent::adjustSelected (int delta)
         if (onScaleChanged)
             onScaleChanged (scaleIndex);
     }
-    else
+    else if (selectedRow == 2)
     {
         effectsEnabled = ! effectsEnabled;
 
         if (onEffectsChanged)
             onEffectsChanged (effectsEnabled);
+    }
+    else if (selectedRow == 3)
+    {
+        yEffectMosaic = ! yEffectMosaic;
+
+        if (onYEffectModeChanged)
+            onYEffectModeChanged (yEffectMosaic);
+    }
+    else
+    {
+        if (visualMode200Available)
+        {
+            visualMode200 = ! visualMode200;
+
+            if (onVisualModeChanged)
+                onVisualModeChanged (visualMode200);
+        }
     }
 
     repaint();
@@ -316,10 +430,20 @@ void ConfigScreenComponent::notifyCurrentRow()
         if (onScaleChanged)
             onScaleChanged (scaleIndex);
     }
-    else
+    else if (selectedRow == 2)
     {
         if (onEffectsChanged)
             onEffectsChanged (effectsEnabled);
+    }
+    else if (selectedRow == 3)
+    {
+        if (onYEffectModeChanged)
+            onYEffectModeChanged (yEffectMosaic);
+    }
+    else
+    {
+        if (onVisualModeChanged)
+            onVisualModeChanged (visualMode200);
     }
 }
 
@@ -345,7 +469,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
                 72, 124, 576, 34,
                 juce::Justification::centredLeft);
 
-    for (int row = 0; row < 3; ++row)
+    for (int row = 0; row < 5; ++row)
     {
         const auto bounds = getRowBounds (row);
         const bool selected = row == selectedRow;
@@ -373,10 +497,20 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
             label = "SCALE";
             value = scaleNames[scaleIndex];
         }
-        else
+        else if (row == 2)
         {
             label = "DEFAULT EFFECT";
             value = effectsEnabled ? "ON" : "OFF";
+        }
+        else if (row == 3)
+        {
+            label = "Y EFFECT";
+            value = yEffectMosaic ? "MOSAIC" : "GRANULAR";
+        }
+        else
+        {
+            label = "VISUAL MODE";
+            value = visualMode200 ? "200 / 20x10" : "100 / 10x10";
         }
 
         g.drawText (label,
@@ -395,12 +529,13 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
     g.drawText ("CLOSE", closeBounds, juce::Justification::centred);
 
     g.setColour (juce::Colour (0xff77705f));
-    g.setFont (juce::FontOptions (15.0f));
+    g.setFont (juce::FontOptions (13.0f));
     g.drawFittedText (
-        "DEFAULT EFFECT applies to DELAY and GRANULAR at startup. "
-        "A / Y can still toggle them independently during performance.",
-        72, 530, 576, 80,
-        juce::Justification::topLeft, 3);
+        visualMode200Available
+            ? "A/Y toggle performance effects. VISUAL MODE selects 100 or 200 frames."
+            : "A/Y toggle performance effects. 200 VISUAL MODE becomes available when 200 frames are embedded.",
+        72, 590, 576, 34,
+        juce::Justification::topLeft, 2);
 }
 
 void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
@@ -424,7 +559,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    for (int row = 0; row < 3; ++row)
+    for (int row = 0; row < 5; ++row)
     {
         const auto bounds = getRowBounds (row);
         if (! bounds.contains (designPoint))
@@ -432,7 +567,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
 
         selectedRow = row;
 
-        if (row == 2)
+        if (row >= 2)
         {
             adjustSelected (1);
         }
@@ -495,7 +630,24 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     scaleIndex = processor.getConfiguredScale();
     delayEnabled = processor.getDefaultEffectsEnabled();
     granularEnabled = delayEnabled;
-    configScreen.setValues (rootClass, scaleIndex, delayEnabled);
+    yEffectMosaic = processor.getConfiguredYEffectMosaic();
+    visualMode200 =
+        processor.getConfiguredVisualMode200()
+        && performancePad.isVisualMode200Available();
+
+    if (! performancePad.setVisualMode200 (visualMode200))
+        visualMode200 = false;
+
+    if (processor.getConfiguredVisualMode200() != visualMode200)
+        processor.setConfiguredVisualMode200 (visualMode200);
+
+    performancePad.setEffectState (
+        arpEnabled, delayEnabled, granularEnabled, yEffectMosaic);
+
+    configScreen.setValues (
+        rootClass, scaleIndex, delayEnabled,
+        yEffectMosaic, visualMode200,
+        performancePad.isVisualMode200Available());
 
     performancePad.onPadChanged =
         [this] (float x, float y, float speed, float horizontalDirection, bool active)
@@ -538,6 +690,38 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             delayEnabled = enabled;
             granularEnabled = enabled;
             processor.setDefaultEffectsEnabled (enabled);
+            performancePad.setEffectState (
+                arpEnabled, delayEnabled, granularEnabled, yEffectMosaic);
+        };
+
+    configScreen.onYEffectModeChanged =
+        [this] (bool mosaic)
+        {
+            yEffectMosaic = mosaic;
+            processor.setConfiguredYEffectMosaic (yEffectMosaic);
+            performancePad.setEffectState (
+                arpEnabled, delayEnabled, granularEnabled, yEffectMosaic);
+        };
+
+    configScreen.onVisualModeChanged =
+        [this] (bool use200)
+        {
+            if (use200)
+            {
+                visualMode200 = performancePad.setVisualMode200 (true);
+            }
+            else
+            {
+                performancePad.setVisualMode200 (false);
+                visualMode200 = false;
+            }
+
+            processor.setConfiguredVisualMode200 (visualMode200);
+            configScreen.setValues (
+                rootClass, scaleIndex,
+                processor.getDefaultEffectsEnabled(),
+                yEffectMosaic, visualMode200,
+                performancePad.isVisualMode200Available());
         };
 
     configScreen.onCloseRequested =
@@ -554,6 +738,7 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     processor.setPerformanceArpEnabled (arpEnabled);
     processor.setPerformanceDelayEnabled (delayEnabled);
     processor.setPerformanceGranularEnabled (granularEnabled);
+    processor.setPerformanceMosaicMode (yEffectMosaic);
 
     grabKeyboardFocus();
 }
@@ -583,8 +768,11 @@ void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
         rootClass += 12;
 
     processor.setConfiguredRoot (rootClass);
-    configScreen.setValues (rootClass, scaleIndex,
-                            processor.getDefaultEffectsEnabled());
+    configScreen.setValues (
+        rootClass, scaleIndex,
+        processor.getDefaultEffectsEnabled(),
+        yEffectMosaic, visualMode200,
+        performancePad.isVisualMode200Available());
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
@@ -600,8 +788,11 @@ void FlowerStandaloneAudioProcessorEditor::cycleScale (int delta)
         scaleIndex += 5;
 
     processor.setConfiguredScale (scaleIndex);
-    configScreen.setValues (rootClass, scaleIndex,
-                            processor.getDefaultEffectsEnabled());
+    configScreen.setValues (
+        rootClass, scaleIndex,
+        processor.getDefaultEffectsEnabled(),
+        yEffectMosaic, visualMode200,
+        performancePad.isVisualMode200Available());
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleHold()
@@ -615,18 +806,24 @@ void FlowerStandaloneAudioProcessorEditor::toggleArp()
 {
     arpEnabled = ! arpEnabled;
     processor.setPerformanceArpEnabled (arpEnabled);
+    performancePad.setEffectState (
+        arpEnabled, delayEnabled, granularEnabled, yEffectMosaic);
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleDelay()
 {
     delayEnabled = ! delayEnabled;
     processor.setPerformanceDelayEnabled (delayEnabled);
+    performancePad.setEffectState (
+        arpEnabled, delayEnabled, granularEnabled, yEffectMosaic);
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleGranular()
 {
     granularEnabled = ! granularEnabled;
     processor.setPerformanceGranularEnabled (granularEnabled);
+    performancePad.setEffectState (
+        arpEnabled, delayEnabled, granularEnabled, yEffectMosaic);
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleConfig()
@@ -645,7 +842,10 @@ void FlowerStandaloneAudioProcessorEditor::toggleConfig()
         configScreen.setValues (
             rootClass,
             scaleIndex,
-            processor.getDefaultEffectsEnabled());
+            processor.getDefaultEffectsEnabled(),
+            yEffectMosaic,
+            visualMode200,
+            performancePad.isVisualMode200Available());
 
         // SELECT-opened CONFIG must use the exact same fullscreen bounds as
         // the performance surface. The CONFIG UI itself is authored in a
@@ -968,8 +1168,11 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
     {
         scaleIndex = static_cast<int> (ch - '1');
         processor.setConfiguredScale (scaleIndex);
-        configScreen.setValues (rootClass, scaleIndex,
-                                processor.getDefaultEffectsEnabled());
+        configScreen.setValues (
+            rootClass, scaleIndex,
+            processor.getDefaultEffectsEnabled(),
+            yEffectMosaic, visualMode200,
+            performancePad.isVisualMode200Available());
         return true;
     }
 
