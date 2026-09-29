@@ -616,9 +616,6 @@ void FlowerStandaloneAudioProcessor::setPerformanceGranularEnabled (bool enabled
 void FlowerStandaloneAudioProcessor::setPerformanceDreamyMode (bool enabled) noexcept
 {
     performanceDreamyMode.store (enabled, std::memory_order_release);
-
-    if (! enabled)
-        performanceDreamyVoiceActive = { false, false };
 }
 
 void FlowerStandaloneAudioProcessor::cycleFlowerTransport() noexcept
@@ -955,7 +952,10 @@ void FlowerStandaloneAudioProcessor::processPerformanceDreamy (
         float dreamyWet[2] { 0.0f, 0.0f };
         float totalWindow = 0.0f;
 
-        if (enabled && performanceDreamySamplesFilled > 2048)
+        const int minimumHistory =
+            juce::roundToInt (currentSampleRate * 0.75);
+
+        if (enabled && performanceDreamySamplesFilled > minimumHistory)
         {
             const float beatSamples =
                 static_cast<float> (currentSampleRate)
