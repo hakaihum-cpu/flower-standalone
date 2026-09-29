@@ -45,6 +45,20 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int sampl
     performanceDelayBuffer.clear();
     performanceDelayWritePosition = 0;
 
+    const int dreamySamples =
+        juce::jmax (4096, juce::roundToInt (currentSampleRate * 2.5));
+    performanceDreamyBuffer.setSize (2, dreamySamples, false, true, false);
+    performanceDreamyBuffer.clear();
+    performanceDreamyWritePosition = 0;
+    performanceDreamySamplesFilled = 0;
+    performanceDreamyLoopStart = { 0, 0 };
+    performanceDreamyLoopLength = { 0, 0 };
+    performanceDreamyOutputPhase = { 0, 0 };
+    performanceDreamyLocalPosition = { 0.0f, 0.0f };
+    performanceDreamyPlaybackSpeed = { 1.3348398f, 2.0f };
+    performanceDreamyVoiceActive = { false, false };
+    performanceDreamyRandomState = 0x44524541u;
+
     performanceDelaySamplesSmoothed.reset (currentSampleRate, 0.035);
     performanceDelayFeedbackSmoothed.reset (currentSampleRate, 0.025);
     performanceDelayWetSmoothed.reset (currentSampleRate, 0.025);
@@ -147,6 +161,10 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
     // The XY performance path reuses FLOWER's proven granular core, but maps
     // pad gesture state directly to position/size/density/spread/hold/mix.
     processFlower (buffer);
+
+    // DREAMY is a Mosaic-inspired overlapping micro-loop effect. Two short
+    // captured loops run at +5 and +12 semitones while the dry signal remains.
+    processPerformanceDreamy (buffer);
 
     // Delay is deliberately after the granular stage so one gesture moves
     // synthesis, granulation and echo as one performance surface.
@@ -288,7 +306,8 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
     const bool legacyEnabled =
         apvts.getRawParameterValue (ParamIDs::flowerEnabled)->load() > 0.5f;
     const bool granularEnabled =
-        performanceGranularEnabled.load (std::memory_order_relaxed);
+        performanceGranularEnabled.load (std::memory_order_relaxed)
+        && ! performanceDreamyMode.load (std::memory_order_relaxed);
     const bool enabled =
         legacyEnabled || (granularEnabled && performanceGate && performancePadY > 0.025f);
 
@@ -594,6 +613,14 @@ void FlowerStandaloneAudioProcessor::setPerformanceGranularEnabled (bool enabled
     performanceGranularEnabled.store (enabled, std::memory_order_release);
 }
 
+void FlowerStandaloneAudioProcessor::setPerformanceDreamyMode (bool enabled) noexcept
+{
+    performanceDreamyMode.store (enabled, std::memory_order_release);
+
+    if (! enabled)
+        performanceDreamyVoiceActive = { false, false };
+}
+
 void FlowerStandaloneAudioProcessor::cycleFlowerTransport() noexcept
 {
     flowerTransportRequest.store (1, std::memory_order_release);
@@ -628,6 +655,11 @@ bool FlowerStandaloneAudioProcessor::getDefaultEffectsEnabled() const noexcept
     return apvts.getRawParameterValue (ParamIDs::defaultEffectsEnabled)->load() > 0.5f;
 }
 
+bool FlowerStandaloneAudioProcessor::getConfiguredYEffectDreamy() const noexcept
+{
+    return apvts.getRawParameterValue (ParamIDs::performanceYEffectConfig)->load() > 0.5f;
+}
+
 void FlowerStandaloneAudioProcessor::setConfiguredRoot (int noteClass)
 {
     noteClass = juce::jlimit (0, 11, noteClass);
@@ -654,6 +686,14 @@ void FlowerStandaloneAudioProcessor::setDefaultEffectsEnabled (bool enabled)
     setPerformanceGranularEnabled (enabled);
 
     if (auto* parameter = apvts.getParameter (ParamIDs::defaultEffectsEnabled))
+        parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
+}
+
+void FlowerStandaloneAudioProcessor::setConfiguredYEffectDreamy (bool enabled)
+{
+    setPerformanceDreamyMode (enabled);
+
+    if (auto* parameter = apvts.getParameter (ParamIDs::performanceYEffectConfig))
         parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
 }
 
@@ -866,6 +906,180 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& 
 }
 
 
+
+void FlowerStandaloneAudioProcessor::processPerformanceDreamy (
+    juce::AudioBuffer<float>& buffer)
+{
+    const int capacity = performanceDreamyBuffer.getNumSamples();
+    const int numSamples = buffer.getNumSamples();
+    const int channels = juce::jmin (
+        buffer.getNumChannels(), performanceDreamyBuffer.getNumChannels());
+
+    if (capacity <= 64 || numSamples <= 0 || channels <= 0)
+        return;
+
+    const bool enabled =
+        performanceGranularEnabled.load (std::memory_order_acquire)
+        && performanceDreamyMode.load (std::memory_order_acquire)
+        && isPerformanceGateOpen();
+
+    const float x = performanceX.load (std::memory_order_relaxed);
+    const float y = performanceY.load (std::memory_order_relaxed);
+    const float bpm = performanceBpm.load (std::memory_order_relaxed);
+
+    const auto wrapIndex = [capacity] (int position)
+    {
+        while (position < 0)
+            position += capacity;
+        while (position >= capacity)
+            position -= capacity;
+        return position;
+    };
+
+    auto nextRandomUnit = [this] ()
+    {
+        uint32_t value = performanceDreamyRandomState;
+        value ^= value << 13;
+        value ^= value >> 17;
+        value ^= value << 5;
+        performanceDreamyRandomState = value;
+        return static_cast<float> (value & 0xffffu) / 65535.0f;
+    };
+
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        float dry[2] { 0.0f, 0.0f };
+        for (int channel = 0; channel < channels; ++channel)
+            dry[channel] = buffer.getSample (channel, sample);
+
+        float dreamyWet[2] { 0.0f, 0.0f };
+        float totalWindow = 0.0f;
+
+        if (enabled && performanceDreamySamplesFilled > 2048)
+        {
+            const float beatSamples =
+                static_cast<float> (currentSampleRate)
+                * 60.0f / juce::jmax (50.0f, bpm);
+            const int baseLoopLength = juce::jlimit (
+                juce::roundToInt (currentSampleRate * 0.070),
+                juce::roundToInt (currentSampleRate * 0.340),
+                juce::roundToInt (beatSamples / (2.0f + y * 2.0f)));
+
+            for (int voice = 0; voice < performanceDreamyVoiceCount; ++voice)
+            {
+                auto& active = performanceDreamyVoiceActive[static_cast<size_t> (voice)];
+                auto& loopStart = performanceDreamyLoopStart[static_cast<size_t> (voice)];
+                auto& loopLength = performanceDreamyLoopLength[static_cast<size_t> (voice)];
+                auto& outputPhase = performanceDreamyOutputPhase[static_cast<size_t> (voice)];
+                auto& localPosition = performanceDreamyLocalPosition[static_cast<size_t> (voice)];
+                auto& playbackSpeed = performanceDreamyPlaybackSpeed[static_cast<size_t> (voice)];
+
+                if (! active || loopLength <= 0
+                    || outputPhase >= loopLength * (3 + voice))
+                {
+                    const float lengthScale = voice == 0 ? 0.82f : 1.18f;
+                    loopLength = juce::jlimit (
+                        256, capacity / 3,
+                        juce::roundToInt (
+                            static_cast<float> (baseLoopLength) * lengthScale));
+
+                    const int maxLookback = juce::jmax (
+                        loopLength + 2,
+                        juce::jmin (
+                            performanceDreamySamplesFilled - 2,
+                            capacity - 2));
+                    const int minLookback = juce::jmin (
+                        maxLookback,
+                        juce::jmax (
+                            loopLength + 2,
+                            loopLength * (2 + voice)));
+                    const int spreadSamples = juce::jmax (
+                        1, maxLookback - minLookback);
+
+                    const int lookback =
+                        minLookback
+                        + juce::roundToInt (
+                            nextRandomUnit()
+                            * static_cast<float> (spreadSamples));
+
+                    loopStart = wrapIndex (
+                        performanceDreamyWritePosition - lookback);
+                    outputPhase = 0;
+                    localPosition =
+                        voice == 0
+                            ? 0.0f
+                            : static_cast<float> (loopLength) * 0.43f;
+
+                    // Voice 1 is a perfect fifth (+5); voice 2 is an octave (+12).
+                    playbackSpeed = voice == 0 ? 1.3348398f : 2.0f;
+                    active = true;
+                }
+
+                while (localPosition >= static_cast<float> (loopLength))
+                    localPosition -= static_cast<float> (loopLength);
+
+                const float phase =
+                    localPosition / static_cast<float> (loopLength);
+                const float window =
+                    0.5f - 0.5f * std::cos (
+                        juce::MathConstants<float>::twoPi * phase);
+
+                const float readPosition =
+                    static_cast<float> (loopStart) + localPosition;
+                const int read0 = wrapIndex (
+                    static_cast<int> (std::floor (readPosition)));
+                const int read1 = wrapIndex (read0 + 1);
+                const float fraction =
+                    readPosition - std::floor (readPosition);
+
+                for (int channel = 0; channel < channels; ++channel)
+                {
+                    const auto* source =
+                        performanceDreamyBuffer.getReadPointer (channel);
+                    const float fragment =
+                        source[read0]
+                        + (source[read1] - source[read0]) * fraction;
+                    dreamyWet[channel] += fragment * window;
+                }
+
+                totalWindow += window;
+                localPosition += playbackSpeed;
+                ++outputPhase;
+            }
+
+            if (totalWindow > 0.0001f)
+            {
+                const float wetMix =
+                    juce::jlimit (0.20f, 0.58f, 0.24f + y * 0.34f);
+                const float drift =
+                    0.90f + x * 0.10f;
+
+                for (int channel = 0; channel < channels; ++channel)
+                {
+                    const float wetSample =
+                        dreamyWet[channel] / totalWindow * drift;
+                    buffer.setSample (
+                        channel, sample,
+                        dry[channel] + (wetSample - dry[channel]) * wetMix);
+                }
+            }
+        }
+        else
+        {
+            performanceDreamyVoiceActive = { false, false };
+        }
+
+        for (int channel = 0; channel < channels; ++channel)
+            performanceDreamyBuffer.setSample (
+                channel, performanceDreamyWritePosition, dry[channel]);
+
+        performanceDreamyWritePosition =
+            (performanceDreamyWritePosition + 1) % capacity;
+        performanceDreamySamplesFilled =
+            juce::jmin (capacity, performanceDreamySamplesFilled + 1);
+    }
+}
+
 void FlowerStandaloneAudioProcessor::processPerformanceDelay (
     juce::AudioBuffer<float>& buffer)
 {
@@ -978,6 +1192,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout FlowerStandaloneAudioProcess
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamIDs::defaultEffectsEnabled, 1 },
         "Default Effects", true));
+    parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParamIDs::performanceYEffectConfig, 1 },
+        "Y Effect",
+        juce::StringArray { "GRANULAR", "DREAMY" }, 0));
 
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamIDs::flowerEnabled, 1 }, "Flower On", false));
