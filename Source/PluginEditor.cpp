@@ -1492,7 +1492,8 @@ bool CarnivalScreenComponent::handleKeyPress (
 FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     FlowerStandaloneAudioProcessor& p)
     : juce::AudioProcessorEditor (&p),
-      processor (p)
+      processor (p),
+      carnivalScreen (p)
 {
     setLookAndFeel (&retroLookAndFeel);
     setOpaque (true);
@@ -1530,7 +1531,9 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
 
     addAndMakeVisible (performancePad);
     addAndMakeVisible (configScreen);
+    addAndMakeVisible (carnivalScreen);
     configScreen.setVisible (false);
+    carnivalScreen.setVisible (false);
 
     rootClass = processor.getConfiguredRoot();
     scaleIndex = processor.getConfiguredScale();
@@ -1605,6 +1608,52 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             processor.setConfiguredMidiChannel (midiChannel);
         };
 
+    configScreen.onCarnivalRequested =
+        [this]
+        {
+            stopAll();
+
+            if (dpadActive)
+                endDpadControl();
+            if (bpmAdjustActive)
+                endBpmAdjust();
+            if (looperButtonActive)
+                endLooperButton();
+
+            configVisible = false;
+            carnivalVisible = true;
+            processor.setCarnivalEnabled (true);
+            carnivalScreen.showSequencePage();
+
+            performancePad.setVisible (false);
+            configScreen.setVisible (false);
+            carnivalScreen.setBounds (getLocalBounds());
+            carnivalScreen.setVisible (true);
+            carnivalScreen.toFront (false);
+            grabKeyboardFocus();
+        };
+
+    carnivalScreen.onExitRequested =
+        [this]
+        {
+            processor.setCarnivalEnabled (false);
+            carnivalVisible = false;
+            carnivalScreen.setVisible (false);
+
+            configVisible = true;
+            configScreen.setValues (
+                rootClass,
+                scaleIndex,
+                processor.getDefaultEffectsEnabled(),
+                yEffectDreamy,
+                processor.getConfiguredMidiChannel());
+            configScreen.setBounds (getLocalBounds());
+            performancePad.setVisible (false);
+            configScreen.setVisible (true);
+            configScreen.toFront (false);
+            grabKeyboardFocus();
+        };
+
     configScreen.onCloseRequested =
         [this]
         {
@@ -1629,6 +1678,7 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
 FlowerStandaloneAudioProcessorEditor::~FlowerStandaloneAudioProcessorEditor()
 {
     stopTimer();
+    processor.setCarnivalEnabled (false);
     processor.stopPerformance();
     setLookAndFeel (nullptr);
 }
@@ -1642,6 +1692,7 @@ void FlowerStandaloneAudioProcessorEditor::resized()
 {
     performancePad.setBounds (getLocalBounds());
     configScreen.setBounds (getLocalBounds());
+    carnivalScreen.setBounds (getLocalBounds());
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
@@ -1956,6 +2007,24 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
 {
     const int code = key.getKeyCode();
     const auto ch = key.getTextCharacter();
+
+    if (carnivalVisible)
+    {
+        int latchCode = 0;
+        if (code == juce::KeyPress::F13Key) latchCode = 1;
+        else if (code == juce::KeyPress::F14Key) latchCode = 2;
+        else if (code == juce::KeyPress::F15Key) latchCode = 3;
+        else if (code == juce::KeyPress::F16Key) latchCode = 4;
+        else if (code == juce::KeyPress::F19Key) latchCode = 19;
+
+        if (latchCode != 0 && toggleButtonLatchCode == latchCode)
+            return true;
+
+        const bool used = carnivalScreen.handleKeyPress (key);
+        if (used && latchCode != 0)
+            toggleButtonLatchCode = latchCode;
+        return used;
+    }
 
     // Android gamepad bridge:
     // SELECT=F19, A=F13, B=F14, X=F15, Y=F16, L1=F17, R1=F18.
