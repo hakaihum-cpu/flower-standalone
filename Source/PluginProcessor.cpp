@@ -21,6 +21,56 @@ FlowerStandaloneAudioProcessor::FlowerStandaloneAudioProcessor()
     for (int i = 0; i < 8; ++i)
         synthesiser.addVoice (new SineVoice());
     synthesiser.addSound (new SineSound());
+
+    static constexpr int defaultMachines[carnivalTrackCount]
+    {
+        0, 1, 2, 3, 4, 5, 6, 0, 2, 4
+    };
+
+    for (int track = 0; track < carnivalTrackCount; ++track)
+    {
+        carnivalInstruments[static_cast<size_t> (track)].store (
+            defaultMachines[track], std::memory_order_relaxed);
+
+        const float defaults[carnivalParamCount]
+        {
+            0.78f, // volume
+            0.50f, // pan
+            0.78f, // filter
+            0.50f, // pitch
+            0.42f, // decay
+            0.20f, // lfo rate
+            0.00f  // lfo depth
+        };
+
+        for (int param = 0; param < carnivalParamCount; ++param)
+        {
+            carnivalBaseParams[static_cast<size_t> (
+                carnivalBaseParamIndex (track, param))].store (
+                    defaults[param], std::memory_order_relaxed);
+        }
+
+        for (int step = 0; step < carnivalStepCount; ++step)
+        {
+            carnivalSteps[static_cast<size_t> (
+                carnivalStepIndex (track, step))].store (
+                    false, std::memory_order_relaxed);
+
+            for (int param = 0; param < carnivalParamCount; ++param)
+            {
+                const auto lock = static_cast<size_t> (
+                    carnivalLockIndex (track, step, param));
+                carnivalLockEnabled[lock].store (
+                    false, std::memory_order_relaxed);
+                carnivalLockValues[lock].store (
+                    defaults[param], std::memory_order_relaxed);
+            }
+        }
+
+        carnivalVoices[static_cast<size_t> (track)].noiseState =
+            0x12345678u
+            ^ (0x9e3779b9u * static_cast<uint32_t> (track + 1));
+    }
 }
 
 bool FlowerStandaloneAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -84,6 +134,19 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int sampl
     performanceStep = 0;
     performanceCurrentNote = -1;
     performanceRandomState = 0x46574C52u;
+
+    carnivalSamplesUntilStep = 0.0;
+    carnivalMidiClockCounter = 0;
+    carnivalMidiRunning = false;
+    carnivalCurrentStep.store (-1, std::memory_order_relaxed);
+    for (auto& voice : carnivalVoices)
+    {
+        voice.active = false;
+        voice.phase1 = voice.phase2 = voice.phase3 = 0.0;
+        voice.lfoPhase = 0.0;
+        voice.ageSeconds = 0.0f;
+        voice.filterStateL = voice.filterStateR = 0.0f;
+    }
 
     const auto initialise = [this] (juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>& value,
                                     const char* id,
@@ -151,6 +214,17 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
 {
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
+
+    if (carnivalEnabled.load (std::memory_order_acquire))
+    {
+        handleCarnivalMidiClock (midiMessages);
+        processCarnival (buffer);
+
+        juce::dsp::AudioBlock<float> carnivalBlock (buffer);
+        juce::dsp::ProcessContextReplacing<float> carnivalContext (carnivalBlock);
+        performanceOutputLimiter.process (carnivalContext);
+        return;
+    }
 
     handlePerformanceMidiCC (midiMessages);
     generatePerformanceMidi (midiMessages, buffer.getNumSamples());
@@ -803,6 +877,555 @@ void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC (juce::MidiBuffer& 
             default:
                 break;
         }
+    }
+}
+
+
+void FlowerStandaloneAudioProcessor::setCarnivalEnabled (bool enabled) noexcept
+{
+    carnivalEnabled.store (enabled, std::memory_order_release);
+    carnivalResetRequested.store (true, std::memory_order_release);
+
+    if (enabled)
+        stopPerformance();
+    else
+        carnivalPlaying.store (false, std::memory_order_release);
+}
+
+void FlowerStandaloneAudioProcessor::setCarnivalPlaying (bool playing) noexcept
+{
+    carnivalPlaying.store (playing, std::memory_order_release);
+    if (playing)
+        carnivalResetRequested.store (true, std::memory_order_release);
+}
+
+void FlowerStandaloneAudioProcessor::setCarnivalClockMidi (bool midiClock) noexcept
+{
+    carnivalClockMidi.store (midiClock, std::memory_order_release);
+    carnivalResetRequested.store (true, std::memory_order_release);
+}
+
+void FlowerStandaloneAudioProcessor::setCarnivalBpm (float bpm) noexcept
+{
+    carnivalBpm.store (
+        juce::jlimit (40.0f, 240.0f, bpm),
+        std::memory_order_relaxed);
+}
+
+bool FlowerStandaloneAudioProcessor::getCarnivalStepEnabled (
+    int track, int step) const noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount
+        || step < 0 || step >= carnivalStepCount)
+        return false;
+
+    return carnivalSteps[static_cast<size_t> (
+        carnivalStepIndex (track, step))].load (std::memory_order_relaxed);
+}
+
+void FlowerStandaloneAudioProcessor::setCarnivalStepEnabled (
+    int track, int step, bool enabled) noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount
+        || step < 0 || step >= carnivalStepCount)
+        return;
+
+    carnivalSteps[static_cast<size_t> (
+        carnivalStepIndex (track, step))].store (
+            enabled, std::memory_order_relaxed);
+}
+
+void FlowerStandaloneAudioProcessor::toggleCarnivalStep (
+    int track, int step) noexcept
+{
+    const bool next = ! getCarnivalStepEnabled (track, step);
+    setCarnivalStepEnabled (track, step, next);
+
+    if (next)
+        previewCarnivalTrack (track);
+}
+
+int FlowerStandaloneAudioProcessor::getCarnivalInstrument (int track) const noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount)
+        return 0;
+
+    return juce::jlimit (
+        0, static_cast<int> (CarnivalInstrument::Count) - 1,
+        carnivalInstruments[static_cast<size_t> (track)].load (
+            std::memory_order_relaxed));
+}
+
+void FlowerStandaloneAudioProcessor::setCarnivalInstrument (
+    int track, int instrument) noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount)
+        return;
+
+    const int count = static_cast<int> (CarnivalInstrument::Count);
+    instrument %= count;
+    if (instrument < 0)
+        instrument += count;
+
+    carnivalInstruments[static_cast<size_t> (track)].store (
+        instrument, std::memory_order_relaxed);
+}
+
+void FlowerStandaloneAudioProcessor::cycleCarnivalInstrument (
+    int track, int delta) noexcept
+{
+    setCarnivalInstrument (
+        track, getCarnivalInstrument (track) + delta);
+    previewCarnivalTrack (track);
+}
+
+float FlowerStandaloneAudioProcessor::getCarnivalBaseParam (
+    int track, int param) const noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount
+        || param < 0 || param >= carnivalParamCount)
+        return 0.0f;
+
+    return carnivalBaseParams[static_cast<size_t> (
+        carnivalBaseParamIndex (track, param))].load (
+            std::memory_order_relaxed);
+}
+
+void FlowerStandaloneAudioProcessor::setCarnivalBaseParam (
+    int track, int param, float value) noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount
+        || param < 0 || param >= carnivalParamCount)
+        return;
+
+    carnivalBaseParams[static_cast<size_t> (
+        carnivalBaseParamIndex (track, param))].store (
+            juce::jlimit (0.0f, 1.0f, value),
+            std::memory_order_relaxed);
+}
+
+bool FlowerStandaloneAudioProcessor::getCarnivalParamLockEnabled (
+    int track, int step, int param) const noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount
+        || step < 0 || step >= carnivalStepCount
+        || param < 0 || param >= carnivalParamCount)
+        return false;
+
+    return carnivalLockEnabled[static_cast<size_t> (
+        carnivalLockIndex (track, step, param))].load (
+            std::memory_order_relaxed);
+}
+
+float FlowerStandaloneAudioProcessor::getCarnivalParamLockValue (
+    int track, int step, int param) const noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount
+        || step < 0 || step >= carnivalStepCount
+        || param < 0 || param >= carnivalParamCount)
+        return 0.0f;
+
+    return carnivalLockValues[static_cast<size_t> (
+        carnivalLockIndex (track, step, param))].load (
+            std::memory_order_relaxed);
+}
+
+void FlowerStandaloneAudioProcessor::setCarnivalParamLock (
+    int track, int step, int param,
+    bool enabled, float value) noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount
+        || step < 0 || step >= carnivalStepCount
+        || param < 0 || param >= carnivalParamCount)
+        return;
+
+    const auto index = static_cast<size_t> (
+        carnivalLockIndex (track, step, param));
+
+    carnivalLockValues[index].store (
+        juce::jlimit (0.0f, 1.0f, value),
+        std::memory_order_relaxed);
+    carnivalLockEnabled[index].store (
+        enabled, std::memory_order_release);
+}
+
+bool FlowerStandaloneAudioProcessor::carnivalStepHasLocks (
+    int track, int step) const noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount
+        || step < 0 || step >= carnivalStepCount)
+        return false;
+
+    for (int param = 0; param < carnivalParamCount; ++param)
+        if (getCarnivalParamLockEnabled (track, step, param))
+            return true;
+
+    return false;
+}
+
+void FlowerStandaloneAudioProcessor::clearCarnivalStepLocks (
+    int track, int step) noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount
+        || step < 0 || step >= carnivalStepCount)
+        return;
+
+    for (int param = 0; param < carnivalParamCount; ++param)
+    {
+        const auto index = static_cast<size_t> (
+            carnivalLockIndex (track, step, param));
+        carnivalLockEnabled[index].store (
+            false, std::memory_order_release);
+    }
+}
+
+void FlowerStandaloneAudioProcessor::clearCarnivalPattern() noexcept
+{
+    for (auto& step : carnivalSteps)
+        step.store (false, std::memory_order_relaxed);
+
+    for (auto& lock : carnivalLockEnabled)
+        lock.store (false, std::memory_order_relaxed);
+}
+
+void FlowerStandaloneAudioProcessor::previewCarnivalTrack (int track) noexcept
+{
+    if (track >= 0 && track < carnivalTrackCount)
+        carnivalPreviewTrackRequested.store (
+            track, std::memory_order_release);
+}
+
+void FlowerStandaloneAudioProcessor::handleCarnivalMidiClock (
+    const juce::MidiBuffer& midi)
+{
+    if (! carnivalClockMidi.load (std::memory_order_acquire))
+        return;
+
+    for (const auto metadata : midi)
+    {
+        const auto message = metadata.getMessage();
+
+        if (message.isMidiStart())
+        {
+            carnivalMidiRunning = true;
+            carnivalMidiClockCounter = 0;
+            carnivalPlaying.store (true, std::memory_order_release);
+            carnivalCurrentStep.store (0, std::memory_order_relaxed);
+            triggerCarnivalStep (0);
+        }
+        else if (message.isMidiContinue())
+        {
+            carnivalMidiRunning = true;
+            carnivalPlaying.store (true, std::memory_order_release);
+        }
+        else if (message.isMidiStop())
+        {
+            carnivalMidiRunning = false;
+            carnivalPlaying.store (false, std::memory_order_release);
+        }
+        else if (message.isMidiClock() && carnivalMidiRunning)
+        {
+            ++carnivalMidiClockCounter;
+
+            if (carnivalMidiClockCounter >= 12)
+            {
+                carnivalMidiClockCounter = 0;
+                const int next =
+                    (juce::jmax (0, carnivalCurrentStep.load (
+                        std::memory_order_relaxed)) + 1)
+                    % carnivalStepCount;
+
+                carnivalCurrentStep.store (
+                    next, std::memory_order_relaxed);
+                triggerCarnivalStep (next);
+            }
+        }
+    }
+}
+
+float FlowerStandaloneAudioProcessor::nextCarnivalNoise (int track) noexcept
+{
+    auto& state = carnivalVoices[static_cast<size_t> (track)].noiseState;
+    state ^= state << 13;
+    state ^= state >> 17;
+    state ^= state << 5;
+
+    const float unit =
+        static_cast<float> (state & 0x00ffffffu)
+        / static_cast<float> (0x00ffffffu);
+    return unit * 2.0f - 1.0f;
+}
+
+void FlowerStandaloneAudioProcessor::triggerCarnivalTrack (
+    int track, int step) noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount)
+        return;
+
+    auto& voice = carnivalVoices[static_cast<size_t> (track)];
+    voice.active = true;
+    voice.instrument = getCarnivalInstrument (track);
+    voice.phase1 = voice.phase2 = voice.phase3 = 0.0;
+    voice.lfoPhase = 0.0;
+    voice.ageSeconds = 0.0f;
+    voice.filterStateL = voice.filterStateR = 0.0f;
+
+    auto readParam = [this, track, step] (int param)
+    {
+        if (step >= 0
+            && step < carnivalStepCount
+            && getCarnivalParamLockEnabled (track, step, param))
+            return getCarnivalParamLockValue (track, step, param);
+
+        return getCarnivalBaseParam (track, param);
+    };
+
+    voice.volume = readParam (static_cast<int> (CarnivalParam::Volume));
+    voice.pan = readParam (static_cast<int> (CarnivalParam::Pan));
+    voice.filter = readParam (static_cast<int> (CarnivalParam::Filter));
+    voice.pitch = readParam (static_cast<int> (CarnivalParam::Pitch));
+    voice.decay = readParam (static_cast<int> (CarnivalParam::Decay));
+    voice.lfoRate = readParam (static_cast<int> (CarnivalParam::LfoRate));
+    voice.lfoDepth = readParam (static_cast<int> (CarnivalParam::LfoDepth));
+
+    static constexpr float baseFrequencies[]
+    {
+        55.0f, 180.0f, 5200.0f, 220.0f,
+        330.0f, 120.0f, 65.0f
+    };
+
+    const float semitones = (voice.pitch - 0.5f) * 48.0f;
+    voice.frequency =
+        baseFrequencies[voice.instrument]
+        * std::pow (2.0f, semitones / 12.0f);
+}
+
+void FlowerStandaloneAudioProcessor::triggerCarnivalStep (int step) noexcept
+{
+    if (step < 0 || step >= carnivalStepCount)
+        return;
+
+    for (int track = 0; track < carnivalTrackCount; ++track)
+        if (getCarnivalStepEnabled (track, step))
+            triggerCarnivalTrack (track, step);
+}
+
+void FlowerStandaloneAudioProcessor::processCarnival (
+    juce::AudioBuffer<float>& buffer)
+{
+    const int numSamples = buffer.getNumSamples();
+    const int numChannels = buffer.getNumChannels();
+
+    if (numSamples <= 0 || numChannels <= 0)
+        return;
+
+    if (carnivalResetRequested.exchange (
+            false, std::memory_order_acq_rel))
+    {
+        carnivalSamplesUntilStep = 0.0;
+        carnivalMidiClockCounter = 0;
+
+        if (! carnivalClockMidi.load (std::memory_order_acquire))
+            carnivalCurrentStep.store (-1, std::memory_order_relaxed);
+    }
+
+    const int preview =
+        carnivalPreviewTrackRequested.exchange (
+            -1, std::memory_order_acq_rel);
+    if (preview >= 0)
+        triggerCarnivalTrack (preview, -1);
+
+    const bool internalClock =
+        ! carnivalClockMidi.load (std::memory_order_acquire);
+
+    const double sampleRate = juce::jmax (1.0, currentSampleRate);
+    constexpr double twoPi = juce::MathConstants<double>::twoPi;
+
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        if (internalClock
+            && carnivalPlaying.load (std::memory_order_acquire))
+        {
+            if (carnivalSamplesUntilStep <= 0.0)
+            {
+                const int previous =
+                    carnivalCurrentStep.load (std::memory_order_relaxed);
+                const int next =
+                    previous < 0 ? 0 : (previous + 1) % carnivalStepCount;
+
+                carnivalCurrentStep.store (
+                    next, std::memory_order_relaxed);
+                triggerCarnivalStep (next);
+
+                const double bpm = static_cast<double> (
+                    carnivalBpm.load (std::memory_order_relaxed));
+                carnivalSamplesUntilStep +=
+                    sampleRate * 60.0
+                    / juce::jlimit (40.0, 240.0, bpm)
+                    / 2.0;
+            }
+
+            carnivalSamplesUntilStep -= 1.0;
+        }
+
+        float left = 0.0f;
+        float right = 0.0f;
+
+        for (int track = 0; track < carnivalTrackCount; ++track)
+        {
+            auto& voice = carnivalVoices[static_cast<size_t> (track)];
+            if (! voice.active)
+                continue;
+
+            const float baseDecay =
+                voice.instrument == static_cast<int> (CarnivalInstrument::Hihat)
+                    ? 0.025f + voice.decay * 0.38f
+                    : voice.instrument == static_cast<int> (CarnivalInstrument::Kick)
+                        ? 0.055f + voice.decay * 0.72f
+                        : 0.08f + voice.decay * 1.25f;
+
+            if (voice.ageSeconds >= baseDecay)
+            {
+                voice.active = false;
+                continue;
+            }
+
+            const float envelope =
+                std::exp (-6.0f * voice.ageSeconds / baseDecay);
+
+            const float lfoHz = 0.10f + voice.lfoRate * 15.9f;
+            const float lfo =
+                std::sin (static_cast<float> (voice.lfoPhase))
+                * voice.lfoDepth;
+
+            voice.lfoPhase += twoPi * lfoHz / sampleRate;
+            if (voice.lfoPhase >= twoPi)
+                voice.lfoPhase -= twoPi;
+
+            const float vibrato =
+                std::pow (2.0f, (lfo * 2.0f) / 12.0f);
+            float frequency = voice.frequency * vibrato;
+            float mono = 0.0f;
+
+            const auto advancePhase =
+                [sampleRate] (double& phase, float hz)
+                {
+                    phase += juce::MathConstants<double>::twoPi
+                           * static_cast<double> (hz) / sampleRate;
+                    if (phase >= juce::MathConstants<double>::twoPi)
+                        phase -= juce::MathConstants<double>::twoPi;
+                };
+
+            switch (voice.instrument)
+            {
+                case static_cast<int> (CarnivalInstrument::Kick):
+                {
+                    const float sweep =
+                        1.0f + 2.4f * std::exp (-voice.ageSeconds * 28.0f);
+                    frequency *= sweep;
+                    advancePhase (voice.phase1, frequency);
+                    mono = std::sin (static_cast<float> (voice.phase1));
+                    break;
+                }
+
+                case static_cast<int> (CarnivalInstrument::Snare):
+                {
+                    advancePhase (voice.phase1, frequency);
+                    const float body =
+                        std::sin (static_cast<float> (voice.phase1));
+                    mono =
+                        body * 0.36f
+                        + nextCarnivalNoise (track) * 0.64f;
+                    break;
+                }
+
+                case static_cast<int> (CarnivalInstrument::Hihat):
+                {
+                    const float noise = nextCarnivalNoise (track);
+                    advancePhase (voice.phase1, frequency);
+                    advancePhase (voice.phase2, frequency * 1.417f);
+                    const float metal =
+                        std::sin (static_cast<float> (voice.phase1))
+                        * std::sin (static_cast<float> (voice.phase2));
+                    mono = noise * 0.58f + metal * 0.42f;
+                    break;
+                }
+
+                case static_cast<int> (CarnivalInstrument::Chord):
+                {
+                    advancePhase (voice.phase1, frequency);
+                    advancePhase (voice.phase2, frequency * 1.259921f);
+                    advancePhase (voice.phase3, frequency * 1.498307f);
+                    mono =
+                        (std::sin (static_cast<float> (voice.phase1))
+                       + std::sin (static_cast<float> (voice.phase2))
+                       + std::sin (static_cast<float> (voice.phase3)))
+                        / 3.0f;
+                    break;
+                }
+
+                case static_cast<int> (CarnivalInstrument::Tone):
+                {
+                    advancePhase (voice.phase1, frequency);
+                    mono = std::sin (static_cast<float> (voice.phase1));
+                    break;
+                }
+
+                case static_cast<int> (CarnivalInstrument::Tom):
+                {
+                    const float sweep =
+                        1.0f + 0.75f * std::exp (-voice.ageSeconds * 18.0f);
+                    advancePhase (voice.phase1, frequency * sweep);
+                    mono = std::sin (static_cast<float> (voice.phase1));
+                    break;
+                }
+
+                default: // BASS
+                {
+                    advancePhase (voice.phase1, frequency);
+                    const float phase =
+                        static_cast<float> (voice.phase1 / twoPi);
+                    const float saw = phase * 2.0f - 1.0f;
+                    const float sine =
+                        std::sin (static_cast<float> (voice.phase1));
+                    mono = saw * 0.38f + sine * 0.62f;
+                    break;
+                }
+            }
+
+            mono *= envelope * voice.volume * 0.34f;
+
+            const float cutoff =
+                180.0f
+                + std::pow (voice.filter, 2.0f) * 15500.0f;
+            const float coefficient =
+                std::exp (
+                    -2.0f * juce::MathConstants<float>::pi
+                    * cutoff / static_cast<float> (sampleRate));
+            const float filteredL =
+                (1.0f - coefficient) * mono
+                + coefficient * voice.filterStateL;
+            const float filteredR =
+                (1.0f - coefficient) * mono
+                + coefficient * voice.filterStateR;
+            voice.filterStateL = filteredL;
+            voice.filterStateR = filteredR;
+
+            const float pan =
+                juce::jlimit (0.0f, 1.0f, voice.pan + lfo * 0.08f);
+            const float gainL = std::sqrt (1.0f - pan);
+            const float gainR = std::sqrt (pan);
+
+            left += filteredL * gainL;
+            right += filteredR * gainR;
+
+            voice.ageSeconds +=
+                1.0f / static_cast<float> (sampleRate);
+        }
+
+        buffer.setSample (0, sample, left);
+        if (numChannels > 1)
+            buffer.setSample (1, sample, right);
     }
 }
 
