@@ -107,6 +107,32 @@ void PerformancePadComponent::setEffectState (
     delayIndicatorOn = delayOn;
     yEffectIndicatorOn = yEffectOn;
     dreamyIndicatorMode = dreamyMode;
+    updateVisualTimer();
+    repaint();
+}
+
+void PerformancePadComponent::updateVisualTimer()
+{
+    const bool animated =
+        arpIndicatorOn || delayIndicatorOn || yEffectIndicatorOn;
+
+    if (animated)
+    {
+        if (! isTimerRunning())
+            startTimerHz (30);
+    }
+    else
+    {
+        stopTimer();
+    }
+}
+
+void PerformancePadComponent::timerCallback()
+{
+    visualPhase += 1.0f / 30.0f;
+    if (visualPhase > 1024.0f)
+        visualPhase = std::fmod (visualPhase, 1024.0f);
+
     repaint();
 }
 
@@ -146,73 +172,119 @@ void PerformancePadComponent::paint (juce::Graphics& g)
                  0, 0, frame.getWidth(), frame.getHeight(),
                  false);
 
-    // Effect state is shown as faint scenery-like marks instead of labels.
-    // OFF removes the corresponding mark entirely.
-    const float unit =
-        juce::jmax (0.55f, juce::jmin (getWidth(), getHeight()) / 720.0f);
-    const auto indicator =
-        juce::Colour (0xffeee5cf).withAlpha (0.20f);
-    g.setColour (indicator);
+    // Comparison build: effect state is expressed by the whole image instead
+    // of small corner marks. The original frame remains the base layer.
 
     if (delayIndicatorOn)
     {
-        const float cx = static_cast<float> (getWidth()) - 43.0f * unit;
-        const float cy = 42.0f * unit;
-        for (int ring = 0; ring < 3; ++ring)
+        const float drift =
+            std::sin (visualPhase * 2.1f) * 2.0f;
+        const float drift2 =
+            std::sin (visualPhase * 1.37f + 1.4f) * 3.0f;
+
+        juce::Graphics::ScopedSaveState delayState (g);
+        g.setOpacity (0.075f);
+        g.drawImage (
+            frame,
+            juce::roundToInt (3.0f + drift), 0,
+            getWidth(), getHeight(),
+            0, 0, frame.getWidth(), frame.getHeight(),
+            false);
+
+        g.setOpacity (0.045f);
+        g.drawImage (
+            frame,
+            juce::roundToInt (-5.0f + drift2), 1,
+            getWidth(), getHeight(),
+            0, 0, frame.getWidth(), frame.getHeight(),
+            false);
+    }
+
+    if (yEffectIndicatorOn && ! dreamyIndicatorMode)
+    {
+        juce::Graphics::ScopedSaveState granularState (g);
+        constexpr int stripCount = 9;
+        const int sourceHeight = frame.getHeight();
+
+        for (int strip = 0; strip < stripCount; ++strip)
         {
-            const float radius = (7.0f + ring * 7.0f) * unit;
-            juce::Path arc;
-            arc.addCentredArc (
-                cx, cy, radius, radius, 0.0f,
-                -1.28f, 1.03f, true);
-            g.strokePath (
-                arc, juce::PathStrokeType (1.05f * unit));
+            const int y0 = getHeight() * strip / stripCount;
+            const int y1 = getHeight() * (strip + 1) / stripCount;
+            const int h = juce::jmax (1, y1 - y0);
+
+            const int sourceY0 = sourceHeight * strip / stripCount;
+            const int sourceY1 = sourceHeight * (strip + 1) / stripCount;
+            const int sourceH = juce::jmax (1, sourceY1 - sourceY0);
+
+            const float wave =
+                std::sin (
+                    visualPhase * (2.5f + 0.12f * strip)
+                    + static_cast<float> (strip) * 1.71f);
+
+            const int offset =
+                juce::roundToInt (wave * (2.0f + (strip % 3)));
+
+            if (std::abs (offset) < 2)
+                continue;
+
+            g.setOpacity (0.13f + 0.015f * static_cast<float> (strip % 2));
+            g.drawImage (
+                frame,
+                offset, y0,
+                getWidth(), h,
+                0, sourceY0,
+                frame.getWidth(), sourceH,
+                false);
         }
     }
 
-    if (yEffectIndicatorOn)
+    if (yEffectIndicatorOn && dreamyIndicatorMode)
     {
-        const float left = 25.0f * unit;
-        const float top = 25.0f * unit;
+        // The two visual ghost rates mirror DREAMY's +5 and +12 audio voices.
+        const float phase5 = visualPhase * 1.3348398f;
+        const float phase12 = visualPhase * 2.0f;
 
-        if (dreamyIndicatorMode)
-        {
-            for (int loop = 0; loop < 2; ++loop)
-            {
-                const float diameter = (12.0f + loop * 8.0f) * unit;
-                g.drawEllipse (
-                    left + loop * 9.0f * unit,
-                    top + loop * 3.0f * unit,
-                    diameter, diameter,
-                    1.0f * unit);
-            }
-        }
-        else
-        {
-            for (int grain = 0; grain < 5; ++grain)
-            {
-                const float radius = (1.5f + (grain % 2) * 0.65f) * unit;
-                g.fillEllipse (
-                    left + grain * 6.2f * unit,
-                    top + (grain % 3) * 4.0f * unit,
-                    radius * 2.0f, radius * 2.0f);
-            }
-        }
+        const int dx5 = juce::roundToInt (std::sin (phase5 * 2.2f) * 4.0f);
+        const int dy5 = juce::roundToInt (std::cos (phase5 * 1.7f) * 2.0f);
+        const int dx12 = juce::roundToInt (std::cos (phase12 * 1.9f) * 6.0f);
+        const int dy12 = juce::roundToInt (std::sin (phase12 * 1.3f) * 3.0f);
+
+        juce::Graphics::ScopedSaveState dreamyState (g);
+
+        g.setOpacity (0.085f);
+        g.drawImage (
+            frame,
+            dx5, dy5,
+            getWidth(), getHeight(),
+            0, 0, frame.getWidth(), frame.getHeight(),
+            false);
+
+        g.setOpacity (0.055f);
+        g.drawImage (
+            frame,
+            dx12, dy12,
+            getWidth(), getHeight(),
+            0, 0, frame.getWidth(), frame.getHeight(),
+            false);
+
+        const float wash =
+            0.018f + 0.010f * (0.5f + 0.5f * std::sin (phase5));
+        g.setOpacity (1.0f);
+        g.setColour (juce::Colour (0xffeee5cf).withAlpha (wash));
+        g.fillRect (getLocalBounds());
     }
 
     if (arpIndicatorOn)
     {
-        const float left = 26.0f * unit;
-        const float bottom =
-            static_cast<float> (getHeight()) - 27.0f * unit;
-        for (int step = 0; step < 5; ++step)
-        {
-            const float radius = 1.7f * unit;
-            g.fillEllipse (
-                left + step * 7.0f * unit,
-                bottom - step * 2.7f * unit,
-                radius * 2.0f, radius * 2.0f);
-        }
+        // Keep ARP readable without adding an icon: a tiny global light pulse.
+        const float pulse =
+            0.008f
+            + 0.012f
+                * (0.5f + 0.5f * std::sin (visualPhase * 6.0f));
+
+        juce::Graphics::ScopedSaveState arpState (g);
+        g.setColour (juce::Colours::white.withAlpha (pulse));
+        g.fillRect (getLocalBounds());
     }
 
     if (physicalPointerVisible)
