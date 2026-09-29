@@ -122,6 +122,13 @@ void PerformancePadComponent::setEffectState (
     repaint();
 }
 
+void PerformancePadComponent::setBpmDisplay (float bpm, bool visible)
+{
+    bpmDisplayValue = bpm;
+    bpmDisplayVisible = visible;
+    repaint();
+}
+
 void PerformancePadComponent::updateVisualTimer()
 {
     const bool animated =
@@ -296,6 +303,96 @@ void PerformancePadComponent::paint (juce::Graphics& g)
         juce::Graphics::ScopedSaveState arpState (g);
         g.setColour (juce::Colours::white.withAlpha (pulse));
         g.fillRect (getLocalBounds());
+    }
+
+    // Compact effect-state legend. Only active functions are shown.
+    {
+        juce::StringArray activeEffects;
+
+        if (delayIndicatorOn)
+            activeEffects.add ("DELAY");
+
+        if (yEffectIndicatorOn)
+            activeEffects.add (dreamyIndicatorMode ? "DRM" : "GRN");
+
+        if (arpIndicatorOn)
+            activeEffects.add ("ARP");
+
+        if (! activeEffects.isEmpty())
+        {
+            const float unit =
+                juce::jmax (0.60f,
+                    juce::jmin (getWidth(), getHeight()) / 720.0f);
+            const auto text = activeEffects.joinIntoString ("  ");
+
+            juce::Font effectFont (
+                juce::FontOptions (13.0f * unit).withStyle ("Bold"));
+
+            g.setFont (effectFont);
+            g.setColour (juce::Colours::black.withAlpha (0.72f));
+            g.drawText (
+                text,
+                juce::roundToInt (13.0f * unit),
+                juce::roundToInt (12.0f * unit),
+                juce::roundToInt (280.0f * unit),
+                juce::roundToInt (22.0f * unit),
+                juce::Justification::centredLeft);
+
+            g.setColour (juce::Colours::white.withAlpha (0.96f));
+            g.drawText (
+                text,
+                juce::roundToInt (12.0f * unit),
+                juce::roundToInt (11.0f * unit),
+                juce::roundToInt (280.0f * unit),
+                juce::roundToInt (22.0f * unit),
+                juce::Justification::centredLeft);
+        }
+    }
+
+    // BPM is intentionally transient: it is visible only while L/R is held.
+    if (bpmDisplayVisible)
+    {
+        const float unit =
+            juce::jmax (0.60f,
+                juce::jmin (getWidth(), getHeight()) / 720.0f);
+
+        const juce::String bpmText =
+            juce::String (juce::roundToInt (bpmDisplayValue));
+
+        juce::Font bpmFont (
+            juce::FontOptions (72.0f * unit).withStyle ("Bold"));
+
+        const auto area = juce::Rectangle<int> (
+            0,
+            juce::roundToInt (68.0f * unit),
+            getWidth(),
+            juce::roundToInt (92.0f * unit));
+
+        g.setFont (bpmFont);
+        g.setColour (juce::Colours::black.withAlpha (0.70f));
+        g.drawText (
+            bpmText,
+            area.translated (
+                juce::roundToInt (2.0f * unit),
+                juce::roundToInt (3.0f * unit)),
+            juce::Justification::centred);
+
+        g.setColour (juce::Colours::white);
+        g.drawText (
+            bpmText,
+            area,
+            juce::Justification::centred);
+
+        g.setFont (
+            juce::FontOptions (16.0f * unit).withStyle ("Bold"));
+        g.setColour (juce::Colours::white.withAlpha (0.90f));
+        g.drawText (
+            "BPM",
+            0,
+            juce::roundToInt (145.0f * unit),
+            getWidth(),
+            juce::roundToInt (26.0f * unit),
+            juce::Justification::centred);
     }
 
     if (physicalPointerVisible)
@@ -1713,6 +1810,9 @@ void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
 {
     bpm = juce::jlimit (50.0f, 200.0f, bpm + delta);
     processor.setPerformanceBpm (bpm);
+
+    if (bpmAdjustActive)
+        performancePad.setBpmDisplay (bpm, true);
 }
 
 void FlowerStandaloneAudioProcessorEditor::cycleScale (int delta)
@@ -1867,6 +1967,7 @@ void FlowerStandaloneAudioProcessorEditor::beginBpmAdjust (int direction)
     bpmLastRepeatMs = bpmHoldStartMs;
 
     applyBpmDelta (2.0f * static_cast<float> (direction));
+    performancePad.setBpmDisplay (bpm, true);
     refreshControlTimer();
 }
 
@@ -1874,6 +1975,7 @@ void FlowerStandaloneAudioProcessorEditor::endBpmAdjust()
 {
     bpmAdjustActive = false;
     bpmAdjustDirection = 0;
+    performancePad.setBpmDisplay (bpm, false);
     refreshControlTimer();
 }
 
