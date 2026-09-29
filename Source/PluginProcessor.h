@@ -11,6 +11,33 @@ public:
     static constexpr int flowerWaveformBins = 256;
     static constexpr int flowerGrainCount = 4;
 
+    static constexpr int carnivalTrackCount = 10;
+    static constexpr int carnivalStepCount = 8;
+    static constexpr int carnivalParamCount = 7;
+
+    enum class CarnivalInstrument
+    {
+        Kick = 0,
+        Snare,
+        Hihat,
+        Chord,
+        Tone,
+        Tom,
+        Bass,
+        Count
+    };
+
+    enum class CarnivalParam
+    {
+        Volume = 0,
+        Pan,
+        Filter,
+        Pitch,
+        Decay,
+        LfoRate,
+        LfoDepth
+    };
+
     FlowerStandaloneAudioProcessor();
     ~FlowerStandaloneAudioProcessor() override = default;
 
@@ -70,6 +97,52 @@ public:
     void setConfiguredYEffectDreamy (bool enabled);
     void setConfiguredMidiChannel (int channel);
 
+    void setCarnivalEnabled (bool enabled) noexcept;
+    bool isCarnivalEnabled() const noexcept
+    {
+        return carnivalEnabled.load (std::memory_order_acquire);
+    }
+
+    void setCarnivalPlaying (bool playing) noexcept;
+    bool isCarnivalPlaying() const noexcept
+    {
+        return carnivalPlaying.load (std::memory_order_acquire);
+    }
+
+    void setCarnivalClockMidi (bool midiClock) noexcept;
+    bool isCarnivalClockMidi() const noexcept
+    {
+        return carnivalClockMidi.load (std::memory_order_acquire);
+    }
+
+    void setCarnivalBpm (float bpm) noexcept;
+    float getCarnivalBpm() const noexcept
+    {
+        return carnivalBpm.load (std::memory_order_relaxed);
+    }
+
+    int getCarnivalCurrentStep() const noexcept
+    {
+        return carnivalCurrentStep.load (std::memory_order_relaxed);
+    }
+
+    bool getCarnivalStepEnabled (int track, int step) const noexcept;
+    void setCarnivalStepEnabled (int track, int step, bool enabled) noexcept;
+    void toggleCarnivalStep (int track, int step) noexcept;
+    int getCarnivalInstrument (int track) const noexcept;
+    void setCarnivalInstrument (int track, int instrument) noexcept;
+    void cycleCarnivalInstrument (int track, int delta) noexcept;
+    float getCarnivalBaseParam (int track, int param) const noexcept;
+    void setCarnivalBaseParam (int track, int param, float value) noexcept;
+    bool getCarnivalParamLockEnabled (int track, int step, int param) const noexcept;
+    float getCarnivalParamLockValue (int track, int step, int param) const noexcept;
+    void setCarnivalParamLock (int track, int step, int param,
+                               bool enabled, float value) noexcept;
+    bool carnivalStepHasLocks (int track, int step) const noexcept;
+    void clearCarnivalStepLocks (int track, int step) noexcept;
+    void clearCarnivalPattern() noexcept;
+    void previewCarnivalTrack (int track) noexcept;
+
     void getFlowerWaveform (std::array<float, flowerWaveformBins>& destination) const noexcept;
     bool hasFlowerLoop() const noexcept { return flowerLoopLengthSamples.load (std::memory_order_relaxed) > 0; }
     bool isFlowerRecording() const noexcept { return flowerRecordingActive.load (std::memory_order_relaxed); }
@@ -89,6 +162,24 @@ private:
     float nextFlowerRandomBipolar() noexcept;
 
     void handlePerformanceMidiCC (juce::MidiBuffer& midi);
+    void handleCarnivalMidiClock (const juce::MidiBuffer& midi);
+    void processCarnival (juce::AudioBuffer<float>& buffer);
+    void triggerCarnivalStep (int step) noexcept;
+    void triggerCarnivalTrack (int track, int step) noexcept;
+    float nextCarnivalNoise (int track) noexcept;
+    static constexpr int carnivalStepIndex (int track, int step) noexcept
+    {
+        return track * carnivalStepCount + step;
+    }
+    static constexpr int carnivalBaseParamIndex (int track, int param) noexcept
+    {
+        return track * carnivalParamCount + param;
+    }
+    static constexpr int carnivalLockIndex (int track, int step, int param) noexcept
+    {
+        return (track * carnivalStepCount + step) * carnivalParamCount + param;
+    }
+
     void generatePerformanceMidi (juce::MidiBuffer& midi, int numSamples);
     void processPerformanceDelay (juce::AudioBuffer<float>& buffer);
     void processPerformanceDreamy (juce::AudioBuffer<float>& buffer);
@@ -149,6 +240,51 @@ private:
     std::atomic<bool> performanceDreamyMode { false };
     std::atomic<bool> performanceStopRequested { false };
     std::array<bool, 128> performanceCcGate {};
+
+    std::atomic<bool> carnivalEnabled { false };
+    std::atomic<bool> carnivalPlaying { false };
+    std::atomic<bool> carnivalClockMidi { false };
+    std::atomic<float> carnivalBpm { 120.0f };
+    std::atomic<int> carnivalCurrentStep { -1 };
+    std::atomic<bool> carnivalResetRequested { false };
+    std::atomic<int> carnivalPreviewTrackRequested { -1 };
+
+    std::array<std::atomic<bool>,
+               carnivalTrackCount * carnivalStepCount> carnivalSteps {};
+    std::array<std::atomic<int>, carnivalTrackCount> carnivalInstruments {};
+    std::array<std::atomic<float>,
+               carnivalTrackCount * carnivalParamCount> carnivalBaseParams {};
+    std::array<std::atomic<bool>,
+               carnivalTrackCount * carnivalStepCount * carnivalParamCount> carnivalLockEnabled {};
+    std::array<std::atomic<float>,
+               carnivalTrackCount * carnivalStepCount * carnivalParamCount> carnivalLockValues {};
+
+    struct CarnivalVoiceState
+    {
+        bool active = false;
+        int instrument = 0;
+        double phase1 = 0.0;
+        double phase2 = 0.0;
+        double phase3 = 0.0;
+        double lfoPhase = 0.0;
+        float ageSeconds = 0.0f;
+        float frequency = 110.0f;
+        float volume = 0.75f;
+        float pan = 0.5f;
+        float filter = 0.75f;
+        float pitch = 0.5f;
+        float decay = 0.45f;
+        float lfoRate = 0.20f;
+        float lfoDepth = 0.0f;
+        float filterStateL = 0.0f;
+        float filterStateR = 0.0f;
+        uint32_t noiseState = 0x12345678u;
+    };
+
+    std::array<CarnivalVoiceState, carnivalTrackCount> carnivalVoices {};
+    double carnivalSamplesUntilStep = 0.0;
+    int carnivalMidiClockCounter = 0;
+    bool carnivalMidiRunning = false;
 
     static constexpr int performanceDreamyVoiceCount = 2;
     juce::AudioBuffer<float> performanceDreamyBuffer;
