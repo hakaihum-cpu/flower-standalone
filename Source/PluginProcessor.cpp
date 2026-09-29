@@ -45,6 +45,19 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int sampl
     performanceDelayBuffer.clear();
     performanceDelayWritePosition = 0;
 
+    const int mosaicSamples =
+        juce::jmax (4096, juce::roundToInt (currentSampleRate * 2.5));
+    performanceMosaicBuffer.setSize (2, mosaicSamples, false, true, false);
+    performanceMosaicBuffer.clear();
+    performanceMosaicWritePosition = 0;
+    performanceMosaicSamplesFilled = 0;
+    performanceMosaicReadPosition = 0.0f;
+    performanceMosaicSourceStart = 0;
+    performanceMosaicSlicePosition = 0;
+    performanceMosaicSliceLength = 0;
+    performanceMosaicRepeatsLeft = 0;
+    performanceMosaicRandomState = 0x4D4F5341u;
+
     performanceDelaySamplesSmoothed.reset (currentSampleRate, 0.035);
     performanceDelayFeedbackSmoothed.reset (currentSampleRate, 0.025);
     performanceDelayWetSmoothed.reset (currentSampleRate, 0.025);
@@ -147,6 +160,11 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
     // The XY performance path reuses FLOWER's proven granular core, but maps
     // pad gesture state directly to position/size/density/spread/hold/mix.
     processFlower (buffer);
+
+    // MOSAIC is a dedicated rolling-fragment performance effect. It is
+    // selected from CONFIG as the Y-button effect while CLASSIC GRANULAR
+    // retains the existing recorded-loop granular path.
+    processPerformanceMosaic (buffer);
 
     // Delay is deliberately after the granular stage so one gesture moves
     // synthesis, granulation and echo as one performance surface.
@@ -288,7 +306,8 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
     const bool legacyEnabled =
         apvts.getRawParameterValue (ParamIDs::flowerEnabled)->load() > 0.5f;
     const bool granularEnabled =
-        performanceGranularEnabled.load (std::memory_order_relaxed);
+        performanceGranularEnabled.load (std::memory_order_relaxed)
+        && ! performanceMosaicMode.load (std::memory_order_relaxed);
     const bool enabled =
         legacyEnabled || (granularEnabled && performanceGate && performancePadY > 0.025f);
 
@@ -594,6 +613,11 @@ void FlowerStandaloneAudioProcessor::setPerformanceGranularEnabled (bool enabled
     performanceGranularEnabled.store (enabled, std::memory_order_release);
 }
 
+void FlowerStandaloneAudioProcessor::setPerformanceMosaicMode (bool enabled) noexcept
+{
+    performanceMosaicMode.store (enabled, std::memory_order_release);
+}
+
 void FlowerStandaloneAudioProcessor::cycleFlowerTransport() noexcept
 {
     flowerTransportRequest.store (1, std::memory_order_release);
@@ -628,6 +652,16 @@ bool FlowerStandaloneAudioProcessor::getDefaultEffectsEnabled() const noexcept
     return apvts.getRawParameterValue (ParamIDs::defaultEffectsEnabled)->load() > 0.5f;
 }
 
+bool FlowerStandaloneAudioProcessor::getConfiguredYEffectMosaic() const noexcept
+{
+    return apvts.getRawParameterValue (ParamIDs::performanceYEffectConfig)->load() > 0.5f;
+}
+
+bool FlowerStandaloneAudioProcessor::getConfiguredVisualMode200() const noexcept
+{
+    return apvts.getRawParameterValue (ParamIDs::performanceVisualModeConfig)->load() > 0.5f;
+}
+
 void FlowerStandaloneAudioProcessor::setConfiguredRoot (int noteClass)
 {
     noteClass = juce::jlimit (0, 11, noteClass);
@@ -654,6 +688,20 @@ void FlowerStandaloneAudioProcessor::setDefaultEffectsEnabled (bool enabled)
     setPerformanceGranularEnabled (enabled);
 
     if (auto* parameter = apvts.getParameter (ParamIDs::defaultEffectsEnabled))
+        parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
+}
+
+void FlowerStandaloneAudioProcessor::setConfiguredYEffectMosaic (bool enabled)
+{
+    setPerformanceMosaicMode (enabled);
+
+    if (auto* parameter = apvts.getParameter (ParamIDs::performanceYEffectConfig))
+        parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
+}
+
+void FlowerStandaloneAudioProcessor::setConfiguredVisualMode200 (bool enabled)
+{
+    if (auto* parameter = apvts.getParameter (ParamIDs::performanceVisualModeConfig))
         parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
 }
 
@@ -866,6 +914,158 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& 
 }
 
 
+
+void FlowerStandaloneAudioProcessor::processPerformanceMosaic (
+    juce::AudioBuffer<float>& buffer)
+{
+    const int capacity = performanceMosaicBuffer.getNumSamples();
+    const int numSamples = buffer.getNumSamples();
+    const int channels = juce::jmin (
+        buffer.getNumChannels(), performanceMosaicBuffer.getNumChannels());
+
+    if (capacity <= 64 || numSamples <= 0 || channels <= 0)
+        return;
+
+    const bool enabled =
+        performanceGranularEnabled.load (std::memory_order_acquire)
+        && performanceMosaicMode.load (std::memory_order_acquire)
+        && isPerformanceGateOpen();
+
+    const float x = performanceX.load (std::memory_order_relaxed);
+    const float y = performanceY.load (std::memory_order_relaxed);
+    const float bpm = performanceBpm.load (std::memory_order_relaxed);
+
+    auto wrapIndex = [capacity] (int position)
+    {
+        while (position < 0)
+            position += capacity;
+        while (position >= capacity)
+            position -= capacity;
+        return position;
+    };
+
+    auto wrapFloat = [capacity] (float position)
+    {
+        const float length = static_cast<float> (capacity);
+        while (position < 0.0f)
+            position += length;
+        while (position >= length)
+            position -= length;
+        return position;
+    };
+
+    auto nextRandom = [this] ()
+    {
+        uint32_t value = performanceMosaicRandomState;
+        value ^= value << 13;
+        value ^= value >> 17;
+        value ^= value << 5;
+        performanceMosaicRandomState = value;
+        return value;
+    };
+
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        float dry[2] { 0.0f, 0.0f };
+        for (int channel = 0; channel < channels; ++channel)
+            dry[channel] = buffer.getSample (channel, sample);
+
+        if (enabled && performanceMosaicSamplesFilled > 1024)
+        {
+            if (performanceMosaicSliceLength <= 0
+                || performanceMosaicSlicePosition >= performanceMosaicSliceLength)
+            {
+                const float beatSamples =
+                    static_cast<float> (currentSampleRate)
+                    * 60.0f / juce::jmax (50.0f, bpm);
+                const float subdivision = 2.0f + y * 2.0f;
+
+                performanceMosaicSliceLength = juce::jlimit (
+                    juce::roundToInt (currentSampleRate * 0.055),
+                    juce::roundToInt (currentSampleRate * 0.32),
+                    juce::roundToInt (beatSamples / subdivision));
+
+                if (performanceMosaicRepeatsLeft <= 0)
+                {
+                    const int maxLookbackSlices =
+                        juce::jlimit (2, 8, 2 + juce::roundToInt (x * 6.0f));
+                    const int lookbackSlices =
+                        2 + static_cast<int> (
+                            nextRandom() % static_cast<uint32_t> (maxLookbackSlices));
+
+                    const int maxLookback =
+                        juce::jmax (2, juce::jmin (
+                            performanceMosaicSamplesFilled - 2, capacity - 2));
+                    const int lookback = juce::jlimit (
+                        2, maxLookback,
+                        performanceMosaicSliceLength * lookbackSlices);
+
+                    performanceMosaicSourceStart =
+                        wrapIndex (performanceMosaicWritePosition - lookback);
+                    performanceMosaicRepeatsLeft =
+                        1 + juce::roundToInt (y * 2.0f);
+                }
+
+                performanceMosaicReadPosition =
+                    static_cast<float> (performanceMosaicSourceStart);
+                performanceMosaicSlicePosition = 0;
+                --performanceMosaicRepeatsLeft;
+            }
+
+            const int read0 = static_cast<int> (
+                std::floor (performanceMosaicReadPosition));
+            const int read1 = (read0 + 1) % capacity;
+            const float fraction =
+                performanceMosaicReadPosition - static_cast<float> (read0);
+
+            const int fadeSamples =
+                juce::jmax (16, juce::roundToInt (currentSampleRate * 0.008));
+            const float fadeIn = juce::jlimit (
+                0.0f, 1.0f,
+                static_cast<float> (performanceMosaicSlicePosition)
+                    / static_cast<float> (fadeSamples));
+            const float fadeOut = juce::jlimit (
+                0.0f, 1.0f,
+                static_cast<float> (
+                    performanceMosaicSliceLength - performanceMosaicSlicePosition)
+                    / static_cast<float> (fadeSamples));
+            const float window = juce::jmin (fadeIn, fadeOut);
+            const float wet = 0.28f + y * 0.34f;
+            const float blend = juce::jlimit (0.0f, 0.62f, wet * window);
+
+            for (int channel = 0; channel < channels; ++channel)
+            {
+                const auto* mosaic =
+                    performanceMosaicBuffer.getReadPointer (channel);
+                const float fragment =
+                    mosaic[read0] + (mosaic[read1] - mosaic[read0]) * fraction;
+                buffer.setSample (
+                    channel, sample,
+                    dry[channel] + (fragment - dry[channel]) * blend);
+            }
+
+            performanceMosaicReadPosition =
+                wrapFloat (performanceMosaicReadPosition + 1.0f);
+            ++performanceMosaicSlicePosition;
+        }
+        else
+        {
+            performanceMosaicSliceLength = 0;
+            performanceMosaicSlicePosition = 0;
+            performanceMosaicRepeatsLeft = 0;
+        }
+
+        for (int channel = 0; channel < channels; ++channel)
+            performanceMosaicBuffer.setSample (
+                channel, performanceMosaicWritePosition, dry[channel]);
+
+        performanceMosaicWritePosition =
+            (performanceMosaicWritePosition + 1) % capacity;
+        performanceMosaicSamplesFilled =
+            juce::jmin (capacity, performanceMosaicSamplesFilled + 1);
+    }
+}
+
 void FlowerStandaloneAudioProcessor::processPerformanceDelay (
     juce::AudioBuffer<float>& buffer)
 {
@@ -978,6 +1178,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout FlowerStandaloneAudioProcess
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamIDs::defaultEffectsEnabled, 1 },
         "Default Effects", true));
+    parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParamIDs::performanceYEffectConfig, 1 },
+        "Y Effect",
+        juce::StringArray { "GRANULAR", "MOSAIC" }, 0));
+    parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParamIDs::performanceVisualModeConfig, 1 },
+        "Visual Mode",
+        juce::StringArray { "100", "200" }, 0));
 
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamIDs::flowerEnabled, 1 }, "Flower On", false));
