@@ -154,7 +154,7 @@ void PerformancePadComponent::paint (juce::Graphics& g)
 
     // 01.jpg..100.jpg are already the final user-cut frames.
     // Use every pixel of the selected frame and stretch the whole image
-    // directly to the full 720 x 720 canvas. No crop, inset, cover or atlas.
+    // directly to the full performance component. No crop, inset, cover or atlas.
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
     g.drawImage (frame,
                  0, 0, getWidth(), getHeight(),
