@@ -29,6 +29,7 @@ public:
     void endPhysicalKeyControl();
     void setExternalPosition (float x, float y);
     void setEffectState (bool arpOn, bool delayOn, bool yEffectOn, bool dreamyMode);
+    void setBpmDisplay (float bpm, bool visible);
     float getXValue() const noexcept { return xValue; }
     float getYValue() const noexcept { return yValue; }
     int getPatternIndex() const noexcept;
@@ -55,6 +56,8 @@ private:
     bool yEffectIndicatorOn = true;
     bool dreamyIndicatorMode = false;
     float visualPhase = 0.0f;
+    float bpmDisplayValue = 112.0f;
+    bool bpmDisplayVisible = false;
 
     float xValue = 0.28f;
     float yValue = 0.28f;
