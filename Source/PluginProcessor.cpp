@@ -1100,8 +1100,8 @@ void FlowerStandaloneAudioProcessor::handleCarnivalMidiClock (
 {
     carnivalMidiTriggerCount = 0;
 
-    if (! carnivalClockMidi.load (std::memory_order_acquire))
-        return;
+    const bool midiClockMode =
+        carnivalClockMidi.load (std::memory_order_acquire);
 
     const auto queueTrigger =
         [this] (int sampleOffset, int step)
@@ -1120,6 +1120,8 @@ void FlowerStandaloneAudioProcessor::handleCarnivalMidiClock (
     {
         const auto message = metadata.getMessage();
 
+        // MIDI transport is honoured in both INTERNAL and MIDI clock modes.
+        // Clock pulses themselves are consumed only when CLOCK SOURCE = MIDI.
         if (message.isMidiStart())
         {
             carnivalMidiRunning = true;
@@ -1127,6 +1129,22 @@ void FlowerStandaloneAudioProcessor::handleCarnivalMidiClock (
             carnivalPlaying.store (true, std::memory_order_release);
             carnivalCurrentStep.store (0, std::memory_order_relaxed);
             queueTrigger (metadata.samplePosition, 0);
+
+            if (! midiClockMode)
+            {
+                const double bpm = static_cast<double> (
+                    carnivalBpm.load (std::memory_order_relaxed));
+                const double stepSamples =
+                    juce::jmax (1.0, currentSampleRate)
+                    * 60.0
+                    / juce::jlimit (40.0, 240.0, bpm)
+                    / 2.0;
+
+                carnivalSamplesUntilStep =
+                    static_cast<double> (
+                        juce::jmax (0, metadata.samplePosition))
+                    + stepSamples;
+            }
         }
         else if (message.isMidiContinue())
         {
@@ -1138,7 +1156,9 @@ void FlowerStandaloneAudioProcessor::handleCarnivalMidiClock (
             carnivalMidiRunning = false;
             carnivalPlaying.store (false, std::memory_order_release);
         }
-        else if (message.isMidiClock() && carnivalMidiRunning)
+        else if (message.isMidiClock()
+                 && midiClockMode
+                 && carnivalMidiRunning)
         {
             ++carnivalMidiClockCounter;
 
