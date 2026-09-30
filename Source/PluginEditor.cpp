@@ -922,11 +922,20 @@ juce::String CarnivalScreenComponent::getParameterName (int param) const
     static constexpr const char* names[]
     {
         "VOLUME", "PAN", "FILTER", "PITCH",
-        "DECAY", "LFO RATE", "LFO DEPTH"
+        "DECAY", "LFO RATE", "LFO DEPTH", "COLOR"
     };
 
-    return names[juce::jlimit (
-        0, FlowerStandaloneAudioProcessor::carnivalParamCount - 1, param)];
+    param = juce::jlimit (
+        0, FlowerStandaloneAudioProcessor::carnivalParamCount - 1, param);
+
+    if (param == static_cast<int> (
+            FlowerStandaloneAudioProcessor::CarnivalParam::Character)
+        && processor.getCarnivalInstrument (selectedTrack)
+            == static_cast<int> (
+                FlowerStandaloneAudioProcessor::CarnivalInstrument::Chord))
+        return "CHORD";
+
+    return names[param];
 }
 
 juce::String CarnivalScreenComponent::getParameterValueText (
@@ -967,6 +976,25 @@ juce::String CarnivalScreenComponent::getParameterValueText (
 
         case 5:
             return juce::String (0.10f + value * 15.9f, 1) + "Hz";
+
+        case 7:
+        {
+            if (processor.getCarnivalInstrument (selectedTrack)
+                == static_cast<int> (
+                    FlowerStandaloneAudioProcessor::CarnivalInstrument::Chord))
+            {
+                static constexpr const char* chordNames[]
+                {
+                    "MAJ", "MIN", "SUS2", "SUS4", "5TH", "OCT"
+                };
+
+                return chordNames[juce::jlimit (
+                    0, 5, juce::roundToInt (value * 5.0f))];
+            }
+
+            return juce::String (
+                juce::roundToInt (value * 100.0f)) + "%";
+        }
 
         default:
             return juce::String (juce::roundToInt (value * 100.0f)) + "%";
