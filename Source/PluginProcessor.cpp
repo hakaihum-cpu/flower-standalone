@@ -702,6 +702,43 @@ void FlowerStandaloneAudioProcessor::setPerformanceDreamyMode (bool enabled) noe
     performanceDreamyMode.store (enabled, std::memory_order_release);
 }
 
+void FlowerStandaloneAudioProcessor::setPerformancePolyTouch (
+    int touchId, float x, float y, bool down) noexcept
+{
+    if (touchId < 0 || touchId >= performancePolyTouchCount)
+        return;
+
+    const auto index = static_cast<size_t> (touchId);
+    performancePolyTouchX[index].store (
+        juce::jlimit (0.0f, 1.0f, x), std::memory_order_relaxed);
+    performancePolyTouchY[index].store (
+        juce::jlimit (0.0f, 1.0f, y), std::memory_order_relaxed);
+    performancePolyTouchActive[index].store (
+        down, std::memory_order_release);
+
+    if (down)
+    {
+        performanceX.store (
+            juce::jlimit (0.0f, 1.0f, x), std::memory_order_relaxed);
+        performanceY.store (
+            juce::jlimit (0.0f, 1.0f, y), std::memory_order_relaxed);
+        performanceSpeed.store (0.0f, std::memory_order_relaxed);
+        performanceDirection.store (0.0f, std::memory_order_relaxed);
+    }
+
+    bool anyActive = false;
+    for (const auto& active : performancePolyTouchActive)
+        anyActive = anyActive
+            || active.load (std::memory_order_acquire);
+
+    performanceActive.store (anyActive, std::memory_order_release);
+
+    if (anyActive)
+        performanceLatched.store (true, std::memory_order_release);
+    else if (! performanceHold.load (std::memory_order_acquire))
+        performanceLatched.store (false, std::memory_order_release);
+}
+
 void FlowerStandaloneAudioProcessor::cycleFlowerTransport() noexcept
 {
     flowerTransportRequest.store (1, std::memory_order_release);
@@ -712,6 +749,10 @@ void FlowerStandaloneAudioProcessor::stopPerformance() noexcept
     performanceActive.store (false, std::memory_order_release);
     performanceHold.store (false, std::memory_order_release);
     performanceLatched.store (false, std::memory_order_release);
+
+    for (auto& active : performancePolyTouchActive)
+        active.store (false, std::memory_order_release);
+
     performanceStopRequested.store (true, std::memory_order_release);
 }
 
@@ -1639,6 +1680,43 @@ int FlowerStandaloneAudioProcessor::performanceScaleSemitone (int degree) const 
     }
 }
 
+int FlowerStandaloneAudioProcessor::performanceNoteForTouch (
+    float x, float y) const noexcept
+{
+    x = juce::jlimit (0.0f, 1.0f, x);
+    y = juce::jlimit (0.0f, 1.0f, y);
+
+    const int root =
+        48 + performanceRootClass.load (std::memory_order_relaxed);
+    const int scale =
+        performanceScaleIndex.load (std::memory_order_relaxed);
+
+    if (scale == 4) // RANDOM scale config becomes chromatic in direct poly play.
+    {
+        const int semitone =
+            juce::jlimit (0, 23, static_cast<int> (std::floor (x * 24.0f)));
+        const int octaveShift = y > 0.78f ? 12 : (y < 0.22f ? -12 : 0);
+        return juce::jlimit (24, 96, root + semitone + octaveShift);
+    }
+
+    const int length = performanceScaleLength();
+    const int span = juce::jmax (1, length * 2);
+    const int index =
+        juce::jlimit (
+            0, span - 1,
+            static_cast<int> (std::floor (x * static_cast<float> (span))));
+    const int degree = index % length;
+    const int octave = index / length;
+    const int octaveShift = y > 0.78f ? 12 : (y < 0.22f ? -12 : 0);
+
+    return juce::jlimit (
+        24, 96,
+        root
+        + performanceScaleSemitone (degree)
+        + octave * 12
+        + octaveShift);
+}
+
 int FlowerStandaloneAudioProcessor::nextPerformanceNote (int patternIndex)
 {
     const int scaleLength = performanceScaleLength();
@@ -1704,11 +1782,28 @@ int FlowerStandaloneAudioProcessor::nextPerformanceNote (int patternIndex)
     return juce::jlimit (24, 96, note);
 }
 
-void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& midi,
-                                                               int numSamples)
+void FlowerStandaloneAudioProcessor::generatePerformanceMidi (
+    juce::MidiBuffer& midi, int numSamples)
 {
     if (numSamples <= 0)
         return;
+
+    const auto releasePolyNotes =
+        [this, &midi] ()
+        {
+            for (int touch = 0; touch < performancePolyTouchCount; ++touch)
+            {
+                auto& current =
+                    performancePolyCurrentNote[static_cast<size_t> (touch)];
+
+                if (current >= 0)
+                {
+                    midi.addEvent (
+                        juce::MidiMessage::noteOff (touch + 1, current), 0);
+                    current = -1;
+                }
+            }
+        };
 
     if (performanceStopRequested.exchange (false, std::memory_order_acq_rel))
     {
@@ -1717,6 +1812,7 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& 
                 juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
 
         performanceCurrentNote = -1;
+        releasePolyNotes();
         performanceSamplesUntilStep = 0.0;
         performanceStep = 0;
     }
@@ -1728,6 +1824,7 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& 
                 juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
 
         performanceCurrentNote = -1;
+        releasePolyNotes();
         performanceSamplesUntilStep = 0.0;
         performanceStep = 0;
         return;
@@ -1739,20 +1836,75 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& 
 
     if (! performanceArpEnabled.load (std::memory_order_acquire))
     {
-        // ARP OFF keeps the instrument playable as one sustained mono note.
-        const int desiredNote = juce::jlimit (
-            24, 96, 48 + performanceRootClass.load (std::memory_order_relaxed));
+        bool anyPolyTouch = false;
 
-        if (performanceCurrentNote != desiredNote)
+        for (int touch = 0; touch < performancePolyTouchCount; ++touch)
         {
-            if (performanceCurrentNote >= 0)
-                midi.addEvent (
-                    juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
+            const auto index = static_cast<size_t> (touch);
+            const bool active =
+                performancePolyTouchActive[index].load (
+                    std::memory_order_acquire);
+            auto& current = performancePolyCurrentNote[index];
 
-            performanceCurrentNote = desiredNote;
+            if (! active)
+            {
+                if (current >= 0)
+                {
+                    midi.addEvent (
+                        juce::MidiMessage::noteOff (touch + 1, current), 0);
+                    current = -1;
+                }
+
+                continue;
+            }
+
+            anyPolyTouch = true;
+
+            const float x =
+                performancePolyTouchX[index].load (
+                    std::memory_order_relaxed);
+            const float y =
+                performancePolyTouchY[index].load (
+                    std::memory_order_relaxed);
+            const int desiredNote = performanceNoteForTouch (x, y);
+            const float touchVelocity =
+                juce::jlimit (0.28f, 1.0f, 0.48f + y * 0.48f);
+
+            if (current != desiredNote)
+            {
+                if (current >= 0)
+                    midi.addEvent (
+                        juce::MidiMessage::noteOff (
+                            touch + 1, current), 0);
+
+                current = desiredNote;
+                midi.addEvent (
+                    juce::MidiMessage::noteOn (
+                        touch + 1, current, touchVelocity), 0);
+            }
+        }
+
+        if (performanceCurrentNote >= 0)
+        {
             midi.addEvent (
-                juce::MidiMessage::noteOn (1, performanceCurrentNote, velocity),
-                0);
+                juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
+            performanceCurrentNote = -1;
+        }
+
+        if (! anyPolyTouch)
+        {
+            // Physical-key/HOLD control stays playable when ARP is disabled.
+            const int desiredNote = juce::jlimit (
+                24, 96,
+                48 + performanceRootClass.load (std::memory_order_relaxed));
+
+            if (performanceCurrentNote != desiredNote)
+            {
+                performanceCurrentNote = desiredNote;
+                midi.addEvent (
+                    juce::MidiMessage::noteOn (
+                        1, performanceCurrentNote, velocity), 0);
+            }
         }
 
         performanceSamplesUntilStep = 0.0;
@@ -1760,12 +1912,12 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& 
         return;
     }
 
+    releasePolyNotes();
+
     const float x = performanceX.load (std::memory_order_relaxed);
     const int patternIndex = juce::jlimit (
         0, 7, static_cast<int> (std::floor (x * 8.0f)));
 
-    // X selects the arp algorithm only.  L/R BPM is now the sole speed
-    // control, so subdivision is fixed at eighth-note steps.
     constexpr int stepsPerBeat = 2;
 
     const double bpm = static_cast<double> (
@@ -1800,7 +1952,6 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (juce::MidiBuffer& 
     performanceSamplesUntilStep =
         eventPosition - static_cast<double> (numSamples);
 }
-
 
 
 void FlowerStandaloneAudioProcessor::processPerformanceDreamy (
