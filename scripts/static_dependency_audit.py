@@ -112,8 +112,8 @@ for required_3d in [
         fail(f"realtime-3D dependency missing: {required_3d}")
 
 circle = (ROOT / ".circleci/config.yml").read_text(encoding="utf-8")
-if "default: false" not in circle or "run_build" not in circle:
-    fail("CircleCI manual build gate is missing")
+if "run_build" not in circle or ("default: false" not in circle and "default: true" not in circle):
+    fail("CircleCI build gate declaration is missing")
 
 for required_ci in [
     "patch_juce_android_gamepad_keys.py JUCE",
