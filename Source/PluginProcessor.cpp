@@ -11,6 +11,24 @@ namespace
         range.setSkewForCentre (centre);
         return range;
     }
+
+    float carnivalDefaultParam (int instrument, int param) noexcept
+    {
+        static constexpr float defaults[7][8]
+        {
+            { 0.84f, 0.50f, 0.72f, 0.48f, 0.36f, 0.08f, 0.00f, 0.46f }, // KICK
+            { 0.74f, 0.52f, 0.82f, 0.50f, 0.34f, 0.12f, 0.02f, 0.60f }, // SNARE
+            { 0.58f, 0.56f, 0.94f, 0.56f, 0.18f, 0.20f, 0.03f, 0.72f }, // HIHAT
+            { 0.62f, 0.46f, 0.70f, 0.48f, 0.68f, 0.14f, 0.04f, 0.00f }, // CHORD
+            { 0.66f, 0.50f, 0.78f, 0.50f, 0.55f, 0.18f, 0.05f, 0.42f }, // TONE
+            { 0.72f, 0.48f, 0.68f, 0.46f, 0.44f, 0.10f, 0.02f, 0.36f }, // TOM
+            { 0.74f, 0.50f, 0.58f, 0.42f, 0.72f, 0.10f, 0.04f, 0.58f }  // BASS
+        };
+
+        instrument = juce::jlimit (0, 6, instrument);
+        param = juce::jlimit (0, 7, param);
+        return defaults[instrument][param];
+    }
 }
 
 FlowerStandaloneAudioProcessor::FlowerStandaloneAudioProcessor()
@@ -32,22 +50,12 @@ FlowerStandaloneAudioProcessor::FlowerStandaloneAudioProcessor()
         carnivalInstruments[static_cast<size_t> (track)].store (
             defaultMachines[track], std::memory_order_relaxed);
 
-        const float defaults[carnivalParamCount]
-        {
-            0.78f, // volume
-            0.50f, // pan
-            0.78f, // filter
-            0.50f, // pitch
-            0.42f, // decay
-            0.20f, // lfo rate
-            0.00f  // lfo depth
-        };
-
         for (int param = 0; param < carnivalParamCount; ++param)
         {
             carnivalBaseParams[static_cast<size_t> (
                 carnivalBaseParamIndex (track, param))].store (
-                    defaults[param], std::memory_order_relaxed);
+                    carnivalDefaultParam (defaultMachines[track], param),
+                    std::memory_order_relaxed);
         }
 
         for (int step = 0; step < carnivalStepCount; ++step)
@@ -63,7 +71,8 @@ FlowerStandaloneAudioProcessor::FlowerStandaloneAudioProcessor()
                 carnivalLockEnabled[lock].store (
                     false, std::memory_order_relaxed);
                 carnivalLockValues[lock].store (
-                    defaults[param], std::memory_order_relaxed);
+                    carnivalDefaultParam (defaultMachines[track], param),
+                    std::memory_order_relaxed);
             }
         }
 
@@ -969,6 +978,12 @@ void FlowerStandaloneAudioProcessor::setCarnivalInstrument (
 
     carnivalInstruments[static_cast<size_t> (track)].store (
         instrument, std::memory_order_relaxed);
+
+    for (int param = 0; param < carnivalParamCount; ++param)
+        carnivalBaseParams[static_cast<size_t> (
+            carnivalBaseParamIndex (track, param))].store (
+                carnivalDefaultParam (instrument, param),
+                std::memory_order_relaxed);
 }
 
 void FlowerStandaloneAudioProcessor::cycleCarnivalInstrument (
@@ -1091,8 +1106,23 @@ void FlowerStandaloneAudioProcessor::clearCarnivalPattern() noexcept
 void FlowerStandaloneAudioProcessor::previewCarnivalTrack (int track) noexcept
 {
     if (track >= 0 && track < carnivalTrackCount)
+    {
+        carnivalPreviewStepRequested.store (-1, std::memory_order_relaxed);
         carnivalPreviewTrackRequested.store (
             track, std::memory_order_release);
+    }
+}
+
+void FlowerStandaloneAudioProcessor::previewCarnivalTrigger (
+    int track, int step) noexcept
+{
+    if (track < 0 || track >= carnivalTrackCount
+        || step < 0 || step >= carnivalStepCount)
+        return;
+
+    carnivalPreviewStepRequested.store (step, std::memory_order_relaxed);
+    carnivalPreviewTrackRequested.store (
+        track, std::memory_order_release);
 }
 
 void FlowerStandaloneAudioProcessor::handleCarnivalMidiClock (
@@ -1222,6 +1252,7 @@ void FlowerStandaloneAudioProcessor::triggerCarnivalTrack (
     voice.decay = readParam (static_cast<int> (CarnivalParam::Decay));
     voice.lfoRate = readParam (static_cast<int> (CarnivalParam::LfoRate));
     voice.lfoDepth = readParam (static_cast<int> (CarnivalParam::LfoDepth));
+    voice.character = readParam (static_cast<int> (CarnivalParam::Character));
 
     static constexpr float baseFrequencies[]
     {
@@ -1268,7 +1299,12 @@ void FlowerStandaloneAudioProcessor::processCarnival (
         carnivalPreviewTrackRequested.exchange (
             -1, std::memory_order_acq_rel);
     if (preview >= 0)
-        triggerCarnivalTrack (preview, -1);
+    {
+        const int previewStep =
+            carnivalPreviewStepRequested.exchange (
+                -1, std::memory_order_acq_rel);
+        triggerCarnivalTrack (preview, previewStep);
+    }
 
     const bool internalClock =
         ! carnivalClockMidi.load (std::memory_order_acquire);
