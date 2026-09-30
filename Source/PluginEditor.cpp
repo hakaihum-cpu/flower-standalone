@@ -1375,28 +1375,28 @@ void CarnivalScreenComponent::paintParameter (juce::Graphics& g)
             juce::Justification::centred);
     }
 
-    const juce::Rectangle<float> trigButton (
-        48.0f, 575.0f, 160.0f, 54.0f);
-    const juce::Rectangle<float> middleButton (
-        228.0f, 575.0f, 216.0f, 54.0f);
-    const juce::Rectangle<float> backButton (
-        464.0f, 575.0f, 208.0f, 54.0f);
+    const juce::Rectangle<int> trigButton (
+        48, 575, 160, 54);
+    const juce::Rectangle<int> middleButton (
+        228, 575, 216, 54);
+    const juce::Rectangle<int> backButton (
+        464, 575, 208, 54);
 
     g.setColour (juce::Colour (0xff30231e));
-    g.fillRoundedRectangle (trigButton, 6.0f);
-    g.fillRoundedRectangle (middleButton, 6.0f);
-    g.fillRoundedRectangle (backButton, 6.0f);
+    g.fillRoundedRectangle (trigButton.toFloat(), 6.0f);
+    g.fillRoundedRectangle (middleButton.toFloat(), 6.0f);
+    g.fillRoundedRectangle (backButton.toFloat(), 6.0f);
 
     g.setColour (juce::Colour (0xffffb49a));
-    g.drawRoundedRectangle (trigButton, 6.0f, 1.2f);
-    g.drawRoundedRectangle (backButton, 6.0f, 1.2f);
+    g.drawRoundedRectangle (trigButton.toFloat(), 6.0f, 1.2f);
+    g.drawRoundedRectangle (backButton.toFloat(), 6.0f, 1.2f);
 
     if (parameterLockMode)
-        g.drawRoundedRectangle (middleButton, 6.0f, 1.0f);
+        g.drawRoundedRectangle (middleButton.toFloat(), 6.0f, 1.0f);
 
     g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
     g.drawText (
-        "TRIG", trigButton.toNearestInt(),
+        "TRIG", trigButton,
         juce::Justification::centred);
 
     g.setColour (parameterLockMode
@@ -1404,12 +1404,12 @@ void CarnivalScreenComponent::paintParameter (juce::Graphics& g)
         : juce::Colour (0xff77655d));
     g.drawText (
         parameterLockMode ? "CLEAR LOCKS" : "BASE SOUND",
-        middleButton.toNearestInt(),
+        middleButton,
         juce::Justification::centred);
 
     g.setColour (juce::Colour (0xffffb49a));
     g.drawText (
-        "SEQUENCE", backButton.toNearestInt(),
+        "SEQUENCE", backButton,
         juce::Justification::centred);
 
     paintHeader (
