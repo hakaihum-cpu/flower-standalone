@@ -30,9 +30,15 @@ This experiment uses JUCE `juce_opengl` and an actual Android OpenGL context.
 
 Runtime path:
 
-`Realtime3DPoseComponent -> GLSL ray-marched 3D scene -> Android GPU -> screen`
+`Realtime3DPoseComponent -> polygon meshes -> OpenGL raster pipeline -> Android GPU -> screen`
 
 It does **not** render 3D assets to PNG frames and does not use the old AN-33 offline 3D-to-2D pipeline.
+
+### 2026-09-30 runtime correction
+
+The first on-device build briefly flashed and then force-closed. No device log was available, so the exact crash signature is not claimed. Static review found that the first implementation used an excessively expensive fullscreen SDF/ray-march shader (up to 84 primary scene steps plus repeated scene evaluation for shadow/AO). That approach is not representative of the intended final Android renderer.
+
+The ray-march implementation has therefore been retired rather than tuned. The prototype now uses the same broad rendering architecture as a conventional 3D game: indexed polygon meshes, depth buffering, per-fragment lighting, fog, material shading and lightweight contact shadows.
 
 ## Quality target
 
@@ -48,9 +54,9 @@ The first vertical slice intentionally includes rendering work that is represent
 - crouch,
 - knees-up sit,
 - lie-down pose,
-- dynamic lighting,
-- soft shadow,
-- ambient occlusion,
+- per-fragment dynamic lighting,
+- depth-buffered polygon rasterisation,
+- lightweight soft contact shadow,
 - atmospheric fog,
 - rooftop material variation,
 - near-monochrome grading,
