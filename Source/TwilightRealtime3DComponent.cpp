@@ -1096,7 +1096,7 @@ TwilightRealtime3DComponent::buildRig (const Pose& pose) const
 
     r.upperArmL =
         r.torso
-        * translate (-0.285f, 0.50f, 0.0f)
+        * translate (-0.245f, 0.50f, 0.0f)
         * rotateXYZ (pose.armPitchL, 0.0f, pose.armRollL);
 
     r.elbowL =
@@ -1106,7 +1106,7 @@ TwilightRealtime3DComponent::buildRig (const Pose& pose) const
 
     r.upperArmR =
         r.torso
-        * translate (0.285f, 0.50f, 0.0f)
+        * translate (0.245f, 0.50f, 0.0f)
         * rotateXYZ (pose.armPitchR, 0.0f, pose.armRollR);
 
     r.elbowR =
@@ -1222,7 +1222,7 @@ void TwilightRealtime3DComponent::renderCharacter (
     // Torso / white short-sleeve blouse.
     drawMesh (
         *torsoMesh,
-        rig.torso * scaleMatrix (0.92f, 0.58f, 0.92f),
+        rig.torso * scaleMatrix (0.52f, 0.58f, 0.75f),
         blouse,
         0.0f);
 
@@ -1250,7 +1250,7 @@ void TwilightRealtime3DComponent::renderCharacter (
         *skirtMesh,
         rig.root
             * translate (0.0f, 0.02f, 0.0f)
-            * scaleMatrix (0.58f, 0.34f, 0.54f),
+            * scaleMatrix (0.48f, 0.34f, 0.36f),
         dark,
         2.0f);
 
@@ -1286,6 +1286,25 @@ void TwilightRealtime3DComponent::renderCharacter (
             * translate (0.0f, 0.09f, 0.178f)
             * rotateXYZ (-0.12f, 0.0f, 0.0f)
             * scaleMatrix (0.29f, 0.12f, 0.030f),
+        hair,
+        2.0f);
+
+    // Long side locks create the straight-hair silhouette visible in the reference.
+    drawMesh (
+        *boxMesh,
+        rig.head
+            * translate (-0.145f, -0.19f, 0.045f)
+            * rotateXYZ (0.03f, 0.0f, -0.03f)
+            * scaleMatrix (0.060f, 0.44f, 0.060f),
+        hair,
+        2.0f);
+
+    drawMesh (
+        *boxMesh,
+        rig.head
+            * translate (0.145f, -0.19f, 0.045f)
+            * rotateXYZ (0.03f, 0.0f, 0.03f)
+            * scaleMatrix (0.060f, 0.44f, 0.060f),
         hair,
         2.0f);
 
@@ -1428,7 +1447,7 @@ void TwilightRealtime3DComponent::renderCharacter (
     // Shoulder bag and strap.
     const auto bagFrame =
         rig.torso
-        * translate (-0.39f, 0.17f, -0.015f)
+        * translate (-0.34f, 0.16f, -0.010f)
         * rotateXYZ (0.02f, 0.08f, -0.08f);
 
     drawMesh (
