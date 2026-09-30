@@ -684,6 +684,18 @@ void FlowerStandaloneAudioProcessor::setPerformanceBpm (float bpm) noexcept
 void FlowerStandaloneAudioProcessor::setPerformanceArpEnabled (bool enabled) noexcept
 {
     performanceArpEnabled.store (enabled, std::memory_order_release);
+
+    if (enabled)
+    {
+        for (auto& active : performancePolyTouchActive)
+            active.store (false, std::memory_order_release);
+
+        performanceActive.store (false, std::memory_order_release);
+
+        if (! performanceHold.load (std::memory_order_acquire))
+            performanceLatched.store (false, std::memory_order_release);
+    }
+
     performanceStopRequested.store (true, std::memory_order_release);
 }
 
