@@ -8,6 +8,8 @@ class Realtime3DPoseComponent final : public juce::OpenGLAppComponent,
                                       private juce::Timer
 {
 public:
+    struct Mesh;
+
     Realtime3DPoseComponent();
     ~Realtime3DPoseComponent() override;
 
@@ -18,8 +20,6 @@ public:
     void resized() override;
 
 private:
-    struct Mesh;
-
     static juce::String preprocessShader (juce::String source);
     void timerCallback() override;
     void updatePoseState (double elapsedSeconds);
