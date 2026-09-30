@@ -79,8 +79,8 @@ for token in FORBIDDEN_SOURCE_TOKENS:
 
 jucer = ROOT / "FLOWER_Standalone.jucer"
 root = ET.parse(jucer).getroot()
-if root.attrib.get("name") != "FLOWER3DTEST":
-    fail("JUCER project name is not FLOWER3DTEST")
+if root.attrib.get("name") != "FLOWERRGPOSE":
+    fail("JUCER project name is not FLOWERRGPOSE")
 if root.attrib.get("pluginFormats") != "buildStandalone":
     fail("JUCER is not standalone-only")
 if root.attrib.get("bundleIdentifier") != "local.flower.realtime3dprototype":
