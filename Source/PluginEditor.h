@@ -16,6 +16,10 @@ public:
                                            float speed,
                                            float horizontalDirection,
                                            bool active)>;
+    using PolyTouchCallback = std::function<void(int touchId,
+                                                 float x,
+                                                 float y,
+                                                 bool down)>;
 
     PerformancePadComponent();
 
@@ -36,6 +40,7 @@ public:
     juce::String getPatternName() const;
 
     PadCallback onPadChanged;
+    PolyTouchCallback onPolyTouchChanged;
     std::function<void()> onTouchStarted;
     std::function<void()> onTapStopRequested;
 
@@ -46,6 +51,7 @@ private:
     static_assert (tileCount == 100, "FLOWER visual bank must contain all 100 cells");
 
     void updateFromEvent (const juce::MouseEvent& e, bool isActive);
+    juce::Point<float> normalisedPoint (juce::Point<float> point) const;
     void notify();
     void updateVisualTimer();
     void timerCallback() override;
@@ -144,7 +150,10 @@ private:
     static constexpr float designSize = 720.0f;
     static constexpr int gridColumns = 10;
     static constexpr int gridRows = 10;
-    static constexpr float cellSize = 72.0f;
+    static constexpr float headerHeight = 70.0f;
+    static constexpr float stepWidth = 65.0f;
+    static constexpr float rowHeight = 65.0f;
+    static constexpr float machineX = stepWidth * 8.0f;
 
     void timerCallback() override;
     juce::Point<float> toDesignPoint (juce::Point<float> point) const;
