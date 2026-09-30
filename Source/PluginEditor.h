@@ -6,6 +6,7 @@
 
 #include "PluginProcessor.h"
 #include "RetroLookAndFeel.h"
+#include "Realtime3DPoseComponent.h"
 
 class PerformancePadComponent final : public juce::Component,
                                       private juce::Timer
@@ -146,6 +147,7 @@ private:
     RetroLookAndFeel retroLookAndFeel;
     PerformancePadComponent performancePad;
     ConfigScreenComponent configScreen;
+    Realtime3DPoseComponent realtime3D;
 
     int rootClass = 0;
     int scaleIndex = 0;
