@@ -10,6 +10,8 @@ class TwilightRealtime3DComponent final : public juce::OpenGLAppComponent,
 {
 public:
     struct Mesh;
+    struct Pose;
+    struct RigMatrices;
 
     TwilightRealtime3DComponent();
     ~TwilightRealtime3DComponent() override;
@@ -21,9 +23,6 @@ public:
     void resized() override;
 
 private:
-    struct Pose;
-    struct RigMatrices;
-
     void timerCallback() override;
     void createMeshes();
     void destroyMeshes();
