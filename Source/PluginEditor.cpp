@@ -1264,40 +1264,54 @@ void CarnivalScreenComponent::paintSequence (juce::Graphics& g)
 
 void CarnivalScreenComponent::paintParameter (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff0a0a09));
+    g.fillAll (juce::Colour (0xff080706));
 
     if (sequenceBackground.isValid())
     {
         juce::Graphics::ScopedSaveState backgroundState (g);
-        g.setOpacity (0.10f);
-        g.drawImage (sequenceBackground,
-                     0, 0, 720, 720,
-                     0, 0,
-                     sequenceBackground.getWidth(),
-                     sequenceBackground.getHeight(),
-                     false);
+        g.setOpacity (0.12f);
+        g.drawImage (
+            sequenceBackground,
+            0, 0, 720, 720,
+            0, 0,
+            sequenceBackground.getWidth(),
+            sequenceBackground.getHeight(),
+            false);
     }
 
-    g.setColour (juce::Colour (0xffe4dac0));
-    g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
-
-    juce::String context =
-        "TR " + juce::String (selectedTrack + 1)
-        + "  " + getMachineName (selectedTrack);
+    juce::String context;
 
     if (parameterLockMode)
-        context += "  STEP " + juce::String (selectedStep + 1) + "  P-LOCK";
+    {
+        context =
+            "TRIG CONFIG   TR "
+            + juce::String (selectedTrack + 1).paddedLeft ('0', 2)
+            + "   " + getMachineName (selectedTrack)
+            + "   STEP " + juce::String (selectedStep + 1);
+    }
     else
-        context += "  TRACK";
+    {
+        context =
+            "TRACK PARAM   TR "
+            + juce::String (selectedTrack + 1).paddedLeft ('0', 2)
+            + "   " + getMachineName (selectedTrack);
+    }
 
-    g.drawText (context, 48, 54, 624, 42,
-                juce::Justification::centredLeft);
+    g.setColour (juce::Colour (0xffffc1aa));
+    g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
+    g.drawText (
+        context, 48, 48, 624, 34,
+        juce::Justification::centredLeft);
+
+    constexpr float rowStart = 92.0f;
+    constexpr float rowStep = 54.0f;
+    constexpr float rowHeightPx = 44.0f;
 
     for (int param = 0;
          param < FlowerStandaloneAudioProcessor::carnivalParamCount;
          ++param)
     {
-        const float y = 110.0f + param * 66.0f;
+        const float y = rowStart + param * rowStep;
         const bool locked =
             parameterLockMode
             && processor.getCarnivalParamLockEnabled (
@@ -1311,50 +1325,99 @@ void CarnivalScreenComponent::paintParameter (juce::Graphics& g)
                     selectedTrack, param);
 
         g.setColour (param == selectedParam
-            ? juce::Colour (0xffd9ceb3).withAlpha (0.20f)
-            : juce::Colour (0xff1d1c19).withAlpha (0.88f));
-        g.fillRoundedRectangle (48.0f, y, 624.0f, 52.0f, 6.0f);
-
-        g.setColour (juce::Colour (0xffd9cfb8));
-        g.setFont (juce::FontOptions (15.0f).withStyle ("Bold"));
-        g.drawText (getParameterName (param),
-                    62, juce::roundToInt (y), 145, 52,
-                    juce::Justification::centredLeft);
-
-        const juce::Rectangle<float> bar (218.0f, y + 19.0f, 330.0f, 14.0f);
-        g.setColour (juce::Colour (0xff3a3730));
-        g.fillRoundedRectangle (bar, 4.0f);
-        g.setColour (locked
-            ? juce::Colour (0xffffdf91)
-            : juce::Colour (0xffc7bfa9));
+            ? juce::Colour (0xff56372e).withAlpha (0.94f)
+            : juce::Colour (0xff171311).withAlpha (0.93f));
         g.fillRoundedRectangle (
-            bar.withWidth (bar.getWidth() * value), 4.0f);
+            48.0f, y, 624.0f, rowHeightPx, 5.0f);
 
-        g.setColour (juce::Colour (0xffe8dfcb));
-        g.setFont (juce::FontOptions (14.0f));
-        g.drawText (getParameterValueText (param, value),
-                    558, juce::roundToInt (y), 100, 52,
-                    juce::Justification::centredRight);
+        g.setColour (param == selectedParam
+            ? juce::Colour (0xffffc1aa)
+            : juce::Colour (0xffd8c9c1));
+        g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
+        g.drawText (
+            getParameterName (param),
+            62, juce::roundToInt (y), 136,
+            juce::roundToInt (rowHeightPx),
+            juce::Justification::centredLeft);
+
+        const juce::Rectangle<float> bar (
+            210.0f, y + 16.0f, 332.0f, 12.0f);
+
+        g.setColour (juce::Colour (0xff302823));
+        g.fillRoundedRectangle (bar, 3.0f);
+
+        g.setColour (locked
+            ? juce::Colour (0xffffb49a)
+            : juce::Colour (0xffbba79d));
+        g.fillRoundedRectangle (
+            bar.withWidth (bar.getWidth() * value), 3.0f);
+
+        g.setColour (juce::Colour (0xfff0ddd4));
+        g.setFont (juce::FontOptions (13.0f).withStyle ("Bold"));
+        g.drawText (
+            getParameterValueText (param, value),
+            552, juce::roundToInt (y), 104,
+            juce::roundToInt (rowHeightPx),
+            juce::Justification::centredRight);
 
         if (locked)
         {
-            g.setColour (juce::Colour (0xffffdf91));
-            g.fillEllipse (204.0f, y + 22.0f, 7.0f, 7.0f);
+            g.setColour (juce::Colour (0xffffb49a));
+            g.fillEllipse (
+                198.0f, y + 18.0f, 7.0f, 7.0f);
         }
     }
 
-    g.setColour (juce::Colour (0xff292722));
-    g.fillRoundedRectangle (48.0f, 590.0f, 288.0f, 52.0f, 7.0f);
-    g.fillRoundedRectangle (384.0f, 590.0f, 288.0f, 52.0f, 7.0f);
+    if (parameterLockMode)
+    {
+        g.setColour (juce::Colour (0xffb99587));
+        g.setFont (juce::FontOptions (11.0f).withStyle ("Bold"));
+        g.drawText (
+            "EDITING THIS PAGE = PARAMETER LOCK FOR THIS TRIGGER",
+            48, 530, 624, 26,
+            juce::Justification::centred);
+    }
 
-    g.setColour (juce::Colour (0xffded3b7));
+    const juce::Rectangle<float> trigButton (
+        48.0f, 575.0f, 160.0f, 54.0f);
+    const juce::Rectangle<float> middleButton (
+        228.0f, 575.0f, 216.0f, 54.0f);
+    const juce::Rectangle<float> backButton (
+        464.0f, 575.0f, 208.0f, 54.0f);
+
+    g.setColour (juce::Colour (0xff30231e));
+    g.fillRoundedRectangle (trigButton, 6.0f);
+    g.fillRoundedRectangle (middleButton, 6.0f);
+    g.fillRoundedRectangle (backButton, 6.0f);
+
+    g.setColour (juce::Colour (0xffffb49a));
+    g.drawRoundedRectangle (trigButton, 6.0f, 1.2f);
+    g.drawRoundedRectangle (backButton, 6.0f, 1.2f);
+
+    if (parameterLockMode)
+        g.drawRoundedRectangle (middleButton, 6.0f, 1.0f);
+
     g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
-    g.drawText (parameterLockMode ? "CLEAR LOCKS" : "TRACK PARAMETERS",
-                48, 590, 288, 52, juce::Justification::centred);
-    g.drawText ("BACK TO SEQUENCE",
-                384, 590, 288, 52, juce::Justification::centred);
+    g.drawText (
+        "TRIG", trigButton.toNearestInt(),
+        juce::Justification::centred);
 
-    paintHeader (g, "PARAMETER");
+    g.setColour (parameterLockMode
+        ? juce::Colour (0xffe8d6cc)
+        : juce::Colour (0xff77655d));
+    g.drawText (
+        parameterLockMode ? "CLEAR LOCKS" : "BASE SOUND",
+        middleButton.toNearestInt(),
+        juce::Justification::centred);
+
+    g.setColour (juce::Colour (0xffffb49a));
+    g.drawText (
+        "SEQUENCE", backButton.toNearestInt(),
+        juce::Justification::centred);
+
+    paintHeader (
+        g,
+        parameterLockMode ? "TRIG CONFIG" : "PARAM");
 }
 
 void CarnivalScreenComponent::paintConfig (juce::Graphics& g)
