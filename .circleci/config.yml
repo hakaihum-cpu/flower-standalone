@@ -3,7 +3,7 @@ version: 2.1
 parameters:
   run_build:
     type: boolean
-    default: false
+    default: true
 
 jobs:
   android_build:
