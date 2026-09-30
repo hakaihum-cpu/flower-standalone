@@ -518,7 +518,7 @@ static std::unique_ptr<TwilightRealtime3DComponent::Mesh> makeShoeMesh()
         0,2,3, 0,3,1
     };
 
-    mesh->indices.assign (std::begin (idx), std::end (idx));
+    mesh->indices.assign (idx, idx + sizeof (idx) / sizeof (idx[0]));
     return mesh;
 }
 
@@ -549,7 +549,7 @@ static std::unique_ptr<TwilightRealtime3DComponent::Mesh> makeHairBackMesh()
         2,6,3, 3,6,7
     };
 
-    mesh->indices.assign (std::begin (idx), std::end (idx));
+    mesh->indices.assign (idx, idx + sizeof (idx) / sizeof (idx[0]));
     return mesh;
 }
 
