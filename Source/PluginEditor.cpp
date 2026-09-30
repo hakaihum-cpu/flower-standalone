@@ -9,6 +9,8 @@
 
 namespace
 {
+constexpr bool realtime3DPrototypeMode = true;
+
 constexpr const char* patternNames[]
 {
     "SINGLE", "UP", "DOWN", "UP/DOWN",
@@ -30,6 +32,9 @@ constexpr const char* scaleNames[]
 
 PerformancePadComponent::PerformancePadComponent()
 {
+    if (realtime3DPrototypeMode)
+        return;
+
     setMouseCursor (juce::MouseCursor::CrosshairCursor);
     setWantsKeyboardFocus (false);
 
@@ -707,8 +712,9 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     yEffectDreamy = processor.getConfiguredYEffectDreamy();
     midiChannel = processor.getConfiguredMidiChannel();
 
-    performancePad.setEffectState (
-        arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
+    if (! realtime3DPrototypeMode)
+        performancePad.setEffectState (
+            arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
     configScreen.setValues (
         rootClass, scaleIndex, delayEnabled, yEffectDreamy, midiChannel);
 
@@ -790,7 +796,9 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     processor.setPerformanceDreamyMode (yEffectDreamy);
     processor.setConfiguredMidiChannel (midiChannel);
 
-    startTimer (40);
+    if (! realtime3DPrototypeMode)
+        startTimer (40);
+
     grabKeyboardFocus();
 }
 
