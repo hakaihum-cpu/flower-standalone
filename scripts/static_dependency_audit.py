@@ -339,7 +339,7 @@ for forbidden_tw3d in [
     "ImageFileFormat",
     "Base64",
     "FlowerFrameData",
-    "sprite",
+    "frameImages",
     "poseAtlas",
 ]:
     if forbidden_tw3d in tw3d_cpp:
