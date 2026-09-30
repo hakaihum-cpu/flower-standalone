@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<JUCERPROJECT id="FlowerSA1" name="FLOWER3DTEST" projectType="audioplug"
+<JUCERPROJECT id="FlowerSA1" name="FLOWERRGPOSE" projectType="audioplug"
               pluginFormats="buildStandalone" companyName="LocalBuild"
-              companyWebsite="" companyEmail="" version="0.1.0"
+              companyWebsite="" companyEmail="" version="0.2.0"
               bundleIdentifier="local.flower.realtime3dprototype"
-              pluginName="FLOWER 3D TEST" pluginDesc="Flower realtime 3D graphics feasibility prototype"
+              pluginName="FLOWER RG POSE" pluginDesc="FLOWER RG Rotate realtime 3D pose study"
               pluginManufacturer="LocalBuild" pluginManufacturerCode="Flwr"
               pluginCode="F3D1" pluginChannelConfigs="{0,2}"
               pluginIsSynth="1" pluginWantsMidiIn="1" pluginProducesMidiOut="0"
@@ -38,10 +38,10 @@
                    androidBluetoothConnectNeeded="1">
       <CONFIGURATIONS>
         <CONFIGURATION name="Debug" isDebug="1" optimisation="1"
-                       linkTimeOptimisation="0" targetName="FLOWER3DTEST"
+                       linkTimeOptimisation="0" targetName="FLOWERRGPOSE"
                        androidArchitectures="arm64-v8a"/>
         <CONFIGURATION name="Release" isDebug="0" optimisation="3"
-                       linkTimeOptimisation="1" targetName="FLOWER3DTEST"
+                       linkTimeOptimisation="1" targetName="FLOWERRGPOSE"
                        androidArchitectures="arm64-v8a"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
