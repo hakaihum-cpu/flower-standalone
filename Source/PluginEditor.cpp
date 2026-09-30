@@ -24,6 +24,8 @@ constexpr const char* rootNames[]
     "F#", "G", "G#", "A", "A#", "B"
 };
 
+constexpr bool twilightRealtime3DPrototypeMode = true;
+
 constexpr const char* scaleNames[]
 {
     "MINOR PENT", "NATURAL MINOR", "MAJOR", "DORIAN", "RANDOM"
@@ -35,6 +37,9 @@ PerformancePadComponent::PerformancePadComponent()
 {
     setMouseCursor (juce::MouseCursor::CrosshairCursor);
     setWantsKeyboardFocus (false);
+
+    if (twilightRealtime3DPrototypeMode)
+        return;
 
     juce::MemoryOutputStream decodedFrames;
     if (! juce::Base64::convertFromBase64 (
@@ -1775,7 +1780,9 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     processor.setPerformanceDreamyMode (yEffectDreamy);
     processor.setConfiguredMidiChannel (midiChannel);
 
-    startTimer (40);
+    if (! twilightRealtime3DPrototypeMode)
+        startTimer (40);
+
     grabKeyboardFocus();
 }
 
