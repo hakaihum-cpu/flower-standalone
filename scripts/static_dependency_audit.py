@@ -18,6 +18,9 @@ REQUIRED = [
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.h",
     "Source/PluginEditor.cpp",
+    "Source/TwilightPoseComponent.h",
+    "Source/TwilightPoseComponent.cpp",
+    "Source/TwilightPoseData.h",
     "Source/FlowerFrameData.h",
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
@@ -77,12 +80,12 @@ for token in FORBIDDEN_SOURCE_TOKENS:
 
 jucer = ROOT / "FLOWER_Standalone.jucer"
 root = ET.parse(jucer).getroot()
-if root.attrib.get("name") != "FLOWER":
-    fail("JUCER project name is not FLOWER")
+if root.attrib.get("name") != "FLOWERTWILIGHTTEST":
+    fail("JUCER project name is not FLOWERTWILIGHTTEST")
 if root.attrib.get("pluginFormats") != "buildStandalone":
     fail("JUCER is not standalone-only")
-if root.attrib.get("bundleIdentifier") != "local.flower.standalone":
-    fail("unexpected provisional bundleIdentifier")
+if root.attrib.get("bundleIdentifier") != "local.flower.twilightposestudy":
+    fail("unexpected Twilight test bundleIdentifier")
 if root.attrib.get("pluginIsSynth") != "1" or root.attrib.get("pluginWantsMidiIn") != "1":
     fail("standalone synth/MIDI flags are not enabled")
 
@@ -92,6 +95,7 @@ for required_ref in [
     "Source/RetroLookAndFeel.cpp",
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.cpp",
+    "Source/TwilightPoseComponent.cpp",
 ]:
     if required_ref not in jucer_text:
         fail(f"JUCER reference missing: {required_ref}")
@@ -304,7 +308,47 @@ order = [
 if any(position < 0 for position in order) or order != sorted(order):
     fail("XY audio order must be arp MIDI -> synth -> granular -> delay")
 
-print("[PASS] Flower XY standalone static dependency audit")
+twilight_header = (ROOT / "Source/TwilightPoseComponent.h").read_text(encoding="utf-8")
+twilight_cpp = (ROOT / "Source/TwilightPoseComponent.cpp").read_text(encoding="utf-8")
+twilight_data = (ROOT / "Source/TwilightPoseData.h").read_text(encoding="utf-8")
+
+for required_twilight in [
+    "TwilightPoseComponent",
+    "poseAtlas",
+    "rooftopBackground",
+    "startTimerHz (16)",
+    "WALK CYCLE",
+    "WALK START",
+    "DIRECTION / TURN",
+    "SIT 1",
+    "CROUCH 1",
+    "KNEES UP",
+    "LIE DOWN",
+    "lowResamplingQuality",
+    "FLOWER / TWILIGHT POSE STUDY",
+]:
+    if required_twilight not in twilight_header and required_twilight not in twilight_cpp:
+        fail(f"Twilight pose-study contract missing: {required_twilight}")
+
+for required_data in [
+    "atlasWidth = 512",
+    "atlasHeight = 512",
+    "backgroundWidth = 236",
+    "backgroundHeight = 168",
+    "TwilightAtlas_",
+    "TwilightBackground_",
+]:
+    if required_data not in twilight_data:
+        fail(f"Twilight embedded visual-data contract missing: {required_data}")
+
+if "TwilightPoseComponent twilightPoseScreen;" not in editor_header:
+    fail("Twilight pose screen member missing from editor")
+if "twilightPoseScreen.setVisible (true)" not in editor_text:
+    fail("Twilight pose screen is not the startup test surface")
+if "twilightPoseScreen.setBounds (getLocalBounds())" not in editor_text:
+    fail("Twilight pose screen does not follow fullscreen bounds")
+
+print("[PASS] Flower Twilight pose-study static dependency audit")
 print("[PASS] obsolete contact-sheet resource excluded from generated target")
 print("[PASS] Android fullscreen editor follows actual logical bounds (physical panel no longer clipped)")
 print("[PASS] exact 100 user-cut JPEG frame bank embedded")
