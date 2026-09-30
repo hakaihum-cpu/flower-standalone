@@ -29,7 +29,7 @@ private:
     std::unique_ptr<juce::OpenGLShaderProgram::Uniform> stateUniform;
     std::unique_ptr<juce::OpenGLShaderProgram::Uniform> phaseUniform;
 
-    juce::gl::GLuint fullscreenVbo = 0;
+    unsigned int fullscreenVbo = 0;
 
     juce::CriticalSection boundsLock;
     juce::Rectangle<int> renderBounds;
