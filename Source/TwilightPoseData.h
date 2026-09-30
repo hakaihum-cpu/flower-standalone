@@ -8,11 +8,15 @@ constexpr int atlasDecodedSize = atlasWidth * atlasHeight;
 
 static const char* const atlasChunks[] =
 {
-#include "TwilightAtlas_00.inc"
+#include "TwilightAtlas_00a.inc"
+#include "TwilightAtlas_00b.inc"
+#include "TwilightAtlas_00c.inc"
 #include "TwilightAtlas_01.inc"
 #include "TwilightAtlas_02.inc"
 #include "TwilightAtlas_03.inc"
-#include "TwilightAtlas_04.inc"
+#include "TwilightAtlas_04a.inc"
+#include "TwilightAtlas_04b.inc"
+#include "TwilightAtlas_04c.inc"
 #include "TwilightAtlas_05.inc"
 #include "TwilightAtlas_06a.inc"
 #include "TwilightAtlas_06b.inc"
