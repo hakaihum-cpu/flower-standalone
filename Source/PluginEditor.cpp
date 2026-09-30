@@ -1004,16 +1004,17 @@ juce::String CarnivalScreenComponent::getParameterValueText (
 void CarnivalScreenComponent::paintHeader (
     juce::Graphics& g, const juce::String& title)
 {
-    g.setColour (juce::Colours::black.withAlpha (0.78f));
+    g.setColour (juce::Colour (0xff080706).withAlpha (0.94f));
     g.fillRect (0.0f, 0.0f, 720.0f, 40.0f);
 
-    g.setColour (juce::Colour (0xffe7dcc0));
-    g.setFont (juce::FontOptions (15.0f).withStyle ("Bold"));
-    g.drawText ("CARNIVAL  " + title, 12, 0, 225, 40,
+    g.setColour (juce::Colour (0xffffc1aa));
+    g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
+    g.drawText ("CARNIVAL", 14, 0, 140, 40,
                 juce::Justification::centredLeft);
 
-    const char* labels[] { "SEQ", "PARAM", "CONFIG" };
-    const float x[] { 240.0f, 400.0f, 560.0f };
+    static constexpr const char* labels[] { "SEQ", "PARAM", "CONFIG" };
+    static constexpr float x[] { 160.0f, 258.0f, 366.0f };
+    static constexpr float w[] { 92.0f, 102.0f, 98.0f };
 
     for (int i = 0; i < 3; ++i)
     {
@@ -1021,112 +1022,244 @@ void CarnivalScreenComponent::paintHeader (
             static_cast<int> (page) == i;
 
         g.setColour (selected
-            ? juce::Colour (0xffe0d5b9)
-            : juce::Colour (0xff292722));
-        g.fillRect (x[i], 4.0f, 154.0f, 32.0f);
+            ? juce::Colour (0xffffb49a)
+            : juce::Colour (0xff27221f));
+        g.fillRoundedRectangle (
+            x[i], 5.0f, w[i], 30.0f, 4.0f);
 
         g.setColour (selected
-            ? juce::Colour (0xff11110f)
-            : juce::Colour (0xffd7ceb8));
-        g.drawText (labels[i],
-                    juce::roundToInt (x[i]), 4, 154, 32,
-                    juce::Justification::centred);
+            ? juce::Colour (0xff100d0b)
+            : juce::Colour (0xffe8d8cf));
+        g.setFont (juce::FontOptions (13.0f).withStyle ("Bold"));
+        g.drawText (
+            labels[i],
+            juce::roundToInt (x[i]), 5,
+            juce::roundToInt (w[i]), 30,
+            juce::Justification::centred);
     }
+
+    juce::String status = title;
+    if (page == Page::Sequence)
+    {
+        status =
+            processor.isCarnivalClockMidi()
+                ? "MIDI"
+                : "INT " + juce::String (
+                    juce::roundToInt (processor.getCarnivalBpm()));
+    }
+
+    g.setColour (juce::Colour (0xffd7c5bb));
+    g.setFont (juce::FontOptions (12.0f).withStyle ("Bold"));
+    g.drawText (status, 474, 0, 122, 40,
+                juce::Justification::centred);
+
+    g.setColour (juce::Colour (0xff2b211d));
+    g.fillRoundedRectangle (610.0f, 5.0f, 100.0f, 30.0f, 4.0f);
+    g.setColour (juce::Colour (0xffffb49a));
+    g.drawRoundedRectangle (610.0f, 5.0f, 100.0f, 30.0f, 4.0f, 1.0f);
+    g.setFont (juce::FontOptions (12.5f).withStyle ("Bold"));
+    g.drawText ("FLOWER", 610, 5, 100, 30,
+                juce::Justification::centred);
 }
 
 void CarnivalScreenComponent::paintSequence (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff090908));
+    g.fillAll (juce::Colour (0xff080706));
 
-    if (sequenceBackground.isValid())
-    {
-        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-        g.drawImage (sequenceBackground,
-                     0, 0, 720, 720,
-                     0, 0,
-                     sequenceBackground.getWidth(),
-                     sequenceBackground.getHeight(),
-                     false);
-    }
+    const int sourceW =
+        sequenceBackground.isValid()
+            ? juce::jmax (1, sequenceBackground.getWidth() / 10)
+            : 1;
+    const int sourceH =
+        sequenceBackground.isValid()
+            ? juce::jmax (1, sequenceBackground.getHeight() / 10)
+            : 1;
+
+    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
 
     for (int track = 0;
          track < FlowerStandaloneAudioProcessor::carnivalTrackCount;
          ++track)
     {
+        const float y = headerHeight + track * rowHeight;
+
         for (int step = 0;
              step < FlowerStandaloneAudioProcessor::carnivalStepCount;
              ++step)
         {
-            const float x = step * cellSize;
-            const float y = track * cellSize;
+            const float x = step * stepWidth;
+
+            if (sequenceBackground.isValid())
+            {
+                g.drawImage (
+                    sequenceBackground,
+                    juce::roundToInt (x),
+                    juce::roundToInt (y),
+                    juce::roundToInt (stepWidth),
+                    juce::roundToInt (rowHeight),
+                    step * sourceW,
+                    track * sourceH,
+                    sourceW,
+                    sourceH,
+                    false);
+            }
+            else
+            {
+                g.setColour (juce::Colour (0xff171411));
+                g.fillRect (x, y, stepWidth, rowHeight);
+            }
 
             if (processor.getCarnivalStepEnabled (track, step))
             {
                 if (activeStepImage.isValid())
                 {
-                    g.drawImage (activeStepImage,
-                                 juce::roundToInt (x),
-                                 juce::roundToInt (y),
-                                 juce::roundToInt (cellSize),
-                                 juce::roundToInt (cellSize),
-                                 0, 0,
-                                 activeStepImage.getWidth(),
-                                 activeStepImage.getHeight(),
-                                 false);
+                    g.drawImage (
+                        activeStepImage,
+                        juce::roundToInt (x),
+                        juce::roundToInt (y),
+                        juce::roundToInt (stepWidth),
+                        juce::roundToInt (rowHeight),
+                        0, 0,
+                        activeStepImage.getWidth(),
+                        activeStepImage.getHeight(),
+                        false);
                 }
                 else
                 {
-                    g.setColour (juce::Colour (0xffd9c58f));
-                    g.fillRect (x, y, cellSize, cellSize);
+                    g.setColour (juce::Colour (0xffffb49a));
+                    g.fillRect (x, y, stepWidth, rowHeight);
                 }
             }
 
+            g.setColour (juce::Colours::black.withAlpha (0.68f));
+            g.drawRect (x, y, stepWidth, rowHeight, 1.2f);
+
             if (processor.carnivalStepHasLocks (track, step))
             {
-                g.setColour (juce::Colour (0xffffe7a5).withAlpha (0.92f));
+                g.setColour (juce::Colour (0xffffd1a9));
                 g.fillEllipse (
-                    x + cellSize - 10.0f, y + 5.0f,
+                    x + stepWidth - 9.0f, y + 5.0f,
                     5.0f, 5.0f);
             }
         }
 
-        const float y = track * cellSize;
-        g.setColour (juce::Colours::black.withAlpha (0.45f));
-        g.fillRect (8.0f * cellSize, y, 2.0f * cellSize, cellSize);
+        g.setColour (juce::Colour (0xff0b0908).withAlpha (0.96f));
+        g.fillRect (
+            machineX, y,
+            designSize - machineX, rowHeight);
 
-        g.setColour (juce::Colour (0xffe5dcc6));
-        g.setFont (juce::FontOptions (11.5f).withStyle ("Bold"));
-        g.drawText ("<", 576, juce::roundToInt (y), 24, 72,
-                    juce::Justification::centred);
-        g.drawText (getMachineName (track),
-                    597, juce::roundToInt (y), 102, 72,
-                    juce::Justification::centred);
-        g.drawText (">", 696, juce::roundToInt (y), 24, 72,
-                    juce::Justification::centred);
+        g.setColour (juce::Colour (0xff5d3c31));
+        g.drawRect (
+            machineX, y,
+            designSize - machineX, rowHeight,
+            1.0f);
+
+        g.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
+        g.setColour (juce::Colour (0xffac8879));
+        g.drawText (
+            juce::String (track + 1).paddedLeft ('0', 2),
+            juce::roundToInt (machineX + 8.0f),
+            juce::roundToInt (y + 4.0f),
+            28, 18,
+            juce::Justification::centredLeft);
+
+        g.setColour (juce::Colour (0xffffb49a));
+        g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
+        g.drawText (
+            "<",
+            juce::roundToInt (machineX + 8.0f),
+            juce::roundToInt (y),
+            34, juce::roundToInt (rowHeight),
+            juce::Justification::centred);
+        g.drawText (
+            getMachineName (track),
+            juce::roundToInt (machineX + 38.0f),
+            juce::roundToInt (y),
+            124, juce::roundToInt (rowHeight),
+            juce::Justification::centred);
+        g.drawText (
+            ">",
+            682,
+            juce::roundToInt (y),
+            30, juce::roundToInt (rowHeight),
+            juce::Justification::centred);
     }
+
+    g.setColour (juce::Colour (0xff0b0908));
+    g.fillRect (0.0f, 40.0f, 720.0f, 30.0f);
 
     const int playhead = processor.getCarnivalCurrentStep();
-    if (playhead >= 0 && playhead < 8)
+
+    for (int step = 0; step < 8; ++step)
     {
-        g.setColour (juce::Colours::white.withAlpha (0.085f));
-        g.fillRect (playhead * cellSize, 0.0f, cellSize, 720.0f);
-        g.setColour (juce::Colour (0xffffe8b4).withAlpha (0.82f));
-        g.drawRect (playhead * cellSize, 0.0f, cellSize, 720.0f, 2.0f);
+        const bool current = step == playhead;
+
+        g.setColour (current
+            ? juce::Colour (0xffffb49a)
+            : juce::Colour (0xffd7c5bb));
+        g.setFont (juce::FontOptions (13.0f).withStyle ("Bold"));
+        g.drawText (
+            juce::String (step + 1),
+            juce::roundToInt (step * stepWidth),
+            40,
+            juce::roundToInt (stepWidth),
+            30,
+            juce::Justification::centred);
+
+        if (current)
+        {
+            g.fillRect (
+                step * stepWidth + 12.0f,
+                67.0f,
+                stepWidth - 24.0f,
+                3.0f);
+
+            g.drawRect (
+                step * stepWidth + 1.5f,
+                headerHeight + 1.5f,
+                stepWidth - 3.0f,
+                650.0f - 3.0f,
+                2.0f);
+        }
     }
 
-    g.setColour (juce::Colours::black.withAlpha (0.68f));
-    for (int column = 1; column < gridColumns; ++column)
-        g.fillRect (column * cellSize - 1.0f, 0.0f, 2.0f, 720.0f);
-    for (int row = 1; row < gridRows; ++row)
-        g.fillRect (0.0f, row * cellSize - 1.0f, 720.0f, 2.0f);
+    g.setColour (juce::Colour (0xff9d7869));
+    g.setFont (juce::FontOptions (10.5f).withStyle ("Bold"));
+    g.drawText (
+        "MACHINE",
+        juce::roundToInt (machineX), 40,
+        juce::roundToInt (720.0f - machineX), 30,
+        juce::Justification::centred);
 
-    g.setColour (juce::Colour (0xffffe7a5).withAlpha (0.90f));
-    g.drawRect (cursorColumn * cellSize + 2.0f,
-                cursorRow * cellSize + 2.0f,
-                cellSize - 4.0f, cellSize - 4.0f,
-                2.0f);
+    if (cursorColumn < 8)
+    {
+        g.setColour (juce::Colour (0xffffdfb9));
+        g.drawRect (
+            cursorColumn * stepWidth + 2.0f,
+            headerHeight + cursorRow * rowHeight + 2.0f,
+            stepWidth - 4.0f,
+            rowHeight - 4.0f,
+            2.0f);
+    }
+    else
+    {
+        const float x =
+            cursorColumn == 8 ? machineX : 620.0f;
+        const float width =
+            cursorColumn == 8 ? 100.0f : 100.0f;
 
-    paintHeader (g, processor.isCarnivalPlaying() ? "PLAY" : "STOP");
+        g.setColour (juce::Colour (0xffffdfb9));
+        g.drawRect (
+            x + 2.0f,
+            headerHeight + cursorRow * rowHeight + 2.0f,
+            width - 4.0f,
+            rowHeight - 4.0f,
+            2.0f);
+    }
+
+    paintHeader (
+        g,
+        processor.isCarnivalPlaying() ? "PLAY" : "STOP");
 }
 
 void CarnivalScreenComponent::paintParameter (juce::Graphics& g)
