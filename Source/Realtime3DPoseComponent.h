@@ -18,18 +18,33 @@ public:
     void resized() override;
 
 private:
+    struct Mesh;
+
     static juce::String preprocessShader (juce::String source);
     void timerCallback() override;
     void updatePoseState (double elapsedSeconds);
 
-    std::unique_ptr<juce::OpenGLShaderProgram> shader;
-    std::unique_ptr<juce::OpenGLShaderProgram::Attribute> positionAttribute;
-    std::unique_ptr<juce::OpenGLShaderProgram::Uniform> resolutionUniform;
-    std::unique_ptr<juce::OpenGLShaderProgram::Uniform> timeUniform;
-    std::unique_ptr<juce::OpenGLShaderProgram::Uniform> stateUniform;
-    std::unique_ptr<juce::OpenGLShaderProgram::Uniform> phaseUniform;
+    void createMeshes();
+    void destroyMeshes();
+    void renderScene (float elapsedSeconds, int pose, float phase);
+    void drawMesh (const Mesh& mesh,
+                   const juce::Matrix3D<float>& model,
+                   juce::Colour colour,
+                   float alpha = 1.0f,
+                   float material = 0.0f);
 
-    unsigned int fullscreenVbo = 0;
+    std::unique_ptr<juce::OpenGLShaderProgram> shader;
+    std::unique_ptr<Mesh> sphereMesh;
+    std::unique_ptr<Mesh> cylinderMesh;
+    std::unique_ptr<Mesh> boxMesh;
+    std::unique_ptr<Mesh> skirtMesh;
+    std::unique_ptr<Mesh> discMesh;
+
+    int positionAttribute = -1;
+    int normalAttribute = -1;
+
+    juce::Matrix3D<float> projectionMatrix;
+    juce::Matrix3D<float> viewMatrix;
 
     juce::CriticalSection boundsLock;
     juce::Rectangle<int> renderBounds;
