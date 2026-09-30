@@ -1858,22 +1858,13 @@ bool CarnivalScreenComponent::handleKeyPress (
             nudgeCurrentParameter (-0.025f);
         else if (code == juce::KeyPress::rightKey)
             nudgeCurrentParameter (0.025f);
-        else if ((code == juce::KeyPress::F14Key || ch == 'b' || ch == 'B')
-                 && parameterLockMode)
+        else if (code == juce::KeyPress::F14Key || ch == 'b' || ch == 'B')
         {
-            const bool enabled =
-                processor.getCarnivalParamLockEnabled (
-                    selectedTrack, selectedStep, selectedParam);
-            const float value =
-                enabled
-                    ? processor.getCarnivalParamLockValue (
-                        selectedTrack, selectedStep, selectedParam)
-                    : processor.getCarnivalBaseParam (
-                        selectedTrack, selectedParam);
-
-            processor.setCarnivalParamLock (
-                selectedTrack, selectedStep, selectedParam,
-                ! enabled, value);
+            if (parameterLockMode)
+                processor.previewCarnivalTrigger (
+                    selectedTrack, selectedStep);
+            else
+                processor.previewCarnivalTrack (selectedTrack);
         }
         else if (code == juce::KeyPress::F15Key || ch == 'x' || ch == 'X')
         {
