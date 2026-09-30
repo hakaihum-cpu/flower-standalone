@@ -1404,21 +1404,44 @@ void FlowerStandaloneAudioProcessor::processCarnival (
                 case static_cast<int> (CarnivalInstrument::Kick):
                 {
                     const float sweep =
-                        1.0f + 2.4f * std::exp (-voice.ageSeconds * 28.0f);
+                        1.0f + (2.2f + voice.character * 2.0f)
+                        * std::exp (-voice.ageSeconds * 30.0f);
                     frequency *= sweep;
+
                     advancePhase (voice.phase1, frequency);
-                    mono = std::sin (static_cast<float> (voice.phase1));
+                    advancePhase (voice.phase2, frequency * 2.0f);
+
+                    const float body =
+                        std::sin (static_cast<float> (voice.phase1));
+                    const float harmonic =
+                        std::sin (static_cast<float> (voice.phase2));
+                    const float click =
+                        nextCarnivalNoise (track)
+                        * std::exp (-voice.ageSeconds * 115.0f);
+
+                    mono =
+                        body * 0.84f
+                        + harmonic * (0.06f + voice.character * 0.10f)
+                        + click * (0.05f + voice.character * 0.16f);
+                    mono = std::tanh (mono * (1.10f + voice.character * 0.75f));
                     break;
                 }
 
                 case static_cast<int> (CarnivalInstrument::Snare):
                 {
                     advancePhase (voice.phase1, frequency);
+                    advancePhase (voice.phase2, frequency * 1.47f);
+
                     const float body =
-                        std::sin (static_cast<float> (voice.phase1));
+                        std::sin (static_cast<float> (voice.phase1)) * 0.62f
+                        + std::sin (static_cast<float> (voice.phase2)) * 0.38f;
+                    const float noise = nextCarnivalNoise (track);
+                    const float noiseMix = 0.46f + voice.character * 0.34f;
+
                     mono =
-                        body * 0.36f
-                        + nextCarnivalNoise (track) * 0.64f;
+                        body * (1.0f - noiseMix)
+                        + noise * noiseMix;
+                    mono = std::tanh (mono * 1.35f);
                     break;
                 }
 
@@ -1427,56 +1450,114 @@ void FlowerStandaloneAudioProcessor::processCarnival (
                     const float noise = nextCarnivalNoise (track);
                     advancePhase (voice.phase1, frequency);
                     advancePhase (voice.phase2, frequency * 1.417f);
+                    advancePhase (voice.phase3, frequency * 1.731f);
+
                     const float metal =
-                        std::sin (static_cast<float> (voice.phase1))
-                        * std::sin (static_cast<float> (voice.phase2));
-                    mono = noise * 0.58f + metal * 0.42f;
+                        (std::sin (static_cast<float> (voice.phase1))
+                       * std::sin (static_cast<float> (voice.phase2))
+                       + std::sin (static_cast<float> (voice.phase3)) * 0.55f)
+                        * 0.64f;
+                    const float noiseMix = 0.34f + voice.character * 0.42f;
+                    mono = metal * (1.0f - noiseMix) + noise * noiseMix;
+                    mono = std::tanh (mono * 1.55f);
                     break;
                 }
 
                 case static_cast<int> (CarnivalInstrument::Chord):
                 {
+                    static constexpr int intervals[6][2]
+                    {
+                        { 4, 7 },   // MAJ
+                        { 3, 7 },   // MIN
+                        { 2, 7 },   // SUS2
+                        { 5, 7 },   // SUS4
+                        { 7, 12 },  // 5TH
+                        { 12, 19 }  // OCT
+                    };
+
+                    const int chord =
+                        juce::jlimit (
+                            0, 5,
+                            juce::roundToInt (voice.character * 5.0f));
+                    const float ratio2 =
+                        std::pow (
+                            2.0f,
+                            static_cast<float> (intervals[chord][0]) / 12.0f);
+                    const float ratio3 =
+                        std::pow (
+                            2.0f,
+                            static_cast<float> (intervals[chord][1]) / 12.0f);
+
                     advancePhase (voice.phase1, frequency);
-                    advancePhase (voice.phase2, frequency * 1.259921f);
-                    advancePhase (voice.phase3, frequency * 1.498307f);
-                    mono =
-                        (std::sin (static_cast<float> (voice.phase1))
-                       + std::sin (static_cast<float> (voice.phase2))
-                       + std::sin (static_cast<float> (voice.phase3)))
-                        / 3.0f;
+                    advancePhase (voice.phase2, frequency * ratio2);
+                    advancePhase (voice.phase3, frequency * ratio3);
+
+                    const float a =
+                        std::sin (static_cast<float> (voice.phase1));
+                    const float b =
+                        std::sin (static_cast<float> (voice.phase2));
+                    const float c =
+                        std::sin (static_cast<float> (voice.phase3));
+
+                    mono = (a + b * 0.92f + c * 0.82f) / 2.74f;
+                    mono = std::tanh (mono * 1.28f);
                     break;
                 }
 
                 case static_cast<int> (CarnivalInstrument::Tone):
                 {
+                    const float ratio =
+                        1.0f + std::floor (voice.character * 4.0f);
+                    advancePhase (voice.phase2, frequency * ratio);
+                    const float mod =
+                        std::sin (static_cast<float> (voice.phase2))
+                        * (0.15f + voice.character * 2.85f);
                     advancePhase (voice.phase1, frequency);
-                    mono = std::sin (static_cast<float> (voice.phase1));
+                    mono =
+                        std::sin (
+                            static_cast<float> (voice.phase1) + mod);
                     break;
                 }
 
                 case static_cast<int> (CarnivalInstrument::Tom):
                 {
                     const float sweep =
-                        1.0f + 0.75f * std::exp (-voice.ageSeconds * 18.0f);
+                        1.0f
+                        + (0.55f + voice.character * 0.85f)
+                        * std::exp (-voice.ageSeconds * 20.0f);
                     advancePhase (voice.phase1, frequency * sweep);
-                    mono = std::sin (static_cast<float> (voice.phase1));
+                    advancePhase (voice.phase2, frequency * sweep * 1.5f);
+                    mono =
+                        std::sin (static_cast<float> (voice.phase1)) * 0.88f
+                        + std::sin (static_cast<float> (voice.phase2))
+                            * (0.05f + voice.character * 0.12f);
+                    mono = std::tanh (mono * 1.18f);
                     break;
                 }
 
                 default: // BASS
                 {
                     advancePhase (voice.phase1, frequency);
+                    advancePhase (voice.phase2, frequency * 0.5f);
+
                     const float phase =
                         static_cast<float> (voice.phase1 / twoPi);
                     const float saw = phase * 2.0f - 1.0f;
                     const float sine =
                         std::sin (static_cast<float> (voice.phase1));
-                    mono = saw * 0.38f + sine * 0.62f;
+                    const float sub =
+                        std::sin (static_cast<float> (voice.phase2));
+
+                    mono =
+                        saw * (0.18f + voice.character * 0.28f)
+                        + sine * 0.52f
+                        + sub * 0.30f;
+                    mono = std::tanh (mono * (1.20f + voice.character * 1.25f));
                     break;
                 }
             }
 
-            mono *= envelope * voice.volume * 0.34f;
+            mono *= envelope * voice.volume * 0.38f;
 
             const float cutoff =
                 180.0f
