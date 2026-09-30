@@ -2088,6 +2088,9 @@ void FlowerStandaloneAudioProcessorEditor::timerCallback()
 
 bool FlowerStandaloneAudioProcessorEditor::keyStateChanged (bool isKeyDown)
 {
+    if (twilightRealtime3DPrototypeMode)
+        return false;
+
     if (isKeyDown)
         return dpadActive || bpmAdjustActive || looperButtonActive;
 
@@ -2122,6 +2125,9 @@ bool FlowerStandaloneAudioProcessorEditor::keyStateChanged (bool isKeyDown)
 
 bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
+    if (twilightRealtime3DPrototypeMode)
+        return true;
+
     const int code = key.getKeyCode();
     const auto ch = key.getTextCharacter();
 
