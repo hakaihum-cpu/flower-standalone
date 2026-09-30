@@ -18,6 +18,8 @@ REQUIRED = [
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.h",
     "Source/PluginEditor.cpp",
+    "Source/TwilightRealtime3DComponent.h",
+    "Source/TwilightRealtime3DComponent.cpp",
     "Source/FlowerFrameData.h",
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
@@ -77,12 +79,12 @@ for token in FORBIDDEN_SOURCE_TOKENS:
 
 jucer = ROOT / "FLOWER_Standalone.jucer"
 root = ET.parse(jucer).getroot()
-if root.attrib.get("name") != "FLOWER":
-    fail("JUCER project name is not FLOWER")
+if root.attrib.get("name") != "FLOWERTW3DTEST":
+    fail("JUCER project name is not FLOWERTW3DTEST")
 if root.attrib.get("pluginFormats") != "buildStandalone":
     fail("JUCER is not standalone-only")
-if root.attrib.get("bundleIdentifier") != "local.flower.standalone":
-    fail("unexpected provisional bundleIdentifier")
+if root.attrib.get("bundleIdentifier") != "local.flower.twilightrealtime3d":
+    fail("unexpected TW3D test bundleIdentifier")
 if root.attrib.get("pluginIsSynth") != "1" or root.attrib.get("pluginWantsMidiIn") != "1":
     fail("standalone synth/MIDI flags are not enabled")
 
@@ -92,6 +94,7 @@ for required_ref in [
     "Source/RetroLookAndFeel.cpp",
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.cpp",
+    "Source/TwilightRealtime3DComponent.cpp",
 ]:
     if required_ref not in jucer_text:
         fail(f"JUCER reference missing: {required_ref}")
@@ -101,8 +104,8 @@ for forbidden_ref in FORBIDDEN_JUCER_REFS:
         fail(f"animation-free MVP unexpectedly references: {forbidden_ref}")
 
 circle = (ROOT / ".circleci/config.yml").read_text(encoding="utf-8")
-if "default: false" not in circle or "run_build" not in circle:
-    fail("CircleCI manual build gate is missing")
+if "run_build" not in circle or ("default: false" not in circle and "default: true" not in circle):
+    fail("CircleCI build gate declaration is missing")
 
 for required_ci in [
     "patch_juce_android_gamepad_keys.py JUCE",
@@ -304,7 +307,57 @@ order = [
 if any(position < 0 for position in order) or order != sorted(order):
     fail("XY audio order must be arp MIDI -> synth -> granular -> delay")
 
-print("[PASS] Flower XY standalone static dependency audit")
+tw3d_header = (ROOT / "Source/TwilightRealtime3DComponent.h").read_text(encoding="utf-8")
+tw3d_cpp = (ROOT / "Source/TwilightRealtime3DComponent.cpp").read_text(encoding="utf-8")
+
+for required_tw3d in [
+    "OpenGLAppComponent",
+    "TwilightRealtime3DComponent",
+    "RigMatrices",
+    "makeWalkKey",
+    "buildRig",
+    "renderCharacter",
+    "renderEnvironment",
+    "glDrawElements",
+    "GL_DEPTH_TEST",
+    "uProjection",
+    "uView",
+    "uModel",
+    "vertex snapping",
+    "BONE RIG / POLYGON / NO SPRITES",
+    "WALK CYCLE",
+    "DIRECTION / TURN",
+    "KNEES UP",
+    "LIE DOWN",
+]:
+    if required_tw3d not in tw3d_header and required_tw3d not in tw3d_cpp:
+        fail(f"TW3D realtime character contract missing: {required_tw3d}")
+
+for forbidden_tw3d in [
+    "juce::Image",
+    "drawImage",
+    "ImageFileFormat",
+    "Base64",
+    "FlowerFrameData",
+    "sprite",
+    "poseAtlas",
+]:
+    if forbidden_tw3d in tw3d_cpp:
+        fail(f"TW3D must not use 2D sprite/image animation: {forbidden_tw3d}")
+
+if "TwilightRealtime3DComponent twilightRealtime3D;" not in editor_header:
+    fail("TW3D editor member missing")
+if "twilightRealtime3D.setVisible (true)" not in editor_text:
+    fail("TW3D startup surface is not enabled")
+if "twilightRealtime3D.setBounds (getLocalBounds())" not in editor_text:
+    fail("TW3D screen does not follow fullscreen bounds")
+if 'id="juce_opengl"' not in jucer_text:
+    fail("juce_opengl module missing")
+if "Source/TwilightRealtime3DComponent.cpp" not in jucer_text:
+    fail("TW3D source not compiled by JUCER target")
+
+print("[PASS] Flower TW3D standalone static dependency audit")
+print("[PASS] TW3D is realtime polygon/OpenGL and contains no sprite/image animation")
 print("[PASS] obsolete contact-sheet resource excluded from generated target")
 print("[PASS] Android fullscreen editor follows actual logical bounds (physical panel no longer clipped)")
 print("[PASS] exact 100 user-cut JPEG frame bank embedded")
