@@ -882,21 +882,18 @@ void CarnivalScreenComponent::showSequencePage()
 
 void CarnivalScreenComponent::selectPageFromHeader (float x)
 {
-    if (x < 240.0f)
-        return;
-
-    if (x < 400.0f)
+    if (x >= 160.0f && x < 252.0f)
     {
         parameterLockMode = false;
         setPage (Page::Sequence);
     }
-    else if (x < 560.0f)
+    else if (x >= 258.0f && x < 360.0f)
     {
         parameterLockMode = false;
         selectedTrack = cursorRow;
         setPage (Page::Parameter);
     }
-    else
+    else if (x >= 366.0f && x < 464.0f)
     {
         setPage (Page::Config);
     }
@@ -1557,6 +1554,16 @@ void CarnivalScreenComponent::nudgeCurrentParameter (float delta)
             selectedTrack, selectedStep, selectedParam)
         : processor.getCarnivalBaseParam (
             selectedTrack, selectedParam);
+
+    if (selectedParam
+            == static_cast<int> (
+                FlowerStandaloneAudioProcessor::CarnivalParam::Character)
+        && processor.getCarnivalInstrument (selectedTrack)
+            == static_cast<int> (
+                FlowerStandaloneAudioProcessor::CarnivalInstrument::Chord))
+    {
+        delta = delta < 0.0f ? -0.20f : 0.20f;
+    }
 
     adjustCurrentParameter (value + delta);
 }
