@@ -1629,8 +1629,15 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     addAndMakeVisible (performancePad);
     addAndMakeVisible (configScreen);
     addAndMakeVisible (carnivalScreen);
+    addAndMakeVisible (twilightRealtime3D);
     configScreen.setVisible (false);
     carnivalScreen.setVisible (false);
+
+    // Branch-local graphics feasibility test only.
+    // The production FLOWER UI/audio paths stay compiled but hidden.
+    performancePad.setVisible (false);
+    twilightRealtime3D.setVisible (true);
+    twilightRealtime3D.toFront (false);
 
     rootClass = processor.getConfiguredRoot();
     scaleIndex = processor.getConfiguredScale();
@@ -1790,6 +1797,7 @@ void FlowerStandaloneAudioProcessorEditor::resized()
     performancePad.setBounds (getLocalBounds());
     configScreen.setBounds (getLocalBounds());
     carnivalScreen.setBounds (getLocalBounds());
+    twilightRealtime3D.setBounds (getLocalBounds());
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
