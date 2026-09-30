@@ -144,19 +144,26 @@ struct Rig
 
 Rig makeRig (int pose, float phase)
 {
+    // The renderer itself remains realtime, but body motion is intentionally
+    // sampled like an old survival-horror/adventure game.  This mirrors the
+    // supplied FLOWER pose sheet more closely than fully smooth mocap.
+    const float posePhase = (pose == 1 || pose == 2)
+        ? std::floor (juce::jlimit (0.0f, 0.9999f, phase) * 8.0f) / 8.0f
+        : phase;
+
     float bob = 0.0f;
     float walkAmount = 0.0f;
-    float walkWave = std::sin (phase * 2.0f * pi);
+    float walkWave = std::sin (posePhase * 2.0f * pi);
 
     if (pose == 1)
     {
         walkAmount = 1.0f;
-        bob = 0.018f * std::sin (phase * 4.0f * pi);
+        bob = 0.018f * std::sin (posePhase * 4.0f * pi);
     }
     else if (pose == 2)
     {
-        walkAmount = std::sin (phase * pi);
-        bob = 0.012f * std::sin (phase * 4.0f * pi) * walkAmount;
+        walkAmount = std::sin (posePhase * pi);
+        bob = 0.012f * std::sin (posePhase * 4.0f * pi) * walkAmount;
     }
 
     Rig r;
@@ -395,6 +402,14 @@ void main()
     float grain = hash21 (gl_FragCoord.xy
         + vec2 (floor (uTime * 24.0) * 13.7, fract (uTime) * 77.3));
     col += (grain - 0.5) * 0.022;
+
+    // Cheap ordered-looking colour reduction.  It preserves true 3D lighting
+    // while giving the final image a coarse late-90s/early-00s game texture.
+    float dither = (hash21 (floor (gl_FragCoord.xy)) - 0.5) / 12.0;
+    col = floor (clamp (col + dither, 0.0, 1.0) * 12.0) / 12.0;
+
+    float scan = 0.988 + 0.012 * sin (gl_FragCoord.y * 3.14159);
+    col *= scan;
 
     gl_FragColor = vec4 (clamp (col, 0.0, 1.0), uColour.a);
 }
@@ -889,9 +904,33 @@ void Realtime3DPoseComponent::renderScene (float elapsedSeconds,
                   modelTRS ({ 0.0f, y, 2.87f }, { 7.25f, 0.030f, 0.030f }),
                   juce::Colour (0xff444748), 1.0f, 3.0f);
 
-    // Character root rotation follows the pose sheet.
+    // Character root follows a short blocking path so this is an actual
+    // moving 3D actor, not a pose viewer with feet cycling in place.
     const auto rig = makeRig (pose, phase);
-    const auto root = juce::Matrix3D<float>::rotation ({ 0.0f, rig.yaw, 0.0f });
+
+    V3 actorPosition { 0.0f, 0.0f, 0.0f };
+
+    if (pose == 0)
+        actorPosition.x = -1.30f;
+    else if (pose == 1)
+        actorPosition.x = juce::jmap (smooth01 (phase), -1.30f, 0.95f);
+    else if (pose == 2)
+        actorPosition.x = juce::jmap (smooth01 (phase), 0.95f, 1.25f);
+    else if (pose >= 3 && pose <= 4)
+        actorPosition.x = 1.25f;
+    else if (pose == 5)
+        actorPosition.x = 0.70f;
+    else if (pose == 6)
+        actorPosition.x = 0.25f;
+    else if (pose == 7)
+        actorPosition.x = -0.20f;
+    else
+        actorPosition.x = -0.15f;
+
+    const auto root =
+        juce::Matrix3D<float>::fromTranslation (
+            { actorPosition.x, actorPosition.y, actorPosition.z })
+        * juce::Matrix3D<float>::rotation ({ 0.0f, rig.yaw, 0.0f });
 
     // Contact shadow: cheap but representative raster-game technique.
     glEnable (GL_BLEND);
@@ -1095,7 +1134,7 @@ void Realtime3DPoseComponent::paint (juce::Graphics& g)
 
     g.setColour (juce::Colours::white.withAlpha (0.94f));
     g.setFont (juce::FontOptions (15.0f).withStyle ("Bold"));
-    g.drawText ("FLOWER / REALTIME 3D RASTER QUALITY TEST",
+    g.drawText ("FLOWER / RG ROTATE / POSE STUDY",
                 top.removeFromTop (21),
                 juce::Justification::centredLeft,
                 false);
@@ -1106,7 +1145,7 @@ void Realtime3DPoseComponent::paint (juce::Graphics& g)
     g.drawText (
         juce::String (poseNames[pose])
             + "    FPS " + juce::String (fps, 1)
-            + "    MESH / LIGHT / FOG / FILM",
+            + "    3D / 8-FRAME MOTION / DITHER / FOG",
         top,
         juce::Justification::centredLeft,
         false);
