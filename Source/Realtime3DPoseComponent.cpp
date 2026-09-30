@@ -2,6 +2,8 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <vector>
 
 namespace
 {
@@ -19,6 +21,280 @@ constexpr const char* poseNames[]
 };
 
 constexpr int poseCount = 9;
+constexpr float pi = 3.14159265358979323846f;
+
+struct V3
+{
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
+V3 operator+ (V3 a, V3 b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+V3 operator- (V3 a, V3 b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+V3 operator* (V3 a, float s) { return { a.x * s, a.y * s, a.z * s }; }
+
+float dot (V3 a, V3 b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+V3 cross (V3 a, V3 b)
+{
+    return {
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    };
+}
+
+float length (V3 a)
+{
+    return std::sqrt (dot (a, a));
+}
+
+V3 normalise (V3 a)
+{
+    const auto n = length (a);
+    if (n <= 0.00001f)
+        return { 0.0f, 1.0f, 0.0f };
+
+    return a * (1.0f / n);
+}
+
+juce::Matrix3D<float> scaleMatrix (float x, float y, float z)
+{
+    return {
+        x, 0.0f, 0.0f, 0.0f,
+        0.0f, y, 0.0f, 0.0f,
+        0.0f, 0.0f, z, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+}
+
+juce::Matrix3D<float> modelTRS (V3 position,
+                                V3 scale,
+                                V3 rotation = {})
+{
+    const auto t = juce::Matrix3D<float>::fromTranslation (
+        { position.x, position.y, position.z });
+    const auto r = juce::Matrix3D<float>::rotation (
+        { rotation.x, rotation.y, rotation.z });
+    const auto s = scaleMatrix (scale.x, scale.y, scale.z);
+    return t * r * s;
+}
+
+juce::Matrix3D<float> cylinderModel (V3 a, V3 b, float radius)
+{
+    const auto delta = b - a;
+    const auto h = juce::jmax (0.001f, length (delta));
+    const auto up = normalise (delta);
+
+    const auto helper = std::abs (up.y) < 0.92f
+                      ? V3 { 0.0f, 1.0f, 0.0f }
+                      : V3 { 1.0f, 0.0f, 0.0f };
+
+    auto right = normalise (cross (helper, up));
+    auto forward = normalise (cross (up, right));
+    const auto centre = (a + b) * 0.5f;
+
+    const float sx = radius * 2.0f;
+    const float sz = radius * 2.0f;
+
+    const float m[16]
+    {
+        right.x * sx,   right.y * sx,   right.z * sx,   0.0f,
+        up.x * h,       up.y * h,       up.z * h,       0.0f,
+        forward.x * sz, forward.y * sz, forward.z * sz, 0.0f,
+        centre.x,       centre.y,       centre.z,       1.0f
+    };
+
+    return juce::Matrix3D<float> (m);
+}
+
+float smooth01 (float x)
+{
+    x = juce::jlimit (0.0f, 1.0f, x);
+    return x * x * (3.0f - 2.0f * x);
+}
+
+struct Rig
+{
+    V3 pelvis;
+    V3 chest;
+    V3 neck;
+    V3 head;
+
+    V3 hipL;
+    V3 hipR;
+    V3 kneeL;
+    V3 kneeR;
+    V3 ankleL;
+    V3 ankleR;
+
+    V3 shoulderL;
+    V3 shoulderR;
+    V3 elbowL;
+    V3 elbowR;
+    V3 handL;
+    V3 handR;
+
+    float yaw = 0.0f;
+};
+
+Rig makeRig (int pose, float phase)
+{
+    float bob = 0.0f;
+    float walkAmount = 0.0f;
+    float walkWave = std::sin (phase * 2.0f * pi);
+
+    if (pose == 1)
+    {
+        walkAmount = 1.0f;
+        bob = 0.018f * std::sin (phase * 4.0f * pi);
+    }
+    else if (pose == 2)
+    {
+        walkAmount = std::sin (phase * pi);
+        bob = 0.012f * std::sin (phase * 4.0f * pi) * walkAmount;
+    }
+
+    Rig r;
+    r.pelvis = { 0.0f, 1.02f + bob, 0.0f };
+    r.chest  = { 0.0f, 1.43f + bob, 0.0f };
+    r.neck   = { 0.0f, 1.65f + bob, -0.005f };
+    r.head   = { 0.0f, 1.83f + bob, -0.020f };
+
+    r.hipL   = r.pelvis + V3 { -0.115f, 0.0f, 0.0f };
+    r.hipR   = r.pelvis + V3 {  0.115f, 0.0f, 0.0f };
+    r.kneeL  = { -0.115f, 0.58f + bob, 0.0f };
+    r.kneeR  = {  0.115f, 0.58f + bob, 0.0f };
+    r.ankleL = { -0.115f, 0.13f, 0.0f };
+    r.ankleR = {  0.115f, 0.13f, 0.0f };
+
+    r.shoulderL = r.chest + V3 { -0.245f, 0.06f, 0.0f };
+    r.shoulderR = r.chest + V3 {  0.245f, 0.06f, 0.0f };
+    r.elbowL = { -0.275f, 1.18f + bob, 0.015f };
+    r.elbowR = {  0.275f, 1.18f + bob, 0.015f };
+    r.handL  = { -0.225f, 0.91f + bob, -0.01f };
+    r.handR  = {  0.225f, 0.91f + bob, -0.01f };
+
+    if (walkAmount > 0.001f)
+    {
+        const auto stepL = walkWave * walkAmount;
+        const auto stepR = -stepL;
+
+        r.kneeL.z  += 0.16f * stepL;
+        r.ankleL.z += 0.31f * stepL;
+        r.kneeR.z  += 0.16f * stepR;
+        r.ankleR.z += 0.31f * stepR;
+
+        r.ankleL.y += 0.055f * juce::jmax (0.0f, -stepL);
+        r.ankleR.y += 0.055f * juce::jmax (0.0f, -stepR);
+
+        r.elbowL.z -= 0.13f * stepL;
+        r.handL.z  -= 0.23f * stepL;
+        r.elbowR.z -= 0.13f * stepR;
+        r.handR.z  -= 0.23f * stepR;
+    }
+
+    if (pose == 1 || pose == 2)
+        r.yaw = -0.5f * pi;
+    else if (pose == 3)
+        r.yaw = pi * smooth01 (phase);
+    else if (pose == 4)
+        r.yaw = pi;
+    else if (pose == 5)
+    {
+        r.yaw = -0.30f;
+        r.pelvis = { 0.0f, 0.60f, 0.06f };
+        r.chest  = { 0.0f, 1.00f, -0.02f };
+        r.neck   = { 0.0f, 1.20f, -0.02f };
+        r.head   = { 0.0f, 1.38f, -0.04f };
+
+        r.hipL = r.pelvis + V3 { -0.12f, 0.0f, 0.0f };
+        r.hipR = r.pelvis + V3 {  0.12f, 0.0f, 0.0f };
+        r.kneeL  = { -0.13f, 0.50f, -0.38f };
+        r.kneeR  = {  0.13f, 0.50f, -0.38f };
+        r.ankleL = { -0.13f, 0.13f, -0.52f };
+        r.ankleR = {  0.13f, 0.13f, -0.52f };
+
+        r.shoulderL = r.chest + V3 { -0.23f, 0.05f, 0.0f };
+        r.shoulderR = r.chest + V3 {  0.23f, 0.05f, 0.0f };
+        r.elbowL = { -0.24f, 0.76f, -0.18f };
+        r.elbowR = {  0.24f, 0.76f, -0.18f };
+        r.handL  = { -0.16f, 0.58f, -0.34f };
+        r.handR  = {  0.16f, 0.58f, -0.34f };
+    }
+    else if (pose == 6)
+    {
+        r.yaw = 0.18f;
+        r.pelvis = { 0.0f, 0.66f, 0.03f };
+        r.chest  = { 0.0f, 1.08f, -0.05f };
+        r.neck   = { 0.0f, 1.27f, -0.07f };
+        r.head   = { 0.0f, 1.44f, -0.09f };
+
+        r.hipL = r.pelvis + V3 { -0.12f, 0.0f, 0.0f };
+        r.hipR = r.pelvis + V3 {  0.12f, 0.0f, 0.0f };
+        r.kneeL  = { -0.16f, 0.36f, -0.18f };
+        r.kneeR  = {  0.16f, 0.36f, -0.18f };
+        r.ankleL = { -0.18f, 0.12f, 0.08f };
+        r.ankleR = {  0.18f, 0.12f, 0.08f };
+
+        r.shoulderL = r.chest + V3 { -0.23f, 0.05f, 0.0f };
+        r.shoulderR = r.chest + V3 {  0.23f, 0.05f, 0.0f };
+        r.elbowL = { -0.29f, 0.80f, -0.10f };
+        r.elbowR = {  0.29f, 0.80f, -0.10f };
+        r.handL  = { -0.20f, 0.60f, -0.19f };
+        r.handR  = {  0.20f, 0.60f, -0.19f };
+    }
+    else if (pose == 7)
+    {
+        r.yaw = -0.15f;
+        r.pelvis = { 0.0f, 0.39f, 0.08f };
+        r.chest  = { 0.0f, 0.80f, -0.03f };
+        r.neck   = { 0.0f, 0.99f, -0.07f };
+        r.head   = { 0.0f, 1.16f, -0.10f };
+
+        r.hipL = r.pelvis + V3 { -0.12f, 0.0f, 0.0f };
+        r.hipR = r.pelvis + V3 {  0.12f, 0.0f, 0.0f };
+        r.kneeL  = { -0.16f, 0.69f, -0.31f };
+        r.kneeR  = {  0.16f, 0.69f, -0.31f };
+        r.ankleL = { -0.16f, 0.18f, -0.42f };
+        r.ankleR = {  0.16f, 0.18f, -0.42f };
+
+        r.shoulderL = r.chest + V3 { -0.23f, 0.05f, 0.0f };
+        r.shoulderR = r.chest + V3 {  0.23f, 0.05f, 0.0f };
+        r.elbowL = { -0.29f, 0.68f, -0.19f };
+        r.elbowR = {  0.29f, 0.68f, -0.19f };
+        r.handL  = { -0.18f, 0.62f, -0.34f };
+        r.handR  = {  0.18f, 0.62f, -0.34f };
+    }
+    else if (pose == 8)
+    {
+        r.yaw = -0.35f;
+        r.pelvis = { 0.08f, 0.24f, 0.02f };
+        r.chest  = { -0.34f, 0.28f, 0.00f };
+        r.neck   = { -0.62f, 0.29f, -0.01f };
+        r.head   = { -0.82f, 0.31f, -0.02f };
+
+        r.hipL = r.pelvis + V3 { -0.06f, 0.05f, -0.08f };
+        r.hipR = r.pelvis + V3 {  0.06f, 0.03f,  0.08f };
+        r.kneeL  = { 0.38f, 0.35f, -0.18f };
+        r.kneeR  = { 0.34f, 0.31f,  0.16f };
+        r.ankleL = { 0.70f, 0.12f, -0.07f };
+        r.ankleR = { 0.66f, 0.11f,  0.10f };
+
+        r.shoulderL = r.chest + V3 { -0.03f, 0.08f, -0.14f };
+        r.shoulderR = r.chest + V3 { -0.03f, 0.06f,  0.14f };
+        r.elbowL = { -0.60f, 0.22f, -0.16f };
+        r.elbowR = { -0.57f, 0.20f,  0.18f };
+        r.handL  = { -0.78f, 0.17f, -0.08f };
+        r.handR  = { -0.74f, 0.17f,  0.08f };
+    }
+
+    return r;
+}
 
 const char* vertexShaderSource = R"GLSL(
 #ifdef GL_ES
@@ -26,13 +302,27 @@ precision highp float;
 precision highp int;
 #endif
 
-attribute vec2 position;
-varying vec2 vUv;
+attribute vec3 position;
+attribute vec3 normal;
+
+uniform mat4 uProjection;
+uniform mat4 uView;
+uniform mat4 uModel;
+
+varying vec3 vNormal;
+varying vec3 vWorldPos;
+varying float vDepth;
 
 void main()
 {
-    vUv = position * 0.5 + 0.5;
-    gl_Position = vec4 (position, 0.0, 1.0);
+    vec4 world = uModel * vec4 (position, 1.0);
+    vec4 view = uView * world;
+
+    vWorldPos = world.xyz;
+    vNormal = normalize (mat3 (uModel) * normal);
+    vDepth = max (0.0, -view.z);
+
+    gl_Position = uProjection * view;
 }
 )GLSL";
 
@@ -42,21 +332,14 @@ precision highp float;
 precision highp int;
 #endif
 
-varying #highp# vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vWorldPos;
+varying float vDepth;
 
-uniform #highp# vec2 uResolution;
-uniform #highp# float uTime;
-uniform #highp# float uState;
-uniform #highp# float uPhase;
-
-const float PI = 3.14159265359;
-
-mat2 rot (float a)
-{
-    float s = sin (a);
-    float c = cos (a);
-    return mat2 (c, -s, s, c);
-}
+uniform vec4 uColour;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uMaterial;
 
 float hash21 (vec2 p)
 {
@@ -65,517 +348,298 @@ float hash21 (vec2 p)
     return fract (p.x * p.y);
 }
 
-float noise2 (vec2 p)
-{
-    vec2 i = floor (p);
-    vec2 f = fract (p);
-    f = f * f * (3.0 - 2.0 * f);
-
-    float a = hash21 (i);
-    float b = hash21 (i + vec2 (1.0, 0.0));
-    float c = hash21 (i + vec2 (0.0, 1.0));
-    float d = hash21 (i + vec2 (1.0, 1.0));
-
-    return mix (mix (a, b, f.x), mix (c, d, f.x), f.y);
-}
-
-float fbm (vec2 p)
-{
-    float v = 0.0;
-    float a = 0.5;
-
-    for (int i = 0; i < 4; ++i)
-    {
-        v += a * noise2 (p);
-        p = rot (0.53) * p * 2.02 + 17.1;
-        a *= 0.5;
-    }
-
-    return v;
-}
-
-float sdSphere (vec3 p, float r)
-{
-    return length (p) - r;
-}
-
-float sdEllipsoid (vec3 p, vec3 r)
-{
-    float k0 = length (p / r);
-    float k1 = length (p / (r * r));
-    return k0 * (k0 - 1.0) / max (k1, 0.0001);
-}
-
-float sdCapsule (vec3 p, vec3 a, vec3 b, float r)
-{
-    vec3 pa = p - a;
-    vec3 ba = b - a;
-    float h = clamp (dot (pa, ba) / max (dot (ba, ba), 0.0001), 0.0, 1.0);
-    return length (pa - ba * h) - r;
-}
-
-float sdRoundBox (vec3 p, vec3 b, float r)
-{
-    vec3 q = abs (p) - b;
-    return length (max (q, 0.0)) + min (max (q.x, max (q.y, q.z)), 0.0) - r;
-}
-
-float sdCappedCone (vec3 p, float h, float r1, float r2)
-{
-    vec2 q = vec2 (length (p.xz), p.y);
-    vec2 k1 = vec2 (r2, h);
-    vec2 k2 = vec2 (r2 - r1, 2.0 * h);
-    vec2 ca = vec2 (q.x - min (q.x, (q.y < 0.0) ? r1 : r2), abs (q.y) - h);
-    vec2 cb = q - k1 + k2 * clamp (dot (k1 - q, k2) / max (dot (k2, k2), 0.0001), 0.0, 1.0);
-    float s = (cb.x < 0.0 && ca.y < 0.0) ? -1.0 : 1.0;
-    return s * sqrt (min (dot (ca, ca), dot (cb, cb)));
-}
-
-vec2 opU (vec2 a, vec2 b)
-{
-    return (a.x < b.x) ? a : b;
-}
-
-vec2 addShape (vec2 result, float d, float material)
-{
-    return opU (result, vec2 (d, material));
-}
-
-vec2 mapCharacter (vec3 p)
-{
-    float state = uState;
-    float phase = uPhase;
-
-    if (state > 7.5)
-    {
-        vec2 r = vec2 (100.0, 0.0);
-
-        vec3 head = vec3 (-0.80, 0.31, 0.03);
-        vec3 neck = vec3 (-0.63, 0.31, 0.02);
-        vec3 chest = vec3 (-0.40, 0.32, 0.00);
-        vec3 pelvis = vec3 (0.02, 0.31, 0.02);
-
-        vec3 kneeL = vec3 (0.36, 0.42, -0.22);
-        vec3 ankleL = vec3 (0.62, 0.18, -0.08);
-        vec3 kneeR = vec3 (0.31, 0.36, 0.17);
-        vec3 ankleR = vec3 (0.56, 0.14, 0.12);
-
-        vec3 shoulderL = vec3 (-0.42, 0.37, -0.18);
-        vec3 elbowL = vec3 (-0.62, 0.22, -0.16);
-        vec3 handL = vec3 (-0.77, 0.18, -0.08);
-        vec3 shoulderR = vec3 (-0.42, 0.37, 0.18);
-        vec3 elbowR = vec3 (-0.57, 0.20, 0.18);
-        vec3 handR = vec3 (-0.72, 0.17, 0.08);
-
-        r = addShape (r, sdEllipsoid (p - head, vec3 (0.14, 0.17, 0.13)), 1.0);
-        r = addShape (r, sdEllipsoid (p - (head + vec3 (0.015, 0.045, 0.055)), vec3 (0.17, 0.20, 0.16)), 3.0);
-        r = addShape (r, sdCapsule (p, neck, chest, 0.18), 2.0);
-        r = addShape (r, sdCapsule (p, chest, pelvis, 0.22), 2.0);
-
-        r = addShape (r, sdCapsule (p, pelvis + vec3 (-0.11, 0.0, 0.0), kneeL, 0.09), 1.0);
-        r = addShape (r, sdCapsule (p, kneeL, ankleL, 0.075), 1.0);
-        r = addShape (r, sdCapsule (p, pelvis + vec3 (0.11, 0.0, 0.0), kneeR, 0.09), 1.0);
-        r = addShape (r, sdCapsule (p, kneeR, ankleR, 0.075), 1.0);
-
-        r = addShape (r, sdCapsule (p, shoulderL, elbowL, 0.075), 2.0);
-        r = addShape (r, sdCapsule (p, elbowL, handL, 0.055), 1.0);
-        r = addShape (r, sdCapsule (p, shoulderR, elbowR, 0.075), 2.0);
-        r = addShape (r, sdCapsule (p, elbowR, handR, 0.055), 1.0);
-
-        r = addShape (r, sdEllipsoid (p - ankleL - vec3 (-0.05, -0.02, -0.08), vec3 (0.15, 0.065, 0.11)), 3.0);
-        r = addShape (r, sdEllipsoid (p - ankleR - vec3 (-0.05, -0.02, -0.08), vec3 (0.15, 0.065, 0.11)), 3.0);
-
-        vec3 bag = vec3 (-0.15, 0.23, 0.25);
-        r = addShape (r, sdRoundBox (p - bag, vec3 (0.23, 0.16, 0.08), 0.05), 4.0);
-        r = addShape (r, sdCapsule (p, shoulderR, bag + vec3 (0.0, 0.10, 0.0), 0.018), 4.0);
-
-        return r;
-    }
-
-    float yaw = 0.0;
-    if (state > 2.5 && state < 3.5)
-        yaw = PI * smoothstep (0.05, 0.95, phase);
-    else if (state > 3.5 && state < 4.5)
-        yaw = PI;
-
-    vec3 q = p;
-    q.xz = rot (-yaw) * q.xz;
-
-    float bob = 0.0;
-    float walkAmount = 0.0;
-    float walkWave = sin (phase * 2.0 * PI);
-
-    if (state > 0.5 && state < 1.5)
-    {
-        walkAmount = 1.0;
-        bob = 0.018 * sin (phase * 4.0 * PI);
-    }
-    else if (state > 1.5 && state < 2.5)
-    {
-        walkAmount = sin (phase * PI);
-        bob = 0.012 * sin (phase * 4.0 * PI) * walkAmount;
-    }
-
-    vec3 pelvis = vec3 (0.0, 1.02 + bob, 0.0);
-    vec3 chest = vec3 (0.0, 1.43 + bob, 0.0);
-    vec3 neck = vec3 (0.0, 1.65 + bob, -0.005);
-    vec3 head = vec3 (0.0, 1.82 + bob, -0.018);
-
-    vec3 hipL = pelvis + vec3 (-0.115, 0.00, 0.0);
-    vec3 hipR = pelvis + vec3 ( 0.115, 0.00, 0.0);
-    vec3 kneeL = vec3 (-0.115, 0.58 + bob, 0.0);
-    vec3 kneeR = vec3 ( 0.115, 0.58 + bob, 0.0);
-    vec3 ankleL = vec3 (-0.115, 0.13, 0.0);
-    vec3 ankleR = vec3 ( 0.115, 0.13, 0.0);
-
-    vec3 shoulderL = chest + vec3 (-0.245, 0.06, 0.0);
-    vec3 shoulderR = chest + vec3 ( 0.245, 0.06, 0.0);
-    vec3 elbowL = vec3 (-0.275, 1.18 + bob, 0.015);
-    vec3 elbowR = vec3 ( 0.275, 1.18 + bob, 0.015);
-    vec3 handL = vec3 (-0.225, 0.91 + bob, -0.01);
-    vec3 handR = vec3 ( 0.225, 0.91 + bob, -0.01);
-
-    if (walkAmount > 0.001)
-    {
-        float stepA = walkWave * walkAmount;
-        float stepB = -stepA;
-
-        kneeL.z += 0.17 * stepA;
-        ankleL.z += 0.30 * stepA;
-        kneeR.z += 0.17 * stepB;
-        ankleR.z += 0.30 * stepB;
-
-        ankleL.y += 0.055 * max (0.0, -stepA);
-        ankleR.y += 0.055 * max (0.0, -stepB);
-
-        elbowL.z -= 0.14 * stepA;
-        handL.z -= 0.24 * stepA;
-        elbowR.z -= 0.14 * stepB;
-        handR.z -= 0.24 * stepB;
-
-        chest.z += 0.012 * sin (phase * 4.0 * PI);
-    }
-
-    if (state > 4.5 && state < 5.5)
-    {
-        pelvis = vec3 (0.0, 0.60, 0.06);
-        chest = vec3 (0.0, 1.00, -0.02);
-        neck = vec3 (0.0, 1.20, -0.02);
-        head = vec3 (0.0, 1.37, -0.04);
-
-        hipL = pelvis + vec3 (-0.12, 0.0, 0.0);
-        hipR = pelvis + vec3 ( 0.12, 0.0, 0.0);
-        kneeL = vec3 (-0.13, 0.50, -0.38);
-        kneeR = vec3 ( 0.13, 0.50, -0.38);
-        ankleL = vec3 (-0.13, 0.13, -0.52);
-        ankleR = vec3 ( 0.13, 0.13, -0.52);
-
-        shoulderL = chest + vec3 (-0.23, 0.05, 0.0);
-        shoulderR = chest + vec3 ( 0.23, 0.05, 0.0);
-        elbowL = vec3 (-0.24, 0.76, -0.18);
-        elbowR = vec3 ( 0.24, 0.76, -0.18);
-        handL = vec3 (-0.16, 0.58, -0.34);
-        handR = vec3 ( 0.16, 0.58, -0.34);
-    }
-    else if (state > 5.5 && state < 6.5)
-    {
-        pelvis = vec3 (0.0, 0.66, 0.03);
-        chest = vec3 (0.0, 1.08, -0.05);
-        neck = vec3 (0.0, 1.27, -0.07);
-        head = vec3 (0.0, 1.43, -0.09);
-
-        hipL = pelvis + vec3 (-0.12, 0.0, 0.0);
-        hipR = pelvis + vec3 ( 0.12, 0.0, 0.0);
-        kneeL = vec3 (-0.16, 0.36, -0.18);
-        kneeR = vec3 ( 0.16, 0.36, -0.18);
-        ankleL = vec3 (-0.18, 0.12, 0.08);
-        ankleR = vec3 ( 0.18, 0.12, 0.08);
-
-        shoulderL = chest + vec3 (-0.23, 0.05, 0.0);
-        shoulderR = chest + vec3 ( 0.23, 0.05, 0.0);
-        elbowL = vec3 (-0.29, 0.80, -0.10);
-        elbowR = vec3 ( 0.29, 0.80, -0.10);
-        handL = vec3 (-0.20, 0.60, -0.19);
-        handR = vec3 ( 0.20, 0.60, -0.19);
-    }
-    else if (state > 6.5 && state < 7.5)
-    {
-        pelvis = vec3 (0.0, 0.39, 0.08);
-        chest = vec3 (0.0, 0.80, -0.03);
-        neck = vec3 (0.0, 0.99, -0.07);
-        head = vec3 (0.0, 1.15, -0.10);
-
-        hipL = pelvis + vec3 (-0.12, 0.0, 0.0);
-        hipR = pelvis + vec3 ( 0.12, 0.0, 0.0);
-        kneeL = vec3 (-0.16, 0.69, -0.31);
-        kneeR = vec3 ( 0.16, 0.69, -0.31);
-        ankleL = vec3 (-0.16, 0.18, -0.42);
-        ankleR = vec3 ( 0.16, 0.18, -0.42);
-
-        shoulderL = chest + vec3 (-0.23, 0.05, 0.0);
-        shoulderR = chest + vec3 ( 0.23, 0.05, 0.0);
-        elbowL = vec3 (-0.29, 0.68, -0.19);
-        elbowR = vec3 ( 0.29, 0.68, -0.19);
-        handL = vec3 (-0.18, 0.62, -0.34);
-        handR = vec3 ( 0.18, 0.62, -0.34);
-    }
-
-    vec2 r = vec2 (100.0, 0.0);
-
-    // Hair volume sits mostly behind the face so the skin remains visible.
-    r = addShape (r, sdEllipsoid (q - (head + vec3 (0.0, 0.04, 0.055)), vec3 (0.185, 0.215, 0.155)), 3.0);
-    r = addShape (r, sdEllipsoid (q - (head + vec3 (0.0, -0.13, 0.105)), vec3 (0.19, 0.30, 0.10)), 3.0);
-
-    // Face and neck.
-    r = addShape (r, sdEllipsoid (q - (head + vec3 (0.0, -0.012, -0.055)), vec3 (0.135, 0.165, 0.115)), 1.0);
-    r = addShape (r, sdCapsule (q, neck - vec3 (0.0, 0.04, 0.0), neck + vec3 (0.0, 0.05, 0.0), 0.065), 1.0);
-
-    // Blouse/torso.
-    r = addShape (r, sdCapsule (q, chest + vec3 (0.0, 0.10, 0.0), pelvis + vec3 (0.0, 0.08, 0.0), 0.235), 2.0);
-
-    // Dark bow at the collar.
-    r = addShape (r, sdRoundBox (q - (neck + vec3 (0.0, -0.10, -0.155)), vec3 (0.095, 0.065, 0.025), 0.025), 3.0);
-
-    // Skirt as a tapered volume following the pelvis.
-    vec3 skirtCentre = pelvis + vec3 (0.0, -0.13, 0.0);
-    vec3 skirtP = q - skirtCentre;
-    r = addShape (r, sdCappedCone (skirtP, 0.22, 0.30, 0.20), 3.0);
-
-    // Legs.
-    r = addShape (r, sdCapsule (q, hipL, kneeL, 0.090), 1.0);
-    r = addShape (r, sdCapsule (q, kneeL, ankleL, 0.070), 1.0);
-    r = addShape (r, sdCapsule (q, hipR, kneeR, 0.090), 1.0);
-    r = addShape (r, sdCapsule (q, kneeR, ankleR, 0.070), 1.0);
-
-    // Ankle socks and chunky shoes.
-    r = addShape (r, sdCapsule (q, ankleL + vec3 (0.0, 0.08, 0.0), ankleL - vec3 (0.0, 0.015, 0.0), 0.077), 3.0);
-    r = addShape (r, sdCapsule (q, ankleR + vec3 (0.0, 0.08, 0.0), ankleR - vec3 (0.0, 0.015, 0.0), 0.077), 3.0);
-    r = addShape (r, sdEllipsoid (q - (ankleL + vec3 (0.0, -0.045, -0.085)), vec3 (0.105, 0.060, 0.165)), 3.0);
-    r = addShape (r, sdEllipsoid (q - (ankleR + vec3 (0.0, -0.045, -0.085)), vec3 (0.105, 0.060, 0.165)), 3.0);
-
-    // Sleeves, forearms and hands.
-    r = addShape (r, sdCapsule (q, shoulderL, elbowL, 0.080), 2.0);
-    r = addShape (r, sdCapsule (q, elbowL, handL, 0.055), 1.0);
-    r = addShape (r, sdSphere (q - handL, 0.067), 1.0);
-    r = addShape (r, sdCapsule (q, shoulderR, elbowR, 0.080), 2.0);
-    r = addShape (r, sdCapsule (q, elbowR, handR, 0.055), 1.0);
-    r = addShape (r, sdSphere (q - handR, 0.067), 1.0);
-
-    // School bag and strap.
-    vec3 bag = pelvis + vec3 (-0.31, 0.08, 0.18);
-    r = addShape (r, sdRoundBox (q - bag, vec3 (0.22, 0.25, 0.085), 0.055), 4.0);
-    r = addShape (r, sdCapsule (q, shoulderL + vec3 (0.0, 0.0, 0.06), bag + vec3 (0.0, 0.18, 0.0), 0.018), 4.0);
-
-    return r;
-}
-
-vec2 mapScene (vec3 p)
-{
-    vec2 r = mapCharacter (p);
-
-    // Rooftop concrete.
-    r = addShape (r, p.y, 5.0);
-
-    // Back parapet.
-    r = addShape (r, sdRoundBox (p - vec3 (0.0, 0.38, 3.20), vec3 (4.7, 0.38, 0.13), 0.03), 6.0);
-
-    // Small rooftop utility room.
-    r = addShape (r, sdRoundBox (p - vec3 (1.92, 1.05, 2.30), vec3 (0.78, 1.05, 0.72), 0.035), 6.0);
-    r = addShape (r, sdRoundBox (p - vec3 (1.92, 0.84, 1.565), vec3 (0.33, 0.70, 0.025), 0.015), 8.0);
-    r = addShape (r, sdRoundBox (p - vec3 (2.18, 1.13, 1.525), vec3 (0.025, 0.035, 0.025), 0.01), 7.0);
-
-    // Fence posts and rails.
-    vec3 postP = p - vec3 (0.0, 1.10, 2.92);
-    postP.x = mod (postP.x + 0.40, 0.80) - 0.40;
-    r = addShape (r, sdRoundBox (postP, vec3 (0.022, 0.78, 0.022), 0.006), 7.0);
-
-    r = addShape (r, sdRoundBox (p - vec3 (0.0, 0.72, 2.92), vec3 (4.4, 0.018, 0.018), 0.005), 7.0);
-    r = addShape (r, sdRoundBox (p - vec3 (0.0, 1.28, 2.92), vec3 (4.4, 0.018, 0.018), 0.005), 7.0);
-    r = addShape (r, sdRoundBox (p - vec3 (0.0, 1.70, 2.92), vec3 (4.4, 0.018, 0.018), 0.005), 7.0);
-
-    return r;
-}
-
-vec3 calcNormal (vec3 p)
-{
-    const float e = 0.0018;
-    vec2 h = vec2 (1.0, -1.0) * 0.5773;
-
-    return normalize (
-        h.xyy * mapScene (p + h.xyy * e).x +
-        h.yyx * mapScene (p + h.yyx * e).x +
-        h.yxy * mapScene (p + h.yxy * e).x +
-        h.xxx * mapScene (p + h.xxx * e).x);
-}
-
-float softShadow (vec3 ro, vec3 rd, float mint, float maxt)
-{
-    float res = 1.0;
-    float t = mint;
-
-    for (int i = 0; i < 18; ++i)
-    {
-        float h = mapScene (ro + rd * t).x;
-        res = min (res, 12.0 * h / max (t, 0.001));
-        t += clamp (h, 0.018, 0.22);
-        if (res < 0.02 || t > maxt)
-            break;
-    }
-
-    return clamp (res, 0.0, 1.0);
-}
-
-float ambientOcclusion (vec3 p, vec3 n)
-{
-    float occ = 0.0;
-    float weight = 1.0;
-
-    for (int i = 1; i <= 4; ++i)
-    {
-        float h = 0.045 * float (i);
-        float d = mapScene (p + n * h).x;
-        occ += (h - d) * weight;
-        weight *= 0.55;
-    }
-
-    return clamp (1.0 - occ * 2.2, 0.15, 1.0);
-}
-
-vec3 materialColour (float m)
-{
-    if (m < 1.5) return vec3 (0.62, 0.60, 0.58);
-    if (m < 2.5) return vec3 (0.82, 0.81, 0.79);
-    if (m < 3.5) return vec3 (0.075, 0.073, 0.070);
-    if (m < 4.5) return vec3 (0.12, 0.115, 0.105);
-    if (m < 5.5) return vec3 (0.43, 0.44, 0.43);
-    if (m < 6.5) return vec3 (0.34, 0.35, 0.34);
-    if (m < 7.5) return vec3 (0.18, 0.19, 0.19);
-    return vec3 (0.095, 0.095, 0.09);
-}
-
-vec3 skyColour (vec3 rd)
-{
-    float h = clamp (rd.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 sky = mix (vec3 (0.36, 0.39, 0.41), vec3 (0.66, 0.68, 0.68), h);
-
-    vec2 cp = vec2 (rd.x / max (0.18, rd.y + 0.55), rd.z / max (0.18, rd.y + 0.55));
-    float clouds = fbm (cp * 1.6 + vec2 (uTime * 0.005, 0.0));
-    clouds = smoothstep (0.48, 0.72, clouds);
-    sky = mix (sky, vec3 (0.78), clouds * 0.42);
-
-    return sky;
-}
-
 void main()
 {
-    vec2 frag = vUv * uResolution;
-    vec2 uv = (frag * 2.0 - uResolution.xy) / max (uResolution.y, 1.0);
+    vec3 n = normalize (vNormal);
+    vec3 lightDir = normalize (vec3 (-0.48, 0.78, -0.39));
+    vec3 fillDir = normalize (vec3 (0.52, 0.28, -0.72));
 
-    float state = uState;
-    float cameraYaw = -0.08 + 0.035 * sin (uTime * 0.22);
+    float key = max (dot (n, lightDir), 0.0);
+    float fill = max (dot (n, fillDir), 0.0);
+    float hemi = 0.46 + 0.18 * max (n.y, 0.0);
 
-    if (state > 0.5 && state < 2.5)
-        cameraYaw = -0.46;
-    else if (state > 3.5 && state < 4.5)
-        cameraYaw = 0.08;
-    else if (state > 7.5)
-        cameraYaw = -0.34;
+    vec3 viewDir = normalize (vec3 (0.0, 1.0, 4.8) - vWorldPos);
+    vec3 halfDir = normalize (lightDir + viewDir);
 
-    float cameraRadius = (state > 7.5) ? 4.45 : 4.10;
-    vec3 ro = vec3 (sin (cameraYaw) * cameraRadius, 1.46, -cos (cameraYaw) * cameraRadius);
-    vec3 ta = (state > 7.5) ? vec3 (-0.05, 0.42, 0.0) : vec3 (0.0, 0.98, 0.0);
+    float specPower = mix (20.0, 54.0, step (2.5, uMaterial));
+    float spec = pow (max (dot (n, halfDir), 0.0), specPower);
+    spec *= mix (0.055, 0.15, step (2.5, uMaterial));
 
-    vec3 forward = normalize (ta - ro);
-    vec3 right = normalize (cross (forward, vec3 (0.0, 1.0, 0.0)));
-    vec3 up = cross (right, forward);
-    vec3 rd = normalize (forward + uv.x * right * 0.74 + uv.y * up * 0.74);
+    float rim = pow (1.0 - max (dot (n, viewDir), 0.0), 3.0) * 0.10;
 
-    vec3 col = skyColour (rd);
+    vec3 base = uColour.rgb;
+    vec3 col = base * (hemi + key * 0.66 + fill * 0.10);
+    col += vec3 (spec + rim);
 
-    float t = 0.03;
-    float material = -1.0;
-    bool hit = false;
-
-    for (int i = 0; i < 84; ++i)
+    if (uMaterial > 0.5 && uMaterial < 1.5)
     {
-        vec3 p = ro + rd * t;
-        vec2 scene = mapScene (p);
-        float d = scene.x;
-
-        if (d < 0.0017)
-        {
-            hit = true;
-            material = scene.y;
-            break;
-        }
-
-        t += d * 0.78;
-
-        if (t > 12.0)
-            break;
+        float grit = hash21 (floor (vWorldPos.xz * 120.0));
+        col *= 0.92 + grit * 0.13;
     }
 
-    if (hit)
-    {
-        vec3 p = ro + rd * t;
-        vec3 n = calcNormal (p);
+    float fog = 1.0 - exp (-0.022 * vDepth * vDepth);
+    vec3 fogColour = vec3 (0.57, 0.59, 0.60);
+    col = mix (col, fogColour, fog);
 
-        vec3 lightDir = normalize (vec3 (-0.45, 0.78, -0.38));
-        float diffuse = max (dot (n, lightDir), 0.0);
-        float shadow = softShadow (p + n * 0.008, lightDir, 0.025, 6.0);
-        float ao = ambientOcclusion (p, n);
-
-        vec3 base = materialColour (material);
-        float ambient = 0.30 + 0.16 * max (n.y, 0.0);
-        float key = diffuse * shadow * 0.86;
-
-        vec3 halfVector = normalize (lightDir - rd);
-        float specPower = (material < 2.5) ? 34.0 : 18.0;
-        float spec = pow (max (dot (n, halfVector), 0.0), specPower);
-        spec *= shadow * ((material < 4.5) ? 0.18 : 0.10);
-
-        float rim = pow (1.0 - max (dot (n, -rd), 0.0), 3.0) * 0.12;
-
-        col = base * (ambient + key) * ao;
-        col += vec3 (spec + rim);
-
-        // Concrete micro-variation keeps the rooftop from looking flat.
-        if (material > 4.5 && material < 6.5)
-        {
-            float grit = hash21 (floor (p.xz * 145.0));
-            col *= 0.92 + grit * 0.14;
-        }
-
-        float fog = 1.0 - exp (-0.018 * t * t);
-        col = mix (col, skyColour (rd) * 0.82, fog);
-    }
-
-    // Directional haze and highlight bloom approximation.
-    vec3 sunDir = normalize (vec3 (0.45, 0.52, 0.72));
-    float sunGlow = pow (max (dot (rd, sunDir), 0.0), 48.0);
-    col += vec3 (0.12) * sunGlow;
-
-    // Near-monochrome late-1990s/early-2000s game-event treatment.
     float luma = dot (col, vec3 (0.299, 0.587, 0.114));
-    col = mix (col, vec3 (luma), 0.88);
-    col *= vec3 (0.98, 1.0, 1.015);
+    col = mix (col, vec3 (luma), 0.84);
+    col *= vec3 (0.985, 1.0, 1.012);
 
-    // Gentle contrast curve.
-    col = clamp ((col - 0.5) * 1.10 + 0.5, 0.0, 1.0);
+    col = clamp ((col - 0.5) * 1.08 + 0.5, 0.0, 1.0);
 
-    // Film grain + subtle scan structure.
-    float grain = hash21 (frag + vec2 (fract (uTime) * 911.7, floor (uTime * 24.0)));
-    col += (grain - 0.5) * 0.035;
+    vec2 uv = gl_FragCoord.xy / max (uResolution, vec2 (1.0));
+    vec2 q = uv * 2.0 - 1.0;
+    float vignette = 1.0 - 0.18 * dot (q, q);
+    col *= clamp (vignette, 0.72, 1.0);
 
-    float scan = sin (frag.y * 1.55) * 0.007;
-    col -= scan;
+    float grain = hash21 (gl_FragCoord.xy
+        + vec2 (floor (uTime * 24.0) * 13.7, fract (uTime) * 77.3));
+    col += (grain - 0.5) * 0.022;
 
-    float vignette = 1.0 - 0.28 * dot (uv * 0.68, uv * 0.68);
-    col *= clamp (vignette, 0.66, 1.0);
-
-    gl_FragColor = vec4 (clamp (col, 0.0, 1.0), 1.0);
+    gl_FragColor = vec4 (clamp (col, 0.0, 1.0), uColour.a);
 }
 )GLSL";
+
+}
+
+struct Realtime3DPoseComponent::Mesh
+{
+    struct Vertex
+    {
+        float x, y, z;
+        float nx, ny, nz;
+    };
+
+    std::vector<Vertex> vertices;
+    std::vector<unsigned short> indices;
+    unsigned int vbo = 0;
+    unsigned int ibo = 0;
+
+    void upload()
+    {
+        using namespace ::juce::gl;
+
+        glGenBuffers (1, &vbo);
+        glBindBuffer (GL_ARRAY_BUFFER, vbo);
+        glBufferData (GL_ARRAY_BUFFER,
+                      static_cast<GLsizeiptr> (vertices.size() * sizeof (Vertex)),
+                      vertices.data(),
+                      GL_STATIC_DRAW);
+
+        glGenBuffers (1, &ibo);
+        glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, ibo);
+        glBufferData (GL_ELEMENT_ARRAY_BUFFER,
+                      static_cast<GLsizeiptr> (indices.size() * sizeof (unsigned short)),
+                      indices.data(),
+                      GL_STATIC_DRAW);
+
+        glBindBuffer (GL_ARRAY_BUFFER, 0);
+        glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, 0);
+    }
+
+    void release()
+    {
+        using namespace ::juce::gl;
+
+        if (vbo != 0)
+            glDeleteBuffers (1, &vbo);
+        if (ibo != 0)
+            glDeleteBuffers (1, &ibo);
+
+        vbo = 0;
+        ibo = 0;
+    }
+};
+
+static std::unique_ptr<Realtime3DPoseComponent::Mesh> makeSphereMesh()
+{
+    auto mesh = std::make_unique<Realtime3DPoseComponent::Mesh>();
+
+    constexpr int rings = 16;
+    constexpr int sectors = 24;
+
+    for (int y = 0; y <= rings; ++y)
+    {
+        const float v = static_cast<float> (y) / static_cast<float> (rings);
+        const float theta = v * pi;
+        const float sy = std::cos (theta);
+        const float sr = std::sin (theta);
+
+        for (int x = 0; x <= sectors; ++x)
+        {
+            const float u = static_cast<float> (x) / static_cast<float> (sectors);
+            const float phi = u * 2.0f * pi;
+            const float sx = sr * std::cos (phi);
+            const float sz = sr * std::sin (phi);
+
+            mesh->vertices.push_back ({ 0.5f * sx, 0.5f * sy, 0.5f * sz,
+                                        sx, sy, sz });
+        }
+    }
+
+    for (int y = 0; y < rings; ++y)
+    {
+        for (int x = 0; x < sectors; ++x)
+        {
+            const auto a = static_cast<unsigned short> (y * (sectors + 1) + x);
+            const auto b = static_cast<unsigned short> ((y + 1) * (sectors + 1) + x);
+            const auto c = static_cast<unsigned short> (b + 1);
+            const auto d = static_cast<unsigned short> (a + 1);
+
+            mesh->indices.insert (mesh->indices.end(), { a, b, d, d, b, c });
+        }
+    }
+
+    return mesh;
+}
+
+static std::unique_ptr<Realtime3DPoseComponent::Mesh> makeCylinderMesh()
+{
+    auto mesh = std::make_unique<Realtime3DPoseComponent::Mesh>();
+    constexpr int sectors = 24;
+
+    for (int i = 0; i <= sectors; ++i)
+    {
+        const auto u = static_cast<float> (i) / static_cast<float> (sectors);
+        const auto a = u * 2.0f * pi;
+        const auto x = 0.5f * std::cos (a);
+        const auto z = 0.5f * std::sin (a);
+        const auto nx = std::cos (a);
+        const auto nz = std::sin (a);
+
+        mesh->vertices.push_back ({ x, -0.5f, z, nx, 0.0f, nz });
+        mesh->vertices.push_back ({ x,  0.5f, z, nx, 0.0f, nz });
+    }
+
+    for (int i = 0; i < sectors; ++i)
+    {
+        const auto a = static_cast<unsigned short> (i * 2);
+        const auto b = static_cast<unsigned short> (a + 1);
+        const auto c = static_cast<unsigned short> (a + 2);
+        const auto d = static_cast<unsigned short> (a + 3);
+        mesh->indices.insert (mesh->indices.end(), { a, c, b, b, c, d });
+    }
+
+    const auto bottomCentre = static_cast<unsigned short> (mesh->vertices.size());
+    mesh->vertices.push_back ({ 0.0f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f });
+
+    const auto topCentre = static_cast<unsigned short> (mesh->vertices.size());
+    mesh->vertices.push_back ({ 0.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f });
+
+    const auto ringBase = static_cast<unsigned short> (mesh->vertices.size());
+
+    for (int i = 0; i <= sectors; ++i)
+    {
+        const auto u = static_cast<float> (i) / static_cast<float> (sectors);
+        const auto a = u * 2.0f * pi;
+        const auto x = 0.5f * std::cos (a);
+        const auto z = 0.5f * std::sin (a);
+        mesh->vertices.push_back ({ x, -0.5f, z, 0.0f, -1.0f, 0.0f });
+        mesh->vertices.push_back ({ x,  0.5f, z, 0.0f,  1.0f, 0.0f });
+    }
+
+    for (int i = 0; i < sectors; ++i)
+    {
+        const auto b0 = static_cast<unsigned short> (ringBase + i * 2);
+        const auto b1 = static_cast<unsigned short> (b0 + 2);
+        mesh->indices.insert (mesh->indices.end(), { bottomCentre, b1, b0 });
+
+        const auto t0 = static_cast<unsigned short> (ringBase + i * 2 + 1);
+        const auto t1 = static_cast<unsigned short> (t0 + 2);
+        mesh->indices.insert (mesh->indices.end(), { topCentre, t0, t1 });
+    }
+
+    return mesh;
+}
+
+static std::unique_ptr<Realtime3DPoseComponent::Mesh> makeBoxMesh()
+{
+    auto mesh = std::make_unique<Realtime3DPoseComponent::Mesh>();
+
+    const auto addFace = [&] (V3 n, V3 a, V3 b, V3 c, V3 d)
+    {
+        const auto base = static_cast<unsigned short> (mesh->vertices.size());
+
+        mesh->vertices.push_back ({ a.x, a.y, a.z, n.x, n.y, n.z });
+        mesh->vertices.push_back ({ b.x, b.y, b.z, n.x, n.y, n.z });
+        mesh->vertices.push_back ({ c.x, c.y, c.z, n.x, n.y, n.z });
+        mesh->vertices.push_back ({ d.x, d.y, d.z, n.x, n.y, n.z });
+
+        mesh->indices.insert (mesh->indices.end(),
+                              { base,
+                                static_cast<unsigned short> (base + 1),
+                                static_cast<unsigned short> (base + 2),
+                                base,
+                                static_cast<unsigned short> (base + 2),
+                                static_cast<unsigned short> (base + 3) });
+    };
+
+    addFace ({ 0, 0, -1 }, { -0.5f,-0.5f,-0.5f }, { 0.5f,-0.5f,-0.5f }, { 0.5f,0.5f,-0.5f }, { -0.5f,0.5f,-0.5f });
+    addFace ({ 0, 0,  1 }, {  0.5f,-0.5f, 0.5f }, { -0.5f,-0.5f, 0.5f }, { -0.5f,0.5f, 0.5f }, { 0.5f,0.5f,0.5f });
+    addFace ({ -1,0, 0 }, { -0.5f,-0.5f, 0.5f }, { -0.5f,-0.5f,-0.5f }, { -0.5f,0.5f,-0.5f }, { -0.5f,0.5f,0.5f });
+    addFace ({ 1, 0, 0 }, { 0.5f,-0.5f,-0.5f }, { 0.5f,-0.5f,0.5f }, { 0.5f,0.5f,0.5f }, { 0.5f,0.5f,-0.5f });
+    addFace ({ 0,-1, 0 }, { -0.5f,-0.5f,0.5f }, { 0.5f,-0.5f,0.5f }, { 0.5f,-0.5f,-0.5f }, { -0.5f,-0.5f,-0.5f });
+    addFace ({ 0, 1, 0 }, { -0.5f,0.5f,-0.5f }, { 0.5f,0.5f,-0.5f }, { 0.5f,0.5f,0.5f }, { -0.5f,0.5f,0.5f });
+
+    return mesh;
+}
+
+static std::unique_ptr<Realtime3DPoseComponent::Mesh> makeSkirtMesh()
+{
+    auto mesh = std::make_unique<Realtime3DPoseComponent::Mesh>();
+    constexpr int sectors = 28;
+    constexpr float bottom = 0.5f;
+    constexpr float top = 0.32f;
+
+    for (int i = 0; i <= sectors; ++i)
+    {
+        const auto u = static_cast<float> (i) / static_cast<float> (sectors);
+        const auto a = u * 2.0f * pi;
+        const auto ca = std::cos (a);
+        const auto sa = std::sin (a);
+
+        const V3 n = normalise ({ ca, (bottom - top) * 0.65f, sa });
+
+        mesh->vertices.push_back ({ bottom * ca, -0.5f, bottom * sa, n.x, n.y, n.z });
+        mesh->vertices.push_back ({ top * ca, 0.5f, top * sa, n.x, n.y, n.z });
+    }
+
+    for (int i = 0; i < sectors; ++i)
+    {
+        const auto a = static_cast<unsigned short> (i * 2);
+        const auto b = static_cast<unsigned short> (a + 1);
+        const auto c = static_cast<unsigned short> (a + 2);
+        const auto d = static_cast<unsigned short> (a + 3);
+        mesh->indices.insert (mesh->indices.end(), { a, c, b, b, c, d });
+    }
+
+    return mesh;
+}
+
+static std::unique_ptr<Realtime3DPoseComponent::Mesh> makeDiscMesh()
+{
+    auto mesh = std::make_unique<Realtime3DPoseComponent::Mesh>();
+    constexpr int sectors = 32;
+
+    mesh->vertices.push_back ({ 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f });
+
+    for (int i = 0; i <= sectors; ++i)
+    {
+        const auto u = static_cast<float> (i) / static_cast<float> (sectors);
+        const auto a = u * 2.0f * pi;
+        mesh->vertices.push_back ({ 0.5f * std::cos (a), 0.0f, 0.5f * std::sin (a),
+                                    0.0f, 1.0f, 0.0f });
+    }
+
+    for (int i = 0; i < sectors; ++i)
+    {
+        mesh->indices.insert (mesh->indices.end(),
+                              { 0,
+                                static_cast<unsigned short> (i + 1),
+                                static_cast<unsigned short> (i + 2) });
+    }
+
+    return mesh;
 }
 
 Realtime3DPoseComponent::Realtime3DPoseComponent()
@@ -597,9 +661,7 @@ Realtime3DPoseComponent::~Realtime3DPoseComponent()
 
 juce::String Realtime3DPoseComponent::preprocessShader (juce::String source)
 {
-    return source.replace ("#lowp#", juce::OpenGLHelpers::isOpenGLES() ? "lowp" : "")
-                 .replace ("#mediump#", juce::OpenGLHelpers::isOpenGLES() ? "mediump" : "")
-                 .replace ("#highp#", juce::OpenGLHelpers::isOpenGLES() ? "highp" : "");
+    return source;
 }
 
 void Realtime3DPoseComponent::initialise()
@@ -620,38 +682,24 @@ void Realtime3DPoseComponent::initialise()
         || ! candidate->link())
     {
         juce::Logger::writeToLog (
-            "FLOWER realtime-3D shader error: " + candidate->getLastError());
+            "FLOWER realtime-3D raster shader error: " + candidate->getLastError());
         return;
     }
 
     shader = std::move (candidate);
     shader->use();
 
-    positionAttribute = std::make_unique<juce::OpenGLShaderProgram::Attribute> (
-        *shader, "position");
-    resolutionUniform = std::make_unique<juce::OpenGLShaderProgram::Uniform> (
-        *shader, "uResolution");
-    timeUniform = std::make_unique<juce::OpenGLShaderProgram::Uniform> (
-        *shader, "uTime");
-    stateUniform = std::make_unique<juce::OpenGLShaderProgram::Uniform> (
-        *shader, "uState");
-    phaseUniform = std::make_unique<juce::OpenGLShaderProgram::Uniform> (
-        *shader, "uPhase");
+    positionAttribute = glGetAttribLocation (shader->getProgramID(), "position");
+    normalAttribute = glGetAttribLocation (shader->getProgramID(), "normal");
 
-    const float fullscreenTriangle[]
+    if (positionAttribute < 0 || normalAttribute < 0)
     {
-        -1.0f, -1.0f,
-         3.0f, -1.0f,
-        -1.0f,  3.0f
-    };
+        juce::Logger::writeToLog ("FLOWER realtime-3D attribute lookup failed");
+        shader.reset();
+        return;
+    }
 
-    glGenBuffers (1, &fullscreenVbo);
-    glBindBuffer (GL_ARRAY_BUFFER, fullscreenVbo);
-    glBufferData (GL_ARRAY_BUFFER,
-                  static_cast<GLsizeiptr> (sizeof (fullscreenTriangle)),
-                  fullscreenTriangle,
-                  GL_STATIC_DRAW);
-    glBindBuffer (GL_ARRAY_BUFFER, 0);
+    createMeshes();
 
     startMs = juce::Time::getMillisecondCounterHiRes();
     fpsWindowStartMs = startMs;
@@ -662,37 +710,50 @@ void Realtime3DPoseComponent::initialise()
 
 void Realtime3DPoseComponent::shutdown()
 {
-    using namespace ::juce::gl;
-
     shaderReady.store (false, std::memory_order_release);
 
-    phaseUniform.reset();
-    stateUniform.reset();
-    timeUniform.reset();
-    resolutionUniform.reset();
-    positionAttribute.reset();
+    destroyMeshes();
     shader.reset();
 
-    if (fullscreenVbo != 0)
-    {
-        glDeleteBuffers (1, &fullscreenVbo);
-        fullscreenVbo = 0;
-    }
+    positionAttribute = -1;
+    normalAttribute = -1;
+}
+
+void Realtime3DPoseComponent::createMeshes()
+{
+    sphereMesh = makeSphereMesh();
+    cylinderMesh = makeCylinderMesh();
+    boxMesh = makeBoxMesh();
+    skirtMesh = makeSkirtMesh();
+    discMesh = makeDiscMesh();
+
+    sphereMesh->upload();
+    cylinderMesh->upload();
+    boxMesh->upload();
+    skirtMesh->upload();
+    discMesh->upload();
+}
+
+void Realtime3DPoseComponent::destroyMeshes()
+{
+    if (sphereMesh != nullptr) sphereMesh->release();
+    if (cylinderMesh != nullptr) cylinderMesh->release();
+    if (boxMesh != nullptr) boxMesh->release();
+    if (skirtMesh != nullptr) skirtMesh->release();
+    if (discMesh != nullptr) discMesh->release();
+
+    sphereMesh.reset();
+    cylinderMesh.reset();
+    boxMesh.reset();
+    skirtMesh.reset();
+    discMesh.reset();
 }
 
 void Realtime3DPoseComponent::updatePoseState (double elapsedSeconds)
 {
     static constexpr std::array<double, poseCount> durations
     {
-        3.0, // idle/front
-        6.0, // walk cycle
-        3.0, // walk start/stop
-        4.0, // turn
-        3.0, // back
-        4.0, // sit
-        4.0, // crouch
-        4.0, // knees up
-        5.0  // lie down
+        3.0, 6.0, 3.0, 4.0, 3.0, 4.0, 4.0, 4.0, 5.0
     };
 
     double cycle = 0.0;
@@ -702,7 +763,8 @@ void Realtime3DPoseComponent::updatePoseState (double elapsedSeconds)
     double cursor = std::fmod (elapsedSeconds, cycle);
     int index = 0;
 
-    while (index < poseCount - 1 && cursor >= durations[static_cast<size_t> (index)])
+    while (index < poseCount - 1
+           && cursor >= durations[static_cast<size_t> (index)])
     {
         cursor -= durations[static_cast<size_t> (index)];
         ++index;
@@ -712,7 +774,246 @@ void Realtime3DPoseComponent::updatePoseState (double elapsedSeconds)
         cursor / durations[static_cast<size_t> (index)]);
 
     currentPose.store (index, std::memory_order_relaxed);
-    currentPhase.store (juce::jlimit (0.0f, 1.0f, phase), std::memory_order_relaxed);
+    currentPhase.store (juce::jlimit (0.0f, 1.0f, phase),
+                        std::memory_order_relaxed);
+}
+
+void Realtime3DPoseComponent::drawMesh (const Mesh& mesh,
+                                        const juce::Matrix3D<float>& model,
+                                        juce::Colour colour,
+                                        float alpha,
+                                        float material)
+{
+    using namespace ::juce::gl;
+
+    if (shader == nullptr || mesh.vbo == 0 || mesh.ibo == 0)
+        return;
+
+    shader->setUniformMat4 ("uModel", model.mat, 1, GL_FALSE);
+    shader->setUniform ("uColour",
+                        colour.getFloatRed(),
+                        colour.getFloatGreen(),
+                        colour.getFloatBlue(),
+                        alpha);
+    shader->setUniform ("uMaterial", material);
+
+    glBindBuffer (GL_ARRAY_BUFFER, mesh.vbo);
+    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, mesh.ibo);
+
+    glVertexAttribPointer (static_cast<GLuint> (positionAttribute),
+                           3, GL_FLOAT, GL_FALSE,
+                           static_cast<GLsizei> (sizeof (Mesh::Vertex)),
+                           nullptr);
+
+    glVertexAttribPointer (static_cast<GLuint> (normalAttribute),
+                           3, GL_FLOAT, GL_FALSE,
+                           static_cast<GLsizei> (sizeof (Mesh::Vertex)),
+                           reinterpret_cast<const void*> (3 * sizeof (float)));
+
+    glEnableVertexAttribArray (static_cast<GLuint> (positionAttribute));
+    glEnableVertexAttribArray (static_cast<GLuint> (normalAttribute));
+
+    glDrawElements (GL_TRIANGLES,
+                    static_cast<GLsizei> (mesh.indices.size()),
+                    GL_UNSIGNED_SHORT,
+                    nullptr);
+
+    glDisableVertexAttribArray (static_cast<GLuint> (positionAttribute));
+    glDisableVertexAttribArray (static_cast<GLuint> (normalAttribute));
+
+    glBindBuffer (GL_ARRAY_BUFFER, 0);
+    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, 0);
+}
+
+void Realtime3DPoseComponent::renderScene (float elapsedSeconds,
+                                           int pose,
+                                           float phase)
+{
+    using namespace ::juce::gl;
+
+    if (shader == nullptr
+        || sphereMesh == nullptr
+        || cylinderMesh == nullptr
+        || boxMesh == nullptr
+        || skirtMesh == nullptr
+        || discMesh == nullptr)
+        return;
+
+    shader->use();
+    shader->setUniformMat4 ("uProjection", projectionMatrix.mat, 1, GL_FALSE);
+    shader->setUniformMat4 ("uView", viewMatrix.mat, 1, GL_FALSE);
+    shader->setUniform ("uTime", elapsedSeconds);
+
+    juce::Rectangle<int> bounds;
+    {
+        const juce::ScopedLock lock (boundsLock);
+        bounds = renderBounds;
+    }
+
+    const auto scale = static_cast<float> (openGLContext.getRenderingScale());
+    shader->setUniform ("uResolution",
+                        juce::jmax (1.0f, scale * static_cast<float> (bounds.getWidth())),
+                        juce::jmax (1.0f, scale * static_cast<float> (bounds.getHeight())));
+
+    // Rooftop environment.
+    drawMesh (*boxMesh,
+              modelTRS ({ 0.0f, -0.10f, 0.7f }, { 8.5f, 0.18f, 8.0f }),
+              juce::Colour (0xff777a7b), 1.0f, 1.0f);
+
+    drawMesh (*boxMesh,
+              modelTRS ({ 0.0f, 0.36f, 3.05f }, { 8.5f, 0.72f, 0.16f }),
+              juce::Colour (0xff66696a), 1.0f, 1.0f);
+
+    drawMesh (*boxMesh,
+              modelTRS ({ 1.78f, 1.02f, 2.25f }, { 1.48f, 2.04f, 1.36f }),
+              juce::Colour (0xff777979), 1.0f, 1.0f);
+
+    drawMesh (*boxMesh,
+              modelTRS ({ 1.78f, 0.78f, 1.555f }, { 0.56f, 1.36f, 0.035f }),
+              juce::Colour (0xff363737), 1.0f, 3.0f);
+
+    drawMesh (*boxMesh,
+              modelTRS ({ 1.99f, 0.91f, 1.53f }, { 0.040f, 0.065f, 0.040f }),
+              juce::Colour (0xffb5b5b2), 1.0f, 2.0f);
+
+    for (int i = -5; i <= 5; ++i)
+    {
+        const float x = static_cast<float> (i) * 0.72f;
+        drawMesh (*boxMesh,
+                  modelTRS ({ x, 1.18f, 2.87f }, { 0.035f, 1.55f, 0.035f }),
+                  juce::Colour (0xff46494a), 1.0f, 3.0f);
+    }
+
+    for (const float y : { 0.72f, 1.28f, 1.68f })
+        drawMesh (*boxMesh,
+                  modelTRS ({ 0.0f, y, 2.87f }, { 7.25f, 0.030f, 0.030f }),
+                  juce::Colour (0xff444748), 1.0f, 3.0f);
+
+    // Character root rotation follows the pose sheet.
+    const auto rig = makeRig (pose, phase);
+    const auto root = juce::Matrix3D<float>::rotation ({ 0.0f, rig.yaw, 0.0f });
+
+    // Contact shadow: cheap but representative raster-game technique.
+    glEnable (GL_BLEND);
+    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask (GL_FALSE);
+
+    V3 shadowPos { 0.0f, 0.006f, 0.02f };
+    V3 shadowScale { 0.82f, 1.0f, 0.48f };
+
+    if (pose == 8)
+    {
+        shadowPos = { -0.05f, 0.006f, -0.02f };
+        shadowScale = { 1.85f, 1.0f, 0.62f };
+    }
+    else if (pose >= 5)
+    {
+        shadowScale = { 0.95f, 1.0f, 0.62f };
+    }
+
+    drawMesh (*discMesh,
+              root * modelTRS (shadowPos, shadowScale),
+              juce::Colour (0xff101112), 0.24f, 4.0f);
+
+    glDepthMask (GL_TRUE);
+    glDisable (GL_BLEND);
+
+    const auto skin = juce::Colour (0xffc5c1ba);
+    const auto blouse = juce::Colour (0xffd1d0ca);
+    const auto dark = juce::Colour (0xff232426);
+    const auto bag = juce::Colour (0xff333436);
+
+    // Hair volumes behind the face.
+    drawMesh (*sphereMesh,
+              root * modelTRS (rig.head + V3 { 0.0f, 0.035f, 0.045f },
+                               { 0.36f, 0.43f, 0.31f }),
+              dark, 1.0f, 3.0f);
+
+    drawMesh (*sphereMesh,
+              root * modelTRS (rig.head + V3 { 0.0f, -0.17f, 0.085f },
+                               { 0.37f, 0.54f, 0.20f }),
+              dark, 1.0f, 3.0f);
+
+    // Face/neck.
+    drawMesh (*sphereMesh,
+              root * modelTRS (rig.head + V3 { 0.0f, -0.01f, -0.055f },
+                               { 0.27f, 0.33f, 0.23f }),
+              skin, 1.0f, 2.0f);
+
+    drawMesh (*cylinderMesh,
+              root * cylinderModel (rig.neck + V3 { 0.0f, -0.055f, 0.0f },
+                                    rig.neck + V3 { 0.0f, 0.045f, 0.0f },
+                                    0.055f),
+              skin, 1.0f, 2.0f);
+
+    // Blouse body and collar/bow.
+    drawMesh (*cylinderMesh,
+              root * cylinderModel (rig.pelvis + V3 { 0.0f, 0.08f, 0.0f },
+                                    rig.chest + V3 { 0.0f, 0.10f, 0.0f },
+                                    0.205f),
+              blouse, 1.0f, 0.0f);
+
+    drawMesh (*boxMesh,
+              root * modelTRS (rig.neck + V3 { 0.0f, -0.105f, -0.14f },
+                               { 0.17f, 0.095f, 0.035f },
+                               { 0.0f, 0.0f, 0.10f }),
+              dark, 1.0f, 3.0f);
+
+    // Pleated-skirt proxy; enough geometry to show material/light quality.
+    drawMesh (*skirtMesh,
+              root * modelTRS (rig.pelvis + V3 { 0.0f, -0.13f, 0.0f },
+                               { 0.75f, 0.44f, 0.75f }),
+              dark, 1.0f, 3.0f);
+
+    // Legs and socks.
+    drawMesh (*cylinderMesh, root * cylinderModel (rig.hipL, rig.kneeL, 0.078f), skin, 1.0f, 2.0f);
+    drawMesh (*cylinderMesh, root * cylinderModel (rig.kneeL, rig.ankleL, 0.063f), skin, 1.0f, 2.0f);
+    drawMesh (*cylinderMesh, root * cylinderModel (rig.hipR, rig.kneeR, 0.078f), skin, 1.0f, 2.0f);
+    drawMesh (*cylinderMesh, root * cylinderModel (rig.kneeR, rig.ankleR, 0.063f), skin, 1.0f, 2.0f);
+
+    drawMesh (*cylinderMesh,
+              root * cylinderModel (rig.ankleL + V3 { 0.0f, 0.12f, 0.0f },
+                                    rig.ankleL + V3 { 0.0f, 0.005f, 0.0f },
+                                    0.071f),
+              dark, 1.0f, 3.0f);
+    drawMesh (*cylinderMesh,
+              root * cylinderModel (rig.ankleR + V3 { 0.0f, 0.12f, 0.0f },
+                                    rig.ankleR + V3 { 0.0f, 0.005f, 0.0f },
+                                    0.071f),
+              dark, 1.0f, 3.0f);
+
+    drawMesh (*boxMesh,
+              root * modelTRS (rig.ankleL + V3 { 0.0f, -0.035f, -0.075f },
+                               { 0.18f, 0.10f, 0.29f },
+                               { 0.02f, 0.0f, 0.0f }),
+              dark, 1.0f, 3.0f);
+    drawMesh (*boxMesh,
+              root * modelTRS (rig.ankleR + V3 { 0.0f, -0.035f, -0.075f },
+                               { 0.18f, 0.10f, 0.29f },
+                               { 0.02f, 0.0f, 0.0f }),
+              dark, 1.0f, 3.0f);
+
+    // Sleeves, arms, hands.
+    drawMesh (*cylinderMesh, root * cylinderModel (rig.shoulderL, rig.elbowL, 0.074f), blouse, 1.0f, 0.0f);
+    drawMesh (*cylinderMesh, root * cylinderModel (rig.elbowL, rig.handL, 0.050f), skin, 1.0f, 2.0f);
+    drawMesh (*sphereMesh, root * modelTRS (rig.handL, { 0.11f, 0.13f, 0.10f }), skin, 1.0f, 2.0f);
+
+    drawMesh (*cylinderMesh, root * cylinderModel (rig.shoulderR, rig.elbowR, 0.074f), blouse, 1.0f, 0.0f);
+    drawMesh (*cylinderMesh, root * cylinderModel (rig.elbowR, rig.handR, 0.050f), skin, 1.0f, 2.0f);
+    drawMesh (*sphereMesh, root * modelTRS (rig.handR, { 0.11f, 0.13f, 0.10f }), skin, 1.0f, 2.0f);
+
+    // Bag and strap.
+    const V3 bagPos = rig.pelvis + V3 { -0.31f, 0.08f, 0.18f };
+    drawMesh (*boxMesh,
+              root * modelTRS (bagPos, { 0.38f, 0.47f, 0.15f },
+                               { 0.0f, -0.10f, -0.05f }),
+              bag, 1.0f, 3.0f);
+
+    drawMesh (*cylinderMesh,
+              root * cylinderModel (rig.shoulderL + V3 { 0.0f, 0.0f, 0.05f },
+                                    bagPos + V3 { 0.0f, 0.18f, 0.0f },
+                                    0.017f),
+              bag, 1.0f, 3.0f);
 }
 
 void Realtime3DPoseComponent::render()
@@ -742,45 +1043,44 @@ void Realtime3DPoseComponent::render()
         bounds = renderBounds;
     }
 
-    const float scale = static_cast<float> (openGLContext.getRenderingScale());
-    const int pixelWidth = juce::jmax (1, juce::roundToInt (scale * static_cast<float> (bounds.getWidth())));
-    const int pixelHeight = juce::jmax (1, juce::roundToInt (scale * static_cast<float> (bounds.getHeight())));
+    const float renderScale = static_cast<float> (openGLContext.getRenderingScale());
+    const int pixelWidth = juce::jmax (1, juce::roundToInt (
+        renderScale * static_cast<float> (bounds.getWidth())));
+    const int pixelHeight = juce::jmax (1, juce::roundToInt (
+        renderScale * static_cast<float> (bounds.getHeight())));
 
     glViewport (0, 0, pixelWidth, pixelHeight);
-    glDisable (GL_DEPTH_TEST);
-    glDisable (GL_BLEND);
+    glEnable (GL_DEPTH_TEST);
+    glDepthFunc (GL_LEQUAL);
+    glDisable (GL_CULL_FACE);
 
-    juce::OpenGLHelpers::clear (juce::Colour (0xff111214));
+    glClearColor (0.57f, 0.59f, 0.60f, 1.0f);
+    glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    if (! shaderReady.load (std::memory_order_acquire)
-        || shader == nullptr
-        || positionAttribute == nullptr
-        || fullscreenVbo == 0)
+    if (! shaderReady.load (std::memory_order_acquire) || shader == nullptr)
         return;
 
-    shader->use();
+    const float aspect = static_cast<float> (pixelWidth)
+                       / static_cast<float> (juce::jmax (1, pixelHeight));
 
-    resolutionUniform->set (
-        static_cast<float> (pixelWidth),
-        static_cast<float> (pixelHeight));
-    timeUniform->set (static_cast<float> (elapsedSeconds));
-    stateUniform->set (static_cast<float> (currentPose.load (std::memory_order_relaxed)));
-    phaseUniform->set (currentPhase.load (std::memory_order_relaxed));
+    constexpr float halfHeight = 0.58f;
+    const float halfWidth = halfHeight * aspect;
 
-    glBindBuffer (GL_ARRAY_BUFFER, fullscreenVbo);
-    glVertexAttribPointer (
-        positionAttribute->attributeID,
-        2,
-        GL_FLOAT,
-        GL_FALSE,
-        static_cast<GLsizei> (2 * sizeof (float)),
-        nullptr);
-    glEnableVertexAttribArray (positionAttribute->attributeID);
+    projectionMatrix = juce::Matrix3D<float>::fromFrustum (
+        -halfWidth, halfWidth,
+        -halfHeight, halfHeight,
+        1.0f, 30.0f);
 
-    glDrawArrays (GL_TRIANGLES, 0, 3);
+    viewMatrix = juce::Matrix3D<float>::fromTranslation (
+        { 0.0f, -1.00f, -4.85f });
 
-    glDisableVertexAttribArray (positionAttribute->attributeID);
+    renderScene (static_cast<float> (elapsedSeconds),
+                 currentPose.load (std::memory_order_relaxed),
+                 currentPhase.load (std::memory_order_relaxed));
+
+    glUseProgram (0);
     glBindBuffer (GL_ARRAY_BUFFER, 0);
+    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
 void Realtime3DPoseComponent::paint (juce::Graphics& g)
@@ -795,17 +1095,18 @@ void Realtime3DPoseComponent::paint (juce::Graphics& g)
 
     g.setColour (juce::Colours::white.withAlpha (0.94f));
     g.setFont (juce::FontOptions (15.0f).withStyle ("Bold"));
-    g.drawText ("FLOWER / REALTIME 3D QUALITY PROTOTYPE",
+    g.drawText ("FLOWER / REALTIME 3D RASTER QUALITY TEST",
                 top.removeFromTop (21),
                 juce::Justification::centredLeft,
                 false);
 
     g.setFont (juce::FontOptions (12.0f));
     const auto fps = measuredFps.load (std::memory_order_relaxed);
+
     g.drawText (
         juce::String (poseNames[pose])
             + "    FPS " + juce::String (fps, 1)
-            + "    HQ SDF / SOFT SHADOW / AO / FOG / FILM",
+            + "    MESH / LIGHT / FOG / FILM",
         top,
         juce::Justification::centredLeft,
         false);
@@ -815,7 +1116,7 @@ void Realtime3DPoseComponent::paint (juce::Graphics& g)
         g.setColour (juce::Colours::white);
         g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
         g.drawFittedText (
-            "3D SHADER INITIALISING / ERROR",
+            "3D RENDERER INITIALISING / ERROR",
             getLocalBounds().reduced (48),
             juce::Justification::centred,
             2);
