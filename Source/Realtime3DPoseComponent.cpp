@@ -18,7 +18,7 @@ constexpr const char* poseNames[]
     "LIE DOWN"
 };
 
-constexpr int poseCount = static_cast<int> (std::size (poseNames));
+constexpr int poseCount = 9;
 
 const char* vertexShaderSource = R"GLSL(
 attribute vec2 position;
@@ -572,9 +572,6 @@ Realtime3DPoseComponent::Realtime3DPoseComponent()
 {
     setOpaque (true);
     setWantsKeyboardFocus (false);
-
-    openGLContext.setComponentPaintingEnabled (true);
-    openGLContext.setContinuousRepainting (true);
 
     startMs = juce::Time::getMillisecondCounterHiRes();
     fpsWindowStartMs = startMs;
