@@ -1884,14 +1884,17 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (
             }
         }
 
-        if (performanceCurrentNote >= 0)
+        if (anyPolyTouch)
         {
-            midi.addEvent (
-                juce::MidiMessage::noteOff (1, performanceCurrentNote), 0);
-            performanceCurrentNote = -1;
+            if (performanceCurrentNote >= 0)
+            {
+                midi.addEvent (
+                    juce::MidiMessage::noteOff (
+                        1, performanceCurrentNote), 0);
+                performanceCurrentNote = -1;
+            }
         }
-
-        if (! anyPolyTouch)
+        else
         {
             // Physical-key/HOLD control stays playable when ARP is disabled.
             const int desiredNote = juce::jlimit (
@@ -1900,6 +1903,11 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (
 
             if (performanceCurrentNote != desiredNote)
             {
+                if (performanceCurrentNote >= 0)
+                    midi.addEvent (
+                        juce::MidiMessage::noteOff (
+                            1, performanceCurrentNote), 0);
+
                 performanceCurrentNote = desiredNote;
                 midi.addEvent (
                     juce::MidiMessage::noteOn (
