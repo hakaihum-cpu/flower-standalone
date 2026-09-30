@@ -1626,31 +1626,42 @@ void CarnivalScreenComponent::mouseDrag (const juce::MouseEvent& e)
     if (p.getDistanceFrom (pointerDownDesign) > 5.0f)
         pointerDragged = true;
 
-    if (page != Page::Parameter || p.y < 100.0f)
+    if (page != Page::Parameter || p.y < 92.0f)
         return;
 
+    constexpr float rowStart = 92.0f;
+    constexpr float rowStep = 54.0f;
+    constexpr float rowHeightPx = 44.0f;
+
     const int row =
-        static_cast<int> ((p.y - 110.0f) / 66.0f);
+        static_cast<int> ((p.y - rowStart) / rowStep);
 
     if (row < 0
         || row >= FlowerStandaloneAudioProcessor::carnivalParamCount)
         return;
 
-    const float rowY = 110.0f + row * 66.0f;
-    if (p.y < rowY || p.y > rowY + 52.0f)
+    const float rowY = rowStart + row * rowStep;
+    if (p.y < rowY || p.y > rowY + rowHeightPx)
         return;
 
     selectedParam = row;
     adjustCurrentParameter (
-        (p.x - 218.0f) / 330.0f);
+        (p.x - 210.0f) / 332.0f);
 }
 
 void CarnivalScreenComponent::mouseUp (const juce::MouseEvent& e)
 {
     const auto p = toDesignPoint (e.position);
 
-    if (p.y < 40.0f && p.x >= 240.0f)
+    if (p.y < 40.0f)
     {
+        if (p.x >= 610.0f && p.x <= 710.0f)
+        {
+            if (onExitRequested)
+                onExitRequested();
+            return;
+        }
+
         selectPageFromHeader (p.x);
         return;
     }
@@ -1663,33 +1674,40 @@ void CarnivalScreenComponent::mouseUp (const juce::MouseEvent& e)
 
     if (page == Page::Sequence)
     {
-        const int column = juce::jlimit (
-            0, gridColumns - 1,
-            static_cast<int> (p.x / cellSize));
+        if (p.y < headerHeight)
+            return;
+
         const int row = juce::jlimit (
             0, gridRows - 1,
-            static_cast<int> (p.y / cellSize));
+            static_cast<int> (
+                (p.y - headerHeight) / rowHeight));
 
-        cursorColumn = column;
         cursorRow = row;
         selectedTrack = row;
 
-        if (column < 8)
+        if (p.x < machineX)
         {
-            selectedStep = column;
+            const int step = juce::jlimit (
+                0, FlowerStandaloneAudioProcessor::carnivalStepCount - 1,
+                static_cast<int> (p.x / stepWidth));
+
+            cursorColumn = step;
+            selectedStep = step;
 
             if (longPress)
-                openParameterForStep (row, column);
+                openParameterForStep (row, step);
             else
-                processor.toggleCarnivalStep (row, column);
+                processor.toggleCarnivalStep (row, step);
         }
         else
         {
+            cursorColumn = p.x < 620.0f ? 8 : 9;
+
             if (longPress)
                 openParameterForTrack (row);
             else
                 processor.cycleCarnivalInstrument (
-                    row, column == 8 ? -1 : 1);
+                    row, cursorColumn == 8 ? -1 : 1);
         }
 
         repaint();
@@ -1698,15 +1716,23 @@ void CarnivalScreenComponent::mouseUp (const juce::MouseEvent& e)
 
     if (page == Page::Parameter)
     {
-        if (p.y >= 590.0f && p.y <= 642.0f)
+        if (p.y >= 575.0f && p.y <= 629.0f)
         {
-            if (p.x < 360.0f)
+            if (p.x >= 48.0f && p.x <= 208.0f)
+            {
+                if (parameterLockMode)
+                    processor.previewCarnivalTrigger (
+                        selectedTrack, selectedStep);
+                else
+                    processor.previewCarnivalTrack (selectedTrack);
+            }
+            else if (p.x >= 228.0f && p.x <= 444.0f)
             {
                 if (parameterLockMode)
                     processor.clearCarnivalStepLocks (
                         selectedTrack, selectedStep);
             }
-            else
+            else if (p.x >= 464.0f && p.x <= 672.0f)
             {
                 showSequencePage();
             }
@@ -1715,18 +1741,23 @@ void CarnivalScreenComponent::mouseUp (const juce::MouseEvent& e)
             return;
         }
 
+        constexpr float rowStart = 92.0f;
+        constexpr float rowStep = 54.0f;
+        constexpr float rowHeightPx = 44.0f;
+
         const int row =
-            static_cast<int> ((p.y - 110.0f) / 66.0f);
+            static_cast<int> ((p.y - rowStart) / rowStep);
 
         if (row >= 0
             && row < FlowerStandaloneAudioProcessor::carnivalParamCount)
         {
-            const float rowY = 110.0f + row * 66.0f;
-            if (p.y >= rowY && p.y <= rowY + 52.0f)
+            const float rowY = rowStart + row * rowStep;
+
+            if (p.y >= rowY && p.y <= rowY + rowHeightPx)
             {
                 selectedParam = row;
                 adjustCurrentParameter (
-                    (p.x - 218.0f) / 330.0f);
+                    (p.x - 210.0f) / 332.0f);
             }
         }
 
