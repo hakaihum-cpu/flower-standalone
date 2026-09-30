@@ -1629,8 +1629,15 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     addAndMakeVisible (performancePad);
     addAndMakeVisible (configScreen);
     addAndMakeVisible (carnivalScreen);
+    addAndMakeVisible (twilightPoseScreen);
     configScreen.setVisible (false);
     carnivalScreen.setVisible (false);
+
+    // TW-01 is a graphics feasibility application.  Keep the existing FLOWER
+    // controls compiled but completely behind the isolated pose-study surface.
+    performancePad.setVisible (false);
+    twilightPoseScreen.setVisible (true);
+    twilightPoseScreen.toFront (false);
 
     rootClass = processor.getConfiguredRoot();
     scaleIndex = processor.getConfiguredScale();
@@ -1790,6 +1797,7 @@ void FlowerStandaloneAudioProcessorEditor::resized()
     performancePad.setBounds (getLocalBounds());
     configScreen.setBounds (getLocalBounds());
     carnivalScreen.setBounds (getLocalBounds());
+    twilightPoseScreen.setBounds (getLocalBounds());
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
