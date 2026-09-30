@@ -418,17 +418,47 @@ void PerformancePadComponent::paint (juce::Graphics& g)
 void PerformancePadComponent::mouseDown (const juce::MouseEvent& e)
 {
     physicalPointerVisible = false;
+
+    if (onTouchStarted)
+        onTouchStarted();
+
+    if (! arpIndicatorOn)
+    {
+        const auto p = normalisedPoint (e.position);
+        xValue = p.x;
+        yValue = p.y;
+        active = true;
+
+        if (onPolyTouchChanged)
+            onPolyTouchChanged (
+                e.source.getIndex(), xValue, yValue, true);
+
+        repaint();
+        return;
+    }
+
     touchDownPoint = e.position;
     lastPoint = e.position;
     lastEventMs = juce::Time::getMillisecondCounterHiRes();
     touchDragged = false;
-
-    if (onTouchStarted)
-        onTouchStarted();
 }
 
 void PerformancePadComponent::mouseDrag (const juce::MouseEvent& e)
 {
+    if (! arpIndicatorOn)
+    {
+        const auto p = normalisedPoint (e.position);
+        xValue = p.x;
+        yValue = p.y;
+
+        if (onPolyTouchChanged)
+            onPolyTouchChanged (
+                e.source.getIndex(), xValue, yValue, true);
+
+        repaint();
+        return;
+    }
+
     if (! touchDragged
         && e.position.getDistanceFrom (touchDownPoint) >= 4.0f)
         touchDragged = true;
@@ -439,12 +469,44 @@ void PerformancePadComponent::mouseDrag (const juce::MouseEvent& e)
 
 void PerformancePadComponent::mouseUp (const juce::MouseEvent& e)
 {
+    if (! arpIndicatorOn)
+    {
+        const auto p = normalisedPoint (e.position);
+        xValue = p.x;
+        yValue = p.y;
+        active = false;
+
+        if (onPolyTouchChanged)
+            onPolyTouchChanged (
+                e.source.getIndex(), xValue, yValue, false);
+
+        repaint();
+        return;
+    }
+
     if (touchDragged)
         updateFromEvent (e, false);
     else if (onTapStopRequested)
         onTapStopRequested();
 
     touchDragged = false;
+}
+
+juce::Point<float> PerformancePadComponent::normalisedPoint (
+    juce::Point<float> point) const
+{
+    const auto grid = getLocalBounds().toFloat();
+    if (grid.getWidth() <= 1.0f || grid.getHeight() <= 1.0f)
+        return { xValue, yValue };
+
+    return {
+        juce::jlimit (
+            0.0f, 1.0f,
+            (point.x - grid.getX()) / grid.getWidth()),
+        juce::jlimit (
+            0.0f, 1.0f,
+            (grid.getBottom() - point.y) / grid.getHeight())
+    };
 }
 
 void PerformancePadComponent::updateFromEvent (const juce::MouseEvent& e, bool isActive)
@@ -454,12 +516,9 @@ void PerformancePadComponent::updateFromEvent (const juce::MouseEvent& e, bool i
     if (grid.getWidth() <= 1.0f || grid.getHeight() <= 1.0f)
         return;
 
-    const float newX = juce::jlimit (
-        0.0f, 1.0f,
-        (e.position.x - grid.getX()) / grid.getWidth());
-    const float newY = juce::jlimit (
-        0.0f, 1.0f,
-        (grid.getBottom() - e.position.y) / grid.getHeight());
+    const auto p = normalisedPoint (e.position);
+    const float newX = p.x;
+    const float newY = p.y;
 
     const double nowMs = juce::Time::getMillisecondCounterHiRes();
     const double elapsedSeconds = juce::jmax (0.001, (nowMs - lastEventMs) / 1000.0);
