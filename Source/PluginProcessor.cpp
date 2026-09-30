@@ -1811,7 +1811,7 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (
                 if (current >= 0)
                 {
                     midi.addEvent (
-                        juce::MidiMessage::noteOff (touch + 1, current), 0);
+                        juce::MidiMessage::noteOff (touch + 2, current), 0);
                     current = -1;
                 }
             }
@@ -1863,7 +1863,7 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (
                 if (current >= 0)
                 {
                     midi.addEvent (
-                        juce::MidiMessage::noteOff (touch + 1, current), 0);
+                        juce::MidiMessage::noteOff (touch + 2, current), 0);
                     current = -1;
                 }
 
@@ -1887,12 +1887,12 @@ void FlowerStandaloneAudioProcessor::generatePerformanceMidi (
                 if (current >= 0)
                     midi.addEvent (
                         juce::MidiMessage::noteOff (
-                            touch + 1, current), 0);
+                            touch + 2, current), 0);
 
                 current = desiredNote;
                 midi.addEvent (
                     juce::MidiMessage::noteOn (
-                        touch + 1, current, touchVelocity), 0);
+                        touch + 2, current, touchVelocity), 0);
             }
         }
 
