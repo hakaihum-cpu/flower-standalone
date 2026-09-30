@@ -21,6 +21,11 @@ constexpr const char* poseNames[]
 constexpr int poseCount = 9;
 
 const char* vertexShaderSource = R"GLSL(
+#ifdef GL_ES
+precision highp float;
+precision highp int;
+#endif
+
 attribute vec2 position;
 varying vec2 vUv;
 
@@ -32,6 +37,11 @@ void main()
 )GLSL";
 
 const char* fragmentShaderSource = R"GLSL(
+#ifdef GL_ES
+precision highp float;
+precision highp int;
+#endif
+
 varying #highp# vec2 vUv;
 
 uniform #highp# vec2 uResolution;
