@@ -13,7 +13,7 @@ public:
 
     static constexpr int carnivalTrackCount = 10;
     static constexpr int carnivalStepCount = 8;
-    static constexpr int carnivalParamCount = 7;
+    static constexpr int carnivalParamCount = 8;
 
     enum class CarnivalInstrument
     {
@@ -35,7 +35,8 @@ public:
         Pitch,
         Decay,
         LfoRate,
-        LfoDepth
+        LfoDepth,
+        Character
     };
 
     FlowerStandaloneAudioProcessor();
@@ -76,6 +77,7 @@ public:
     void setPerformanceDelayEnabled (bool enabled) noexcept;
     void setPerformanceGranularEnabled (bool enabled) noexcept;
     void setPerformanceDreamyMode (bool enabled) noexcept;
+    void setPerformancePolyTouch (int touchId, float x, float y, bool down) noexcept;
     void cycleFlowerTransport() noexcept;
     void stopPerformance() noexcept;
 
@@ -142,6 +144,7 @@ public:
     void clearCarnivalStepLocks (int track, int step) noexcept;
     void clearCarnivalPattern() noexcept;
     void previewCarnivalTrack (int track) noexcept;
+    void previewCarnivalTrigger (int track, int step) noexcept;
 
     void getFlowerWaveform (std::array<float, flowerWaveformBins>& destination) const noexcept;
     bool hasFlowerLoop() const noexcept { return flowerLoopLengthSamples.load (std::memory_order_relaxed) > 0; }
@@ -188,6 +191,7 @@ private:
     int performanceScaleLength() const noexcept;
     int performanceScaleSemitone (int degree) const noexcept;
     uint32_t nextPerformanceRandom() noexcept;
+    int performanceNoteForTouch (float x, float y) const noexcept;
 
     juce::AudioProcessorValueTreeState apvts;
     juce::Synthesiser synthesiser;
@@ -239,6 +243,13 @@ private:
     std::atomic<bool> performanceGranularEnabled { true };
     std::atomic<bool> performanceDreamyMode { false };
     std::atomic<bool> performanceStopRequested { false };
+    static constexpr int performancePolyTouchCount = 8;
+    std::array<std::atomic<bool>, performancePolyTouchCount> performancePolyTouchActive {};
+    std::array<std::atomic<float>, performancePolyTouchCount> performancePolyTouchX {};
+    std::array<std::atomic<float>, performancePolyTouchCount> performancePolyTouchY {};
+    std::array<int, performancePolyTouchCount> performancePolyCurrentNote {
+        -1, -1, -1, -1, -1, -1, -1, -1
+    };
     std::array<bool, 128> performanceCcGate {};
 
     std::atomic<bool> carnivalEnabled { false };
@@ -248,6 +259,7 @@ private:
     std::atomic<int> carnivalCurrentStep { -1 };
     std::atomic<bool> carnivalResetRequested { false };
     std::atomic<int> carnivalPreviewTrackRequested { -1 };
+    std::atomic<int> carnivalPreviewStepRequested { -1 };
 
     std::array<std::atomic<bool>,
                carnivalTrackCount * carnivalStepCount> carnivalSteps {};
@@ -276,6 +288,7 @@ private:
         float decay = 0.45f;
         float lfoRate = 0.20f;
         float lfoDepth = 0.0f;
+        float character = 0.35f;
         float filterStateL = 0.0f;
         float filterStateR = 0.0f;
         uint32_t noiseState = 0x12345678u;
