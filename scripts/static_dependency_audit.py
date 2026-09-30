@@ -18,6 +18,8 @@ REQUIRED = [
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.h",
     "Source/PluginEditor.cpp",
+    "Source/Realtime3DPoseComponent.h",
+    "Source/Realtime3DPoseComponent.cpp",
     "Source/FlowerFrameData.h",
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
@@ -77,12 +79,12 @@ for token in FORBIDDEN_SOURCE_TOKENS:
 
 jucer = ROOT / "FLOWER_Standalone.jucer"
 root = ET.parse(jucer).getroot()
-if root.attrib.get("name") != "FLOWER":
-    fail("JUCER project name is not FLOWER")
+if root.attrib.get("name") != "FLOWER3DTEST":
+    fail("JUCER project name is not FLOWER3DTEST")
 if root.attrib.get("pluginFormats") != "buildStandalone":
     fail("JUCER is not standalone-only")
-if root.attrib.get("bundleIdentifier") != "local.flower.standalone":
-    fail("unexpected provisional bundleIdentifier")
+if root.attrib.get("bundleIdentifier") != "local.flower.realtime3dprototype":
+    fail("3D prototype must use its isolated bundleIdentifier")
 if root.attrib.get("pluginIsSynth") != "1" or root.attrib.get("pluginWantsMidiIn") != "1":
     fail("standalone synth/MIDI flags are not enabled")
 
@@ -92,6 +94,7 @@ for required_ref in [
     "Source/RetroLookAndFeel.cpp",
     "Source/PluginProcessor.cpp",
     "Source/PluginEditor.cpp",
+    "Source/Realtime3DPoseComponent.cpp",
 ]:
     if required_ref not in jucer_text:
         fail(f"JUCER reference missing: {required_ref}")
@@ -99,6 +102,14 @@ for required_ref in [
 for forbidden_ref in FORBIDDEN_JUCER_REFS:
     if forbidden_ref in jucer_text:
         fail(f"animation-free MVP unexpectedly references: {forbidden_ref}")
+
+for required_3d in [
+    'id="juce_opengl"',
+    "Source/Realtime3DPoseComponent.h",
+    "Source/Realtime3DPoseComponent.cpp",
+]:
+    if required_3d not in jucer_text:
+        fail(f"realtime-3D dependency missing: {required_3d}")
 
 circle = (ROOT / ".circleci/config.yml").read_text(encoding="utf-8")
 if "default: false" not in circle or "run_build" not in circle:
