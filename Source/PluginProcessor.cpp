@@ -144,6 +144,18 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int sampl
     performanceCurrentNote = -1;
     performanceRandomState = 0x46574C52u;
 
+    for (int touch = 0; touch < performancePolyTouchCount; ++touch)
+    {
+        const auto index = static_cast<size_t> (touch);
+        performancePolyTouchActive[index].store (
+            false, std::memory_order_relaxed);
+        performancePolyTouchX[index].store (
+            0.0f, std::memory_order_relaxed);
+        performancePolyTouchY[index].store (
+            0.0f, std::memory_order_relaxed);
+        performancePolyCurrentNote[index] = -1;
+    }
+
     carnivalSamplesUntilStep = 0.0;
     carnivalMidiClockCounter = 0;
     carnivalMidiRunning = false;
