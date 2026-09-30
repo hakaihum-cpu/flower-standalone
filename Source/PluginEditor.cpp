@@ -690,7 +690,15 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
 
     addAndMakeVisible (performancePad);
     addAndMakeVisible (configScreen);
+    addAndMakeVisible (realtime3D);
+
+    // AN-41 is a branch-local graphics feasibility slice.
+    // Keep the production XY/config implementation intact but hidden so no
+    // DSP/MIDI/runtime code has to be rewritten for this experiment.
+    performancePad.setVisible (false);
     configScreen.setVisible (false);
+    realtime3D.setVisible (true);
+    realtime3D.toFront (false);
 
     rootClass = processor.getConfiguredRoot();
     scaleIndex = processor.getConfiguredScale();
@@ -802,6 +810,7 @@ void FlowerStandaloneAudioProcessorEditor::resized()
 {
     performancePad.setBounds (getLocalBounds());
     configScreen.setBounds (getLocalBounds());
+    realtime3D.setBounds (getLocalBounds());
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
@@ -896,14 +905,16 @@ void FlowerStandaloneAudioProcessorEditor::toggleConfig()
         configScreen.repaint();
 
         performancePad.setVisible (false);
+        realtime3D.setVisible (false);
         configScreen.setVisible (true);
         configScreen.toFront (false);
     }
     else
     {
         configScreen.setVisible (false);
-        performancePad.setVisible (true);
-        performancePad.toFront (false);
+        performancePad.setVisible (false);
+        realtime3D.setVisible (true);
+        realtime3D.toFront (false);
         grabKeyboardFocus();
     }
 }
