@@ -6,6 +6,7 @@
 
 #include "PluginProcessor.h"
 #include "RetroLookAndFeel.h"
+#include "TwilightPoseComponent.h"
 
 class PerformancePadComponent final : public juce::Component,
                                       private juce::Timer
@@ -219,6 +220,7 @@ private:
     PerformancePadComponent performancePad;
     ConfigScreenComponent configScreen;
     CarnivalScreenComponent carnivalScreen;
+    TwilightPoseComponent twilightPoseScreen;
 
     int rootClass = 0;
     int scaleIndex = 0;
