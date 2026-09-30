@@ -1709,6 +1709,13 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             processor.setPerformancePad (x, y, speed, horizontalDirection, active);
         };
 
+    performancePad.onPolyTouchChanged =
+        [this] (int touchId, float x, float y, bool down)
+        {
+            processor.setPerformancePolyTouch (
+                touchId, x, y, down);
+        };
+
     performancePad.onTouchStarted =
         [this]
         {
@@ -1796,17 +1803,11 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             carnivalVisible = false;
             carnivalScreen.setVisible (false);
 
-            configVisible = true;
-            configScreen.setValues (
-                rootClass,
-                scaleIndex,
-                processor.getDefaultEffectsEnabled(),
-                yEffectDreamy,
-                processor.getConfiguredMidiChannel());
-            configScreen.setBounds (getLocalBounds());
-            performancePad.setVisible (false);
-            configScreen.setVisible (true);
-            configScreen.toFront (false);
+            configVisible = false;
+            configScreen.setVisible (false);
+            performancePad.setBounds (getLocalBounds());
+            performancePad.setVisible (true);
+            performancePad.toFront (false);
             grabKeyboardFocus();
         };
 
