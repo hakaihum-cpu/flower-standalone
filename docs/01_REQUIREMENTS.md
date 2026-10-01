@@ -1,66 +1,46 @@
 # Requirements
 
-## Confirmed
-REQ-001: The project develops an Android application.
+## Audio behaviour
+1. Accept a monophonic musical input signal.
+2. Detect the fundamental pitch in real time.
+3. Create generated chord voices by pitch-shifting the input audio; do not synthesize replacement oscillators.
+4. Generate theory-guided chord movement with weighted randomness.
+5. A new accepted input note immediately re-harmonises the output and resets the progression interval.
 
-REQ-002: The application is a completely standalone version of Flower. MIYAKO is a separate project and must not be modified by this project.
+## Main parameters
+### COMPLEX
+0..100. At low values use primarily diatonic triads. Increasing values progressively permits sevenths/add9/sus colours, borrowed chords, secondary-dominant behaviour and, near maximum, altered/substitute dominant colours.
 
-REQ-003: MIYAKO may be used only as a read-only source reference for the initial extraction. No standalone change is written back to MIYAKO unless explicitly requested in the future.
+### BAR
+Discrete: 1/4, 1/2, 1, 2 bars. Time signature is 4/4. Determines the progression-change interval when LENGTH is not infinite.
 
-REQ-004: The initial Flower standalone baseline reuses the latest MIYAKO Flower implementation from `feature/flower-actor-v3` as closely as practical before new behavior is designed.
+### WIDTH
+0..100. Controls close vs spread voicing. Generated notes must never be placed below C3 (MIDI 48). High values may spread upper voices across additional octaves.
 
-REQ-005: The initial synth is intentionally minimal:
-- oscillator: Sine only
-- ADSR envelope
-- Filter
-- LFO
+### LENGTH
+0..100 plus effective MAX at the endpoint. Below MAX, controls gate duration within each BAR interval. At MAX the generated chord is held indefinitely and changes only when a new input note is accepted.
 
-REQ-006: The initial UI reuses the existing Flower page/UI as the starting point. Do not redesign it during the extraction phase unless required to remove MIYAKO-only controls.
+## Transport-like interaction
+- Tap the background image area while stopped: start generator state and show a thin red screen border plus red `● REC` text.
+- Tap the background image area while running: stop and CLEAR generated state.
+- Parameter/config hit areas consume touch and must not toggle REC.
+- Stopped/CLEAR state passes input through dry for setup/audition; active state outputs generated harmony.
 
-REQ-007: Initial Flower behavior to retain:
-- Flower looper
-- REC / DUB / CLEAR
-- feedback / reverse
-- maximum 16-second loop
-- 4-grain granular engine
-- POSITION / SIZE / DENSITY / SPREAD / HOLD / PITCH / MIX
-- waveform/record/playhead telemetry
-- approved rooftop/cast visual baseline
-- Actor Engine v3 independent-actor behavior and continuity rules
-- existing Flower MIDI behavior where it remains meaningful in standalone
+## Visuals
+- Use the exact user-supplied 01..300 image frames as the only main visual bank.
+- Progress sequentially; wrap after frame 300.
+- Frame advances on an accepted generated chord event (new input note or timed chord transition).
+- Stop+CLEAR resets to frame 1.
 
-REQ-008: MIYAKO-only systems are not part of the standalone baseline unless explicitly reintroduced:
-- DX7
-- Sampler
-- Twilight
-- Notebook FX
-- other MIYAKO oscillator types
-- MIYAKO-specific pages unrelated to Flower
-- MIYAKO project/release state
+## CONFIG
+- Audio input list/select.
+- Current input/detection status.
+- Explicit `iRig Streamer DETECTED / NOT DETECTED` status. Detection checks both JUCE-selectable input names and Android `AudioManager.getDevices(GET_DEVICES_INPUTS)` / `AudioDeviceInfo.getProductName()` so a generic JUCE route name does not hide the physical USB device name.
+- Input level meter.
+- MIDI CH 1..16.
+- CLOCK: Internal / MIDI.
+- BPM is shown only for Internal because BAR timing cannot be defined without an internal tempo.
+- MIDI clock assumes 24 PPQN and 4/4.
 
-## Isolation rule
-The two repositories are independent products.
-- Read MIYAKO source when necessary.
-- Copy required code/assets into flower-standalone.
-- Never edit MIYAKO as part of AN-* work.
-- Never make MIYAKO depend on flower-standalone.
-- Never make flower-standalone depend on MIYAKO repository contents at build/runtime.
-- After extraction, standalone evolves independently.
-
-## Still undecided
-- Final app/package name shown to users
-- Final applicationId
-- Minimum supported Android version
-- Exact standalone main-screen arrangement after the reused Flower UI baseline
-- Whether CONFIG/MIDI setup remains a separate page or is simplified
-- Audio/MIDI device policy beyond the first working baseline
-- Distribution/signing/store policy
-- Further Flower behavior changes after standalone parity is established
-
-## Requirement change rule
-Confirmed requirements are changed only by an issue that records:
-- previous requirement
-- requested change
-- reason
-- impact
-- verification method
+## iRig verification acceptance criterion
+On the target Android device with iRig Stream connected, CONFIG must expose enough device/routing information to confirm that the external input is active. The target-device smoke test must confirm that the Android physical-input probe exposes the connected iRig product name, or otherwise records exactly what Android reports. A generic JUCE route alone must never be treated as proof that iRig is connected.

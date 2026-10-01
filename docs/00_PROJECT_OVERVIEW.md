@@ -1,24 +1,13 @@
 # Project Overview
 
-- Project name: `androidapp`
-- Project key: `AN`
-- Purpose: Android application development
-- Initial status: Bootstrap / product requirements not yet defined
-- Repository model: GitHub (source control only; GitHub Actions disabled)
-- Work tracking: Jira
-- Documentation: Confluence
-- CI/build: CircleCI
-- Primary baseline branch: `main`
-- Integration branch: not created yet; feature branches are used until a separate integration branch is justified
+## Purpose
+Android standalone audio effect for a monophonic performance source connected through an interface such as iRig Stream. The app detects input pitch, derives/updates tonal context and produces a chord from the same input timbre by real-time pitch shifting.
 
-## Initial technical baseline
-- Android Gradle Plugin: 9.4.0
-- Gradle runtime for CI bootstrap: 9.6.0
-- Java toolchain level: 17
-- compileSdk: 36
-- targetSdk: 36
-- minSdk: 26
-- UI/product framework: intentionally undecided
-- Current app screen: non-product placeholder only
+## Non-goals
+- No internal synthesizer.
+- No generated/anime replacement artwork.
+- No dependency on FLOWER or MIYAKO source.
+- No automatic MASTER promotion after build.
 
-These values are infrastructure defaults, not product requirements.
+## Visual concept
+The supplied 300 classroom frames fill the screen and progress in sequence as accepted note/chord events occur. Controls remain subordinate to the image.
