@@ -1,28 +1,7 @@
-# androidapp
+# Realtime Chord FX
 
-Bootstrap package for a new Android application project.
+Provisional technical project name. Android standalone real-time chord-generation effect.
 
-## What is intentionally included
-- Minimal Android app shell
-- Governance contract
-- GitHub PR template and branch rules
-- Jira seed issues
-- Confluence source documents
-- CircleCI manual-build configuration
-- Build history schema
+A monophonic input is pitch-detected, interpreted as a tonal anchor, and transformed into theory-guided chord voices using real-time pitch shifting. No internal synthesizer is used.
 
-## What is intentionally NOT decided
-- Product functionality
-- Product UI
-- Architecture frameworks
-- Account/network/storage design
-- Distribution/signing
-
-## CI safety
-CircleCI's Android build workflow is guarded by the boolean pipeline parameter:
-`run_build=false` by default.
-
-A normal source push therefore does not execute the build job.
-
-## First real development step
-Define the product purpose and first feature as Jira requirements before changing product code.
+The visual surface uses the supplied 300-frame classroom sequence. The image is the dominant UI; controls are text/thin bars only.
