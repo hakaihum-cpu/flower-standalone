@@ -26,8 +26,8 @@ for m in sorted(mods):
     if not header.is_file():
         raise SystemExit(f"[FAIL] JUCE module header missing: {header}")
     text = header.read_text(errors="ignore")
-    vm = re.search(r"(?m)^\s*version:\s*([^\s]+)", text)
-    dm = re.search(r"(?m)^\s*dependencies:\s*([^\r\n]+)", text)
+    vm = re.search(r"(?m)^[ \\t]*version:[ \\t]*([^\\s]+)", text)
+    dm = re.search(r"(?m)^[ \\t]*dependencies:[ \\t]*([^\\r\\n]*)", text)
     versions[m] = vm.group(1).strip() if vm else None
     raw = dm.group(1).strip() if dm else ""
     deps[m] = {x for x in re.split(r"[\s,]+", raw) if x}
