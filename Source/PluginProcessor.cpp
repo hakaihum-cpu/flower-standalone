@@ -16,13 +16,13 @@ namespace
     {
         static constexpr float defaults[7][8]
         {
-            { 0.84f, 0.50f, 0.72f, 0.48f, 0.36f, 0.08f, 0.00f, 0.46f }, // KICK
+            { 0.86f, 0.50f, 0.66f, 0.50f, 0.28f, 0.08f, 0.00f, 0.52f }, // KICK
             { 0.74f, 0.52f, 0.82f, 0.50f, 0.34f, 0.12f, 0.02f, 0.60f }, // SNARE
             { 0.58f, 0.56f, 0.94f, 0.56f, 0.18f, 0.20f, 0.03f, 0.72f }, // HIHAT
             { 0.62f, 0.46f, 0.70f, 0.48f, 0.68f, 0.14f, 0.04f, 0.00f }, // CHORD
             { 0.66f, 0.50f, 0.78f, 0.50f, 0.55f, 0.18f, 0.05f, 0.42f }, // TONE
             { 0.72f, 0.48f, 0.68f, 0.46f, 0.44f, 0.10f, 0.02f, 0.36f }, // TOM
-            { 0.74f, 0.50f, 0.58f, 0.42f, 0.72f, 0.10f, 0.04f, 0.58f }  // BASS
+            { 0.76f, 0.50f, 0.42f, 0.50f, 0.88f, 0.10f, 0.04f, 0.70f }  // BASS
         };
 
         instrument = juce::jlimit (0, 6, instrument);
@@ -166,6 +166,7 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int sampl
         voice.phase1 = voice.phase2 = voice.phase3 = 0.0;
         voice.lfoPhase = 0.0;
         voice.ageSeconds = 0.0f;
+        voice.envelope = 0.0f;
         voice.filterStateL = voice.filterStateR = 0.0f;
     }
 
@@ -961,9 +962,18 @@ void FlowerStandaloneAudioProcessor::setCarnivalEnabled (bool enabled) noexcept
     carnivalResetRequested.store (true, std::memory_order_release);
 
     if (enabled)
+    {
         stopPerformance();
+    }
     else
+    {
         carnivalPlaying.store (false, std::memory_order_release);
+        carnivalMidiRunning = false;
+        carnivalCurrentStep.store (-1, std::memory_order_relaxed);
+        carnivalPreviewTrackRequested.store (-1, std::memory_order_relaxed);
+        carnivalPreviewStepRequested.store (-1, std::memory_order_relaxed);
+        carnivalKillVoicesRequested.store (true, std::memory_order_release);
+    }
 }
 
 void FlowerStandaloneAudioProcessor::setCarnivalPlaying (bool playing) noexcept
@@ -984,6 +994,30 @@ void FlowerStandaloneAudioProcessor::setCarnivalBpm (float bpm) noexcept
     carnivalBpm.store (
         juce::jlimit (40.0f, 240.0f, bpm),
         std::memory_order_relaxed);
+}
+
+void FlowerStandaloneAudioProcessor::adjustCarnivalRate (int delta) noexcept
+{
+    static constexpr int rateCount = 4;
+
+    int index =
+        carnivalRateIndex.load (std::memory_order_relaxed);
+    index += delta < 0 ? -1 : 1;
+    index = juce::jlimit (0, rateCount - 1, index);
+
+    carnivalRateIndex.store (
+        index, std::memory_order_release);
+}
+
+float FlowerStandaloneAudioProcessor::getCarnivalRateMultiplier() const noexcept
+{
+    static constexpr float rates[] { 1.0f, 2.0f, 4.0f, 12.0f };
+
+    const int index = juce::jlimit (
+        0, 3,
+        carnivalRateIndex.load (std::memory_order_relaxed));
+
+    return rates[index];
 }
 
 bool FlowerStandaloneAudioProcessor::getCarnivalStepEnabled (
