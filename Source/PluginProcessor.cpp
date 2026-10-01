@@ -1469,7 +1469,9 @@ void FlowerStandaloneAudioProcessor::processCarnival (
                 carnivalSamplesUntilStep +=
                     sampleRate * 60.0
                     / juce::jlimit (40.0, 240.0, bpm)
-                    / 2.0;
+                    / 2.0
+                    / static_cast<double> (
+                        getCarnivalRateMultiplier());
             }
 
             carnivalSamplesUntilStep -= 1.0;
@@ -1494,11 +1496,48 @@ void FlowerStandaloneAudioProcessor::processCarnival (
             if (voice.ageSeconds >= baseDecay)
             {
                 voice.active = false;
+                voice.envelope = 0.0f;
                 continue;
             }
 
-            const float envelope =
-                std::exp (-6.0f * voice.ageSeconds / baseDecay);
+            const float attackSeconds =
+                voice.instrument == static_cast<int> (
+                    CarnivalInstrument::Hihat)
+                    ? 0.0008f
+                    : voice.instrument == static_cast<int> (
+                        CarnivalInstrument::Kick)
+                        ? 0.0012f
+                        : voice.instrument == static_cast<int> (
+                            CarnivalInstrument::Chord)
+                            ? 0.0060f
+                            : 0.0030f;
+
+            if (voice.ageSeconds < attackSeconds)
+            {
+                const float attackIncrement =
+                    1.0f
+                    / juce::jmax (
+                        1.0f,
+                        attackSeconds
+                        * static_cast<float> (sampleRate));
+
+                voice.envelope =
+                    juce::jmin (
+                        1.0f,
+                        voice.envelope + attackIncrement);
+            }
+            else
+            {
+                const float decayCoefficient =
+                    std::exp (
+                        -6.0f
+                        / (baseDecay
+                           * static_cast<float> (sampleRate)));
+
+                voice.envelope *= decayCoefficient;
+            }
+
+            const float envelope = voice.envelope;
 
             const float lfoHz = 0.10f + voice.lfoRate * 15.9f;
             const float lfo =
