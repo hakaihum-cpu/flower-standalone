@@ -215,6 +215,8 @@ for required_xy_ui in [
     "juce::KeyPress::F17Key",
     "juce::KeyPress::F18Key",
     "juce::KeyPress::F19Key",
+    "juce::KeyPress::F20Key",
+    "juce::KeyPress::F21Key",
     "ConfigScreenComponent",
     "ConfigScreenComponent() = default",
     "toggleConfig",
@@ -263,6 +265,8 @@ for required_key_patch in [
     "KEYCODE_BUTTON_Y",
     "KEYCODE_BUTTON_L1",
     "KEYCODE_BUTTON_R1",
+    "KEYCODE_BUTTON_L2",
+    "KEYCODE_BUTTON_R2",
     "KEYCODE_BUTTON_SELECT",
     "handleKeyUpOrDown (true)",
     "handleKeyUpOrDown (false)",
@@ -314,7 +318,7 @@ print("[PASS] source frame is drawn in full with no coordinate crop")
 print("[PASS] runtime performs no source crop and no atlas lookup")
 print("[PASS] all 100 direct JPEG frames are addressable with no skip list")
 print("[PASS] dpad XY latch / tap-stop / pointer contract present")
-print("[PASS] A/B/X/Y/L/R gamepad assignment contract present")
+print("[PASS] A/B/X/Y/L1/R1/L2/R2 gamepad assignment contract present")
 print("[PASS] SELECT CONFIG screen contract present")
 print("[PASS] persistent ROOT/SCALE/RANDOM/default-effect config contract present")
 print("[PASS] X looper transport REC->STOP->OVERDUB and long-clear contract present")
