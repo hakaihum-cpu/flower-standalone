@@ -123,6 +123,9 @@ public:
         return carnivalBpm.load (std::memory_order_relaxed);
     }
 
+    void adjustCarnivalRate (int delta) noexcept;
+    float getCarnivalRateMultiplier() const noexcept;
+
     int getCarnivalCurrentStep() const noexcept
     {
         return carnivalCurrentStep.load (std::memory_order_relaxed);
@@ -256,8 +259,10 @@ private:
     std::atomic<bool> carnivalPlaying { false };
     std::atomic<bool> carnivalClockMidi { false };
     std::atomic<float> carnivalBpm { 120.0f };
+    std::atomic<int> carnivalRateIndex { 0 }; // x1, x2, x4, x12
     std::atomic<int> carnivalCurrentStep { -1 };
     std::atomic<bool> carnivalResetRequested { false };
+    std::atomic<bool> carnivalKillVoicesRequested { false };
     std::atomic<int> carnivalPreviewTrackRequested { -1 };
     std::atomic<int> carnivalPreviewStepRequested { -1 };
 
@@ -289,6 +294,7 @@ private:
         float lfoRate = 0.20f;
         float lfoDepth = 0.0f;
         float character = 0.35f;
+        float envelope = 0.0f;
         float filterStateL = 0.0f;
         float filterStateR = 0.0f;
         uint32_t noiseState = 0x12345678u;
