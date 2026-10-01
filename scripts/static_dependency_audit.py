@@ -42,6 +42,12 @@ if root.attrib.get('pluginFormats')!='buildStandalone': raise SystemExit('[FAIL]
 if root.attrib.get('pluginIsSynth')!='0': raise SystemExit('[FAIL] synth flag must be off')
 if root.attrib.get('pluginWantsMidiIn')!='1': raise SystemExit('[FAIL] MIDI input required for clock/control')
 jucer_text=(R/'RealtimeChordFX_Standalone.jucer').read_text()
+for need in [
+    'MODULEPATH id="juce_audio_processors_headless"',
+    '<MODULE id="juce_audio_processors_headless"',
+]:
+    if need not in jucer_text:
+        raise SystemExit(f'[FAIL] JUCE 9 required module dependency missing: {need}')
 if 'Resources/classroom_frames.pack' not in jucer_text: raise SystemExit('[FAIL] supplied frame pack not embedded')
 for bad_ref in ['FLOWER_Standalone.jucer','SynthVoice','Carnival','flower_']:
     if bad_ref in jucer_text: raise SystemExit(f'[FAIL] cross-project JUCER reference found: {bad_ref}')
