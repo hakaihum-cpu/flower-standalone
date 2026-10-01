@@ -1352,12 +1352,26 @@ void FlowerStandaloneAudioProcessor::triggerCarnivalTrack (
         return;
 
     auto& voice = carnivalVoices[static_cast<size_t> (track)];
+    const int nextInstrument = getCarnivalInstrument (track);
+    const bool continueChordPhase =
+        voice.active
+        && voice.instrument
+            == static_cast<int> (CarnivalInstrument::Chord)
+        && nextInstrument
+            == static_cast<int> (CarnivalInstrument::Chord);
+
     voice.active = true;
-    voice.instrument = getCarnivalInstrument (track);
-    voice.phase1 = voice.phase2 = voice.phase3 = 0.0;
+    voice.instrument = nextInstrument;
+
+    if (! continueChordPhase)
+    {
+        voice.phase1 = voice.phase2 = voice.phase3 = 0.0;
+        voice.filterStateL = voice.filterStateR = 0.0f;
+        voice.envelope = 0.0f;
+    }
+
     voice.lfoPhase = 0.0;
     voice.ageSeconds = 0.0f;
-    voice.filterStateL = voice.filterStateR = 0.0f;
 
     auto readParam = [this, track, step] (int param)
     {
@@ -1380,8 +1394,8 @@ void FlowerStandaloneAudioProcessor::triggerCarnivalTrack (
 
     static constexpr float baseFrequencies[]
     {
-        55.0f, 180.0f, 5200.0f, 220.0f,
-        330.0f, 120.0f, 65.0f
+        48.0f, 185.0f, 5600.0f, 220.0f,
+        330.0f, 125.0f, 82.4069f
     };
 
     const float semitones = (voice.pitch - 0.5f) * 48.0f;
