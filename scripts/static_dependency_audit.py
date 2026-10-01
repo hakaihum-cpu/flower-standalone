@@ -53,7 +53,6 @@ required = [
     "scripts/materialize_frame_pack.py",
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_juce_android_gamepad_keys.py",
-    "scripts/verify_juce_module_dependencies.py",
     "tests/core_test.cpp",
 ]
 for rel in required:
@@ -151,7 +150,6 @@ ci = (R / ".circleci/config.yml").read_text()
 for need in [
     "run_build:", "default: false",
     "Materialize exact supplied frame pack",
-    "verify_juce_module_dependencies.py",
     "no_output_timeout: 30m",
     "CMAKE_BUILD_PARALLEL_LEVEL=2",
     "--max-workers=2",

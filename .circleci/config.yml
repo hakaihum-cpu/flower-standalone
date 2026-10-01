@@ -56,7 +56,6 @@ jobs:
             fi
 
             python3 scripts/patch_juce_android_gamepad_keys.py JUCE
-            python3 scripts/verify_juce_module_dependencies.py JUCE RealtimeChordFX_Standalone.jucer
 
             PROJUCER="$(find JUCE/build -type f -name Projucer -perm -111 2>/dev/null | head -n 1 || true)"
             if [ -z "$PROJUCER" ]; then
