@@ -1,2 +1,3 @@
 build_id,date_time,issue,branch,commit_sha,result,artifact,sha256,golden_baseline,device_result,notes
 circleci-build-58,2026-10-02,CHORD-1,feature/CHORD-1-bootstrap,a530e8f655c1061fb890154d0f757f6e1aa314b3,FAILURE,NONE,,false,NOT_RUN,"Projucer resave failed before Android project generation: juce_audio_processors_headless dependency missing; fixed by commits 6282846d and 4d06da10."
+circleci-job-5f28960e-c148-45ff-8ebd-b341ca13cab0,2026-10-02,AN-42,feature/CHORD-1-bootstrap,e76063914062255d837ad309a56daa714d916aa2,FAILURE,NONE,,false,NOT_RUN,"Second CI attempt failed; exact failing step/log not available in chat. Rebuild prohibited until Golden/Jira preflight restoration. CircleCI status URL job UUID 5f28960e-c148-45ff-8ebd-b341ca13cab0."\n

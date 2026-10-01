@@ -1,6 +1,10 @@
 #include "PluginEditor.h"
 #include "ParameterIDs.h"
 #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#if JUCE_ANDROID
+ #include <jni.h>
+ #include <juce_core/native/juce_JNIHelpers_android.h>
+#endif
 
 namespace
 {
@@ -126,8 +130,24 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
     currentFrame = frames.getFrame (0);
     loadedFrame = 0;
 
+   #if JUCE_ANDROID
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+    {
+        holder->stopPlaying();
+        holder->deviceManager.closeAudioDevice();
+
+        const auto audioError = holder->deviceManager.initialise (1, 2, nullptr, true);
+
+        if (audioError.isNotEmpty())
+            juce::Logger::writeToLog ("RealtimeChordFX Android audio initialise failed: " + audioError);
+
+        holder->getMuteInputValue().setValue (false);
+        holder->startPlaying();
+    }
+   #else
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
         holder->getMuteInputValue().setValue (false);
+   #endif
 
     startTimerHz (30);
 }
