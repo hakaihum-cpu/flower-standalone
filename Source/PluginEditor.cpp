@@ -1039,14 +1039,15 @@ void CarnivalScreenComponent::paintHeader (
     if (page == Page::Sequence)
     {
         const auto rateText =
-            " x" + juce::String (
+            juce::String (" x")
+            + juce::String (
                 juce::roundToInt (
                     processor.getCarnivalRateMultiplier()));
 
         status =
             processor.isCarnivalClockMidi()
-                ? "MIDI" + rateText
-                : "INT "
+                ? juce::String ("MIDI") + rateText
+                : juce::String ("INT ")
                     + juce::String (
                         juce::roundToInt (processor.getCarnivalBpm()))
                     + rateText;
