@@ -243,6 +243,7 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
         carnivalMidiTriggerCount = 0;
         carnivalMidiClockCounter = 0;
         carnivalSamplesUntilStep = 0.0;
+        carnivalMidiRunning = false;
 
         for (auto& voice : carnivalVoices)
         {
@@ -984,7 +985,6 @@ void FlowerStandaloneAudioProcessor::setCarnivalEnabled (bool enabled) noexcept
     else
     {
         carnivalPlaying.store (false, std::memory_order_release);
-        carnivalMidiRunning = false;
         carnivalCurrentStep.store (-1, std::memory_order_relaxed);
         carnivalPreviewTrackRequested.store (-1, std::memory_order_relaxed);
         carnivalPreviewStepRequested.store (-1, std::memory_order_relaxed);
