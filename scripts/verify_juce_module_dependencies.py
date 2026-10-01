@@ -26,11 +26,16 @@ for m in sorted(mods):
     if not header.is_file():
         raise SystemExit(f"[FAIL] JUCE module header missing: {header}")
     text = header.read_text(errors="ignore")
-    vm = re.search(r"(?m)^[ \\t]*version:[ \\t]*([^\\s]+)", text)
-    dm = re.search(r"(?m)^[ \\t]*dependencies:[ \\t]*([^\\r\\n]*)", text)
-    versions[m] = vm.group(1).strip() if vm else None
-    raw = dm.group(1).strip() if dm else ""
-    deps[m] = {x for x in re.split(r"[\s,]+", raw) if x}
+    fields = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if ":" in stripped:
+            key, value = stripped.split(":", 1)
+            if key in {"version", "dependencies"}:
+                fields[key] = value.strip()
+    versions[m] = fields.get("version")
+    raw = fields.get("dependencies", "")
+    deps[m] = {x for x in re.split(r"[\\s,]+", raw) if x}
 
 for m in sorted(mods):
     if versions[m] != "9.0.2":
