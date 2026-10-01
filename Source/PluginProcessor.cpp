@@ -1279,11 +1279,14 @@ void FlowerStandaloneAudioProcessor::handleCarnivalMidiClock (
             {
                 const double bpm = static_cast<double> (
                     carnivalBpm.load (std::memory_order_relaxed));
+                const double rate =
+                    static_cast<double> (getCarnivalRateMultiplier());
                 const double stepSamples =
                     juce::jmax (1.0, currentSampleRate)
                     * 60.0
                     / juce::jlimit (40.0, 240.0, bpm)
-                    / 2.0;
+                    / 2.0
+                    / juce::jmax (1.0, rate);
 
                 carnivalSamplesUntilStep =
                     static_cast<double> (
@@ -1307,7 +1310,13 @@ void FlowerStandaloneAudioProcessor::handleCarnivalMidiClock (
         {
             ++carnivalMidiClockCounter;
 
-            if (carnivalMidiClockCounter >= 12)
+            const int clocksPerStep =
+                juce::jlimit (
+                    1, 12,
+                    juce::roundToInt (
+                        12.0f / getCarnivalRateMultiplier()));
+
+            if (carnivalMidiClockCounter >= clocksPerStep)
             {
                 carnivalMidiClockCounter = 0;
                 const int next =
