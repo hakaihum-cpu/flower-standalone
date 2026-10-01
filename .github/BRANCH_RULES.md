@@ -1,23 +1,10 @@
-# GitHub branch rules for androidapp
+# Branch rules
 
 ## main
-- Golden Baseline only.
-- No direct routine development.
-- Changes arrive only through pull request.
-- Merge only after explicit user approval that the revision becomes the new Golden Baseline.
-- Never rewrite history.
+Golden Baseline only. No routine direct development. Merge only after explicit user approval.
 
-## feature/*
-Recommended naming:
-`feature/AN-<issue-number>-<short-name>`
+## feature/* / fix/*
+One issue/scope per branch. No unrelated edits.
 
-## fix/*
-Recommended naming:
-`fix/AN-<issue-number>-<short-name>`
-
-## release/*
-Used only when a release candidate must be stabilized separately.
-
-## CI cost-control rule
-GitHub Actions are not used.
-CircleCI pushes do not build by default; build workflow runs only when pipeline parameter `run_build=true`.
+## CI
+GitHub Actions are not used. CircleCI builds only with manual pipeline parameter `run_build=true`.

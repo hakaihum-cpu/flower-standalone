@@ -14,25 +14,23 @@ jobs:
       - checkout
 
       - run:
+          name: Materialize exact supplied frame pack
+          command: python3 scripts/materialize_frame_pack.py
+
+      - run:
           name: Static dependency audit
-          command: |
-            python3 scripts/static_dependency_audit.py
+          command: python3 scripts/static_dependency_audit.py
 
       - restore_cache:
           keys:
-            - juce-9.0.2-projucer-v1
-            - gradle-flower-v1-
+            - juce-9.0.2-projucer-chordfx-v1
+            - gradle-chordfx-v1-
 
       - run:
-          name: Install Projucer Linux dependencies
+          name: Install Projucer dependencies
           command: |
             sudo apt-get update
-            sudo apt-get install -y \
-              git cmake ninja-build \
-              libasound2-dev libjack-jackd2-dev libcurl4-openssl-dev \
-              libfreetype6-dev libx11-dev libxcomposite-dev libxcursor-dev \
-              libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
-              libwebkit2gtk-4.1-dev libglu1-mesa-dev mesa-common-dev
+            sudo apt-get install -y git cmake ninja-build libasound2-dev libjack-jackd2-dev libcurl4-openssl-dev libfreetype6-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev libwebkit2gtk-4.1-dev libglu1-mesa-dev mesa-common-dev
 
       - run:
           name: Prepare JUCE 9.0.2 and Projucer
@@ -42,15 +40,9 @@ jobs:
               rm -rf JUCE
               git clone --depth 1 --branch 9.0.2 https://github.com/juce-framework/JUCE.git JUCE
             fi
-
-            python3 scripts/patch_juce_android_gamepad_keys.py JUCE
-
             PROJUCER="$(find JUCE/build -type f -name Projucer -perm -111 2>/dev/null | head -n 1 || true)"
             if [ -z "$PROJUCER" ]; then
-              cmake -S JUCE -B JUCE/build \
-                -DJUCE_BUILD_EXTRAS=ON \
-                -DJUCE_BUILD_EXAMPLES=OFF \
-                -DCMAKE_BUILD_TYPE=Release
+              cmake -S JUCE -B JUCE/build -DJUCE_BUILD_EXTRAS=ON -DJUCE_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release
               cmake --build JUCE/build --target Projucer -j2
               PROJUCER="$(find JUCE/build -type f -name Projucer -perm -111 | head -n 1)"
             fi
@@ -58,49 +50,38 @@ jobs:
             echo "export PROJUCER=$PROJUCER" >> "$BASH_ENV"
 
       - save_cache:
-          key: juce-9.0.2-projucer-v1
-          paths:
-            - JUCE
+          key: juce-9.0.2-projucer-chordfx-v1
+          paths: [JUCE]
 
       - run:
           name: Install Android SDK components
           command: |
             yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-              "platforms;android-35" \
-              "build-tools;35.0.0" \
-              "ndk;26.1.10909125"
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "ndk;26.1.10909125"
 
       - run:
-          name: Generate Android Studio project
+          name: Generate Android project
           command: |
             set -euo pipefail
-            "$PROJUCER" --resave FLOWER_Standalone.jucer
+            "$PROJUCER" --resave RealtimeChordFX_Standalone.jucer
             test -d Builds/Android
             python3 scripts/patch_android_native_parallelism.py Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
-            grep -F -- '-DCMAKE_JOB_POOL_COMPILE:STRING=compile' Builds/Android/app/build.gradle
-            grep -F -- '-DCMAKE_JOB_POOL_LINK:STRING=link' Builds/Android/app/build.gradle
             printf 'sdk.dir=%s\n' "$ANDROID_HOME" > Builds/Android/local.properties
 
       - run:
-          name: Create Android debug signing keystore
+          name: Create debug signing keystore
           command: |
             set -euo pipefail
             mkdir -p "$HOME/.android"
             rm -f "$HOME/.android/debug.keystore"
-            keytool -genkeypair -v \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android -alias androiddebugkey -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US" \
-              -keyalg RSA -keysize 2048 -validity 10000
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
 
       - restore_cache:
-          keys:
-            - gradle-flower-v1-
+          keys: [gradle-chordfx-v1-]
 
       - run:
-          name: Build optimized installable APK with native diagnostics
+          name: Build release APK with diagnostics
           no_output_timeout: 30m
           command: |
             set -u
@@ -109,147 +90,52 @@ jobs:
             export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=2"
             mkdir -p android-artifact
             LOG="$PWD/android-artifact/gradle-build.log"
-            EXIT_FILE="$PWD/android-artifact/gradle-exit-code.txt"
-
-            {
-              echo "[diagnostic] start $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              echo "[diagnostic] nproc=$(nproc)"
-              echo "[diagnostic] processors_online=$(getconf _NPROCESSORS_ONLN || true)"
-              echo "[diagnostic] CMAKE_BUILD_PARALLEL_LEVEL=$CMAKE_BUILD_PARALLEL_LEVEL"
-              echo "[diagnostic] uname=$(uname -a)"
-              java -version 2>&1
-              free -m || true
-              df -h || true
-              ulimit -a || true
-              if [ -r /sys/fs/cgroup/memory.max ]; then
-                echo "[diagnostic] cgroup memory.max=$(cat /sys/fs/cgroup/memory.max)"
-              fi
-              if [ -r /sys/fs/cgroup/memory.current ]; then
-                echo "[diagnostic] cgroup memory.current=$(cat /sys/fs/cgroup/memory.current)"
-              fi
-            } | tee "$LOG"
-
+            EXIT="$PWD/android-artifact/gradle-exit-code.txt"
             cd Builds/Android
             chmod +x gradlew
-
             set +e
-            ./gradlew assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2 >> "$LOG" 2>&1 &
-            GRADLE_PID=$!
-            echo "[diagnostic] gradle_pid=$GRADLE_PID" | tee -a "$LOG"
-
-            while kill -0 "$GRADLE_PID" 2>/dev/null; do
-              {
-                echo "[heartbeat] $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-                free -m || true
-                if [ -r /sys/fs/cgroup/memory.current ]; then
-                  echo "[heartbeat] cgroup memory.current=$(cat /sys/fs/cgroup/memory.current)"
-                fi
-                CLANG_COUNT="$(ps -eo comm= | grep -Ec '^clang(\+\+)?$' || true)"
-                echo "[heartbeat] clang_processes=$CLANG_COUNT"
-                ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 16 || true
-
-                if [ -r /sys/fs/cgroup/memory.stat ]; then
-                  echo "[heartbeat] memory.stat selected fields:"
-                  grep -E '^(anon|file|kernel|kernel_stack|pagetables|sock|slab|shmem) ' /sys/fs/cgroup/memory.stat || true
-                fi
-                if [ -r /sys/fs/cgroup/memory.events ]; then
-                  echo "[heartbeat] memory.events:"
-                  cat /sys/fs/cgroup/memory.events || true
-                fi
-              } | tee -a "$LOG"
+            ./gradlew assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2 > "$LOG" 2>&1 &
+            PID=$!
+            while kill -0 "$PID" 2>/dev/null; do
+              echo "[heartbeat] $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$LOG"
               sleep 30
             done
-
-            wait "$GRADLE_PID"
-            STATUS=$?
+            wait "$PID"; STATUS=$?
             set -e
-
-            echo "$STATUS" | tee "$EXIT_FILE"
-            echo "[diagnostic] gradle_exit=$STATUS" | tee -a "$LOG"
-            echo "[diagnostic] final memory/process snapshot" | tee -a "$LOG"
-            free -m | tee -a "$LOG" || true
-            if [ -r /sys/fs/cgroup/memory.stat ]; then
-              echo "[diagnostic] final memory.stat selected fields" | tee -a "$LOG"
-              grep -E '^(anon|file|kernel|kernel_stack|pagetables|sock|slab|shmem) ' /sys/fs/cgroup/memory.stat | tee -a "$LOG" || true
-            fi
-            if [ -r /sys/fs/cgroup/memory.events ]; then
-              echo "[diagnostic] final memory.events" | tee -a "$LOG"
-              cat /sys/fs/cgroup/memory.events | tee -a "$LOG" || true
-            fi
-            ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 20 | tee -a "$LOG" || true
-
-            echo "[diagnostic] last 250 Gradle log lines:"
+            echo "$STATUS" > "$EXIT"
             tail -n 250 "$LOG" || true
-
-            # Do not fail this step. Artifact collection and the explicit
-            # result-propagation step below must run even when Gradle fails.
             exit 0
 
       - save_cache:
-          key: gradle-flower-v1-{{ epoch }}
-          paths:
-            - ~/.gradle/caches
-            - ~/.gradle/wrapper
+          key: gradle-chordfx-v1-{{ epoch }}
+          paths: [~/.gradle/caches, ~/.gradle/wrapper]
 
       - run:
-          name: Collect build diagnostics and APK
+          name: Collect APK and identity
           when: always
           command: |
             set -euo pipefail
             mkdir -p android-artifact
             git rev-parse HEAD | tee android-artifact/SOURCE_COMMIT.txt
-
-            find Builds/Android/app/.cxx -type f -name 'build_command.txt' -print -exec sh -c 'echo "===== $1 ====="; cat "$1"' _ {} \; \
-              > android-artifact/native-build-commands.txt 2>/dev/null || true
-
-            {
-              echo "Expected CMake/Ninja job pools:"
-              echo "compile=2"
-              echo "link=1"
-              find Builds/Android/app/.cxx -type f -name 'build.ninja' -print -exec sh -c 'echo "===== $1 ====="; grep -E "^(pool (compile|link)|  depth = )" "$1" || true' _ {} \;
-            } > android-artifact/native-job-pools.txt 2>/dev/null || true
-
             APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1 || true)"
             if [ -n "$APK" ]; then
-              cp "$APK" android-artifact/Flower-Standalone-Android.apk
-              sha256sum android-artifact/Flower-Standalone-Android.apk \
-                | tee android-artifact/SHA256.txt
+              cp "$APK" android-artifact/RealtimeChordFX-Android.apk
+              sha256sum android-artifact/RealtimeChordFX-Android.apk | tee android-artifact/SHA256.txt
             else
               echo "No release APK produced." | tee android-artifact/NO_APK.txt
             fi
-
-      - store_artifacts:
-          path: android-artifact/Flower-Standalone-Android.apk
-          destination: Flower-Standalone-Android.apk
 
       - store_artifacts:
           path: android-artifact
           destination: diagnostics
 
       - run:
-          name: Propagate Gradle build result
+          name: Propagate Gradle result
           when: always
           command: |
             set -euo pipefail
-            if [ ! -f android-artifact/gradle-exit-code.txt ]; then
-              echo "Gradle exit code file is missing; runner may have terminated unexpectedly."
-              if [ -f android-artifact/gradle-build.log ]; then
-                echo "===== Gradle log tail ====="
-                tail -n 250 android-artifact/gradle-build.log || true
-              fi
-              exit 97
-            fi
-
+            test -f android-artifact/gradle-exit-code.txt || exit 97
             STATUS="$(cat android-artifact/gradle-exit-code.txt)"
-            echo "Gradle exit code: $STATUS"
-
-            if [ "$STATUS" != "0" ] && [ -f android-artifact/gradle-build.log ]; then
-              echo "===== Gradle failure highlights ====="
-              grep -nE '(^|[^A-Za-z])(error:|fatal error:|FAILURE:|FAILED|Exception|undefined reference|ninja: build stopped|Execution failed for task)'                 android-artifact/gradle-build.log | tail -n 120 || true
-              echo "===== Gradle failure log tail ====="
-              tail -n 300 android-artifact/gradle-build.log || true
-            fi
-
             exit "$STATUS"
 
 workflows:

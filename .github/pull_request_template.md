@@ -1,28 +1,20 @@
-## Related Jira issue
-AN-___
+## Scope / issue
 
-## Change purpose
-<!-- State exactly what this PR changes. -->
+## Golden Baseline source
 
-## Files intentionally changed
-<!-- List files/directories that are in scope. -->
+## Changed files
 
-## Files intentionally NOT changed
-<!-- Explicitly note protected/out-of-scope areas. -->
+## Protected / unchanged areas
 
-## Static verification
-- [ ] Diff reviewed
-- [ ] No unrelated changes
-- [ ] Requirements/issue acceptance criteria checked
-- [ ] No secrets committed
+## Static audit
 
-## Build permission
-- [ ] Build is actually required for this change
-- [ ] CircleCI `run_build=true` may be used
+## Build justification
 
-## Regression check
-- [ ] Existing confirmed behavior preserved
-- [ ] Golden Baseline impact assessed
+## Device verification
 
-## Merge rule
-- [ ] User explicitly approved merge to `main`
+## Regression result
+
+## Artifact / commit / SHA-256
+
+## Merge approval
+Do not merge until explicit user approval.
