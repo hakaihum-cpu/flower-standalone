@@ -844,7 +844,7 @@ CarnivalScreenComponent::CarnivalScreenComponent (
     activeStepImage = loadImageFromBase64 (
         juce::String (CarnivalActiveData::data));
 
-    startTimerHz (30);
+    startTimerHz (60);
 }
 
 CarnivalScreenComponent::~CarnivalScreenComponent()
@@ -1038,11 +1038,18 @@ void CarnivalScreenComponent::paintHeader (
     juce::String status = title;
     if (page == Page::Sequence)
     {
+        const auto rateText =
+            " x" + juce::String (
+                juce::roundToInt (
+                    processor.getCarnivalRateMultiplier()));
+
         status =
             processor.isCarnivalClockMidi()
-                ? "MIDI"
-                : "INT " + juce::String (
-                    juce::roundToInt (processor.getCarnivalBpm()));
+                ? "MIDI" + rateText
+                : "INT "
+                    + juce::String (
+                        juce::roundToInt (processor.getCarnivalBpm()))
+                    + rateText;
     }
 
     g.setColour (juce::Colour (0xffd7c5bb));
@@ -1804,6 +1811,22 @@ bool CarnivalScreenComponent::handleKeyPress (
         return true;
     }
 
+    // Android gamepad bridge: L2=F20, R2=F21.
+    // Step-rate ladder: x1 <-> x2 <-> x4 <-> x12.
+    if (code == juce::KeyPress::F20Key || ch == '[')
+    {
+        processor.adjustCarnivalRate (-1);
+        repaint();
+        return true;
+    }
+
+    if (code == juce::KeyPress::F21Key || ch == ']')
+    {
+        processor.adjustCarnivalRate (1);
+        repaint();
+        return true;
+    }
+
     if (page == Page::Sequence)
     {
         if (code == juce::KeyPress::leftKey)
@@ -2431,6 +2454,8 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
         else if (code == juce::KeyPress::F15Key) latchCode = 3;
         else if (code == juce::KeyPress::F16Key) latchCode = 4;
         else if (code == juce::KeyPress::F19Key) latchCode = 19;
+        else if (code == juce::KeyPress::F20Key) latchCode = 20;
+        else if (code == juce::KeyPress::F21Key) latchCode = 21;
 
         if (latchCode != 0 && toggleButtonLatchCode == latchCode)
             return true;
@@ -2442,7 +2467,8 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
     }
 
     // Android gamepad bridge:
-    // SELECT=F19, A=F13, B=F14, X=F15, Y=F16, L1=F17, R1=F18.
+    // SELECT=F19, A=F13, B=F14, X=F15, Y=F16,
+    // L1=F17, R1=F18, L2=F20, R2=F21.
     if (code == juce::KeyPress::F19Key || ch == 'c' || ch == 'C')
     {
         if (toggleButtonLatchCode != 19)
