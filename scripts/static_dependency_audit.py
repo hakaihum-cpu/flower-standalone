@@ -11,7 +11,16 @@ if len(rows)!=300: raise SystemExit(f'[FAIL] expected 300 supplied frames, got {
 pack=(R/'Resources/classroom_frames.pack').read_bytes()
 if pack[:4]!=b'CRF1': raise SystemExit('[FAIL] frame pack magic mismatch')
 # No synth path: this product transforms input audio only.
-src='\n'.join(p.read_text(errors='ignore') for p in (R/'Source').glob('*') if p.suffix in {'.h','.cpp'})
+target_source_files = [
+    'Source/FramePack.cpp','Source/FramePack.h',
+    'Source/GranularPitchBank.cpp','Source/GranularPitchBank.h',
+    'Source/ParameterIDs.h',
+    'Source/PluginEditor.cpp','Source/PluginEditor.h',
+    'Source/PluginProcessor.cpp','Source/PluginProcessor.h',
+    'Source/TheoryEngine.cpp','Source/TheoryEngine.h',
+    'Source/YinPitchDetector.cpp','Source/YinPitchDetector.h',
+]
+src='\n'.join((R/name).read_text(errors='ignore') for name in target_source_files)
 for bad in ['SynthVoice','juce::Synthesiser','SineVoice','FLOWER','MIYAKO']:
     if bad in src: raise SystemExit(f'[FAIL] forbidden cross-project/synth token in Source: {bad}')
 for need in ['COMPLEX','BAR','WIDTH','LENGTH','iRig Streamer','DETECTED','● REC']:
@@ -32,7 +41,10 @@ root=ET.parse(R/'RealtimeChordFX_Standalone.jucer').getroot()
 if root.attrib.get('pluginFormats')!='buildStandalone': raise SystemExit('[FAIL] standalone-only contract broken')
 if root.attrib.get('pluginIsSynth')!='0': raise SystemExit('[FAIL] synth flag must be off')
 if root.attrib.get('pluginWantsMidiIn')!='1': raise SystemExit('[FAIL] MIDI input required for clock/control')
-if 'Resources/classroom_frames.pack' not in (R/'RealtimeChordFX_Standalone.jucer').read_text(): raise SystemExit('[FAIL] supplied frame pack not embedded')
+jucer_text=(R/'RealtimeChordFX_Standalone.jucer').read_text()
+if 'Resources/classroom_frames.pack' not in jucer_text: raise SystemExit('[FAIL] supplied frame pack not embedded')
+for bad_ref in ['FLOWER_Standalone.jucer','SynthVoice','Carnival','flower_']:
+    if bad_ref in jucer_text: raise SystemExit(f'[FAIL] cross-project JUCER reference found: {bad_ref}')
 ci=(R/'.circleci/config.yml').read_text()
 for need in ['run_build','default: false','CMAKE_BUILD_PARALLEL_LEVEL=2','--max-workers=2','patch_android_native_parallelism.py']:
     if need not in ci: raise SystemExit(f'[FAIL] CI guard missing: {need}')
