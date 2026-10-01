@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re, sys, xml.etree.ElementTree as ET
+import sys, xml.etree.ElementTree as ET
 
 if len(sys.argv) != 3:
     raise SystemExit("usage: verify_juce_module_dependencies.py <JUCE root> <project.jucer>")
@@ -35,7 +35,7 @@ for m in sorted(mods):
                 fields[key] = value.strip()
     versions[m] = fields.get("version")
     raw = fields.get("dependencies", "")
-    deps[m] = {x for x in re.split(r"[\\s,]+", raw) if x}
+    deps[m] = set(raw.replace(",", " ").split())
 
 for m in sorted(mods):
     if versions[m] != "9.0.2":
