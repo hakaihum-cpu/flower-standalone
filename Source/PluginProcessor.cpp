@@ -237,6 +237,22 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
 
+    if (carnivalKillVoicesRequested.exchange (
+            false, std::memory_order_acq_rel))
+    {
+        carnivalMidiTriggerCount = 0;
+        carnivalMidiClockCounter = 0;
+        carnivalSamplesUntilStep = 0.0;
+
+        for (auto& voice : carnivalVoices)
+        {
+            voice.active = false;
+            voice.envelope = 0.0f;
+            voice.ageSeconds = 0.0f;
+            voice.filterStateL = voice.filterStateR = 0.0f;
+        }
+    }
+
     if (carnivalEnabled.load (std::memory_order_acquire))
     {
         handleCarnivalMidiClock (midiMessages);
