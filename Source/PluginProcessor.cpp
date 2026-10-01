@@ -1720,16 +1720,20 @@ void FlowerStandaloneAudioProcessor::processCarnival (
                     const float phase =
                         static_cast<float> (voice.phase1 / twoPi);
                     const float saw = phase * 2.0f - 1.0f;
+                    const float square =
+                        phase < 0.5f ? 1.0f : -1.0f;
                     const float sine =
                         std::sin (static_cast<float> (voice.phase1));
                     const float sub =
                         std::sin (static_cast<float> (voice.phase2));
 
                     mono =
-                        saw * (0.18f + voice.character * 0.28f)
-                        + sine * 0.52f
-                        + sub * 0.30f;
-                    mono = std::tanh (mono * (1.20f + voice.character * 1.25f));
+                        saw * (0.20f + voice.character * 0.20f)
+                        + square * (0.05f + voice.character * 0.14f)
+                        + sine * 0.28f
+                        + sub * 0.46f;
+                    mono = std::tanh (
+                        mono * (1.05f + voice.character * 1.45f));
                     break;
                 }
             }
