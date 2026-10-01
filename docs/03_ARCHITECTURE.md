@@ -1,49 +1,28 @@
 # Architecture
 
-## Product architecture decision for AN-7
+## Signal path
+Audio input -> mono analysis tap -> YIN pitch estimate -> stability gate -> TheoryEngine -> target MIDI pitches -> pitch ratios -> GranularPitchBank -> stereo output.
 
-The extraction baseline keeps the Flower implementation in **JUCE/C++** rather than rewriting Flower into the temporary Java bootstrap UI.
+Stopped state bypasses dry input. Running state outputs generated harmony only in the MVP.
 
-Reason:
-- the MIYAKO Flower audio engine, UI and Actor v3 behavior are already implemented in JUCE/C++,
-- the requirement is reuse-first, not redesign-first,
-- a native-Java rewrite would change too many variables before parity is established.
+## Pitch detection
+1024-sample YIN window, 256-sample hop. Range approximately 75..1100 Hz. RMS and confidence gates reject silence/unstable estimates. Two matching note estimates are required before a note change is accepted.
 
-The current Java `MainActivity` is therefore bootstrap-only and may be replaced when the JUCE standalone target is introduced.
+## Harmony generation
+The first note establishes a provisional tonal centre. Because one note cannot establish major/minor, the initial chord deliberately avoids the third (`5(add9)`). Following input notes add major/minor evidence. Progression movement uses a weighted degree transition matrix rather than equiprobable random chords.
 
-## Standalone target
-- Android standalone application
-- JUCE/C++ audio/UI core
-- Sine oscillator only
-- ADSR
-- Filter
-- LFO
-- Flower looper + four-grain engine
-- Flower waveform/telemetry UI
-- Flower Actor v3 rooftop runtime
-- MIDI support retained only where required by standalone behavior
+COMPLEX layers additional harmonic vocabulary; it does not simply increase random chance uniformly.
 
-## Explicitly excluded from the first extraction
-- MIYAKO DX7 code
-- MIYAKO Sampler code
-- Twilight
-- Notebook FX
-- unrelated MIYAKO visualizer modes
-- MIYAKO VST3 target
-- cross-repository runtime/build dependency
+## Pitch shifting
+A low-latency overlapping-grain pitch bank reuses the input audio. Each target chord tone receives a pitch ratio from target MIDI note vs current detected pitch. No oscillator/synth voice is present.
 
-## Extraction principle
-Do not copy entire MIYAKO files unchanged merely because Flower code is currently embedded inside them.
+## Timing
+Internal: BAR factor × four beats × 60/BPM.
+MIDI: 24 PPQN, therefore 24/48/96/192 clocks for 1/4, 1/2, 1, 2 bars.
+LENGTH=MAX bypasses timed progression and latches until new input.
 
-For large shared files such as `PluginEditor.cpp` and `PluginProcessor.cpp`:
-1. identify the Flower-specific code,
-2. extract the minimum required supporting code,
-3. preserve Flower behavior,
-4. remove MIYAKO-only branches,
-5. keep source provenance documented,
-6. validate statically before running CI.
+## Visuals
+The 300 source JPEG byte streams are packed without image regeneration into `classroom_frames.pack`. Runtime decodes the selected frame and stretches it to the screen. The sequence index changes only on chord events.
 
-## Independence boundary
-Once copied, standalone files are owned by flower-standalone.
-Future standalone changes do not imply corresponding MIYAKO changes.
-Future MIYAKO changes do not automatically flow into standalone.
+## Audio-device access
+The standalone editor uses JUCE `StandalonePluginHolder::deviceManager` so CONFIG operates on the actual standalone host device manager rather than a separate unused manager.
