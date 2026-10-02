@@ -15,8 +15,8 @@ public:
     void prepare (double sr)
     {
         sampleRate = sr > 1000.0 ? sr : 48000.0;
-        history.assign ((size_t) std::max (4096.0, sampleRate * 0.30), 0.0f);
-        capture.assign (4096, 0.0f);
+        history.assign ((size_t) std::max (4096.0, sampleRate * 0.35), 0.0f);
+        capture.assign ((size_t) std::max (4096.0, sampleRate * 0.12), 0.0f);
         reset();
     }
 
@@ -31,7 +31,6 @@ public:
         sourceMidi = 60.0f;
         phase.fill (0.0);
         ratio.fill (1.0);
-        capturePending = false;
     }
 
     void pushInput (float sample) noexcept
@@ -42,9 +41,6 @@ public:
         history[(size_t) writePosition] = sample;
         writePosition = (writePosition + 1) % (int) history.size();
         historyFilled = std::min (historyFilled + 1, (int) history.size());
-
-        if (capturePending)
-            tryCapture();
     }
 
     void setPlan (const std::vector<int>& midiNotes, float sourceMidiFloat,
@@ -52,32 +48,35 @@ public:
     {
         sourceMidi = sourceMidiFloat;
         targetCount = std::min ((int) midiNotes.size(), maxVoices);
+
         for (int i = 0; i < targetCount; ++i)
         {
             const int note = std::clamp (midiNotes[(size_t) i], 60, 83);
             ratio[(size_t) i] = std::pow (2.0, ((double) note - (double) sourceMidi) / 12.0);
             phase[(size_t) i] = 0.0;
         }
+
         for (int i = targetCount; i < maxVoices; ++i)
         {
             ratio[(size_t) i] = 1.0;
             phase[(size_t) i] = 0.0;
         }
-        capturePending = targetCount > 0 && (recapture || captureLength < 32);
-        if (capturePending)
-            tryCapture();
+
+        if (recapture || captureLength <= 0)
+            captureRecentPhrase();
     }
 
     float renderSample (bool gateOpen) noexcept
     {
-        if (! gateOpen || captureLength < 32 || targetCount <= 0)
+        if (! gateOpen || captureLength < 64 || targetCount <= 0)
             return 0.0f;
 
         float sum = 0.0f;
         for (int voice = 0; voice < targetCount; ++voice)
         {
-            sum += readCapture (phase[(size_t) voice]);
+            sum += readCaptureLooped (phase[(size_t) voice]);
             phase[(size_t) voice] += ratio[(size_t) voice];
+
             while (phase[(size_t) voice] >= (double) captureLength)
                 phase[(size_t) voice] -= (double) captureLength;
         }
@@ -85,92 +84,45 @@ public:
         return sum / std::sqrt ((float) std::max (1, targetCount));
     }
 
-    bool hasCapture() const noexcept { return captureLength >= 32; }
+    bool hasCapture() const noexcept { return captureLength >= 64; }
 
 private:
-    float historyAtAge (int age) const noexcept
+    void captureRecentPhrase() noexcept
     {
-        if (history.empty() || age < 0 || age >= historyFilled)
-            return 0.0f;
-        int index = writePosition - 1 - age;
-        while (index < 0) index += (int) history.size();
-        return history[(size_t) index];
-    }
-
-    bool isPositiveCrossingAtAge (int age) const noexcept
-    {
-        if (age <= 0 || age >= historyFilled)
-            return false;
-        const float older = historyAtAge (age);
-        const float newer = historyAtAge (age - 1);
-        return older <= 0.0f && newer > 0.0f;
-    }
-
-    void tryCapture() noexcept
-    {
-        if (! capturePending || targetCount <= 0 || historyFilled < 96)
+        if (history.empty() || capture.empty())
             return;
 
-        const double hz = 440.0 * std::pow (2.0, ((double) sourceMidi - 69.0) / 12.0);
-        const int period = std::clamp ((int) std::lround (sampleRate / std::max (40.0, hz)), 16, 1200);
-        const int desired = std::clamp (period * 2, 64, (int) capture.size() - 2);
+        // Capture a real recent phrase (~90 ms), not one/two pitch periods.
+        // This keeps timbral evolution and avoids turning the input into a
+        // periodic oscillator/vocoder-like source.
+        const int wanted = std::clamp (
+            (int) std::lround (sampleRate * 0.090),
+            256,
+            (int) capture.size());
 
-        if (historyFilled < desired + period / 2 + 8)
+        if (historyFilled < wanted)
             return;
 
-        int newestCrossing = -1;
-        const int recentSearch = std::min (period * 2, historyFilled - 2);
-        for (int age = 1; age <= recentSearch; ++age)
-        {
-            if (isPositiveCrossingAtAge (age))
-            {
-                newestCrossing = age;
-                break;
-            }
-        }
-        if (newestCrossing < 0)
-            return;
+        int start = writePosition - wanted;
+        while (start < 0) start += (int) history.size();
 
-        const int targetOlderAge = newestCrossing + desired;
-        const int searchRadius = std::max (8, period / 2);
-        const int begin = std::max (newestCrossing + 32, targetOlderAge - searchRadius);
-        const int end = std::min (historyFilled - 2, targetOlderAge + searchRadius);
-
-        int oldestCrossing = -1;
-        int bestDistance = 1000000;
-        for (int age = begin; age <= end; ++age)
-        {
-            if (! isPositiveCrossingAtAge (age))
-                continue;
-            const int distance = std::abs (age - targetOlderAge);
-            if (distance < bestDistance)
-            {
-                bestDistance = distance;
-                oldestCrossing = age;
-            }
-        }
-        if (oldestCrossing < 0)
-            return;
-
-        const int length = std::clamp (oldestCrossing - newestCrossing,
-                                       32, (int) capture.size());
         double mean = 0.0;
-        for (int i = 0; i < length; ++i)
+        for (int i = 0; i < wanted; ++i)
         {
-            const int age = oldestCrossing - 1 - i;
-            capture[(size_t) i] = historyAtAge (age);
+            const int index = (start + i) % (int) history.size();
+            capture[(size_t) i] = history[(size_t) index];
             mean += capture[(size_t) i];
         }
-        mean /= (double) length;
-        for (int i = 0; i < length; ++i)
+
+        mean /= (double) wanted;
+        for (int i = 0; i < wanted; ++i)
             capture[(size_t) i] -= (float) mean;
 
-        captureLength = length;
+        captureLength = wanted;
         phase.fill (0.0);
-        capturePending = false;
     }
 
-    float readCapture (double position) const noexcept
+    float readCaptureLooped (double position) const noexcept
     {
         if (captureLength <= 1)
             return 0.0f;
@@ -178,11 +130,34 @@ private:
         while (position < 0.0) position += (double) captureLength;
         while (position >= (double) captureLength) position -= (double) captureLength;
 
-        const int i0 = (int) position;
-        const int i1 = (i0 + 1) % captureLength;
-        const float frac = (float) (position - (double) i0);
-        return capture[(size_t) i0]
-             + frac * (capture[(size_t) i1] - capture[(size_t) i0]);
+        auto readLinear = [this] (double p) noexcept
+        {
+            while (p < 0.0) p += (double) captureLength;
+            while (p >= (double) captureLength) p -= (double) captureLength;
+
+            const int i0 = (int) p;
+            const int i1 = (i0 + 1) % captureLength;
+            const float frac = (float) (p - (double) i0);
+            return capture[(size_t) i0]
+                 + frac * (capture[(size_t) i1] - capture[(size_t) i0]);
+        };
+
+        // Crossfade only across the loop seam (~8 ms). Most of the captured
+        // phrase is played untouched, so this remains a sampler-style source.
+        const int xf = std::clamp (
+            (int) std::lround (sampleRate * 0.008),
+            16,
+            std::max (16, captureLength / 4));
+
+        if (position < (double) xf)
+        {
+            const float t = (float) (position / (double) xf);
+            const float a = readLinear (position + (double) captureLength - (double) xf);
+            const float b = readLinear (position);
+            return a + (b - a) * t;
+        }
+
+        return readLinear (position);
     }
 
     double sampleRate = 48000.0;
@@ -195,7 +170,6 @@ private:
     float sourceMidi = 60.0f;
     std::array<double, maxVoices> phase {};
     std::array<double, maxVoices> ratio { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
-    bool capturePending = false;
 };
 
 class SineArpeggiator
