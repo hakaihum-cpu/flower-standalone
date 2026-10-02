@@ -21,7 +21,7 @@ public:
 
 private:
     struct AudioInputOption { juce::String type; juce::String name; };
-    enum class DragParam { none, complex, bar, width, length };
+    enum class DragParam { none, complex, bar, width, length, hold };
     void timerCallback() override;
     void paintMain (juce::Graphics&);
     void paintConfig (juce::Graphics&);
@@ -30,6 +30,7 @@ private:
     void setParameterFromX (DragParam, float designX);
     juce::Point<float> toDesign (juce::Point<float>) const;
     juce::Rectangle<float> parameterBounds (int index) const;
+    juce::Rectangle<float> holdBounds() const;
     void refreshAudioInputs();
     void selectAudioInput (int index);
     void refreshMidiOutputs();
