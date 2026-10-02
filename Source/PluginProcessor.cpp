@@ -267,7 +267,6 @@ void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
     }
 
     dreamyVoiceActive = { false, false };
-    dreamyWetLowpass = { 0.0f, 0.0f };
     dreamyDelayLowpass = { 0.0f, 0.0f };
     dreamyDelayWritePosition = 0;
     if (dreamyDelayBuffer.getNumSamples() > 0)
@@ -419,8 +418,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         chordMidiStopRequested = true;
         chordMidiRefreshRequested = false;
         dreamyVoiceActive = { false, false };
-        dreamyWetLowpass = { 0.0f, 0.0f };
-        dreamyDelayLowpass = { 0.0f, 0.0f };
+            dreamyDelayLowpass = { 0.0f, 0.0f };
         dreamyReverb.reset();
 
         const juce::SpinLock::ScopedLockType lock (labelLock);
@@ -697,7 +695,7 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
     }
 
 
-    // EFFECTS-only post stage: Dreamy above is kept identical to FLOWER Master.
+    // EFFECTS-only post stage: the accepted Dreamy core above remains unchanged.
     // Delay/Reverb are added after Dreamy and increase only toward the upper-right.
     if (enabled && ambience > 0.001f && dreamyDelayBuffer.getNumSamples() > 0)
     {
