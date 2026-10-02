@@ -344,6 +344,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     {
         lastChordMode = chordMode;
         sineArpeggiator.reset();
+        chordBRandomFx.reset();
         chordReverb.reset();
         if (haveChord)
         {
