@@ -36,3 +36,11 @@ When MIDI CONTROL is ON:
 - Rows: ENABLE, MIDI OUT, MIDI CH, X MODE, X CC, Y MODE, Y CC, KEY, SCALE, PRESET, LOAD, SAVE.
 - X/Y modes: CC / NOTE / CLOCK.
 - Coordinate-to-frame mapping is 20 columns x 15 rows over the exact supplied 01..300 frames.
+
+
+## Motion REC controls
+- Physical L1: record / stop-and-play.
+- Physical R1: clear.
+- MIDI SETTINGS includes MOTION BARS 1..16.
+- Main screen shows MOTION REC while recording and MOTION PLAY while looping.
+- Holding L1/R1 must not retrigger repeatedly; actions occur on physical press transitions.

@@ -61,3 +61,17 @@ On the target Android device with iRig Stream connected, CONFIG must expose enou
 - XY selects the exact 300-frame visual bank as a 20 x 15 grid. Top-right selects frame 300.
 - Eight internal preset slots SAVE/LOAD MIDI CH, X/Y modes, CC numbers, KEY/SCALE and XY position.
 - Preset LOAD does not change MIDI CONTROL enable state or MIDI OUT device.
+
+
+## XY Motion REC
+- Available when MIDI CONTROL is ON.
+- Android physical L1 uses the existing key bridge mapping KEYCODE_BUTTON_L1 -> F17.
+- L1 while stopped/playing starts a new XY recording and replaces the previous motion.
+- L1 while recording stops immediately and starts loop playback.
+- If recording reaches the configured MOTION BARS length, it automatically stops and starts loop playback.
+- Android physical R1 uses KEYCODE_BUTTON_R1 -> F18 and clears/stops the motion.
+- MOTION BARS is configured in MIDI SETTINGS, integer 1..16, default 1.
+- Motion resolution is 24 PPQN / 4/4 = 96 XY samples per bar.
+- Internal CLOCK derives the motion tick from BPM. MIDI CLOCK mode advances motion from received MIDI clock ticks.
+- Playback replays both X and Y, including the associated 300-frame XY visual selection and MIDI controller output.
+- Motion data itself is temporary and is not stored in controller presets; MOTION BARS is normal saved parameter state.

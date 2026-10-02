@@ -87,7 +87,7 @@ for bad in ["SynthVoice", "juce::Synthesiser", "SineVoice", "FLOWER", "MIYAKO"]:
     if bad in src:
         fail(f"forbidden cross-project/synth token in product source: {bad}")
 for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● REC",
-             "MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET"]:
+             "MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY"]:
     if need not in src:
         fail(f"UI/requirement token missing: {need}")
 
@@ -101,9 +101,36 @@ for need in [
     "initialise (1, 2, nullptr, true)",
     "closeAudioDevice",
     "startPlaying",
+    "setWantsKeyboardFocus (true)",
+    "keyStateChanged",
+    "KeyPress::F17Key",
+    "KeyPress::F18Key",
 ]:
     if need not in editor:
         fail(f"Android input/startup contract missing: {need}")
+
+motion = (R / "Source/PluginProcessor.cpp").read_text()
+for need in [
+    "motionTicksPerBar = 96",
+    "maxMotionBars = 16",
+    "processMotionTick",
+    "processInternalMotionClock",
+    "ParamID::motionBars",
+]:
+    if need not in src and need not in motion:
+        fail(f"Motion REC contract missing: {need}")
+
+gamepad_patch = (R / "scripts/patch_juce_android_gamepad_keys.py").read_text()
+for need in [
+    "KEYCODE_BUTTON_L1",
+    "KeyPress::F17Key",
+    "KEYCODE_BUTTON_R1",
+    "KeyPress::F18Key",
+    "handleKeyUpOrDown (true)",
+    "handleKeyUpOrDown (false)",
+]:
+    if need not in gamepad_patch:
+        fail(f"physical-key bridge contract missing: {need}")
 
 # JUCER: exact module set proven by FLOWER Golden and complete JUCE 9.0.2 dependency closure.
 root = ET.parse(JUCER).getroot()
