@@ -38,6 +38,10 @@ void RecorderAudioProcessor::prepareToPlay (double sampleRate, int)
     recordingWasEnabled = false;
     playPositions.fill (0);
     requestedPlayMask.store (0u);
+    randomPlaySlot = -1;
+    randomPlayPosition = 0;
+    randomSamplesRemaining = 0;
+    randomWasEnabled = false;
     uiRecordingSlot.store (-1);
     for (int i = 0; i < kSlots; ++i)
     {
@@ -61,16 +65,24 @@ void RecorderAudioProcessor::requestPlaySlot (int slot) noexcept
 
 bool RecorderAudioProcessor::isSlotPlaying (int slot) const noexcept
 {
-    return juce::isPositiveAndBelow (slot, kSlots)
-        ? uiPlaying[(size_t) slot].load()
-        : false;
+    if (! juce::isPositiveAndBelow (slot, kSlots))
+        return false;
+
+    return uiPlaying[(size_t) slot].load() || randomPlaySlot == slot;
 }
 
 float RecorderAudioProcessor::getSlotPlaybackProgress (int slot) const noexcept
 {
-    return juce::isPositiveAndBelow (slot, kSlots)
-        ? uiPlaybackProgress[(size_t) slot].load()
-        : 0.0f;
+    if (! juce::isPositiveAndBelow (slot, kSlots))
+        return 0.0f;
+
+    if (randomPlaySlot == slot)
+    {
+        const int length = validSamples[(size_t) slot].load();
+        return length > 0 ? (float) randomPlayPosition / (float) length : 0.0f;
+    }
+
+    return uiPlaybackProgress[(size_t) slot].load();
 }
 
 int RecorderAudioProcessor::getValidSamples (int slot) const noexcept
@@ -122,25 +134,88 @@ int RecorderAudioProcessor::chooseRandomValidSlot()
     int candidates[kSlots] {};
     int count = 0;
     const int rec = uiRecordingSlot.load();
-    for (int i = 0; i < kSlots; ++i)
-        if (i != rec && validSamples[(size_t) i].load() > 0)
-            candidates[count++] = i;
 
-    if (count == 0) return -1;
+    for (int i = 0; i < kSlots; ++i)
+    {
+        if (i == rec || i == randomPlaySlot || validSamples[(size_t) i].load() <= 0)
+            continue;
+
+        if (! uiPlaying[(size_t) i].load())
+            candidates[count++] = i;
+    }
+
+    if (count == 0)
+    {
+        for (int i = 0; i < kSlots; ++i)
+            if (i != rec && i != randomPlaySlot && validSamples[(size_t) i].load() > 0)
+                candidates[count++] = i;
+    }
+
+    if (count == 0 && randomPlaySlot >= 0 && validSamples[(size_t) randomPlaySlot].load() > 0)
+        return randomPlaySlot;
+
+    if (count == 0)
+        return -1;
+
     randomState = randomState * 1664525u + 1013904223u;
     return candidates[randomState % (uint32_t) count];
 }
 
-void RecorderAudioProcessor::maybeStartRandomPlayback()
+void RecorderAudioProcessor::beginRandomPlayback (int slot)
 {
-    if (! randomEnabled.load()) return;
+    if (! juce::isPositiveAndBelow (slot, kSlots)) return;
+    if (slot == uiRecordingSlot.load()) return;
+    if (validSamples[(size_t) slot].load() <= 0) return;
 
-    for (int i = 0; i < kSlots; ++i)
-        if (uiPlaying[(size_t) i].load())
-            return;
+    randomPlaySlot = slot;
+    randomPlayPosition = 0;
+}
 
-    const int slot = chooseRandomValidSlot();
-    if (slot >= 0) beginPlayback (slot);
+void RecorderAudioProcessor::stopRandomPlayback()
+{
+    randomPlaySlot = -1;
+    randomPlayPosition = 0;
+    randomSamplesRemaining = 0;
+}
+
+void RecorderAudioProcessor::scheduleNextRandomSwitch()
+{
+    randomState = randomState * 1664525u + 1013904223u;
+    const int seconds = 1 + (int) (randomState % 5u);
+    randomSamplesRemaining = (int64_t) std::llround (currentSampleRate * (double) seconds);
+}
+
+void RecorderAudioProcessor::updateRandomPlayback (int numSamples)
+{
+    const bool enabled = randomEnabled.load();
+
+    if (enabled && ! randomWasEnabled)
+    {
+        const int slot = chooseRandomValidSlot();
+        if (slot >= 0)
+        {
+            beginRandomPlayback (slot);
+            scheduleNextRandomSwitch();
+        }
+    }
+    else if (! enabled && randomWasEnabled)
+    {
+        stopRandomPlayback();
+    }
+
+    randomWasEnabled = enabled;
+
+    if (! enabled || randomPlaySlot < 0)
+        return;
+
+    randomSamplesRemaining -= numSamples;
+    if (randomSamplesRemaining <= 0)
+    {
+        const int slot = chooseRandomValidSlot();
+        if (slot >= 0)
+            beginRandomPlayback (slot);
+        scheduleNextRandomSwitch();
+    }
 }
 
 void RecorderAudioProcessor::handleClock (const juce::MidiBuffer& midi, int numSamples)
@@ -165,7 +240,8 @@ void RecorderAudioProcessor::handleClock (const juce::MidiBuffer& midi, int numS
                 if (++midiClockTicks >= 24)
                 {
                     midiClockTicks = 0;
-                    maybeStartRandomPlayback();
+                    // MIDI clock remains available for clock state, but RANDOM switching
+                    // uses its own 1-5 second timer.
                 }
             }
         }
@@ -179,7 +255,6 @@ void RecorderAudioProcessor::handleClock (const juce::MidiBuffer& midi, int numS
     internalBeatSamplesRemaining -= numSamples;
     while (internalBeatSamplesRemaining <= 0.0)
     {
-        maybeStartRandomPlayback();
         internalBeatSamplesRemaining += beatSamples;
     }
 }
@@ -247,6 +322,7 @@ void RecorderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             beginPlayback (slot);
 
     handleClock (midi, numSamples);
+    updateRandomPlayback (numSamples);
 
     for (int ch = 0; ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, numSamples);
@@ -277,6 +353,29 @@ void RecorderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             position = 0;
             uiPlaying[(size_t) slot].store (false);
             uiPlaybackProgress[(size_t) slot].store (0.0f);
+        }
+    }
+
+    if (randomPlaySlot >= 0)
+    {
+        const int slot = randomPlaySlot;
+        const int length = validSamples[(size_t) slot].load();
+
+        if (length > 0)
+        {
+            const float* src = slotBuffers[(size_t) slot].getReadPointer (0);
+            int outPos = 0;
+
+            while (outPos < numSamples && randomPlayPosition < length)
+            {
+                const float s = src[randomPlayPosition++];
+                for (int ch = 0; ch < getTotalNumOutputChannels(); ++ch)
+                    buffer.addSample (ch, outPos, s);
+                ++outPos;
+            }
+
+            if (randomPlayPosition >= length)
+                randomPlayPosition = 0;
         }
     }
 }
