@@ -23,7 +23,6 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
 {
     currentSampleRate = sr > 1000.0 ? sr : 48000.0;
     pitchDetector.prepare (currentSampleRate, 1024, 256);
-    pitchBank.prepare (currentSampleRate, block);
     theory.reset();
     pendingMidi = -1;
     stableCount = 0;
@@ -89,7 +88,6 @@ void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e
     if (midi == pendingMidi) ++stableCount;
     else { pendingMidi = midi; stableCount = 1; }
 
-    if (haveChord) refreshPitchRatios();
     if (stableCount < 2) return;
 
     const int previous = detectedMidi.load (std::memory_order_relaxed);
@@ -119,7 +117,6 @@ void RealtimeChordFxAudioProcessor::applyChord (const chordfx::ChordPlan& plan)
     if (plan.midiNotes.empty()) return;
     currentPlan = plan;
     haveChord = true;
-    refreshPitchRatios();
     {
         const juce::SpinLock::ScopedLockType lock (labelLock);
         chordLabel = plan.label;
@@ -207,7 +204,6 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     if (clearRequested.exchange (false, std::memory_order_acq_rel))
     {
         pitchDetector.reset();
-        pitchBank.reset();
         theory.reset();
         haveChord = false;
         pendingMidi = -1;

@@ -1,11 +1,14 @@
 # Requirements
 
 ## Audio behaviour
-1. Accept a monophonic musical input signal.
-2. Detect the fundamental pitch in real time.
-3. Create generated chord voices by pitch-shifting the input audio; do not synthesize replacement oscillators.
-4. Generate theory-guided chord movement with weighted randomness.
-5. A new accepted input note immediately re-harmonises the output and resets the progression interval.
+1. Accept a live mono or stereo musical input signal.
+2. Stopped state is dry bypass.
+3. Running state applies the exact Dreamy overlapping micro-loop DSP copied from FLOWER Golden `golden/flower-android-2026-09-29` @ `14ef1619045dea1c7a09e64b0f11c70ab99d20f2`.
+4. Dreamy uses two captured-loop voices at +5 and +12 semitones, 2.5 seconds of history, and 0.75 seconds minimum history.
+5. Dreamy X mapping is the FLOWER Master mapping: output drift `0.90 + X*0.10`.
+6. Dreamy Y mapping is the FLOWER Master mapping: loop length via `beatSamples/(2+Y*2)` and wet mix `clamp(0.24+Y*0.34, 0.20, 0.58)`.
+7. The theory/chord generator may remain active only for optional CHORD MIDI OUT and visual/chord metadata; generated pitch-shifted chord audio is not in the audible path.
+8. The EFFECTS 300-frame screen and existing MIDI/Motion features remain the product UI; no FLOWER UI is imported.
 
 ## Main parameters
 ### COMPLEX
@@ -21,8 +24,9 @@ Discrete: 1/4, 1/2, 1, 2 bars. Time signature is 4/4. Determines the progression
 0..100 plus effective MAX at the endpoint. Below MAX, controls gate duration within each BAR interval. At MAX the generated chord is held indefinitely and changes only when a new input note is accepted.
 
 ## Transport-like interaction
-- Tap the background image area while stopped: start generator state and show a thin red screen border plus red `● REC` text.
-- Tap the background image area while running: stop and CLEAR generated state.
+- Tap the top-left REC area while stopped: enable Dreamy and show a thin red screen border plus red `● REC` text.
+- Tap the top-left REC area while running: stop Dreamy and CLEAR generator/MIDI state.
+- The rest of the main EFFECTS image surface is always the Dreamy XY controller. With MIDI CONTROL ON, the same XY values are also transmitted by the configured MIDI controller mode.
 - Parameter/config hit areas consume touch and must not toggle REC.
 - Stopped/CLEAR state passes input through dry for setup/audition; active state outputs generated harmony.
 
@@ -38,7 +42,8 @@ Discrete: 1/4, 1/2, 1, 2 bars. Time signature is 4/4. Determines the progression
 - Current input/detection status.
 - Explicit `iRig Streamer DETECTED / NOT DETECTED` status. Detection checks both JUCE-selectable input names and Android `AudioManager.getDevices(GET_DEVICES_INPUTS)` / `AudioDeviceInfo.getProductName()` so a generic JUCE route name does not hide the physical USB device name.
 - Input level meter.
-- CONFIG diagnostics show numeric input level in dBFS, actual JUCE input route, actual output route, active input-channel count, sample rate, and the most recent route-open error. This diagnostic display must not change routing by itself.
+- CONFIG diagnostics show raw PEAK dBFS, RMS dBFS, NONZERO sample ratio, actual JUCE input route, actual output route, active input-channel count, sample rate, and the most recent route-open error. This diagnostic display must not change routing by itself.
+- If an iRig route is open with active input channels but raw peak remains below -100 dBFS, CONFIG explicitly reports `iRig ROUTE OPEN / SIGNAL < -100 dBFS` rather than treating device-open state as proof of usable audio.
 - MIDI CH 1..16.
 - CLOCK: Internal / MIDI.
 - BPM is shown only for Internal because BAR timing cannot be defined without an internal tempo.

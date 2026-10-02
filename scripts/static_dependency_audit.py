@@ -157,6 +157,25 @@ for need in [
     if need not in gamepad_patch:
         fail(f"physical-key bridge contract missing: {need}")
 
+dreamy = (R / "Source/PluginProcessor.cpp").read_text()
+for need in [
+    "dreamyBuffer",
+    "dreamyVoiceCount = 2",
+    "1.3348398f, 2.0f",
+    "currentSampleRate * 2.5",
+    "currentSampleRate * 0.75",
+    "0.24f + y * 0.34f",
+    "0.90f + x * 0.10f",
+    "processDreamy (buffer)",
+    "getInputPeakRaw",
+    "getInputRmsRaw",
+    "getInputNonZeroRatio",
+]:
+    if need not in src and need not in dreamy:
+        fail(f"Dreamy/live-input contract missing: {need}")
+if "pitchBank.processSample" in dreamy:
+    fail("generated pitch-shifter audio path must remain disabled while Dreamy is active")
+
 # JUCER: exact module set proven by FLOWER Golden and complete JUCE 9.0.2 dependency closure.
 root = ET.parse(JUCER).getroot()
 if root.attrib.get("pluginFormats") != "buildStandalone":

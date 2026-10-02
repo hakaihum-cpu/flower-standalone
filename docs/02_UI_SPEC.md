@@ -52,3 +52,12 @@ When MIDI CONTROL is ON:
 - CHORD CH is 1..16 and independent from the XY MIDI CH.
 - MIDI OUT remains the common destination device for XY/Motion and generated-chord MIDI.
 - No new panel or decorative control is introduced; the existing text-row style is retained.
+
+
+## EFFECTS Dreamy surface
+- Keep the RealtimeChordFX/EFFECTS 300-frame visual surface. Do not import FLOWER screen layout, 100-frame UI, CONFIG, ARP, Delay, or Granular controls.
+- Top-left remains REC start/stop.
+- Main image area outside controls is always XY for Dreamy.
+- X/Y readout remains on the EFFECTS screen.
+- With MIDI CONTROL ON, Dreamy XY and MIDI XY share the same 0..127 coordinates.
+- CONFIG keeps the EFFECTS style and adds iRig PEAK/RMS/NONZERO diagnostics only.

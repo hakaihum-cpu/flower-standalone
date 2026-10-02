@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include <atomic>
 #include <array>
+#include <cstdint>
 #include <string>
 #include "GranularPitchBank.h"
 #include "TheoryEngine.h"
