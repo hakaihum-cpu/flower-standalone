@@ -66,16 +66,27 @@ void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e
     if (! e.valid) return;
     const float midiFloat = 69.0f + 12.0f * std::log2 (e.hz / 440.0f);
     const int midi = juce::jlimit (0, 127, juce::roundToInt (midiFloat));
-    lastInputMidiFloat = midiFloat;
+    const int previous = detectedMidi.load (std::memory_order_relaxed);
+
+    // For an already accepted note, follow bend/vibrato smoothly. Do not let a
+    // single unstable YIN estimate jerk all pitch-shift ratios before the new
+    // note has passed the existing stability gate.
+    if (midi == previous && previous >= 0)
+    {
+        lastInputMidiFloat += 0.18f * (midiFloat - lastInputMidiFloat);
+        if (haveChord)
+            refreshPitchRatios();
+        pendingMidi = midi;
+        stableCount = juce::jmax (stableCount, 2);
+        return;
+    }
 
     if (midi == pendingMidi) ++stableCount;
     else { pendingMidi = midi; stableCount = 1; }
 
-    if (haveChord) refreshPitchRatios();
     if (stableCount < 2) return;
 
-    const int previous = detectedMidi.load (std::memory_order_relaxed);
-    if (midi == previous) return;
+    lastInputMidiFloat = midiFloat;
     detectedMidi.store (midi, std::memory_order_relaxed);
 
     if (! running.load (std::memory_order_acquire)) return;
