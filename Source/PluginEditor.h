@@ -21,7 +21,7 @@ public:
 
 private:
     struct AudioInputOption { juce::String type; juce::String name; };
-    enum class DragParam { none, complex, bar, width, length, hold };
+    enum class DragParam { none, complex, bar, width, length, hold, effect };
     void timerCallback() override;
     void paintMain (juce::Graphics&);
     void paintConfig (juce::Graphics&);
