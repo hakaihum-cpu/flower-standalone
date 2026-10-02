@@ -227,8 +227,8 @@ void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
 
 void RealtimeChordFxAudioProcessor::processChordAudio (juce::AudioBuffer<float>& buffer)
 {
-    // CHORD-A: captured live input -> short periodic sample -> simultaneous
-    // C4..B5 chord voices. No PSOLA/vocoder resynthesis is used here.
+    // CHORD-A: a recent real input phrase is sampled, then the same source is
+    // resampled simultaneously to the C4..B5 ChordPlan voices.
     const int n = buffer.getNumSamples();
     const int channels = buffer.getNumChannels();
     if (n <= 0 || channels <= 0)
@@ -475,9 +475,13 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
     if (capacity <= 64 || numSamples <= 0 || channels <= 0)
         return;
 
+    // Map the accepted performance effect gate directly:
+    // effect enabled -> running, Dreamy mode -> effectMode, performance gate
+    // -> current XY touch / Motion playback.
     const bool enabled =
         running.load (std::memory_order_acquire)
-        && apvts.getRawParameterValue (ParamID::effectMode)->load() >= 0.5f;
+        && apvts.getRawParameterValue (ParamID::effectMode)->load() >= 0.5f
+        && controllerTouch.load (std::memory_order_acquire);
     const float x = juce::jlimit (0.0f, 1.0f,
         (float) controllerX.load (std::memory_order_relaxed) / 127.0f);
     const float y = juce::jlimit (0.0f, 1.0f,
