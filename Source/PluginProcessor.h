@@ -21,7 +21,7 @@ public:
     bool hasEditor() const override { return true; }
     const juce::String getName() const override { return "Realtime Chord FX"; }
     bool acceptsMidi() const override { return true; }
-    bool producesMidi() const override { return false; }
+    bool producesMidi() const override { return true; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 0.25; }
 
@@ -44,6 +44,14 @@ public:
     int getDetectedMidi() const noexcept { return detectedMidi.load (std::memory_order_relaxed); }
     int getVisualFrame() const noexcept { return visualFrame.load (std::memory_order_relaxed); }
     juce::String getChordLabel() const;
+    void setMidiControllerXY (int x, int y, bool touchDown) noexcept;
+    void releaseMidiControllerTouch() noexcept;
+    void notifyMidiControllerConfigChanged() noexcept { controllerDirty.store (true, std::memory_order_release); }
+    int getMidiControllerX() const noexcept { return controllerX.load (std::memory_order_relaxed); }
+    int getMidiControllerY() const noexcept { return controllerY.load (std::memory_order_relaxed); }
+    bool saveMidiControllerPreset (int slot);
+    bool loadMidiControllerPreset (int slot);
+    bool hasMidiControllerPreset (int slot) const;
 
 private:
     void acceptPitch (const chordfx::PitchEstimate& estimate);
@@ -52,6 +60,10 @@ private:
     double barIntervalSamples() const;
     void handleMidiClock (const juce::MidiBuffer& midi);
     void advanceProgression();
+    void processMidiController (juce::MidiBuffer&, int numSamples);
+    int quantiseControllerNote (int value) const;
+    int controllerFrameForXY (int x, int y) const noexcept;
+    void setParameterActual (const char* id, float actual);
 
     juce::AudioProcessorValueTreeState apvts;
     chordfx::YinPitchDetector pitchDetector;
@@ -74,6 +86,16 @@ private:
     double gateSamplesRemaining = 0.0;
     int midiClockTicks = 0;
     bool midiClockRunning = false;
+    std::atomic<int> controllerX { 0 };
+    std::atomic<int> controllerY { 0 };
+    std::atomic<bool> controllerTouch { false };
+    std::atomic<bool> controllerDirty { false };
+    int activeControllerNoteX = -1;
+    int activeControllerNoteY = -1;
+    int activeControllerChannelX = 1;
+    int activeControllerChannelY = 1;
+    double controllerClockSamplesUntilNext = 0.0;
+    bool controllerClockRunning = false;
 
     mutable juce::SpinLock labelLock;
     juce::String chordLabel { "--" };
