@@ -516,6 +516,20 @@ public:
     }
 
 private:
+    static float softProtect (float sample) noexcept
+    {
+        constexpr float threshold = 0.62f;
+        constexpr float ceiling = 0.88f;
+        const float magnitude = std::abs (sample);
+        if (magnitude <= threshold)
+            return sample;
+
+        const float knee = ceiling - threshold;
+        const float shaped =
+            threshold + knee * std::tanh ((magnitude - threshold) / knee);
+        return std::copysign (shaped, sample);
+    }
+
     uint32_t nextRandom() noexcept
     {
         rng ^= rng << 13;
