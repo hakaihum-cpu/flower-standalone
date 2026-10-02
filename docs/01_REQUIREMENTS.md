@@ -44,3 +44,20 @@ Discrete: 1/4, 1/2, 1, 2 bars. Time signature is 4/4. Determines the progression
 
 ## iRig verification acceptance criterion
 On the target Android device with iRig Stream connected, CONFIG must expose enough device/routing information to confirm that the external input is active. The target-device smoke test must confirm that the Android physical-input probe exposes the connected iRig product name, or otherwise records exactly what Android reports. A generic JUCE route alone must never be treated as proof that iRig is connected.
+
+## MIDI controller mode
+- CONFIG includes MIDI CONTROL ON/OFF; default is OFF.
+- With MIDI CONTROL OFF, existing REC/touch/frame behaviour remains unchanged.
+- With MIDI CONTROL ON, the main image area becomes an XY MIDI controller.
+- X is 0 at the left edge and 127 at the right edge.
+- Y is 0 at the bottom edge and 127 at the top edge; the top-right corner is X=127 / Y=127.
+- X and Y can each be assigned CC, NOTE or CLOCK.
+- CC sends the axis value 0..127 with an independently selectable CC number.
+- NOTE maps the axis value to a MIDI note quantised to the selected KEY/SCALE. Note-off is sent on touch release or when NOTE/controller mode is disabled.
+- NOTE scales: Chromatic, Major, Natural Minor, Major Pentatonic, Minor Pentatonic.
+- CLOCK maps the selected axis 0..127 to 40..240 BPM and emits 24 PPQN MIDI Clock. Only one axis owns CLOCK at a time.
+- MIDI CH applies to CC/NOTE; MIDI Clock is channel-less.
+- MIDI SETTINGS includes explicit MIDI OUT selection for standalone routing.
+- XY selects the exact 300-frame visual bank as a 20 x 15 grid. Top-right selects frame 300.
+- Eight internal preset slots SAVE/LOAD MIDI CH, X/Y modes, CC numbers, KEY/SCALE and XY position.
+- Preset LOAD does not change MIDI CONTROL enable state or MIDI OUT device.

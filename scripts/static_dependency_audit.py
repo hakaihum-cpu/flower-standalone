@@ -86,7 +86,8 @@ src = "\n".join((R / name).read_text(errors="ignore") for name in target_source_
 for bad in ["SynthVoice", "juce::Synthesiser", "SineVoice", "FLOWER", "MIYAKO"]:
     if bad in src:
         fail(f"forbidden cross-project/synth token in product source: {bad}")
-for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● REC"]:
+for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● REC",
+             "MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET"]:
     if need not in src:
         fail(f"UI/requirement token missing: {need}")
 
@@ -112,6 +113,8 @@ if root.attrib.get("pluginIsSynth") != "0":
     fail("synth flag must be off")
 if root.attrib.get("pluginWantsMidiIn") != "1":
     fail("MIDI input required")
+if root.attrib.get("pluginProducesMidiOut") != "1":
+    fail("MIDI controller output must be enabled")
 if root.attrib.get("pluginChannelConfigs") != "{1,2}":
     fail("expected mono input / stereo output channel config {1,2}")
 

@@ -26,3 +26,13 @@ Same current supplied frame behind a dark translucent layer.
 - CLOCK text row.
 - BPM row only in Internal mode.
 - CLOSE text; no ornamental panel/knob styling.
+
+## MIDI controller mode
+When MIDI CONTROL is ON:
+- The main image field is the XY surface.
+- Top-left becomes the dedicated REC toggle so XY touches never toggle REC.
+- A small X/Y numeric readout is shown; no decorative panel is added.
+- CONFIG -> MIDI SETTINGS opens a second text-only configuration page.
+- Rows: ENABLE, MIDI OUT, MIDI CH, X MODE, X CC, Y MODE, Y CC, KEY, SCALE, PRESET, LOAD, SAVE.
+- X/Y modes: CC / NOTE / CLOCK.
+- Coordinate-to-frame mapping is 20 columns x 15 rows over the exact supplied 01..300 frames.
