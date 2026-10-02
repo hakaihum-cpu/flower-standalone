@@ -249,6 +249,8 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
 {
     const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+    const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::chordMode)->load()));
 
     if (effectMode == 0)
     {
@@ -273,6 +275,8 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
             g.setFont (juce::FontOptions (14.0f));
             g.drawText ("IN  " + noteText (processor.getDetectedMidi()) + "    CHORD  " + processor.getChordLabel(),
                         28, 578, 520, 28, juce::Justification::centredLeft);
+            g.drawText (chordMode == 0 ? "CHORD-A" : "CHORD-B",
+                        548, 578, 144, 28, juce::Justification::centredRight);
             g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
         
             const bool midiControlOn = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
@@ -527,6 +531,8 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
 
     const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+    const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::chordMode)->load()));
     const bool midiControl = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
     const int clock = juce::roundToInt (processor.state().getRawParameterValue (ParamID::clockMode)->load());
     const int bpm = juce::roundToInt (processor.state().getRawParameterValue (ParamID::internalBpm)->load());
@@ -534,7 +540,10 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setColour (juce::Colours::white.withAlpha (0.78f));
     g.setFont (juce::FontOptions (16.0f));
     g.drawText ("MODE", 54, 510, 220, 30, juce::Justification::centredLeft);
-    g.drawText (effectMode == 0 ? "CHORD" : "DREAMY",
+    const juce::String modeText = effectMode == 1
+        ? "DREAMY"
+        : (chordMode == 0 ? "CHORD-A" : "CHORD-B");
+    g.drawText (modeText,
                 450, 510, 180, 30, juce::Justification::centredRight);
     g.drawText ("MIDI CONTROL", 54, 542, 220, 30, juce::Justification::centredLeft);
     g.drawText (midiControl ? "ON" : "OFF", 450, 542, 180, 30, juce::Justification::centredRight);
@@ -549,7 +558,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     }
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colours::white.withAlpha (0.42f));
-    g.drawText ("MODE default: CHORD. MIDI CONTROL remains independent.", 54, 681, 560, 18, juce::Justification::centredLeft);
+    g.drawText ("MODE default: CHORD-A. A/B both use C4-B5 and reverb.", 54, 681, 590, 18, juce::Justification::centredLeft);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
@@ -773,8 +782,20 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
         if (p.y >= 508 && p.y < 540)
         {
-            auto* par = processor.state().getParameter (ParamID::effectMode);
-            par->setValueNotifyingHost (par->getValue() < 0.5f ? 1.0f : 0.0f);
+            const int effect = juce::jlimit (0, 1, juce::roundToInt (
+                processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+            const int chord = juce::jlimit (0, 1, juce::roundToInt (
+                processor.state().getRawParameterValue (ParamID::chordMode)->load()));
+
+            if (effect == 0 && chord == 0)
+                setChoiceActual (ParamID::chordMode, 1);       // A -> B
+            else if (effect == 0)
+                setChoiceActual (ParamID::effectMode, 1);      // B -> DREAMY
+            else
+            {
+                setChoiceActual (ParamID::effectMode, 0);      // DREAMY -> A
+                setChoiceActual (ParamID::chordMode, 0);
+            }
         }
         else if (p.y >= 540 && p.y < 572)
         {
