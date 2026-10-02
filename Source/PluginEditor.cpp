@@ -189,7 +189,7 @@ void RealtimeChordFxAudioProcessorEditor::paint (juce::Graphics& g)
     g.fillAll (juce::Colours::black);
     juce::Graphics::ScopedSaveState save (g);
     g.addTransform (juce::AffineTransform::scale ((float) getWidth() / design, (float) getHeight() / design));
-    if (configVisible) paintConfig (g); else paintMain (g);
+    if (midiControlConfigVisible) paintMidiControlConfig (g); else if (configVisible) paintConfig (g); else paintMain (g);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintBar (juce::Graphics& g,
@@ -235,6 +235,18 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
     g.drawText ("IN  " + noteText (processor.getDetectedMidi()) + "    CHORD  " + processor.getChordLabel(),
                 28, 578, 520, 28, juce::Justification::centredLeft);
     g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
+
+    const bool midiControlOn = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
+    if (midiControlOn)
+    {
+        g.setFont (juce::FontOptions (12.0f));
+        g.setColour (juce::Colours::white.withAlpha (0.74f));
+        g.drawText ("X " + juce::String (processor.getMidiControllerX()).paddedLeft ('0', 3)
+                    + "   Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
+                    28, 548, 240, 22, juce::Justification::centredLeft);
+        if (! processor.isRunning())
+            g.drawText ("REC", 24, 20, 80, 28, juce::Justification::centredLeft);
+    }
 
     const float complex = processor.state().getRawParameterValue (ParamID::complex)->load();
     const int bar = juce::jlimit (0, 3, juce::roundToInt (processor.state().getRawParameterValue (ParamID::bar)->load()));
@@ -334,23 +346,14 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     {
         g.setColour (juce::Colours::white.withAlpha (0.55f));
         g.drawText ("No selectable input reported by Android/JUCE", 64, y, 520, 34, juce::Justification::centredLeft);
-        y += 38;
     }
 
     bool irigDetected = false;
     juce::String irigPhysicalName;
     for (const auto& o : audioInputs)
-        if (o.name.containsIgnoreCase ("irig"))
-        {
-            irigDetected = true;
-            irigPhysicalName = o.name;
-        }
+        if (o.name.containsIgnoreCase ("irig")) { irigDetected = true; irigPhysicalName = o.name; }
     for (const auto& name : physicalInputNames)
-        if (name.containsIgnoreCase ("irig"))
-        {
-            irigDetected = true;
-            irigPhysicalName = name;
-        }
+        if (name.containsIgnoreCase ("irig")) { irigDetected = true; irigPhysicalName = name; }
 
     g.setColour (irigDetected ? juce::Colour (0xffb8d9bf) : juce::Colours::white.withAlpha (0.55f));
     g.drawText ("iRig Streamer  " + juce::String (irigDetected ? "DETECTED" : "NOT DETECTED"),
@@ -369,24 +372,134 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setColour (juce::Colours::white.withAlpha (0.58f));
     g.drawText ("INPUT LEVEL", 488, 410, 150, 26, juce::Justification::centredLeft);
 
-    const int midiCh = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiChannel)->load());
+    const bool midiControl = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
     const int clock = juce::roundToInt (processor.state().getRawParameterValue (ParamID::clockMode)->load());
     const int bpm = juce::roundToInt (processor.state().getRawParameterValue (ParamID::internalBpm)->load());
 
     g.setColour (juce::Colours::white.withAlpha (0.78f));
     g.setFont (juce::FontOptions (16.0f));
-    g.drawText ("MIDI CH", 54, 470, 180, 40, juce::Justification::centredLeft);
-    g.drawText (juce::String (midiCh), 450, 470, 180, 40, juce::Justification::centredRight);
-    g.drawText ("CLOCK", 54, 520, 180, 40, juce::Justification::centredLeft);
-    g.drawText (clock == 0 ? "Internal" : "MIDI", 450, 520, 180, 40, juce::Justification::centredRight);
+    g.drawText ("MIDI CONTROL", 54, 460, 220, 40, juce::Justification::centredLeft);
+    g.drawText (midiControl ? "ON" : "OFF", 450, 460, 180, 40, juce::Justification::centredRight);
+    g.drawText ("MIDI SETTINGS", 54, 506, 220, 40, juce::Justification::centredLeft);
+    g.drawText (">", 450, 506, 180, 40, juce::Justification::centredRight);
+    g.drawText ("CLOCK", 54, 552, 180, 40, juce::Justification::centredLeft);
+    g.drawText (clock == 0 ? "Internal" : "MIDI", 450, 552, 180, 40, juce::Justification::centredRight);
     if (clock == 0)
     {
-        g.drawText ("BPM", 54, 570, 180, 40, juce::Justification::centredLeft);
-        g.drawText (juce::String (bpm), 450, 570, 180, 40, juce::Justification::centredRight);
+        g.drawText ("BPM", 54, 598, 180, 40, juce::Justification::centredLeft);
+        g.drawText (juce::String (bpm), 450, 598, 180, 40, juce::Justification::centredRight);
     }
-    g.setFont (juce::FontOptions (12.0f));
+    g.setFont (juce::FontOptions (11.5f));
     g.setColour (juce::Colours::white.withAlpha (0.42f));
-    g.drawText ("Internal clock requires BPM; MIDI clock follows 24 PPQN.", 54, 638, 560, 26, juce::Justification::centredLeft);
+    g.drawText ("MIDI CONTROL is independent from the chord CLOCK setting.", 54, 656, 560, 24, juce::Justification::centredLeft);
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
+{
+    if (currentFrame.isValid())
+        g.drawImage (currentFrame, juce::Rectangle<float> (0,0,design,design), juce::RectanglePlacement::stretchToFit);
+    g.setColour (juce::Colours::black.withAlpha (0.80f));
+    g.fillAll();
+
+    static constexpr const char* modes[] = { "CC", "NOTE", "CLOCK" };
+    static constexpr const char* keys[] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+    static constexpr const char* scales[] = { "Chromatic","Major","Natural Minor","Major Pent","Minor Pent" };
+
+    const bool enabled = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
+    const int ch = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiChannel)->load());
+    const int xm = juce::jlimit (0, 2, juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiXMode)->load()));
+    const int ym = juce::jlimit (0, 2, juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiYMode)->load()));
+    const int xcc = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiXCC)->load());
+    const int ycc = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiYCC)->load());
+    const int key = juce::jlimit (0, 11, juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiKey)->load()));
+    const int scale = juce::jlimit (0, 4, juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiScale)->load()));
+
+    g.setColour (juce::Colours::white.withAlpha (0.92f));
+    g.setFont (juce::FontOptions (20.0f));
+    g.drawText ("MIDI CONTROL", 34, 26, 240, 32, juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (13.0f));
+    g.drawText ("BACK", 620, 30, 70, 24, juce::Justification::centredRight);
+
+    auto row = [&] (int yy, const juce::String& label, const juce::String& value)
+    {
+        g.setFont (juce::FontOptions (15.0f));
+        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.drawText (label, 54, yy, 250, 36, juce::Justification::centredLeft);
+        g.setColour (juce::Colours::white.withAlpha (0.92f));
+        g.drawText (value, 330, yy, 300, 36, juce::Justification::centredRight);
+    };
+
+    juce::String midiOut = "NONE";
+    if (juce::isPositiveAndBelow (selectedMidiOutput, midiOutputs.size()))
+        midiOut = midiOutputs.getReference (selectedMidiOutput).name;
+
+    row (78,  "ENABLE", enabled ? "ON" : "OFF");
+    row (120, "MIDI OUT", midiOut);
+    row (162, "MIDI CH", juce::String (ch));
+    row (204, "X MODE", modes[xm]);
+    row (246, "X CC", xm == 0 ? juce::String (xcc) : "--");
+    row (288, "Y MODE", modes[ym]);
+    row (330, "Y CC", ym == 0 ? juce::String (ycc) : "--");
+    row (372, "KEY", keys[key]);
+    row (414, "SCALE", scales[scale]);
+    row (456, "PRESET", juce::String (midiPresetSlot)
+                           + (processor.hasMidiControllerPreset (midiPresetSlot) ? "  SAVED" : "  EMPTY"));
+
+    g.setColour (juce::Colours::white.withAlpha (0.82f));
+    g.drawText ("LOAD", 110, 510, 180, 42, juce::Justification::centred);
+    g.drawText ("SAVE", 430, 510, 180, 42, juce::Justification::centred);
+
+    g.setFont (juce::FontOptions (15.0f));
+    g.drawText ("X " + juce::String (processor.getMidiControllerX()).paddedLeft ('0', 3)
+                + "     Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
+                180, 570, 360, 30, juce::Justification::centred);
+    g.setFont (juce::FontOptions (12.0f));
+    g.setColour (juce::Colours::white.withAlpha (0.52f));
+    g.drawText ("X: left 0 -> right 127    Y: bottom 0 -> top 127", 54, 614, 560, 24, juce::Justification::centredLeft);
+    g.drawText ("CLOCK: 40-240 BPM / 24 PPQN. One CLOCK axis at a time.", 54, 638, 610, 24, juce::Justification::centredLeft);
+    if (midiPresetMessage.isNotEmpty())
+        g.drawText (midiPresetMessage, 54, 666, 560, 22, juce::Justification::centredLeft);
+}
+
+void RealtimeChordFxAudioProcessorEditor::refreshMidiOutputs()
+{
+    midiOutputs = juce::MidiOutput::getAvailableDevices();
+    selectedMidiOutput = -1;
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+    {
+        const auto current = holder->deviceManager.getDefaultMidiOutputIdentifier();
+        for (int i = 0; i < midiOutputs.size(); ++i)
+            if (midiOutputs.getReference (i).identifier == current) { selectedMidiOutput = i; break; }
+    }
+}
+
+void RealtimeChordFxAudioProcessorEditor::cycleMidiOutput (int direction)
+{
+    refreshMidiOutputs();
+    const int count = midiOutputs.size();
+    int logical = selectedMidiOutput + 1;
+    logical = (logical + (direction >= 0 ? 1 : count) + count + 1) % (count + 1);
+    selectedMidiOutput = logical - 1;
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+    {
+        const juce::String id = selectedMidiOutput >= 0 ? midiOutputs.getReference (selectedMidiOutput).identifier : juce::String();
+        holder->deviceManager.setDefaultMidiOutputDevice (id);
+        holder->player.setMidiOutput (holder->deviceManager.getDefaultMidiOutput());
+    }
+}
+
+void RealtimeChordFxAudioProcessorEditor::setChoiceActual (const char* id, int value)
+{
+    if (auto* p = processor.state().getParameter (id))
+        p->setValueNotifyingHost (p->convertTo0to1 ((float) value));
+    processor.notifyMidiControllerConfigChanged();
+}
+
+void RealtimeChordFxAudioProcessorEditor::updateMidiControllerFromPoint (juce::Point<float> p)
+{
+    const int x = juce::jlimit (0, 127, juce::roundToInt (127.0f * p.x / design));
+    const int y = juce::jlimit (0, 127, juce::roundToInt (127.0f * (design - p.y) / design));
+    processor.setMidiControllerXY (x, y, true);
 }
 
 void RealtimeChordFxAudioProcessorEditor::setParameterFromX (DragParam which, float x)
@@ -417,6 +530,78 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     const auto p = toDesign (e.position);
     dragging = DragParam::none;
 
+    if (midiControlConfigVisible)
+    {
+        if (p.x >= 590 && p.y <= 74) { midiControlConfigVisible = false; repaint(); return; }
+        const int dir = p.x >= 360 ? 1 : -1;
+        if (p.y >= 76 && p.y < 116)
+        {
+            auto* par = processor.state().getParameter (ParamID::midiControl);
+            par->setValueNotifyingHost (par->getValue() < 0.5f ? 1.0f : 0.0f);
+            processor.notifyMidiControllerConfigChanged();
+        }
+        else if (p.y >= 118 && p.y < 158) cycleMidiOutput (dir);
+        else if (p.y >= 160 && p.y < 200)
+        {
+            const int v = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiChannel)->load());
+            setChoiceActual (ParamID::midiChannel, juce::jlimit (1, 16, v + dir));
+        }
+        else if (p.y >= 202 && p.y < 242)
+        {
+            int v = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiXMode)->load());
+            v = (v + dir + 3) % 3;
+            setChoiceActual (ParamID::midiXMode, v);
+            if (v == 2 && juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiYMode)->load()) == 2)
+                setChoiceActual (ParamID::midiYMode, 0);
+        }
+        else if (p.y >= 244 && p.y < 284)
+        {
+            const int v = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiXCC)->load());
+            setChoiceActual (ParamID::midiXCC, juce::jlimit (0, 127, v + dir));
+        }
+        else if (p.y >= 286 && p.y < 326)
+        {
+            int v = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiYMode)->load());
+            v = (v + dir + 3) % 3;
+            setChoiceActual (ParamID::midiYMode, v);
+            if (v == 2 && juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiXMode)->load()) == 2)
+                setChoiceActual (ParamID::midiXMode, 0);
+        }
+        else if (p.y >= 328 && p.y < 368)
+        {
+            const int v = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiYCC)->load());
+            setChoiceActual (ParamID::midiYCC, juce::jlimit (0, 127, v + dir));
+        }
+        else if (p.y >= 370 && p.y < 410)
+        {
+            const int v = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiKey)->load());
+            setChoiceActual (ParamID::midiKey, (v + dir + 12) % 12);
+        }
+        else if (p.y >= 412 && p.y < 452)
+        {
+            const int v = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiScale)->load());
+            setChoiceActual (ParamID::midiScale, (v + dir + 5) % 5);
+        }
+        else if (p.y >= 454 && p.y < 494)
+        {
+            midiPresetSlot = juce::jlimit (1, 8, midiPresetSlot + dir);
+            midiPresetMessage.clear();
+        }
+        else if (p.y >= 504 && p.y < 560)
+        {
+            if (p.x < 360)
+                midiPresetMessage = processor.loadMidiControllerPreset (midiPresetSlot)
+                                  ? "LOADED PRESET " + juce::String (midiPresetSlot)
+                                  : "PRESET " + juce::String (midiPresetSlot) + " IS EMPTY";
+            else
+                midiPresetMessage = processor.saveMidiControllerPreset (midiPresetSlot)
+                                  ? "SAVED PRESET " + juce::String (midiPresetSlot)
+                                  : "SAVE FAILED";
+        }
+        repaint();
+        return;
+    }
+
     if (configVisible)
     {
         if (p.x >= 590 && p.y <= 74) { configVisible = false; repaint(); return; }
@@ -425,18 +610,24 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         for (int i = 0; i < maxRows; ++i, y += 38)
             if (p.y >= y && p.y < y + 34) { selectAudioInput (i); repaint(); return; }
 
-        if (p.y >= 468 && p.y < 512)
+        if (p.y >= 458 && p.y < 504)
         {
-            auto* par = processor.state().getParameter (ParamID::midiChannel);
-            const float now = par->getValue();
-            par->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, now + (p.x > 360 ? 1.0f/15.0f : -1.0f/15.0f)));
+            auto* par = processor.state().getParameter (ParamID::midiControl);
+            par->setValueNotifyingHost (par->getValue() < 0.5f ? 1.0f : 0.0f);
+            processor.notifyMidiControllerConfigChanged();
         }
-        else if (p.y >= 518 && p.y < 562)
+        else if (p.y >= 504 && p.y < 550)
+        {
+            midiControlConfigVisible = true;
+            configVisible = false;
+            refreshMidiOutputs();
+        }
+        else if (p.y >= 550 && p.y < 596)
         {
             auto* par = processor.state().getParameter (ParamID::clockMode);
             par->setValueNotifyingHost (par->getValue() < 0.5f ? 1.0f : 0.0f);
         }
-        else if (p.y >= 568 && p.y < 614 && processor.state().getRawParameterValue (ParamID::clockMode)->load() < 0.5f)
+        else if (p.y >= 596 && p.y < 644 && processor.state().getRawParameterValue (ParamID::clockMode)->load() < 0.5f)
         {
             auto* par = processor.state().getParameter (ParamID::internalBpm);
             par->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, par->getValue() + (p.x > 360 ? 1.0f/200.0f : -1.0f/200.0f)));
@@ -456,14 +647,38 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         }
     }
 
-    // The image area itself is the REC/STOP control. Stopping also clears the generated state.
-    processor.toggleRunState();
+    const bool midiControlOn = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
+    if (midiControlOn)
+    {
+        if (p.x <= 170 && p.y <= 70) processor.toggleRunState();
+        else { xyDragging = true; updateMidiControllerFromPoint (p); }
+    }
+    else processor.toggleRunState();
     repaint();
 }
 
 void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 {
-    if (configVisible || dragging == DragParam::none) return;
-    setParameterFromX (dragging, toDesign (e.position).x);
-    repaint();
+    if (midiControlConfigVisible || configVisible) return;
+    if (xyDragging)
+    {
+        updateMidiControllerFromPoint (toDesign (e.position));
+        repaint();
+        return;
+    }
+    if (dragging != DragParam::none)
+    {
+        setParameterFromX (dragging, toDesign (e.position).x);
+        repaint();
+    }
+}
+
+void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
+{
+    if (xyDragging)
+    {
+        xyDragging = false;
+        processor.releaseMidiControllerTouch();
+        repaint();
+    }
 }
