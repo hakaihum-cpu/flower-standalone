@@ -7,6 +7,7 @@
 #include "TheoryEngine.h"
 #include "YinPitchDetector.h"
 #include "PsolaHarmonyBank.h"
+#include "ChordRenderers.h"
 
 class RealtimeChordFxAudioProcessor final : public juce::AudioProcessor
 {
@@ -78,14 +79,19 @@ private:
     void processChordMidi (juce::MidiBuffer&);
     void stopActiveChordMidi (juce::MidiBuffer&);
     void updateChordRatios();
-    void processChordAudio (juce::AudioBuffer<float>&);
+    void processChordAudio (juce::AudioBuffer<float>&); // CHORD-A: captured-input chord
+    void processChordB (juce::AudioBuffer<float>&);     // CHORD-B: random sine arpeggiator
+    void processChordReverb (juce::AudioBuffer<float>&);
     void processDreamy (juce::AudioBuffer<float>&);
     void resetModeAudioState (int mode);
 
     juce::AudioProcessorValueTreeState apvts;
     chordfx::YinPitchDetector pitchDetector;
     chordfx::TheoryEngine theory;
-    chordfx::PsolaHarmonyBank psolaHarmony;
+    chordfx::PsolaHarmonyBank psolaHarmony; // retained only for rollback/reference; no audible CHORD path
+    chordfx::SampleChordRenderer sampleChordRenderer;
+    chordfx::SineArpeggiator sineArpeggiator;
+    juce::Reverb chordReverb;
 
     double currentSampleRate = 48000.0;
     std::atomic<bool> running { false };
@@ -107,6 +113,7 @@ private:
     int midiClockTicks = 0;
     bool midiClockRunning = false;
     int lastEffectMode = 0; // 0=CHORD, 1=DREAMY
+    int lastChordMode = 0;  // 0=CHORD-A, 1=CHORD-B
     float psolaTargetPeriod = 240.0f;
     float psolaCurrentPeriod = 240.0f;
     int pitchSamplesSinceValid = 1000000;
