@@ -133,11 +133,11 @@ void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e
 
     theory.setComplexity (apvts.getRawParameterValue (ParamID::complex)->load());
     theory.setWidth (apvts.getRawParameterValue (ParamID::width)->load());
-    applyChord (theory.noteOn (midi));
+    applyChord (theory.noteOn (midi), true);
     samplesUntilChange = barIntervalSamples();
 }
 
-void RealtimeChordFxAudioProcessor::applyChord (const chordfx::ChordPlan& plan)
+void RealtimeChordFxAudioProcessor::applyChord (const chordfx::ChordPlan& plan, bool recaptureSample)
 {
     if (plan.midiNotes.empty()) return;
     currentPlan = plan;
@@ -157,7 +157,7 @@ void RealtimeChordFxAudioProcessor::applyChord (const chordfx::ChordPlan& plan)
     // Both CHORD renderers consume the exact same TheoryEngine plan.
     // CHORD-A turns the live input into a short looped sample source.
     // CHORD-B treats the input as pitch/control only and plays sine tones.
-    sampleChordRenderer.setPlan (plan.midiNotes, lastInputMidiFloat);
+    sampleChordRenderer.setPlan (plan.midiNotes, lastInputMidiFloat, recaptureSample);
     sineArpeggiator.setPlan (plan.midiNotes);
     updateChordRatios();
 }
@@ -167,7 +167,7 @@ void RealtimeChordFxAudioProcessor::advanceProgression()
     if (! haveChord) return;
     theory.setComplexity (apvts.getRawParameterValue (ParamID::complex)->load());
     theory.setWidth (apvts.getRawParameterValue (ParamID::width)->load());
-    applyChord (theory.advance());
+    applyChord (theory.advance(), false);
     samplesUntilChange = barIntervalSamples();
 }
 
