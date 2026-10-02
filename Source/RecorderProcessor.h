@@ -63,7 +63,10 @@ private:
     void beginRecordingSegment();
     void finishRecordingSegment();
     void beginPlayback (int slot);
-    void maybeStartRandomPlayback();
+    void beginRandomPlayback (int slot);
+    void stopRandomPlayback();
+    void scheduleNextRandomSwitch();
+    void updateRandomPlayback (int numSamples);
     void handleClock (const juce::MidiBuffer& midi, int numSamples);
     int chooseRandomValidSlot();
 
@@ -79,6 +82,11 @@ private:
 
     std::array<int, kSlots> playPositions {};
     std::atomic<uint32_t> requestedPlayMask { 0u };
+
+    int randomPlaySlot = -1;
+    int randomPlayPosition = 0;
+    int64_t randomSamplesRemaining = 0;
+    bool randomWasEnabled = false;
 
     std::atomic<bool> recordingEnabled { false };
     std::atomic<bool> randomEnabled { false };
