@@ -383,15 +383,6 @@ for need in [
     if need not in patch:
         fail(f"known-good native parallelism patch drift: {need}")
 
-print("[PASS] exact 300-frame visual bank SHA/size verified")
-print("[PASS] product source isolated; synth/cross-project tokens absent")
-print("[PASS] Android input/JNI/startup contract verified")
-print("[PASS] JUCER module set matches proven FLOWER Golden")
-print("[PASS] JUCE 9.0.2 dependency closure verified")
-print("[PASS] Android RECORD_AUDIO exporter contract verified")
-print("[PASS] known-good AN-10..AN-15 CircleCI controls preserved")
-
-
 # Noise-hardening contracts.
 if "std::clamp (left, -0.72f, 0.72f)" in renderers or "std::clamp (right, -0.72f, 0.72f)" in renderers:
     fail("CHORD-B hard clamp must not return; use soft-knee protection")
@@ -406,3 +397,12 @@ for need in [
 ]:
     if need not in renderers and need not in dreamy:
         fail(f"noise-hardening contract missing: {need}")
+
+print("[PASS] exact 300-frame visual bank SHA/size verified")
+print("[PASS] product source isolated; synth/cross-project tokens absent")
+print("[PASS] Android input/JNI/startup contract verified")
+print("[PASS] JUCER module set matches proven FLOWER Golden")
+print("[PASS] JUCE 9.0.2 dependency closure verified")
+print("[PASS] Android RECORD_AUDIO exporter contract verified")
+print("[PASS] known-good AN-10..AN-15 CircleCI controls preserved")
+print("[PASS] CHORD/Dreamy noise-hardening contracts verified")
