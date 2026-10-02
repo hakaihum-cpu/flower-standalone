@@ -92,6 +92,8 @@ for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● RE
         fail(f"UI/requirement token missing: {need}")
 
 editor = (R / "Source/PluginEditor.cpp").read_text()
+if "isKeyCurrentlyDown" in editor:
+    fail("Android Motion REC must not rely on JUCE Android isKeyCurrentlyDown()")
 for need in [
     "#include <juce_core/native/juce_JNIHelpers_android.h>",
     "getAndroidPhysicalInputNames",
@@ -102,7 +104,7 @@ for need in [
     "closeAudioDevice",
     "startPlaying",
     "setWantsKeyboardFocus (true)",
-    "keyStateChanged",
+    "keyPressed",
     "KeyPress::F17Key",
     "KeyPress::F18Key",
 ]:

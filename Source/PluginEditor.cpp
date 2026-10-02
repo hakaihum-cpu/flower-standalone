@@ -176,6 +176,10 @@ juce::String RealtimeChordFxAudioProcessorEditor::noteText (int midi) const
 
 void RealtimeChordFxAudioProcessorEditor::timerCallback()
 {
+    const auto now = juce::Time::getMillisecondCounter();
+    if (l1Latched && now - lastL1EventMs > 180u) l1Latched = false;
+    if (r1Latched && now - lastR1EventMs > 180u) r1Latched = false;
+
     const int frame = processor.getVisualFrame();
     if (frame != loadedFrame && frames.getFrameCount() > 0)
     {
@@ -700,23 +704,33 @@ void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
     }
 }
 
-bool RealtimeChordFxAudioProcessorEditor::keyStateChanged (bool)
+bool RealtimeChordFxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
-    const bool l1Now = juce::KeyPress::isKeyCurrentlyDown (juce::KeyPress::F17Key);
-    const bool r1Now = juce::KeyPress::isKeyCurrentlyDown (juce::KeyPress::F18Key);
-    const bool changed = (l1Now != l1Down) || (r1Now != r1Down);
+    const auto now = juce::Time::getMillisecondCounter();
 
-    if (l1Now && ! l1Down)
-        processor.toggleMotionRecord();
+    if (key.getKeyCode() == juce::KeyPress::F17Key)
+    {
+        lastL1EventMs = now;
+        if (! l1Latched)
+        {
+            l1Latched = true;
+            processor.toggleMotionRecord();
+            repaint();
+        }
+        return true;
+    }
 
-    if (r1Now && ! r1Down)
-        processor.clearMotion();
+    if (key.getKeyCode() == juce::KeyPress::F18Key)
+    {
+        lastR1EventMs = now;
+        if (! r1Latched)
+        {
+            r1Latched = true;
+            processor.clearMotion();
+            repaint();
+        }
+        return true;
+    }
 
-    l1Down = l1Now;
-    r1Down = r1Now;
-
-    if (changed)
-        repaint();
-
-    return changed;
+    return false;
 }
