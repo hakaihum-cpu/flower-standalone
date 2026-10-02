@@ -345,10 +345,8 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
                     + "   Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
                     28, 660, 240, 22, juce::Justification::centredLeft);
     
-        const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
-            processor.state().getRawParameterValue (ParamID::effectMode)->load()));
         if (processor.isRunning())
-            g.drawText (effectMode == 0 ? "CHORD" : "DREAMY",
+            g.drawText ("DREAMY",
                         286, 660, 120, 22, juce::Justification::centredLeft);
     
         const int motion = processor.getMotionState();
