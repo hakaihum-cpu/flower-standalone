@@ -419,6 +419,10 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
         (float) controllerY.load (std::memory_order_relaxed) / 127.0f);
     const float bpm = juce::jlimit (50.0f, 200.0f,
         apvts.getRawParameterValue (ParamID::internalBpm)->load());
+    const float ambience = enabled ? std::pow (x * y, 1.35f) : 0.0f;
+    const float wetCutoff = 9000.0f - 2800.0f * y;
+    const float wetLpAlpha = 1.0f - std::exp (
+        -juce::MathConstants<float>::twoPi * wetCutoff / (float) currentSampleRate);
 
     const auto wrapIndex = [capacity] (int position)
     {
@@ -532,9 +536,11 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
                 for (int channel = 0; channel < channels; ++channel)
                 {
                     const float wetSample = dreamyWet[channel] / totalWindow * drift;
+                    auto& filtered = dreamyWetLowpass[(size_t) channel];
+                    filtered += wetLpAlpha * (wetSample - filtered);
                     buffer.setSample (
                         channel, sample,
-                        dry[channel] + (wetSample - dry[channel]) * wetMix);
+                        dry[channel] + (filtered - dry[channel]) * wetMix);
                 }
             }
         }
@@ -549,6 +555,65 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
 
         dreamyWritePosition = (dreamyWritePosition + 1) % capacity;
         dreamySamplesFilled = juce::jmin (capacity, dreamySamplesFilled + 1);
+    }
+
+    // Additional ambience is deliberately tied to the upper-right corner.
+    // The accepted Dreamy X/Y mapping above remains unchanged; this is an
+    // extra spatial layer requested for EFFECTS.
+    if (enabled && ambience > 0.001f && dreamyDelayBuffer.getNumSamples() > 0)
+    {
+        const int delayCapacity = dreamyDelayBuffer.getNumSamples();
+        const int delaySamples = juce::jlimit (
+            1, delayCapacity - 1,
+            juce::roundToInt (currentSampleRate * (0.16 + 0.36 * y)));
+        const float delayMix = 0.46f * ambience;
+        const float feedback = 0.18f + 0.42f * ambience;
+
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            const int readPos =
+                (dreamyDelayWritePosition - delaySamples + delayCapacity) % delayCapacity;
+
+            float current[2] { 0.0f, 0.0f };
+            float delayed[2] { 0.0f, 0.0f };
+            for (int channel = 0; channel < channels; ++channel)
+            {
+                current[channel] = buffer.getSample (channel, sample);
+                const float rawDelay = dreamyDelayBuffer.getSample (channel, readPos);
+                auto& lp = dreamyDelayLowpass[(size_t) channel];
+                lp += 0.24f * (rawDelay - lp);
+                delayed[channel] = lp;
+            }
+
+            for (int channel = 0; channel < channels; ++channel)
+            {
+                const int other = channels > 1 ? 1 - channel : channel;
+                dreamyDelayBuffer.setSample (
+                    channel, dreamyDelayWritePosition,
+                    current[channel] + delayed[other] * feedback);
+                buffer.setSample (
+                    channel, sample,
+                    current[channel] + delayed[channel] * delayMix);
+            }
+
+            dreamyDelayWritePosition =
+                (dreamyDelayWritePosition + 1) % delayCapacity;
+        }
+
+        juce::Reverb::Parameters reverbParams;
+        reverbParams.roomSize = 0.38f + 0.57f * ambience;
+        reverbParams.damping = 0.62f;
+        reverbParams.wetLevel = 0.52f * ambience;
+        reverbParams.dryLevel = 1.0f;
+        reverbParams.width = 1.0f;
+        reverbParams.freezeMode = 0.0f;
+        dreamyReverb.setParameters (reverbParams);
+
+        if (channels >= 2)
+            dreamyReverb.processStereo (
+                buffer.getWritePointer (0), buffer.getWritePointer (1), numSamples);
+        else
+            dreamyReverb.processMono (buffer.getWritePointer (0), numSamples);
     }
 }
 
