@@ -47,7 +47,8 @@ public:
             tryCapture();
     }
 
-    void setPlan (const std::vector<int>& midiNotes, float sourceMidiFloat) noexcept
+    void setPlan (const std::vector<int>& midiNotes, float sourceMidiFloat,
+                  bool recapture = true) noexcept
     {
         sourceMidi = sourceMidiFloat;
         targetCount = std::min ((int) midiNotes.size(), maxVoices);
@@ -62,8 +63,9 @@ public:
             ratio[(size_t) i] = 1.0;
             phase[(size_t) i] = 0.0;
         }
-        capturePending = targetCount > 0;
-        tryCapture();
+        capturePending = targetCount > 0 && (recapture || captureLength < 32);
+        if (capturePending)
+            tryCapture();
     }
 
     float renderSample (bool gateOpen) noexcept
@@ -244,7 +246,11 @@ public:
         if (! gateOpen || noteCount <= 0)
         {
             envelope *= 0.992f;
-            return std::sin (phase) * envelope * 0.32f;
+            const float out = std::sin (phase) * envelope * 0.32f;
+            phase += 6.28318530717958647692 * frequency / sampleRate;
+            if (phase >= 6.28318530717958647692)
+                phase -= 6.28318530717958647692;
+            return out;
         }
 
         if (--stepSamplesRemaining <= 0)
