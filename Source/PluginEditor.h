@@ -33,7 +33,6 @@ private:
     void updateMidiControllerFromPoint (juce::Point<float>);
     void setChoiceActual (const char* id, int value);
     juce::String currentInputName() const;
-    juce::String noteText (int midi) const;
 
     RealtimeChordFxAudioProcessor& processor;
     FramePack frames;

@@ -61,3 +61,6 @@ When MIDI CONTROL is ON:
 - X/Y readout remains on the EFFECTS screen.
 - With MIDI CONTROL ON, Dreamy XY and MIDI XY share the same 0..127 coordinates.
 - CONFIG keeps the EFFECTS style and adds iRig PEAK/RMS/NONZERO diagnostics only.
+
+- Main EFFECTS screen must not show legacy IN/CHORD/COMPLEX/BAR/WIDTH/LENGTH generator UI while Dreamy audio mode is active.
+- Legacy generator parameter hit areas must also be absent; the main surface outside REC/CONFIG is Dreamy XY.

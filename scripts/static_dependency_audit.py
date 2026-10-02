@@ -92,6 +92,17 @@ for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● RE
         fail(f"UI/requirement token missing: {need}")
 
 editor = (R / "Source/PluginEditor.cpp").read_text()
+main_start = editor.find("void RealtimeChordFxAudioProcessorEditor::paintMain")
+main_end = editor.find("juce::String RealtimeChordFxAudioProcessorEditor::currentInputName", main_start)
+if main_start < 0 or main_end < 0:
+    fail("EFFECTS main-screen function boundaries missing")
+main_screen = editor[main_start:main_end]
+for forbidden in ["CHORD  ", "COMPLEX", "WIDTH", "LENGTH", "paintBar", "parameterBounds"]:
+    if forbidden in main_screen:
+        fail(f"obsolete chord-generator main UI still present: {forbidden}")
+for need in ['"DREAMY"', '"X " + juce::String', '"CONFIG"', 'u8"● REC"']:
+    if need not in main_screen:
+        fail(f"EFFECTS Dreamy main UI missing: {need}")
 if "isKeyCurrentlyDown" in editor:
     fail("Android Motion REC must not rely on JUCE Android isKeyCurrentlyDown()")
 for need in [
@@ -173,8 +184,8 @@ for need in [
 ]:
     if need not in src and need not in dreamy:
         fail(f"Dreamy/live-input contract missing: {need}")
-if "pitchBank.processSample" in dreamy:
-    fail("generated pitch-shifter audio path must remain disabled while Dreamy is active")
+if "pitchBank" in dreamy or "GranularPitchBank" in (R / "Source/PluginProcessor.h").read_text():
+    fail("obsolete generated-audio pitch shifter must not remain in Processor")
 
 # JUCER: exact module set proven by FLOWER Golden and complete JUCE 9.0.2 dependency closure.
 root = ET.parse(JUCER).getroot()
