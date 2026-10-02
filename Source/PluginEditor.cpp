@@ -275,8 +275,6 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
             g.setFont (juce::FontOptions (14.0f));
             g.drawText ("IN  " + noteText (processor.getDetectedMidi()) + "    CHORD  " + processor.getChordLabel(),
                         28, 578, 520, 28, juce::Justification::centredLeft);
-            g.drawText (chordMode == 0 ? "CHORD-A" : "CHORD-B",
-                        548, 578, 144, 28, juce::Justification::centredRight);
             g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
         
             const bool midiControlOn = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
