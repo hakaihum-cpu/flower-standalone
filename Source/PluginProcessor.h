@@ -42,6 +42,9 @@ public:
     void stopAndClear() noexcept;
     bool isRunning() const noexcept { return running.load (std::memory_order_relaxed); }
     float getInputLevel() const noexcept { return inputLevel.load (std::memory_order_relaxed); }
+    float getInputPeakRaw() const noexcept { return inputPeakRaw.load (std::memory_order_relaxed); }
+    float getInputRmsRaw() const noexcept { return inputRmsRaw.load (std::memory_order_relaxed); }
+    float getInputNonZeroRatio() const noexcept { return inputNonZeroRatio.load (std::memory_order_relaxed); }
     int getDetectedMidi() const noexcept { return detectedMidi.load (std::memory_order_relaxed); }
     int getVisualFrame() const noexcept { return visualFrame.load (std::memory_order_relaxed); }
     juce::String getChordLabel() const;
@@ -74,6 +77,7 @@ private:
     void applyMotionPoint (int x, int y);
     void processChordMidi (juce::MidiBuffer&);
     void stopActiveChordMidi (juce::MidiBuffer&);
+    void processDreamy (juce::AudioBuffer<float>&);
 
     juce::AudioProcessorValueTreeState apvts;
     chordfx::YinPitchDetector pitchDetector;
@@ -84,6 +88,9 @@ private:
     std::atomic<bool> running { false };
     std::atomic<bool> clearRequested { false };
     std::atomic<float> inputLevel { 0.0f };
+    std::atomic<float> inputPeakRaw { 0.0f };
+    std::atomic<float> inputRmsRaw { 0.0f };
+    std::atomic<float> inputNonZeroRatio { 0.0f };
     std::atomic<int> detectedMidi { -1 };
     std::atomic<int> visualFrame { 0 };
 
@@ -126,6 +133,19 @@ private:
     bool chordMidiRefreshRequested = false;
     bool chordMidiStopRequested = false;
     bool chordMidiGateOpen = false;
+
+    // Dreamy DSP state copied from the accepted effect implementation.
+    static constexpr int dreamyVoiceCount = 2;
+    juce::AudioBuffer<float> dreamyBuffer;
+    int dreamyWritePosition = 0;
+    int dreamySamplesFilled = 0;
+    std::array<int, dreamyVoiceCount> dreamyLoopStart { 0, 0 };
+    std::array<int, dreamyVoiceCount> dreamyLoopLength { 0, 0 };
+    std::array<int, dreamyVoiceCount> dreamyOutputPhase { 0, 0 };
+    std::array<float, dreamyVoiceCount> dreamyLocalPosition { 0.0f, 0.0f };
+    std::array<float, dreamyVoiceCount> dreamyPlaybackSpeed { 1.3348398f, 2.0f };
+    std::array<bool, dreamyVoiceCount> dreamyVoiceActive { false, false };
+    uint32_t dreamyRandomState = 0x44524541u;
 
     mutable juce::SpinLock labelLock;
     juce::String chordLabel { "--" };

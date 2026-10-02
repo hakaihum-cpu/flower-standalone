@@ -41,6 +41,24 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordMidiRefreshRequested = false;
     chordMidiStopRequested = false;
     chordMidiGateOpen = false;
+
+    const int dreamySamples =
+        juce::jmax (4096, juce::roundToInt (currentSampleRate * 2.5));
+    dreamyBuffer.setSize (2, dreamySamples, false, true, false);
+    dreamyBuffer.clear();
+    dreamyWritePosition = 0;
+    dreamySamplesFilled = 0;
+    dreamyLoopStart = { 0, 0 };
+    dreamyLoopLength = { 0, 0 };
+    dreamyOutputPhase = { 0, 0 };
+    dreamyLocalPosition = { 0.0f, 0.0f };
+    dreamyPlaybackSpeed = { 1.3348398f, 2.0f };
+    dreamyVoiceActive = { false, false };
+    dreamyRandomState = 0x44524541u;
+
+    inputPeakRaw.store (0.0f, std::memory_order_relaxed);
+    inputRmsRaw.store (0.0f, std::memory_order_relaxed);
+    inputNonZeroRatio.store (0.0f, std::memory_order_relaxed);
 }
 
 void RealtimeChordFxAudioProcessor::toggleRunState() noexcept
@@ -174,11 +192,15 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 {
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
-    const int inChannels = juce::jmax (1, getTotalNumInputChannels());
-    const bool midiClockMode = apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
+    const int availableInputChannels =
+        juce::jmax (1, juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels()));
+    const bool midiClockMode =
+        apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
+
     handleMotionCommand();
     if (midiClockMode) handleMidiClock (midi);
     else processInternalMotionClock (n);
+
     midi.clear();
     processMidiController (midi, n);
 
@@ -188,12 +210,16 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         pitchBank.reset();
         theory.reset();
         haveChord = false;
-        pendingMidi = -1; stableCount = 0;
+        pendingMidi = -1;
+        stableCount = 0;
         detectedMidi.store (-1, std::memory_order_relaxed);
+
         if (apvts.getRawParameterValue (ParamID::midiControl)->load() < 0.5f)
             visualFrame.store (0, std::memory_order_relaxed);
         else
-            visualFrame.store (controllerFrameForXY (controllerX.load(), controllerY.load()), std::memory_order_relaxed);
+            visualFrame.store (controllerFrameForXY (controllerX.load(), controllerY.load()),
+                               std::memory_order_relaxed);
+
         samplesUntilChange = gateSamplesRemaining = 0.0;
         midiClockTicks = 0;
         chordMidiGateOpen = false;
@@ -203,56 +229,220 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         chordLabel = "--";
     }
 
-    processChordMidi (midi);
-
     float blockPeak = 0.0f;
+    double squareSum = 0.0;
+    int nonZeroSamples = 0;
+
+    // Build a clean stereo dry buffer from the selected live input. The audio
+    // effect path no longer uses generated chord voices or GranularPitchBank.
     for (int i = 0; i < n; ++i)
     {
         float mono = 0.0f;
-        for (int ch = 0; ch < juce::jmin (inChannels, buffer.getNumChannels()); ++ch)
+        for (int ch = 0; ch < availableInputChannels; ++ch)
             mono += buffer.getSample (ch, i);
-        mono /= (float) juce::jmin (inChannels, buffer.getNumChannels());
-        blockPeak = juce::jmax (blockPeak, std::abs (mono));
+        mono /= (float) availableInputChannels;
+
+        const float absolute = std::abs (mono);
+        blockPeak = juce::jmax (blockPeak, absolute);
+        squareSum += (double) mono * (double) mono;
+        if (absolute > 1.0e-6f)
+            ++nonZeroSamples;
 
         const auto estimate = pitchDetector.pushSample (mono);
-        if (estimate.valid) acceptPitch (estimate);
+        if (estimate.valid)
+            acceptPitch (estimate);
 
-        const bool active = running.load (std::memory_order_relaxed);
-        float out = mono;
-        if (active && haveChord)
+        if (buffer.getNumChannels() >= 1) buffer.setSample (0, i, mono);
+        if (buffer.getNumChannels() >= 2) buffer.setSample (1, i, mono);
+    }
+
+    inputPeakRaw.store (blockPeak, std::memory_order_relaxed);
+    inputRmsRaw.store (n > 0 ? (float) std::sqrt (squareSum / (double) n) : 0.0f,
+                       std::memory_order_relaxed);
+    inputNonZeroRatio.store (n > 0 ? (float) nonZeroSamples / (float) n : 0.0f,
+                             std::memory_order_relaxed);
+    inputLevel.store (0.82f * inputLevel.load (std::memory_order_relaxed)
+                      + 0.18f * blockPeak,
+                      std::memory_order_relaxed);
+
+    // Keep the theory engine only for optional CHORD MIDI OUT. It no longer
+    // creates the audible signal.
+    if (running.load (std::memory_order_relaxed) && haveChord)
+    {
+        if (gateSamplesRemaining > 0.0)
         {
-            const bool gated = gateSamplesRemaining < 0.0 || gateSamplesRemaining > 0.0;
-            const float wet = pitchBank.processSample (mono);
-            out = gated ? wet : 0.0f;
-            if (gateSamplesRemaining > 0.0)
+            gateSamplesRemaining -= (double) n;
+            if (gateSamplesRemaining <= 0.0)
             {
-                gateSamplesRemaining -= 1.0;
-                if (gateSamplesRemaining <= 0.0)
+                gateSamplesRemaining = 0.0;
+                chordMidiGateOpen = false;
+                chordMidiStopRequested = true;
+            }
+        }
+
+        const float length = apvts.getRawParameterValue (ParamID::length)->load();
+        if (! midiClockMode && length < 0.995f)
+        {
+            samplesUntilChange -= (double) n;
+            if (samplesUntilChange <= 0.0)
+                advanceProgression();
+        }
+    }
+
+    processChordMidi (midi);
+
+    // Always feed live input into the Dreamy history. Running only controls
+    // whether the wet micro-loop layer is heard, matching the accepted effect.
+    processDreamy (buffer);
+}
+
+void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buffer)
+{
+    const int capacity = dreamyBuffer.getNumSamples();
+    const int numSamples = buffer.getNumSamples();
+    const int channels = juce::jmin (buffer.getNumChannels(), dreamyBuffer.getNumChannels());
+
+    if (capacity <= 64 || numSamples <= 0 || channels <= 0)
+        return;
+
+    const bool enabled = running.load (std::memory_order_acquire);
+    const float x = juce::jlimit (0.0f, 1.0f,
+        (float) controllerX.load (std::memory_order_relaxed) / 127.0f);
+    const float y = juce::jlimit (0.0f, 1.0f,
+        (float) controllerY.load (std::memory_order_relaxed) / 127.0f);
+    const float bpm = juce::jlimit (50.0f, 200.0f,
+        apvts.getRawParameterValue (ParamID::internalBpm)->load());
+
+    const auto wrapIndex = [capacity] (int position)
+    {
+        while (position < 0) position += capacity;
+        while (position >= capacity) position -= capacity;
+        return position;
+    };
+
+    auto nextRandomUnit = [this] ()
+    {
+        uint32_t value = dreamyRandomState;
+        value ^= value << 13;
+        value ^= value >> 17;
+        value ^= value << 5;
+        dreamyRandomState = value;
+        return static_cast<float> (value & 0xffffu) / 65535.0f;
+    };
+
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        float dry[2] { 0.0f, 0.0f };
+        for (int channel = 0; channel < channels; ++channel)
+            dry[channel] = buffer.getSample (channel, sample);
+
+        float dreamyWet[2] { 0.0f, 0.0f };
+        float totalWindow = 0.0f;
+
+        const int minimumHistory = juce::roundToInt (currentSampleRate * 0.75);
+
+        if (enabled && dreamySamplesFilled > minimumHistory)
+        {
+            const float beatSamples =
+                static_cast<float> (currentSampleRate)
+                * 60.0f / juce::jmax (50.0f, bpm);
+            const int baseLoopLength = juce::jlimit (
+                juce::roundToInt (currentSampleRate * 0.070),
+                juce::roundToInt (currentSampleRate * 0.340),
+                juce::roundToInt (beatSamples / (2.0f + y * 2.0f)));
+
+            for (int voice = 0; voice < dreamyVoiceCount; ++voice)
+            {
+                auto& active = dreamyVoiceActive[(size_t) voice];
+                auto& loopStart = dreamyLoopStart[(size_t) voice];
+                auto& loopLength = dreamyLoopLength[(size_t) voice];
+                auto& outputPhase = dreamyOutputPhase[(size_t) voice];
+                auto& localPosition = dreamyLocalPosition[(size_t) voice];
+                auto& playbackSpeed = dreamyPlaybackSpeed[(size_t) voice];
+
+                if (! active || loopLength <= 0
+                    || outputPhase >= loopLength * (3 + voice))
                 {
-                    gateSamplesRemaining = 0.0;
-                    chordMidiGateOpen = false;
-                    chordMidiStopRequested = true;
+                    const float lengthScale = voice == 0 ? 0.82f : 1.18f;
+                    loopLength = juce::jlimit (
+                        256, capacity / 3,
+                        juce::roundToInt ((float) baseLoopLength * lengthScale));
+
+                    const int maxLookback = juce::jmax (
+                        loopLength + 2,
+                        juce::jmin (dreamySamplesFilled - 2, capacity - 2));
+                    const int minLookback = juce::jmin (
+                        maxLookback,
+                        juce::jmax (loopLength + 2, loopLength * (2 + voice)));
+                    const int spreadSamples = juce::jmax (1, maxLookback - minLookback);
+
+                    const int lookback =
+                        minLookback
+                        + juce::roundToInt (
+                            nextRandomUnit() * static_cast<float> (spreadSamples));
+
+                    loopStart = wrapIndex (dreamyWritePosition - lookback);
+                    outputPhase = 0;
+                    localPosition =
+                        voice == 0 ? 0.0f : static_cast<float> (loopLength) * 0.43f;
+
+                    // Accepted Dreamy voices: +5 semitones and +12 semitones.
+                    playbackSpeed = voice == 0 ? 1.3348398f : 2.0f;
+                    active = true;
                 }
+
+                while (localPosition >= static_cast<float> (loopLength))
+                    localPosition -= static_cast<float> (loopLength);
+
+                const float phase = localPosition / static_cast<float> (loopLength);
+                const float window =
+                    0.5f - 0.5f * std::cos (juce::MathConstants<float>::twoPi * phase);
+
+                const float readPosition = static_cast<float> (loopStart) + localPosition;
+                const int read0 = wrapIndex ((int) std::floor (readPosition));
+                const int read1 = wrapIndex (read0 + 1);
+                const float fraction = readPosition - std::floor (readPosition);
+
+                for (int channel = 0; channel < channels; ++channel)
+                {
+                    const auto* source = dreamyBuffer.getReadPointer (channel);
+                    const float fragment =
+                        source[read0] + (source[read1] - source[read0]) * fraction;
+                    dreamyWet[channel] += fragment * window;
+                }
+
+                totalWindow += window;
+                localPosition += playbackSpeed;
+                ++outputPhase;
             }
 
-            const float length = apvts.getRawParameterValue (ParamID::length)->load();
-            if (! midiClockMode && length < 0.995f)
+            if (totalWindow > 0.0001f)
             {
-                samplesUntilChange -= 1.0;
-                if (samplesUntilChange <= 0.0) advanceProgression();
+                const float wetMix =
+                    juce::jlimit (0.20f, 0.58f, 0.24f + y * 0.34f);
+                const float drift = 0.90f + x * 0.10f;
+
+                for (int channel = 0; channel < channels; ++channel)
+                {
+                    const float wetSample = dreamyWet[channel] / totalWindow * drift;
+                    buffer.setSample (
+                        channel, sample,
+                        dry[channel] + (wetSample - dry[channel]) * wetMix);
+                }
             }
         }
         else
         {
-            // Stopped = clear/bypass, so the input remains audible while the generator is idle.
-            pitchBank.processSample (mono);
+            dreamyVoiceActive = { false, false };
         }
 
-        if (buffer.getNumChannels() >= 1) buffer.setSample (0, i, out);
-        if (buffer.getNumChannels() >= 2) buffer.setSample (1, i, out);
+        for (int channel = 0; channel < channels; ++channel)
+            dreamyBuffer.setSample (
+                channel, dreamyWritePosition, dry[channel]);
+
+        dreamyWritePosition = (dreamyWritePosition + 1) % capacity;
+        dreamySamplesFilled = juce::jmin (capacity, dreamySamplesFilled + 1);
     }
-    inputLevel.store (0.82f * inputLevel.load (std::memory_order_relaxed) + 0.18f * blockPeak,
-                      std::memory_order_relaxed);
 }
 
 
@@ -271,8 +461,7 @@ void RealtimeChordFxAudioProcessor::setMidiControllerXY (int x, int y, bool touc
     controllerY.store (y, std::memory_order_relaxed);
     controllerTouch.store (touchDown, std::memory_order_relaxed);
     controllerDirty.store (true, std::memory_order_release);
-    if (apvts.getRawParameterValue (ParamID::midiControl)->load() >= 0.5f)
-        visualFrame.store (controllerFrameForXY (x, y), std::memory_order_relaxed);
+    visualFrame.store (controllerFrameForXY (x, y), std::memory_order_relaxed);
 }
 
 void RealtimeChordFxAudioProcessor::releaseMidiControllerTouch() noexcept
