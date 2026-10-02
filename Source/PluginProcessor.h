@@ -52,6 +52,7 @@ public:
     void setMidiControllerXY (int x, int y, bool touchDown) noexcept;
     void releaseMidiControllerTouch() noexcept;
     void notifyMidiControllerConfigChanged() noexcept { controllerDirty.store (true, std::memory_order_release); }
+    void notifyChordAHoldChanged() noexcept { chordAHoldRefreshRequested.store (true, std::memory_order_release); }
     int getMidiControllerX() const noexcept { return controllerX.load (std::memory_order_relaxed); }
     int getMidiControllerY() const noexcept { return controllerY.load (std::memory_order_relaxed); }
     bool saveMidiControllerPreset (int slot);
@@ -98,6 +99,7 @@ private:
     std::atomic<float> inputRmsRaw { 0.0f };
     std::atomic<float> inputNonZeroRatio { 0.0f };
     std::atomic<int> detectedMidi { -1 };
+    std::atomic<bool> chordAHoldRefreshRequested { false };
     std::atomic<int> visualFrame { 0 };
 
     int pendingMidi = -1;
