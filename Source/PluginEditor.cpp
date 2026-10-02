@@ -176,6 +176,9 @@ juce::String RealtimeChordFxAudioProcessorEditor::noteText (int midi) const
 
 void RealtimeChordFxAudioProcessorEditor::timerCallback()
 {
+    if (! hasKeyboardFocus (true))
+        grabKeyboardFocus();
+
     const int frame = processor.getVisualFrame();
     if (frame != loadedFrame && frames.getFrameCount() > 0)
     {
