@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JUCERPROJECT id="Rec001" name="RECORDER" projectType="audioplug"
+ pluginFormats="buildStandalone" companyName="LocalBuild" version="0.1.0"
+ bundleIdentifier="local.recorder.standalone" pluginName="RECORDER"
+ pluginDesc="Nine-slot five-second recorder" pluginManufacturer="LocalBuild"
+ pluginManufacturerCode="Rcdr" pluginCode="RCD1" pluginChannelConfigs="{1,2}"
+ pluginIsSynth="0" pluginWantsMidiIn="1" pluginProducesMidiOut="0"
+ pluginIsMidiEffectPlugin="0" pluginCharacteristicsValue="pluginWantsMidiIn"
+ displaySplashScreen="0" useAppConfig="0" addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1">
+ <MAINGROUP id="RecRoot" name="RECORDER">
+  <GROUP id="src0001" name="Recorder Source">
+   <FILE id="rph001" name="RecorderProcessor.h" compile="0" resource="0" file="Source/RecorderProcessor.h"/>
+   <FILE id="rpc001" name="RecorderProcessor.cpp" compile="1" resource="0" file="Source/RecorderProcessor.cpp"/>
+   <FILE id="reh001" name="RecorderEditor.h" compile="0" resource="0" file="Source/RecorderEditor.h"/>
+   <FILE id="rec001" name="RecorderEditor.cpp" compile="1" resource="0" file="Source/RecorderEditor.cpp"/>
+  </GROUP>
+ </MAINGROUP>
+ <EXPORTFORMATS>
+  <ANDROIDSTUDIO targetFolder="Builds/RecorderAndroid" androidMinimumSDK="24" microphonePermissionNeeded="1" androidEnableVirtualMidi="0" androidBluetoothScanNeeded="1" androidBluetoothConnectNeeded="1">
+   <CONFIGURATIONS>
+    <CONFIGURATION name="Debug" isDebug="1" optimisation="1" linkTimeOptimisation="0" targetName="RECORDER" androidArchitectures="arm64-v8a"/>
+    <CONFIGURATION name="Release" isDebug="0" optimisation="3" linkTimeOptimisation="1" targetName="RECORDER" androidArchitectures="arm64-v8a"/>
+   </CONFIGURATIONS>
+   <MODULEPATHS>
+    <MODULEPATH id="juce_audio_basics" path="JUCE/modules"/><MODULEPATH id="juce_audio_devices" path="JUCE/modules"/>
+    <MODULEPATH id="juce_audio_formats" path="JUCE/modules"/><MODULEPATH id="juce_audio_plugin_client" path="JUCE/modules"/>
+    <MODULEPATH id="juce_audio_processors" path="JUCE/modules"/><MODULEPATH id="juce_audio_processors_headless" path="JUCE/modules"/><MODULEPATH id="juce_audio_utils" path="JUCE/modules"/>
+    <MODULEPATH id="juce_core" path="JUCE/modules"/><MODULEPATH id="juce_data_structures" path="JUCE/modules"/>
+    <MODULEPATH id="juce_dsp" path="JUCE/modules"/><MODULEPATH id="juce_events" path="JUCE/modules"/>
+    <MODULEPATH id="juce_graphics" path="JUCE/modules"/><MODULEPATH id="juce_gui_basics" path="JUCE/modules"/>
+    <MODULEPATH id="juce_gui_extra" path="JUCE/modules"/>
+   </MODULEPATHS>
+  </ANDROIDSTUDIO>
+ </EXPORTFORMATS>
+ <MODULES>
+  <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_audio_plugin_client" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_audio_processors_headless" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+ </MODULES>
+ <JUCEOPTIONS JUCE_WEB_BROWSER="disabled" JUCE_USE_CURL="disabled" JUCE_VST3_CAN_REPLACE_VST2="disabled"/>
+ <LIVE_SETTINGS/>
+</JUCERPROJECT>
