@@ -148,8 +148,9 @@ void RealtimeChordFxAudioProcessor::applyChord (const chordfx::ChordPlan& plan, 
     chordMidiStopRequested = false;
 
     // Both CHORD renderers consume the exact same TheoryEngine plan.
-    // CHORD-A turns the live input into a short looped sample source.
-    // CHORD-B treats the input as pitch/control only and plays sine tones.
+    // HOLD affects only CHORD-A sample/crossfade duration.
+    sampleChordRenderer.setHold (
+        apvts.getRawParameterValue (ParamID::hold)->load());
     sampleChordRenderer.setPlan (plan.midiNotes, lastInputMidiFloat, recaptureSample);
     sineArpeggiator.setPlan (plan.midiNotes);
 }
@@ -1051,6 +1052,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::bar, "BAR", juce::StringArray { "1/4", "1/2", "1", "2" }, 2));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::width, "WIDTH", 0.0f, 1.0f, 0.35f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::length, "LENGTH", 0.0f, 1.0f, 0.70f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hold, "HOLD", 0.0f, 1.0f, 0.0f));
     p.add (std::make_unique<juce::AudioParameterInt> (ParamID::midiChannel, "MIDI CH", 1, 16, 1));
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::clockMode, "CLOCK", juce::StringArray { "Internal", "MIDI" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::internalBpm, "BPM", 40.0f, 240.0f, 120.0f));
