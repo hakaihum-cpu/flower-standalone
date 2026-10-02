@@ -44,7 +44,7 @@ def fail(msg):
 
 required = [
     "RealtimeChordFX_Standalone.jucer",
-    "Source/PluginProcessor.cpp", "Source/PluginEditor.cpp",
+    "Source/PluginProcessor.cpp", "Source/PluginEditor.cpp", "Source/ChordRenderers.h",
     "Source/TheoryEngine.cpp", "Source/YinPitchDetector.cpp",
     "Source/GranularPitchBank.cpp", "Source/PsolaHarmonyBank.h", "Source/FramePack.cpp",
     "Resources/classroom_frames.pack",
@@ -77,6 +77,7 @@ target_source_files = [
     "Source/FramePack.cpp","Source/FramePack.h",
     "Source/GranularPitchBank.cpp","Source/GranularPitchBank.h",
     "Source/ParameterIDs.h",
+    "Source/ChordRenderers.h",
     "Source/PsolaHarmonyBank.h",
     "Source/PluginEditor.cpp","Source/PluginEditor.h",
     "Source/PluginProcessor.cpp","Source/PluginProcessor.h",
