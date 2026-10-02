@@ -240,25 +240,21 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
                 28, 578, 520, 28, juce::Justification::centredLeft);
     g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
 
-    const bool midiControlOn = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
-    if (midiControlOn)
-    {
-        g.setFont (juce::FontOptions (12.0f));
-        g.setColour (juce::Colours::white.withAlpha (0.74f));
-        g.drawText ("X " + juce::String (processor.getMidiControllerX()).paddedLeft ('0', 3)
-                    + "   Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
-                    28, 548, 240, 22, juce::Justification::centredLeft);
-        if (! processor.isRunning())
-            g.drawText ("REC", 24, 20, 80, 28, juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (12.0f));
+    g.setColour (juce::Colours::white.withAlpha (0.74f));
+    g.drawText ("X " + juce::String (processor.getMidiControllerX()).paddedLeft ('0', 3)
+                + "   Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
+                28, 548, 240, 22, juce::Justification::centredLeft);
+    if (! processor.isRunning())
+        g.drawText ("REC", 24, 20, 80, 28, juce::Justification::centredLeft);
 
-        const int motion = processor.getMotionState();
-        if (motion != 0)
-        {
-            g.setColour (motion == 1 ? juce::Colour (0xfff23a36)
-                                     : juce::Colours::white.withAlpha (0.82f));
-            g.drawText (motion == 1 ? "MOTION REC" : "MOTION PLAY",
-                        270, 548, 170, 22, juce::Justification::centredLeft);
-        }
+    const int motion = processor.getMotionState();
+    if (motion != 0)
+    {
+        g.setColour (motion == 1 ? juce::Colour (0xfff23a36)
+                                 : juce::Colours::white.withAlpha (0.82f));
+        g.drawText (motion == 1 ? "MOTION REC" : "MOTION PLAY",
+                    270, 548, 170, 22, juce::Justification::centredLeft);
     }
 
     const float complex = processor.state().getRawParameterValue (ParamID::complex)->load();
@@ -384,15 +380,20 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
                                                     : "Android physical-input name unavailable / no iRig found",
                       54, 376, 520, 25, juce::Justification::centredLeft, 1);
 
-    const float rawLevel = processor.getInputLevel();
-    const float level = juce::jlimit (0.0f, 1.0f, rawLevel * 3.0f);
-    const float db = rawLevel > 0.0000001f ? juce::Decibels::gainToDecibels (rawLevel) : -120.0f;
+    const float displayLevel = processor.getInputLevel();
+    const float rawPeak = processor.getInputPeakRaw();
+    const float rawRms = processor.getInputRmsRaw();
+    const float nonZero = processor.getInputNonZeroRatio();
+    const float level = juce::jlimit (0.0f, 1.0f, displayLevel * 3.0f);
+    const float peakDb = rawPeak > 1.0e-8f ? juce::Decibels::gainToDecibels (rawPeak) : -160.0f;
+    const float rmsDb = rawRms > 1.0e-8f ? juce::Decibels::gainToDecibels (rawRms) : -160.0f;
     g.setColour (juce::Colours::white.withAlpha (0.25f));
     g.fillRect (54.0f, 423.0f, 420.0f, 2.0f);
     g.setColour (juce::Colours::white.withAlpha (0.86f));
     g.fillRect (54.0f, 422.0f, 420.0f * level, 4.0f);
     g.setColour (juce::Colours::white.withAlpha (0.58f));
-    g.drawText ("INPUT LEVEL  " + juce::String (db, 1) + " dBFS", 488, 410, 190, 26, juce::Justification::centredLeft);
+    g.drawText ("PEAK " + juce::String (peakDb, 1) + " dBFS   RMS " + juce::String (rmsDb, 1) + " dBFS",
+                478, 410, 210, 26, juce::Justification::centredRight);
 
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
     {
@@ -401,6 +402,9 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
         auto* dev = holder->deviceManager.getCurrentAudioDevice();
         const int inputChans = dev != nullptr ? dev->getActiveInputChannels().countNumberOfSetBits() : 0;
         const double sr = dev != nullptr ? dev->getCurrentSampleRate() : 0.0;
+        const bool irigRoute = route.inputDeviceName.containsIgnoreCase ("irig");
+        const bool routeOpen = irigRoute && inputChans > 0;
+        const bool signalNearZero = peakDb < -100.0f;
 
         g.setFont (juce::FontOptions (10.5f));
         g.setColour (juce::Colours::white.withAlpha (0.46f));
@@ -408,9 +412,27 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
                           54, 438, 600, 18, juce::Justification::centredLeft, 1);
         g.drawFittedText ("ROUTE OUT: " + (route.outputDeviceName.isNotEmpty() ? route.outputDeviceName : juce::String ("NONE")),
                           54, 456, 600, 18, juce::Justification::centredLeft, 1);
-        g.drawText ("IN CH " + juce::String (inputChans) + "    SR " + juce::String ((int) sr)
-                    + (lastAudioRouteError.isNotEmpty() ? "    ERR " + lastAudioRouteError : juce::String()),
+        g.drawText ("IN CH " + juce::String (inputChans)
+                    + "    SR " + juce::String ((int) sr)
+                    + "    NONZERO " + juce::String (nonZero * 100.0f, 1) + "%",
                     54, 474, 610, 18, juce::Justification::centredLeft);
+        if (irigRoute)
+        {
+            g.setColour (routeOpen && ! signalNearZero
+                         ? juce::Colour (0xffb8d9bf)
+                         : juce::Colour (0xffe0b39b));
+            g.drawText (routeOpen
+                        ? (signalNearZero ? "iRig ROUTE OPEN / SIGNAL < -100 dBFS"
+                                          : "iRig ROUTE OPEN / SIGNAL ACTIVE")
+                        : "iRig ROUTE NOT OPEN",
+                        54, 492, 430, 18, juce::Justification::centredLeft);
+        }
+        if (lastAudioRouteError.isNotEmpty())
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.46f));
+            g.drawFittedText ("ERR " + lastAudioRouteError,
+                              430, 492, 240, 18, juce::Justification::centredRight, 1);
+        }
     }
 
     const bool midiControl = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
@@ -419,16 +441,16 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
 
     g.setColour (juce::Colours::white.withAlpha (0.78f));
     g.setFont (juce::FontOptions (16.0f));
-    g.drawText ("MIDI CONTROL", 54, 506, 220, 34, juce::Justification::centredLeft);
-    g.drawText (midiControl ? "ON" : "OFF", 450, 506, 180, 34, juce::Justification::centredRight);
-    g.drawText ("MIDI SETTINGS", 54, 542, 220, 34, juce::Justification::centredLeft);
-    g.drawText (">", 450, 542, 180, 34, juce::Justification::centredRight);
-    g.drawText ("CLOCK", 54, 578, 180, 34, juce::Justification::centredLeft);
-    g.drawText (clock == 0 ? "Internal" : "MIDI", 450, 578, 180, 34, juce::Justification::centredRight);
+    g.drawText ("MIDI CONTROL", 54, 516, 220, 32, juce::Justification::centredLeft);
+    g.drawText (midiControl ? "ON" : "OFF", 450, 516, 180, 32, juce::Justification::centredRight);
+    g.drawText ("MIDI SETTINGS", 54, 550, 220, 32, juce::Justification::centredLeft);
+    g.drawText (">", 450, 550, 180, 32, juce::Justification::centredRight);
+    g.drawText ("CLOCK", 54, 584, 180, 32, juce::Justification::centredLeft);
+    g.drawText (clock == 0 ? "Internal" : "MIDI", 450, 584, 180, 32, juce::Justification::centredRight);
     if (clock == 0)
     {
-        g.drawText ("BPM", 54, 614, 180, 34, juce::Justification::centredLeft);
-        g.drawText (juce::String (bpm), 450, 614, 180, 34, juce::Justification::centredRight);
+        g.drawText ("BPM", 54, 618, 180, 32, juce::Justification::centredLeft);
+        g.drawText (juce::String (bpm), 450, 618, 180, 32, juce::Justification::centredRight);
     }
     g.setFont (juce::FontOptions (11.5f));
     g.setColour (juce::Colours::white.withAlpha (0.42f));
@@ -678,24 +700,24 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         for (int i = 0; i < maxRows; ++i, y += 38)
             if (p.y >= y && p.y < y + 34) { selectAudioInput (i); repaint(); return; }
 
-        if (p.y >= 504 && p.y < 540)
+        if (p.y >= 514 && p.y < 548)
         {
             auto* par = processor.state().getParameter (ParamID::midiControl);
             par->setValueNotifyingHost (par->getValue() < 0.5f ? 1.0f : 0.0f);
             processor.notifyMidiControllerConfigChanged();
         }
-        else if (p.y >= 540 && p.y < 576)
+        else if (p.y >= 548 && p.y < 582)
         {
             midiControlConfigVisible = true;
             configVisible = false;
             refreshMidiOutputs();
         }
-        else if (p.y >= 576 && p.y < 612)
+        else if (p.y >= 582 && p.y < 616)
         {
             auto* par = processor.state().getParameter (ParamID::clockMode);
             par->setValueNotifyingHost (par->getValue() < 0.5f ? 1.0f : 0.0f);
         }
-        else if (p.y >= 612 && p.y < 650 && processor.state().getRawParameterValue (ParamID::clockMode)->load() < 0.5f)
+        else if (p.y >= 616 && p.y < 650 && processor.state().getRawParameterValue (ParamID::clockMode)->load() < 0.5f)
         {
             auto* par = processor.state().getParameter (ParamID::internalBpm);
             par->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, par->getValue() + (p.x > 360 ? 1.0f/200.0f : -1.0f/200.0f)));
@@ -715,13 +737,13 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         }
     }
 
-    const bool midiControlOn = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
-    if (midiControlOn)
+    if (p.x <= 170 && p.y <= 70)
+        processor.toggleRunState();
+    else
     {
-        if (p.x <= 170 && p.y <= 70) processor.toggleRunState();
-        else { xyDragging = true; updateMidiControllerFromPoint (p); }
+        xyDragging = true;
+        updateMidiControllerFromPoint (p);
     }
-    else processor.toggleRunState();
     repaint();
 }
 
