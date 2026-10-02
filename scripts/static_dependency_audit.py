@@ -46,10 +46,10 @@ required = [
     "RealtimeChordFX_Standalone.jucer",
     "Source/PluginProcessor.cpp", "Source/PluginEditor.cpp",
     "Source/TheoryEngine.cpp", "Source/YinPitchDetector.cpp",
-    "Source/GranularPitchBank.cpp", "Source/FramePack.cpp",
+    "Source/GranularPitchBank.cpp", "Source/PsolaHarmonyBank.h", "Source/FramePack.cpp",
     "Resources/classroom_frames.pack",
     "Resources/classroom_frames_manifest.csv",
-    "PROJECT_CONTRACT.md", "BUILD_HISTORY.csv",
+    "PROJECT_CONTRACT.md", "BUILD_HISTORY.csv", "THIRD_PARTY_NOTICES.md",
     "scripts/materialize_frame_pack.py",
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_juce_android_gamepad_keys.py",
@@ -77,6 +77,7 @@ target_source_files = [
     "Source/FramePack.cpp","Source/FramePack.h",
     "Source/GranularPitchBank.cpp","Source/GranularPitchBank.h",
     "Source/ParameterIDs.h",
+    "Source/PsolaHarmonyBank.h",
     "Source/PluginEditor.cpp","Source/PluginEditor.h",
     "Source/PluginProcessor.cpp","Source/PluginProcessor.h",
     "Source/TheoryEngine.cpp","Source/TheoryEngine.h",
@@ -87,7 +88,7 @@ for bad in ["SynthVoice", "juce::Synthesiser", "SineVoice", "FLOWER", "MIYAKO"]:
     if bad in src:
         fail(f"forbidden cross-project/synth token in product source: {bad}")
 for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● REC",
-             "MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
+             "MODE","CHORD","DREAMY","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
     if need not in src:
         fail(f"UI/requirement token missing: {need}")
 
@@ -186,6 +187,50 @@ for need in [
         fail(f"Dreamy/live-input contract missing: {need}")
 if "pitchBank" in dreamy or "GranularPitchBank" in (R / "Source/PluginProcessor.h").read_text():
     fail("obsolete generated-audio pitch shifter must not remain in Processor")
+
+psola = (R / "Source/PsolaHarmonyBank.h").read_text()
+for need in [
+    "class PsolaVoice",
+    "placeGrain",
+    "readHermite",
+    "PsolaHarmonyBank",
+    "allocation-free",
+]:
+    if need not in psola:
+        fail(f"TD-PSOLA contract missing: {need}")
+for need in [
+    "ParamID::effectMode",
+    '"MODE", juce::StringArray { "CHORD", "DREAMY" }, 0',
+    "processChordAudio (buffer)",
+    "processDreamy (buffer)",
+    "updateChordRatios",
+    "psolaTargetPeriod",
+]:
+    if need not in dreamy:
+        fail(f"CHORD/DREAMY mode contract missing: {need}")
+if 'if (effectMode == 0)' not in dreamy:
+    fail("CHORD and DREAMY must be mutually exclusive audio paths")
+for need in [
+    "dreamyWetLowpass",
+    "dreamyDelayBuffer",
+    "dreamyReverb",
+    "std::pow (x * y, 1.35f)",
+    "0.46f * ambience",
+    "0.52f * ambience",
+]:
+    if need not in src and need not in dreamy:
+        fail(f"Dreamy anti-fizz/ambience contract missing: {need}")
+if "DspTap" not in (R / "THIRD_PARTY_NOTICES.md").read_text():
+    fail("DspTap MIT attribution missing")
+
+theory = (R / "Source/TheoryEngine.cpp").read_text()
+for need in [
+    "degreeContainsAnchor",
+    "the live note is already a chord member",
+    "Chromatic input",
+]:
+    if need not in theory:
+        fail(f"anchor-constrained harmony contract missing: {need}")
 
 # JUCER: exact module set proven by FLOWER Golden and complete JUCE 9.0.2 dependency closure.
 root = ET.parse(JUCER).getroot()
