@@ -55,6 +55,7 @@ private:
     int selectedMidiOutput = -1;
     int midiPresetSlot = 1;
     juce::String midiPresetMessage;
+    juce::String lastAudioRouteError;
     bool l1Latched = false;
     bool r1Latched = false;
 

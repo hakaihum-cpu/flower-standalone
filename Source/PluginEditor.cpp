@@ -325,6 +325,7 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioInput (int index)
     setup.inputDeviceName = option.name;
     setup.useDefaultInputChannels = true;
     const auto error = dm.setAudioDeviceSetup (setup, true);
+    lastAudioRouteError = error;
     if (error.isEmpty())
     {
         holder->getMuteInputValue().setValue (false);
@@ -383,13 +384,34 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
                                                     : "Android physical-input name unavailable / no iRig found",
                       54, 376, 520, 25, juce::Justification::centredLeft, 1);
 
-    const float level = juce::jlimit (0.0f, 1.0f, processor.getInputLevel() * 3.0f);
+    const float rawLevel = processor.getInputLevel();
+    const float level = juce::jlimit (0.0f, 1.0f, rawLevel * 3.0f);
+    const float db = rawLevel > 0.0000001f ? juce::Decibels::gainToDecibels (rawLevel) : -120.0f;
     g.setColour (juce::Colours::white.withAlpha (0.25f));
     g.fillRect (54.0f, 423.0f, 420.0f, 2.0f);
     g.setColour (juce::Colours::white.withAlpha (0.86f));
     g.fillRect (54.0f, 422.0f, 420.0f * level, 4.0f);
     g.setColour (juce::Colours::white.withAlpha (0.58f));
-    g.drawText ("INPUT LEVEL", 488, 410, 150, 26, juce::Justification::centredLeft);
+    g.drawText ("INPUT LEVEL  " + juce::String (db, 1) + " dBFS", 488, 410, 190, 26, juce::Justification::centredLeft);
+
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+    {
+        juce::AudioDeviceManager::AudioDeviceSetup route;
+        holder->deviceManager.getAudioDeviceSetup (route);
+        auto* dev = holder->deviceManager.getCurrentAudioDevice();
+        const int inputChans = dev != nullptr ? dev->getActiveInputChannels().countNumberOfSetBits() : 0;
+        const double sr = dev != nullptr ? dev->getCurrentSampleRate() : 0.0;
+
+        g.setFont (juce::FontOptions (10.5f));
+        g.setColour (juce::Colours::white.withAlpha (0.46f));
+        g.drawFittedText ("ROUTE IN: " + (route.inputDeviceName.isNotEmpty() ? route.inputDeviceName : juce::String ("NONE")),
+                          54, 438, 600, 18, juce::Justification::centredLeft, 1);
+        g.drawFittedText ("ROUTE OUT: " + (route.outputDeviceName.isNotEmpty() ? route.outputDeviceName : juce::String ("NONE")),
+                          54, 456, 600, 18, juce::Justification::centredLeft, 1);
+        g.drawText ("IN CH " + juce::String (inputChans) + "    SR " + juce::String ((int) sr)
+                    + (lastAudioRouteError.isNotEmpty() ? "    ERR " + lastAudioRouteError : juce::String()),
+                    54, 474, 610, 18, juce::Justification::centredLeft);
+    }
 
     const bool midiControl = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
     const int clock = juce::roundToInt (processor.state().getRawParameterValue (ParamID::clockMode)->load());
@@ -397,20 +419,20 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
 
     g.setColour (juce::Colours::white.withAlpha (0.78f));
     g.setFont (juce::FontOptions (16.0f));
-    g.drawText ("MIDI CONTROL", 54, 460, 220, 40, juce::Justification::centredLeft);
-    g.drawText (midiControl ? "ON" : "OFF", 450, 460, 180, 40, juce::Justification::centredRight);
-    g.drawText ("MIDI SETTINGS", 54, 506, 220, 40, juce::Justification::centredLeft);
-    g.drawText (">", 450, 506, 180, 40, juce::Justification::centredRight);
-    g.drawText ("CLOCK", 54, 552, 180, 40, juce::Justification::centredLeft);
-    g.drawText (clock == 0 ? "Internal" : "MIDI", 450, 552, 180, 40, juce::Justification::centredRight);
+    g.drawText ("MIDI CONTROL", 54, 506, 220, 34, juce::Justification::centredLeft);
+    g.drawText (midiControl ? "ON" : "OFF", 450, 506, 180, 34, juce::Justification::centredRight);
+    g.drawText ("MIDI SETTINGS", 54, 542, 220, 34, juce::Justification::centredLeft);
+    g.drawText (">", 450, 542, 180, 34, juce::Justification::centredRight);
+    g.drawText ("CLOCK", 54, 578, 180, 34, juce::Justification::centredLeft);
+    g.drawText (clock == 0 ? "Internal" : "MIDI", 450, 578, 180, 34, juce::Justification::centredRight);
     if (clock == 0)
     {
-        g.drawText ("BPM", 54, 598, 180, 40, juce::Justification::centredLeft);
-        g.drawText (juce::String (bpm), 450, 598, 180, 40, juce::Justification::centredRight);
+        g.drawText ("BPM", 54, 614, 180, 34, juce::Justification::centredLeft);
+        g.drawText (juce::String (bpm), 450, 614, 180, 34, juce::Justification::centredRight);
     }
     g.setFont (juce::FontOptions (11.5f));
     g.setColour (juce::Colours::white.withAlpha (0.42f));
-    g.drawText ("MIDI CONTROL is independent from the chord CLOCK setting.", 54, 656, 560, 24, juce::Justification::centredLeft);
+    g.drawText ("MIDI CONTROL is independent from the chord CLOCK setting.", 54, 672, 560, 20, juce::Justification::centredLeft);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
@@ -656,24 +678,24 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         for (int i = 0; i < maxRows; ++i, y += 38)
             if (p.y >= y && p.y < y + 34) { selectAudioInput (i); repaint(); return; }
 
-        if (p.y >= 458 && p.y < 504)
+        if (p.y >= 504 && p.y < 540)
         {
             auto* par = processor.state().getParameter (ParamID::midiControl);
             par->setValueNotifyingHost (par->getValue() < 0.5f ? 1.0f : 0.0f);
             processor.notifyMidiControllerConfigChanged();
         }
-        else if (p.y >= 504 && p.y < 550)
+        else if (p.y >= 540 && p.y < 576)
         {
             midiControlConfigVisible = true;
             configVisible = false;
             refreshMidiOutputs();
         }
-        else if (p.y >= 550 && p.y < 596)
+        else if (p.y >= 576 && p.y < 612)
         {
             auto* par = processor.state().getParameter (ParamID::clockMode);
             par->setValueNotifyingHost (par->getValue() < 0.5f ? 1.0f : 0.0f);
         }
-        else if (p.y >= 596 && p.y < 644 && processor.state().getRawParameterValue (ParamID::clockMode)->load() < 0.5f)
+        else if (p.y >= 612 && p.y < 650 && processor.state().getRawParameterValue (ParamID::clockMode)->load() < 0.5f)
         {
             auto* par = processor.state().getParameter (ParamID::internalBpm);
             par->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, par->getValue() + (p.x > 360 ? 1.0f/200.0f : -1.0f/200.0f)));
