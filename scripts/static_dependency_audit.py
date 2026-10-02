@@ -105,6 +105,7 @@ for need in [
     "startPlaying",
     "setWantsKeyboardFocus (true)",
     "keyPressed",
+    "keyStateChanged",
     "KeyPress::F17Key",
     "KeyPress::F18Key",
 ]:
