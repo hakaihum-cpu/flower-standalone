@@ -62,20 +62,23 @@ public:
                   bool recapture = true) noexcept
     {
         sourceMidi = sourceMidiFloat;
+        const int previousCount = targetCount;
         targetCount = std::min ((int) midiNotes.size(), maxVoices);
 
         for (int i = 0; i < targetCount; ++i)
         {
             const int note = std::clamp (midiNotes[(size_t) i], 60, 83);
             ratio[(size_t) i] = std::pow (2.0, ((double) note - (double) sourceMidi) / 12.0);
-            phase[(size_t) i] = 0.0;
+
+            // Progression changes reuse the same captured phrase. Preserve the
+            // current read phase for existing voices so a BAR change cannot
+            // jump the waveform back to sample zero.
+            if (recapture || captureLength <= 0 || i >= previousCount)
+                phase[(size_t) i] = 0.0;
         }
 
         for (int i = targetCount; i < maxVoices; ++i)
-        {
             ratio[(size_t) i] = 1.0;
-            phase[(size_t) i] = 0.0;
-        }
 
         if (recapture || captureLength <= 0)
             captureRecentPhrase();
@@ -272,6 +275,20 @@ public:
     }
 
 private:
+    static float softProtect (float sample) noexcept
+    {
+        constexpr float threshold = 0.62f;
+        constexpr float ceiling = 0.88f;
+        const float magnitude = std::abs (sample);
+        if (magnitude <= threshold)
+            return sample;
+
+        const float knee = ceiling - threshold;
+        const float shaped =
+            threshold + knee * std::tanh ((magnitude - threshold) / knee);
+        return std::copysign (shaped, sample);
+    }
+
     uint32_t nextRandom() noexcept
     {
         rng ^= rng << 13;
@@ -361,6 +378,9 @@ public:
         shortDelayWrite = longDelayWrite = tapeDelayWrite = 0;
         chorusWrite = reverbWrite = 0;
         activeEffect = none;
+        previousEffect = none;
+        transitionSamplesRemaining = 0;
+        transitionSamplesTotal = std::max (32, (int) std::lround (sampleRate * 0.006));
         probability = 0.0f;
         tapeFeedbackLpL = tapeFeedbackLpR = 0.0f;
         tapeTone = 0.0f;
@@ -378,83 +398,117 @@ public:
     void chooseForNote() noexcept
     {
         const float draw = (float) (nextRandom() & 0xffffu) / 65535.0f;
-        if (draw >= probability)
-        {
-            activeEffect = none;
-            return;
-        }
+        const int nextEffect = draw >= probability
+            ? none
+            : 1 + (int) (nextRandom() % 7u);
 
-        activeEffect = 1 + (int) (nextRandom() % 7u);
+        if (nextEffect != activeEffect)
+        {
+            previousEffect = activeEffect;
+            activeEffect = nextEffect;
+            transitionSamplesRemaining = transitionSamplesTotal;
+        }
     }
 
     int getActiveEffect() const noexcept { return activeEffect; }
 
     void processSample (float input, float& left, float& right) noexcept
     {
-        const auto effect = activeEffect;
+        const bool transitioning = transitionSamplesRemaining > 0;
+        const int effect = activeEffect;
+        const int oldEffect = transitioning ? previousEffect : activeEffect;
+
+        const auto feeds = [effect, oldEffect, transitioning] (int type) noexcept
+        {
+            return effect == type || (transitioning && oldEffect == type);
+        };
 
         float shortL = 0.0f, shortR = 0.0f;
-        processDelayPair (effect == shortDelay ? input : 0.0f,
+        processDelayPair (feeds (shortDelay) ? input : 0.0f,
                           shortDelayL, shortDelayR, shortDelayWrite,
                           (int) std::lround (sampleRate * 0.075),
                           0.26f, 0.46f, shortL, shortR);
 
         float longL = 0.0f, longR = 0.0f;
-        processDelayPair (effect == longDelay ? input : 0.0f,
+        processDelayPair (feeds (longDelay) ? input : 0.0f,
                           longDelayL, longDelayR, longDelayWrite,
                           (int) std::lround (sampleRate * 0.360),
                           0.36f, 0.50f, longL, longR);
 
-        float tapeDelayL = 0.0f, tapeDelayR = 0.0f;
-        processTapeDelay (effect == tapeDelay ? input : 0.0f,
-                          tapeDelayL, tapeDelayR);
+        float tapeDelayOutL = 0.0f, tapeDelayOutR = 0.0f;
+        processTapeDelay (feeds (tapeDelay) ? input : 0.0f,
+                          tapeDelayOutL, tapeDelayOutR);
 
         float chorusL = 0.0f, chorusR = 0.0f;
-        processChorus (effect == chorus ? input : 0.0f, chorusL, chorusR);
+        processChorus (feeds (chorus) ? input : 0.0f, chorusL, chorusR);
 
         float revL = 0.0f, revR = 0.0f;
-        processReverb (effect == reverb ? input : 0.0f, revL, revR);
+        processReverb (feeds (reverb) ? input : 0.0f, revL, revR);
 
-        switch (effect)
+        // Keep these processors warm so switching to/from them never starts
+        // from an unrelated stale sample.
+        tapeTone += 0.18f * (input - tapeTone);
+        const float tapeSimSample =
+            std::tanh (1.8f * tapeTone) / std::tanh (1.8f) * 0.88f;
+
+        if (--bitCounter <= 0)
         {
-            case shortDelay: left = shortL; right = shortR; break;
-            case longDelay:  left = longL;  right = longR;  break;
-            case tapeDelay:  left = tapeDelayL; right = tapeDelayR; break;
-            case tapeSim:
+            constexpr float levels = 31.0f;
+            bitHeld = std::round (input * levels) / levels;
+            bitCounter = 4;
+        }
+        const float bitcrushSample = bitHeld * 0.92f;
+
+        auto selected = [&] (int type, float& outL, float& outR) noexcept
+        {
+            switch (type)
             {
-                tapeTone += 0.18f * (input - tapeTone);
-                const float saturated = std::tanh (1.8f * tapeTone) / std::tanh (1.8f);
-                left = right = saturated * 0.88f;
-                break;
+                case shortDelay: outL = shortL; outR = shortR; break;
+                case longDelay:  outL = longL; outR = longR; break;
+                case tapeDelay:  outL = tapeDelayOutL; outR = tapeDelayOutR; break;
+                case tapeSim:    outL = outR = tapeSimSample; break;
+                case bitcrush:   outL = outR = bitcrushSample; break;
+                case chorus:     outL = chorusL; outR = chorusR; break;
+                case reverb:     outL = revL; outR = revR; break;
+                default:         outL = outR = input; break;
             }
-            case bitcrush:
-            {
-                if (--bitCounter <= 0)
-                {
-                    constexpr float levels = 31.0f;
-                    bitHeld = std::round (input * levels) / levels;
-                    bitCounter = 4;
-                }
-                left = right = bitHeld * 0.92f;
-                break;
-            }
-            case chorus: left = chorusL; right = chorusR; break;
-            case reverb: left = revL; right = revR; break;
-            default: left = right = input; break;
+        };
+
+        float newL = input, newR = input;
+        selected (effect, newL, newR);
+
+        if (transitioning)
+        {
+            float oldL = input, oldR = input;
+            selected (oldEffect, oldL, oldR);
+            const float t = 1.0f
+                - (float) transitionSamplesRemaining
+                  / (float) std::max (1, transitionSamplesTotal);
+            left = oldL + (newL - oldL) * t;
+            right = oldR + (newR - oldR) * t;
+            --transitionSamplesRemaining;
+        }
+        else
+        {
+            left = newL;
+            right = newR;
         }
 
-        // Time-based effects keep decaying after a later note selects a
-        // different effect or NONE. This lets LONG DELAY/REVERB actually
-        // produce their tails across arpeggiator steps.
-        if (effect != shortDelay) { left += shortL; right += shortR; }
-        if (effect != longDelay)  { left += longL;  right += longR; }
-        if (effect != tapeDelay)  { left += tapeDelayL; right += tapeDelayR; }
-        if (effect != reverb)     { left += revL; right += revR; }
+        // Time-based tails remain audible after their note has moved on, but
+        // do not double-add the currently selected or crossfading effects.
+        auto tailAllowed = [effect, oldEffect, transitioning] (int type) noexcept
+        {
+            return type != effect && (! transitioning || type != oldEffect);
+        };
+        if (tailAllowed (shortDelay)) { left += shortL; right += shortR; }
+        if (tailAllowed (longDelay))  { left += longL; right += longR; }
+        if (tailAllowed (tapeDelay))  { left += tapeDelayOutL; right += tapeDelayOutR; }
+        if (tailAllowed (reverb))     { left += revL; right += revR; }
 
-        // Keep the generated layer safely below full scale before the existing
-        // CHORD-B mix/reverb headroom stage.
-        left = std::clamp (left, -0.72f, 0.72f);
-        right = std::clamp (right, -0.72f, 0.72f);
+        // Soft-knee protection avoids the high-frequency edge created by the
+        // previous hard clamp while still bounding accumulated effect tails.
+        left = softProtect (left);
+        right = softProtect (right);
 
         lfoPhase += 6.28318530717958647692 * 0.31 / sampleRate;
         if (lfoPhase >= 6.28318530717958647692)
@@ -597,6 +651,9 @@ private:
     double sampleRate = 48000.0;
     float probability = 0.0f;
     int activeEffect = none;
+    int previousEffect = none;
+    int transitionSamplesRemaining = 0;
+    int transitionSamplesTotal = 288;
     std::vector<float> shortDelayL, shortDelayR;
     std::vector<float> longDelayL, longDelayR;
     std::vector<float> tapeDelayL, tapeDelayR;
