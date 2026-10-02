@@ -430,6 +430,15 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
                       + 0.18f * blockPeak,
                       std::memory_order_relaxed);
 
+    if (chordAHoldRefreshRequested.exchange (false, std::memory_order_acq_rel)
+        && haveChord)
+    {
+        sampleChordRenderer.setHold (
+            apvts.getRawParameterValue (ParamID::hold)->load());
+        sampleChordRenderer.setPlan (
+            currentPlan.midiNotes, lastInputMidiFloat, true);
+    }
+
     // Theory keeps running in either audio mode because CHORD MIDI OUT may be
     // used independently from the audible CHORD/DREAMY selection.
     if (running.load (std::memory_order_relaxed) && haveChord)
