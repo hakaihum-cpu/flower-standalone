@@ -224,6 +224,8 @@ for module in sorted(mods):
         fail(f"JUCE 9.0.2 dependency closure broken for {module}: {sorted(missing)}")
 
 jucer_text = JUCER.read_text()
+if "GranularPitchBank.cpp" in jucer_text or "GranularPitchBank.h" in jucer_text:
+    fail("obsolete generated-audio pitch shifter must not be compiled into EFFECTS")
 if "Resources/classroom_frames.pack" not in jucer_text:
     fail("supplied frame pack not embedded")
 for bad_ref in ["FLOWER_Standalone.jucer","SynthVoice","Carnival","flower_"]:

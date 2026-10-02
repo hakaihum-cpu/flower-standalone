@@ -213,7 +213,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     int nonZeroSamples = 0;
 
     // Build a clean stereo dry buffer from the selected live input. The audio
-    // effect path no longer uses generated chord voices or GranularPitchBank.
+    // effect path no longer uses generated chord voices.
     for (int i = 0; i < n; ++i)
     {
         float mono = 0.0f;

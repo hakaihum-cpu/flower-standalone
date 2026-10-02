@@ -14,8 +14,6 @@
    <FILE id="thyc01" name="TheoryEngine.cpp" compile="1" resource="0" file="Source/TheoryEngine.cpp"/>
    <FILE id="yinh01" name="YinPitchDetector.h" compile="0" resource="0" file="Source/YinPitchDetector.h"/>
    <FILE id="yinc01" name="YinPitchDetector.cpp" compile="1" resource="0" file="Source/YinPitchDetector.cpp"/>
-   <FILE id="grnh01" name="GranularPitchBank.h" compile="0" resource="0" file="Source/GranularPitchBank.h"/>
-   <FILE id="grnc01" name="GranularPitchBank.cpp" compile="1" resource="0" file="Source/GranularPitchBank.cpp"/>
    <FILE id="frmh01" name="FramePack.h" compile="0" resource="0" file="Source/FramePack.h"/>
    <FILE id="frmc01" name="FramePack.cpp" compile="1" resource="0" file="Source/FramePack.cpp"/>
    <FILE id="prch01" name="PluginProcessor.h" compile="0" resource="0" file="Source/PluginProcessor.h"/>
