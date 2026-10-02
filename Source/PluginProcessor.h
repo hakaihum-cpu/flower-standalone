@@ -6,6 +6,7 @@
 #include <string>
 #include "TheoryEngine.h"
 #include "YinPitchDetector.h"
+#include "PsolaHarmonyBank.h"
 
 class RealtimeChordFxAudioProcessor final : public juce::AudioProcessor
 {
@@ -76,11 +77,15 @@ private:
     void applyMotionPoint (int x, int y);
     void processChordMidi (juce::MidiBuffer&);
     void stopActiveChordMidi (juce::MidiBuffer&);
+    void updateChordRatios();
+    void processChordAudio (juce::AudioBuffer<float>&);
     void processDreamy (juce::AudioBuffer<float>&);
+    void resetModeAudioState (int mode);
 
     juce::AudioProcessorValueTreeState apvts;
     chordfx::YinPitchDetector pitchDetector;
     chordfx::TheoryEngine theory;
+    chordfx::PsolaHarmonyBank psolaHarmony;
 
     double currentSampleRate = 48000.0;
     std::atomic<bool> running { false };
@@ -101,6 +106,12 @@ private:
     double gateSamplesRemaining = 0.0;
     int midiClockTicks = 0;
     bool midiClockRunning = false;
+    int lastEffectMode = 0; // 0=CHORD, 1=DREAMY
+    float psolaTargetPeriod = 240.0f;
+    float psolaCurrentPeriod = 240.0f;
+    int pitchSamplesSinceValid = 1000000;
+    std::array<float, chordfx::PsolaHarmonyBank::maxVoices> chordRatios { 1.0f, 1.0f, 1.0f, 1.0f };
+    int chordRatioCount = 0;
     std::atomic<int> controllerX { 36 };
     std::atomic<int> controllerY { 36 };
     std::atomic<bool> controllerTouch { false };
@@ -144,6 +155,11 @@ private:
     std::array<float, dreamyVoiceCount> dreamyPlaybackSpeed { 1.3348398f, 2.0f };
     std::array<bool, dreamyVoiceCount> dreamyVoiceActive { false, false };
     uint32_t dreamyRandomState = 0x44524541u;
+    std::array<float, 2> dreamyWetLowpass { 0.0f, 0.0f };
+    juce::AudioBuffer<float> dreamyDelayBuffer;
+    int dreamyDelayWritePosition = 0;
+    std::array<float, 2> dreamyDelayLowpass { 0.0f, 0.0f };
+    juce::Reverb dreamyReverb;
 
     mutable juce::SpinLock labelLock;
     juce::String chordLabel { "--" };
