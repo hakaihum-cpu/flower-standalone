@@ -36,9 +36,9 @@ Discrete: 1/4, 1/2, 1, 2 bars. Time signature is 4/4. Determines the progression
 
 ## Visuals
 - Use the exact user-supplied 01..300 image frames as the only main visual bank.
-- Progress sequentially; wrap after frame 300.
-- Frame advances on an accepted generated chord event (new input note or timed chord transition).
-- Stop+CLEAR resets to frame 1.
+- The shared XY surface maps the bank as 20 columns x 15 rows; top-right is frame 300.
+- CHORD generation does not advance frames independently from XY.
+- Stop/CLEAR keeps the current XY-derived frame rather than resetting to frame 1.
 
 ## CONFIG
 - MODE: CHORD / DREAMY. Default CHORD.
@@ -59,8 +59,8 @@ On the target Android device with iRig Stream connected, CONFIG must expose enou
 
 ## MIDI controller mode
 - CONFIG includes MIDI CONTROL ON/OFF; default is OFF.
-- With MIDI CONTROL OFF, existing REC/touch/frame behaviour remains unchanged.
-- With MIDI CONTROL ON, the main image area becomes an XY MIDI controller.
+- The main EFFECTS image area is always the shared XY surface for visual/Dreamy control.
+- With MIDI CONTROL ON, the same XY surface additionally becomes an XY MIDI controller.
 - X is 0 at the left edge and 127 at the right edge.
 - Y is 0 at the bottom edge and 127 at the top edge; the top-right corner is X=127 / Y=127.
 - X and Y can each be assigned CC, NOTE or CLOCK.
