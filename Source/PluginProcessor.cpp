@@ -343,7 +343,7 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
     {
         processChordReverb (buffer);
         buffer.applyGain (0.86f); // explicit CHORD-B output headroom
-        softProtectBuffer (buffer)
+        softProtectBuffer (buffer);
     }
 }
 
