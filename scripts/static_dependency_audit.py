@@ -248,6 +248,8 @@ for need in [
     if need not in renderers:
         fail(f"CHORD A/B renderer contract missing: {need}")
 
+processor_header = (R / "Source/PluginProcessor.h").read_text()
+
 for need in [
     "ParamID::effectMode",
     '"MODE", juce::StringArray { "CHORD", "DREAMY" }, 0',
@@ -258,7 +260,6 @@ for need in [
     "processDreamy (buffer)",
     "sampleChordRenderer.pushInput",
     "ParamID::hold",
-    "notifyChordAHoldChanged",
     "ParamID::effect",
     "chordBRandomFx.setProbability",
     "chordBRandomFx.chooseForNote",
@@ -271,7 +272,8 @@ for need in [
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
 
-processor_header = (R / "Source/PluginProcessor.h").read_text()
+if "notifyChordAHoldChanged" not in processor_header:
+    fail("CHORD/DREAMY mode contract missing: notifyChordAHoldChanged")
 for bad in [
     "PsolaHarmonyBank",
     "psolaTargetPeriod",
