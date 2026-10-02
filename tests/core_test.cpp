@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 int main()
 {
@@ -44,13 +45,37 @@ int main()
 
     chordfx::GranularPitchBank bank;
     bank.prepare(48000.0,256);
-    bank.setTargetRatios({1.0f, 1.5f});
-    double energy=0.0;
-    for(int i=0;i<5000;++i)
+    bank.setTargetRatios({2.0f});
+
+    std::vector<float> shifted;
+    shifted.reserve (48000);
+    for(int i=0;i<96000;++i)
     {
         float s=0.25f*std::sin(2.0*M_PI*220.0*i/48000.0);
-        float y=bank.processSample(s); energy += y*y;
+        float y=bank.processSample(s);
+        if (i >= 48000) shifted.push_back(y);
     }
-    assert(energy > 0.01);
+
+    auto toneMagnitude = [&shifted] (double hz)
+    {
+        double re = 0.0, im = 0.0;
+        for (size_t i = 0; i < shifted.size(); ++i)
+        {
+            const double phase = 2.0 * M_PI * hz * (double) i / 48000.0;
+            re += shifted[i] * std::cos (phase);
+            im -= shifted[i] * std::sin (phase);
+        }
+        return std::sqrt (re * re + im * im);
+    };
+
+    const double target440 = toneMagnitude (440.0);
+    const double oldSideband408 = toneMagnitude (408.0);
+    const double oldSideband502 = toneMagnitude (502.0);
+    std::cout << "pitch target440=" << target440
+              << " side408=" << oldSideband408
+              << " side502=" << oldSideband502 << "\n";
+    assert (target440 > oldSideband408 * 2.0);
+    assert (target440 > oldSideband502 * 2.0);
+
     std::cout << "core tests passed\n";
 }
