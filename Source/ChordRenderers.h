@@ -335,8 +335,12 @@ public:
     {
         sampleRate = sr > 1000.0 ? sr : 48000.0;
         const int delaySize = std::max (4096, (int) std::lround (sampleRate * 2.5));
-        delayL.assign ((size_t) delaySize, 0.0f);
-        delayR.assign ((size_t) delaySize, 0.0f);
+        shortDelayL.assign ((size_t) delaySize, 0.0f);
+        shortDelayR.assign ((size_t) delaySize, 0.0f);
+        longDelayL.assign ((size_t) delaySize, 0.0f);
+        longDelayR.assign ((size_t) delaySize, 0.0f);
+        tapeDelayL.assign ((size_t) delaySize, 0.0f);
+        tapeDelayR.assign ((size_t) delaySize, 0.0f);
         chorusBuffer.assign ((size_t) std::max (2048, (int) std::lround (sampleRate * 0.060)), 0.0f);
         reverbL.assign ((size_t) std::max (4096, (int) std::lround (sampleRate * 0.50)), 0.0f);
         reverbR.assign (reverbL.size(), 0.0f);
@@ -345,12 +349,17 @@ public:
 
     void reset() noexcept
     {
-        std::fill (delayL.begin(), delayL.end(), 0.0f);
-        std::fill (delayR.begin(), delayR.end(), 0.0f);
+        std::fill (shortDelayL.begin(), shortDelayL.end(), 0.0f);
+        std::fill (shortDelayR.begin(), shortDelayR.end(), 0.0f);
+        std::fill (longDelayL.begin(), longDelayL.end(), 0.0f);
+        std::fill (longDelayR.begin(), longDelayR.end(), 0.0f);
+        std::fill (tapeDelayL.begin(), tapeDelayL.end(), 0.0f);
+        std::fill (tapeDelayR.begin(), tapeDelayR.end(), 0.0f);
         std::fill (chorusBuffer.begin(), chorusBuffer.end(), 0.0f);
         std::fill (reverbL.begin(), reverbL.end(), 0.0f);
         std::fill (reverbR.begin(), reverbR.end(), 0.0f);
-        delayWrite = chorusWrite = reverbWrite = 0;
+        shortDelayWrite = longDelayWrite = tapeDelayWrite = 0;
+        chorusWrite = reverbWrite = 0;
         activeEffect = none;
         probability = 0.0f;
         tapeFeedbackLpL = tapeFeedbackLpR = 0.0f;
@@ -386,11 +395,13 @@ public:
 
         float shortL = 0.0f, shortR = 0.0f;
         processDelayPair (effect == shortDelay ? input : 0.0f,
+                          shortDelayL, shortDelayR, shortDelayWrite,
                           (int) std::lround (sampleRate * 0.075),
                           0.26f, 0.46f, shortL, shortR);
 
         float longL = 0.0f, longR = 0.0f;
         processDelayPair (effect == longDelay ? input : 0.0f,
+                          longDelayL, longDelayR, longDelayWrite,
                           (int) std::lround (sampleRate * 0.360),
                           0.36f, 0.50f, longL, longR);
 
@@ -467,33 +478,37 @@ private:
              + frac * (buffer[(size_t) i1] - buffer[(size_t) i0]);
     }
 
-    void processDelayPair (float input, int delaySamples, float feedback,
+    void processDelayPair (float input,
+                           std::vector<float>& bufferL,
+                           std::vector<float>& bufferR,
+                           int& writePosition,
+                           int delaySamples, float feedback,
                            float wet, float& left, float& right) noexcept
     {
-        if (delayL.empty())
+        if (bufferL.empty())
         {
             left = right = input;
             return;
         }
 
-        const int size = (int) delayL.size();
+        const int size = (int) bufferL.size();
         delaySamples = std::clamp (delaySamples, 1, size - 2);
-        int read = delayWrite - delaySamples;
+        int read = writePosition - delaySamples;
         if (read < 0) read += size;
 
-        const float dl = delayL[(size_t) read];
-        const float dr = delayR[(size_t) read];
-        delayL[(size_t) delayWrite] = input + dl * feedback;
-        delayR[(size_t) delayWrite] = input + dr * feedback;
+        const float dl = bufferL[(size_t) read];
+        const float dr = bufferR[(size_t) read];
+        bufferL[(size_t) writePosition] = input + dl * feedback;
+        bufferR[(size_t) writePosition] = input + dr * feedback;
 
         left = input * 0.76f + dl * wet;
         right = input * 0.76f + dr * wet;
-        delayWrite = (delayWrite + 1) % size;
+        writePosition = (writePosition + 1) % size;
     }
 
     void processTapeDelay (float input, float& left, float& right) noexcept
     {
-        if (delayL.empty())
+        if (tapeDelayL.empty())
         {
             left = right = input;
             return;
@@ -501,20 +516,20 @@ private:
 
         const double base = sampleRate * 0.235;
         const double mod = sampleRate * 0.0045 * std::sin (lfoPhase);
-        const double readPos = (double) delayWrite - base - mod;
-        const float dl = readInterpolated (delayL, readPos);
-        const float dr = readInterpolated (delayR, readPos - sampleRate * 0.003);
+        const double readPos = (double) tapeDelayWrite - base - mod;
+        const float dl = readInterpolated (tapeDelayL, readPos);
+        const float dr = readInterpolated (tapeDelayR, readPos - sampleRate * 0.003);
 
         tapeFeedbackLpL += 0.16f * (dl - tapeFeedbackLpL);
         tapeFeedbackLpR += 0.16f * (dr - tapeFeedbackLpR);
-        delayL[(size_t) delayWrite] =
+        tapeDelayL[(size_t) tapeDelayWrite] =
             std::tanh (input + tapeFeedbackLpL * 0.33f);
-        delayR[(size_t) delayWrite] =
+        tapeDelayR[(size_t) tapeDelayWrite] =
             std::tanh (input + tapeFeedbackLpR * 0.33f);
 
         left = input * 0.74f + tapeFeedbackLpL * 0.52f;
         right = input * 0.74f + tapeFeedbackLpR * 0.52f;
-        delayWrite = (delayWrite + 1) % (int) delayL.size();
+        tapeDelayWrite = (tapeDelayWrite + 1) % (int) tapeDelayL.size();
     }
 
     void processChorus (float input, float& left, float& right) noexcept
@@ -574,10 +589,14 @@ private:
     double sampleRate = 48000.0;
     float probability = 0.0f;
     int activeEffect = none;
-    std::vector<float> delayL, delayR;
+    std::vector<float> shortDelayL, shortDelayR;
+    std::vector<float> longDelayL, longDelayR;
+    std::vector<float> tapeDelayL, tapeDelayR;
     std::vector<float> chorusBuffer;
     std::vector<float> reverbL, reverbR;
-    int delayWrite = 0;
+    int shortDelayWrite = 0;
+    int longDelayWrite = 0;
+    int tapeDelayWrite = 0;
     int chorusWrite = 0;
     int reverbWrite = 0;
     float tapeFeedbackLpL = 0.0f;
