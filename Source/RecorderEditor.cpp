@@ -65,7 +65,7 @@ void RecorderAudioProcessorEditor::drawTile (juce::Graphics& g, int slot)
 {
     auto r = tileBounds (slot);
     const bool recording = processor.getRecordingSlot() == slot;
-    const bool playing = processor.getPlaybackSlot() == slot;
+    const bool playing = processor.isSlotPlaying (slot);
     const int valid = processor.getValidSamples (slot);
 
     g.setColour (juce::Colours::white.withAlpha (0.055f));
@@ -104,7 +104,7 @@ void RecorderAudioProcessorEditor::drawTile (juce::Graphics& g, int slot)
 
     if (playing)
     {
-        const float px = wave.getX() + wave.getWidth() * juce::jlimit (0.0f, 1.0f, processor.getPlaybackProgress());
+        const float px = wave.getX() + wave.getWidth() * juce::jlimit (0.0f, 1.0f, processor.getSlotPlaybackProgress (slot));
         g.setColour (juce::Colours::white);
         g.drawLine (px, wave.getY(), px, wave.getBottom(), 2.0f);
     }
@@ -119,6 +119,11 @@ void RecorderAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (juce::Colours::white.withAlpha (0.92f));
     g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
     g.drawText ("RECORDER", 30, 20, 230, 34, juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
+    g.setColour (processor.isRecording() ? juce::Colour (0xffe7463d)
+                                         : juce::Colours::white.withAlpha (0.72f));
+    g.drawText (processor.isRecording() ? "REC" : "PLAY",
+                320, 24, 90, 26, juce::Justification::centred);
 
     const float level = juce::jlimit (0.0f, 1.0f, processor.getInputLevel() * 2.5f);
     g.setColour (juce::Colours::white.withAlpha (0.20f));
