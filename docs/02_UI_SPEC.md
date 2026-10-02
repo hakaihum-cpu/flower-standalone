@@ -8,13 +8,13 @@ Design space: 720 x 720 logical square, scaled to actual display bounds.
 - Bottom readability gradient only.
 - Small `CONFIG` text at top-right.
 - Running only: 3px red border inset 8px and `● REC` at top-left.
-- Bottom status shows shared X/Y and the active mode name `CHORD` or `DREAMY`.
-- The legacy always-visible IN/CHORD/COMPLEX/BAR/WIDTH/LENGTH block is not shown.
+- CHORD mode restores the original CHORD screen: IN/CHORD readout plus COMPLEX/BAR/WIDTH/LENGTH controls.
+- DREAMY mode keeps the XY-focused EFFECTS screen.
 
 ## Touch
-- Main image/background: REC toggle.
-- Bottom four parameter cells: drag horizontally.
-- CONFIG label: opens config.
+- CHORD mode: original CHORD interaction is restored. Bottom four parameter cells drag horizontally; with MIDI CONTROL OFF the remaining image/background toggles REC; with MIDI CONTROL ON the image is XY and top-left is REC.
+- DREAMY mode: top-left is REC and the remaining image is Dreamy XY.
+- CONFIG label opens config.
 - Parameter interaction never toggles REC.
 
 ## CONFIG screen
@@ -76,3 +76,10 @@ When MIDI CONTROL is ON:
 - Wet micro-loop output is low-pass smoothed to reduce high-frequency fizz.
 - The original Dreamy X/Y mapping remains active.
 - Additional delay/reverb depth is derived from X*Y; top-right is strongest.
+
+
+## DREAMY processing boundary
+- FLOWER Master Dreamy core is unchanged.
+- No low-pass or other processing is inserted inside the Dreamy core.
+- EFFECTS adds only a post-Dreamy Delay/Reverb stage.
+- Post Delay/Reverb depth is driven by X*Y and is strongest at the upper-right.

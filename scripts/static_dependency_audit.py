@@ -98,12 +98,20 @@ main_end = editor.find("juce::String RealtimeChordFxAudioProcessorEditor::curren
 if main_start < 0 or main_end < 0:
     fail("EFFECTS main-screen function boundaries missing")
 main_screen = editor[main_start:main_end]
-for forbidden in ["CHORD  ", "COMPLEX", "WIDTH", "LENGTH", "paintBar", "parameterBounds"]:
-    if forbidden in main_screen:
-        fail(f"obsolete chord-generator main UI still present: {forbidden}")
-for need in ['"DREAMY"', '"X " + juce::String', '"CONFIG"', 'u8"● REC"']:
+for need in [
+    'effectMode == 0',
+    '"IN  " + noteText',
+    '"COMPLEX"',
+    '"BAR"',
+    '"WIDTH"',
+    '"LENGTH"',
+    '"DREAMY"',
+    '"X " + juce::String',
+    '"CONFIG"',
+    'u8"● REC"',
+]:
     if need not in main_screen:
-        fail(f"EFFECTS Dreamy main UI missing: {need}")
+        fail(f"CHORD/DREAMY mode-specific main UI missing: {need}")
 if "isKeyCurrentlyDown" in editor:
     fail("Android Motion REC must not rely on JUCE Android isKeyCurrentlyDown()")
 for need in [
@@ -212,7 +220,6 @@ for need in [
 if 'if (effectMode == 0)' not in dreamy:
     fail("CHORD and DREAMY must be mutually exclusive audio paths")
 for need in [
-    "dreamyWetLowpass",
     "dreamyDelayBuffer",
     "dreamyReverb",
     "std::pow (x * y, 1.35f)",
@@ -221,6 +228,8 @@ for need in [
 ]:
     if need not in src and need not in dreamy:
         fail(f"Dreamy anti-fizz/ambience contract missing: {need}")
+if "dreamyWetLowpass" in dreamy:
+    fail("FLOWER Master Dreamy core must not be modified by in-core low-pass")
 if "DspTap" not in (R / "THIRD_PARTY_NOTICES.md").read_text():
     fail("DspTap MIT attribution missing")
 

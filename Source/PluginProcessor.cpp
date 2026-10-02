@@ -61,7 +61,6 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     dreamyPlaybackSpeed = { 1.3348398f, 2.0f };
     dreamyVoiceActive = { false, false };
     dreamyRandomState = 0x44524541u;
-    dreamyWetLowpass = { 0.0f, 0.0f };
     dreamyDelayLowpass = { 0.0f, 0.0f };
     const int dreamyDelaySamples = juce::jmax (4096, juce::roundToInt (currentSampleRate * 2.0));
     dreamyDelayBuffer.setSize (2, dreamyDelaySamples, false, true, false);
@@ -428,7 +427,8 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
 {
     const int capacity = dreamyBuffer.getNumSamples();
     const int numSamples = buffer.getNumSamples();
-    const int channels = juce::jmin (buffer.getNumChannels(), dreamyBuffer.getNumChannels());
+    const int channels = juce::jmin (
+        buffer.getNumChannels(), dreamyBuffer.getNumChannels());
 
     if (capacity <= 64 || numSamples <= 0 || channels <= 0)
         return;
@@ -441,14 +441,13 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
     const float bpm = juce::jlimit (50.0f, 200.0f,
         apvts.getRawParameterValue (ParamID::internalBpm)->load());
     const float ambience = enabled ? std::pow (x * y, 1.35f) : 0.0f;
-    const float wetCutoff = 9000.0f - 2800.0f * y;
-    const float wetLpAlpha = 1.0f - std::exp (
-        -juce::MathConstants<float>::twoPi * wetCutoff / (float) currentSampleRate);
 
     const auto wrapIndex = [capacity] (int position)
     {
-        while (position < 0) position += capacity;
-        while (position >= capacity) position -= capacity;
+        while (position < 0)
+            position += capacity;
+        while (position >= capacity)
+            position -= capacity;
         return position;
     };
 
@@ -471,7 +470,8 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
         float dreamyWet[2] { 0.0f, 0.0f };
         float totalWindow = 0.0f;
 
-        const int minimumHistory = juce::roundToInt (currentSampleRate * 0.75);
+        const int minimumHistory =
+            juce::roundToInt (currentSampleRate * 0.75);
 
         if (enabled && dreamySamplesFilled > minimumHistory)
         {
@@ -485,12 +485,12 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
 
             for (int voice = 0; voice < dreamyVoiceCount; ++voice)
             {
-                auto& active = dreamyVoiceActive[(size_t) voice];
-                auto& loopStart = dreamyLoopStart[(size_t) voice];
-                auto& loopLength = dreamyLoopLength[(size_t) voice];
-                auto& outputPhase = dreamyOutputPhase[(size_t) voice];
-                auto& localPosition = dreamyLocalPosition[(size_t) voice];
-                auto& playbackSpeed = dreamyPlaybackSpeed[(size_t) voice];
+                auto& active = dreamyVoiceActive[static_cast<size_t> (voice)];
+                auto& loopStart = dreamyLoopStart[static_cast<size_t> (voice)];
+                auto& loopLength = dreamyLoopLength[static_cast<size_t> (voice)];
+                auto& outputPhase = dreamyOutputPhase[static_cast<size_t> (voice)];
+                auto& localPosition = dreamyLocalPosition[static_cast<size_t> (voice)];
+                auto& playbackSpeed = dreamyPlaybackSpeed[static_cast<size_t> (voice)];
 
                 if (! active || loopLength <= 0
                     || outputPhase >= loopLength * (3 + voice))
@@ -498,27 +498,37 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
                     const float lengthScale = voice == 0 ? 0.82f : 1.18f;
                     loopLength = juce::jlimit (
                         256, capacity / 3,
-                        juce::roundToInt ((float) baseLoopLength * lengthScale));
+                        juce::roundToInt (
+                            static_cast<float> (baseLoopLength) * lengthScale));
 
                     const int maxLookback = juce::jmax (
                         loopLength + 2,
-                        juce::jmin (dreamySamplesFilled - 2, capacity - 2));
+                        juce::jmin (
+                            dreamySamplesFilled - 2,
+                            capacity - 2));
                     const int minLookback = juce::jmin (
                         maxLookback,
-                        juce::jmax (loopLength + 2, loopLength * (2 + voice)));
-                    const int spreadSamples = juce::jmax (1, maxLookback - minLookback);
+                        juce::jmax (
+                            loopLength + 2,
+                            loopLength * (2 + voice)));
+                    const int spreadSamples = juce::jmax (
+                        1, maxLookback - minLookback);
 
                     const int lookback =
                         minLookback
                         + juce::roundToInt (
-                            nextRandomUnit() * static_cast<float> (spreadSamples));
+                            nextRandomUnit()
+                            * static_cast<float> (spreadSamples));
 
-                    loopStart = wrapIndex (dreamyWritePosition - lookback);
+                    loopStart = wrapIndex (
+                        dreamyWritePosition - lookback);
                     outputPhase = 0;
                     localPosition =
-                        voice == 0 ? 0.0f : static_cast<float> (loopLength) * 0.43f;
+                        voice == 0
+                            ? 0.0f
+                            : static_cast<float> (loopLength) * 0.43f;
 
-                    // Accepted Dreamy voices: +5 semitones and +12 semitones.
+                    // Voice 1 is a perfect fifth (+5); voice 2 is an octave (+12).
                     playbackSpeed = voice == 0 ? 1.3348398f : 2.0f;
                     active = true;
                 }
@@ -526,20 +536,27 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
                 while (localPosition >= static_cast<float> (loopLength))
                     localPosition -= static_cast<float> (loopLength);
 
-                const float phase = localPosition / static_cast<float> (loopLength);
+                const float phase =
+                    localPosition / static_cast<float> (loopLength);
                 const float window =
-                    0.5f - 0.5f * std::cos (juce::MathConstants<float>::twoPi * phase);
+                    0.5f - 0.5f * std::cos (
+                        juce::MathConstants<float>::twoPi * phase);
 
-                const float readPosition = static_cast<float> (loopStart) + localPosition;
-                const int read0 = wrapIndex ((int) std::floor (readPosition));
+                const float readPosition =
+                    static_cast<float> (loopStart) + localPosition;
+                const int read0 = wrapIndex (
+                    static_cast<int> (std::floor (readPosition)));
                 const int read1 = wrapIndex (read0 + 1);
-                const float fraction = readPosition - std::floor (readPosition);
+                const float fraction =
+                    readPosition - std::floor (readPosition);
 
                 for (int channel = 0; channel < channels; ++channel)
                 {
-                    const auto* source = dreamyBuffer.getReadPointer (channel);
+                    const auto* source =
+                        dreamyBuffer.getReadPointer (channel);
                     const float fragment =
-                        source[read0] + (source[read1] - source[read0]) * fraction;
+                        source[read0]
+                        + (source[read1] - source[read0]) * fraction;
                     dreamyWet[channel] += fragment * window;
                 }
 
@@ -552,16 +569,16 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
             {
                 const float wetMix =
                     juce::jlimit (0.20f, 0.58f, 0.24f + y * 0.34f);
-                const float drift = 0.90f + x * 0.10f;
+                const float drift =
+                    0.90f + x * 0.10f;
 
                 for (int channel = 0; channel < channels; ++channel)
                 {
-                    const float wetSample = dreamyWet[channel] / totalWindow * drift;
-                    auto& filtered = dreamyWetLowpass[(size_t) channel];
-                    filtered += wetLpAlpha * (wetSample - filtered);
+                    const float wetSample =
+                        dreamyWet[channel] / totalWindow * drift;
                     buffer.setSample (
                         channel, sample,
-                        dry[channel] + (filtered - dry[channel]) * wetMix);
+                        dry[channel] + (wetSample - dry[channel]) * wetMix);
                 }
             }
         }
@@ -574,13 +591,15 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
             dreamyBuffer.setSample (
                 channel, dreamyWritePosition, dry[channel]);
 
-        dreamyWritePosition = (dreamyWritePosition + 1) % capacity;
-        dreamySamplesFilled = juce::jmin (capacity, dreamySamplesFilled + 1);
+        dreamyWritePosition =
+            (dreamyWritePosition + 1) % capacity;
+        dreamySamplesFilled =
+            juce::jmin (capacity, dreamySamplesFilled + 1);
     }
 
-    // Additional ambience is deliberately tied to the upper-right corner.
-    // The accepted Dreamy X/Y mapping above remains unchanged; this is an
-    // extra spatial layer requested for EFFECTS.
+
+    // EFFECTS-only post stage: Dreamy above is kept identical to FLOWER Master.
+    // Delay/Reverb are added after Dreamy and increase only toward the upper-right.
     if (enabled && ambience > 0.001f && dreamyDelayBuffer.getNumSamples() > 0)
     {
         const int delayCapacity = dreamyDelayBuffer.getNumSamples();
@@ -597,6 +616,7 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
 
             float current[2] { 0.0f, 0.0f };
             float delayed[2] { 0.0f, 0.0f };
+
             for (int channel = 0; channel < channels; ++channel)
             {
                 current[channel] = buffer.getSample (channel, sample);

@@ -168,6 +168,61 @@ juce::Point<float> RealtimeChordFxAudioProcessorEditor::toDesign (juce::Point<fl
              p.y * design / (float) juce::jmax (1, getHeight()) };
 }
 
+void RealtimeChordFxAudioProcessorEditor::setParameterFromX (DragParam which, float x)
+{
+    auto setNorm = [&] (const char* id, float norm)
+    {
+        if (auto* p = processor.state().getParameter (id)) p->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, norm));
+    };
+
+    int idx = 0;
+    if (which == DragParam::bar) idx = 1;
+    else if (which == DragParam::width) idx = 2;
+    else if (which == DragParam::length) idx = 3;
+    auto r = parameterBounds (idx);
+    const float norm = juce::jlimit (0.0f, 1.0f, (x - r.getX()) / r.getWidth());
+    if (which == DragParam::complex) setNorm (ParamID::complex, norm);
+    else if (which == DragParam::width) setNorm (ParamID::width, norm);
+    else if (which == DragParam::length) setNorm (ParamID::length, norm);
+    else if (which == DragParam::bar)
+    {
+        const int step = juce::jlimit (0, 3, juce::roundToInt (norm * 3.0f));
+        setNorm (ParamID::bar, step / 3.0f);
+    }
+}
+
+juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::parameterBounds (int i) const
+{
+    const float x = 28.0f + i * 173.0f;
+    return { x, 625.0f, 148.0f, 64.0f };
+}
+
+juce::String RealtimeChordFxAudioProcessorEditor::noteText (int midi) const
+{
+    if (midi < 0) return "--";
+    static constexpr const char* names[] { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    return juce::String (names[midi % 12]) + juce::String (midi / 12 - 1);
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintBar (juce::Graphics& g,
+                                                     juce::Rectangle<float> r,
+                                                     const juce::String& label,
+                                                     float value,
+                                                     const juce::String& text)
+{
+    g.setColour (juce::Colours::white.withAlpha (0.84f));
+    g.setFont (juce::FontOptions (13.0f));
+    g.drawText (label, r.removeFromTop (20.0f), juce::Justification::centredLeft);
+    auto line = r.removeFromTop (20.0f).reduced (0.0f, 8.0f);
+    g.setColour (juce::Colours::white.withAlpha (0.30f));
+    g.fillRect (line.withHeight (1.0f));
+    g.setColour (juce::Colours::white.withAlpha (0.88f));
+    g.fillRect (line.withWidth (line.getWidth() * juce::jlimit (0.0f, 1.0f, value)).withHeight (2.0f));
+    g.fillEllipse (line.getX() + line.getWidth() * value - 3.0f, line.getCentreY() - 3.0f, 6.0f, 6.0f);
+    g.setFont (juce::FontOptions (13.0f));
+    g.drawText (text, r, juce::Justification::centredLeft);
+}
+
 void RealtimeChordFxAudioProcessorEditor::timerCallback()
 {
     if (! hasKeyboardFocus (true))
@@ -192,55 +247,118 @@ void RealtimeChordFxAudioProcessorEditor::paint (juce::Graphics& g)
 
 void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
 {
-    if (currentFrame.isValid())
-        g.drawImage (currentFrame, juce::Rectangle<float> (0, 0, design, design),
-                     juce::RectanglePlacement::stretchToFit);
-
-    juce::ColourGradient shade (juce::Colours::transparentBlack, 360.0f, 555.0f,
-                                juce::Colours::black.withAlpha (0.58f),
-                                360.0f, 720.0f, false);
-    g.setGradientFill (shade);
-    g.fillRect (0.0f, 535.0f, 720.0f, 185.0f);
-
-    if (processor.isRunning())
-    {
-        g.setColour (juce::Colour (0xfff23a36));
-        g.drawRect (juce::Rectangle<float> (8.0f, 8.0f, 704.0f, 704.0f), 3.0f);
-        g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
-        g.drawText (juce::String::fromUTF8 (u8"● REC"),
-                    24, 20, 130, 28, juce::Justification::centredLeft);
-    }
-    else
-    {
-        g.setColour (juce::Colours::white.withAlpha (0.74f));
-        g.setFont (juce::FontOptions (12.0f));
-        g.drawText ("REC", 24, 20, 80, 28, juce::Justification::centredLeft);
-    }
-
-    g.setColour (juce::Colours::white.withAlpha (0.88f));
-    g.setFont (juce::FontOptions (14.0f));
-    g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
-
-    g.setFont (juce::FontOptions (12.0f));
-    g.setColour (juce::Colours::white.withAlpha (0.74f));
-    g.drawText ("X " + juce::String (processor.getMidiControllerX()).paddedLeft ('0', 3)
-                + "   Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
-                28, 660, 240, 22, juce::Justification::centredLeft);
-
     const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
-    if (processor.isRunning())
-        g.drawText (effectMode == 0 ? "CHORD" : "DREAMY",
-                    286, 660, 120, 22, juce::Justification::centredLeft);
 
-    const int motion = processor.getMotionState();
-    if (motion != 0)
+    if (effectMode == 0)
     {
-        g.setColour (motion == 1 ? juce::Colour (0xfff23a36)
-                                 : juce::Colours::white.withAlpha (0.82f));
-        g.drawText (motion == 1 ? "MOTION REC" : "MOTION PLAY",
-                    430, 660, 170, 22, juce::Justification::centredLeft);
+        if (currentFrame.isValid())
+                g.drawImage (currentFrame, juce::Rectangle<float> (0, 0, design, design), juce::RectanglePlacement::stretchToFit);
+        
+            // Only a soft readability strip; the supplied frames remain the visual focus.
+            juce::ColourGradient shade (juce::Colours::transparentBlack, 360.0f, 520.0f,
+                                        juce::Colours::black.withAlpha (0.70f), 360.0f, 720.0f, false);
+            g.setGradientFill (shade);
+            g.fillRect (0.0f, 500.0f, 720.0f, 220.0f);
+        
+            if (processor.isRunning())
+            {
+                g.setColour (juce::Colour (0xfff23a36));
+                g.drawRect (juce::Rectangle<float> (8.0f, 8.0f, 704.0f, 704.0f), 3.0f);
+                g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
+                g.drawText (juce::String::fromUTF8 (u8"● REC"), 24, 20, 130, 28, juce::Justification::centredLeft);
+            }
+        
+            g.setColour (juce::Colours::white.withAlpha (0.88f));
+            g.setFont (juce::FontOptions (14.0f));
+            g.drawText ("IN  " + noteText (processor.getDetectedMidi()) + "    CHORD  " + processor.getChordLabel(),
+                        28, 578, 520, 28, juce::Justification::centredLeft);
+            g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
+        
+            const bool midiControlOn = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
+            if (midiControlOn)
+            {
+                g.setFont (juce::FontOptions (12.0f));
+                g.setColour (juce::Colours::white.withAlpha (0.74f));
+                g.drawText ("X " + juce::String (processor.getMidiControllerX()).paddedLeft ('0', 3)
+                            + "   Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
+                            28, 548, 240, 22, juce::Justification::centredLeft);
+                if (! processor.isRunning())
+                    g.drawText ("REC", 24, 20, 80, 28, juce::Justification::centredLeft);
+        
+                const int motion = processor.getMotionState();
+                if (motion != 0)
+                {
+                    g.setColour (motion == 1 ? juce::Colour (0xfff23a36)
+                                             : juce::Colours::white.withAlpha (0.82f));
+                    g.drawText (motion == 1 ? "MOTION REC" : "MOTION PLAY",
+                                270, 548, 170, 22, juce::Justification::centredLeft);
+                }
+            }
+        
+            const float complex = processor.state().getRawParameterValue (ParamID::complex)->load();
+            const int bar = juce::jlimit (0, 3, juce::roundToInt (processor.state().getRawParameterValue (ParamID::bar)->load()));
+            const float width = processor.state().getRawParameterValue (ParamID::width)->load();
+            const float length = processor.state().getRawParameterValue (ParamID::length)->load();
+            static constexpr const char* bars[] { "1/4", "1/2", "1 BAR", "2 BAR" };
+        
+            paintBar (g, parameterBounds (0), "COMPLEX", complex, juce::String (juce::roundToInt (complex * 100.0f)));
+            paintBar (g, parameterBounds (1), "BAR", bar / 3.0f, bars[bar]);
+            paintBar (g, parameterBounds (2), "WIDTH", width, juce::String (juce::roundToInt (width * 100.0f)));
+            paintBar (g, parameterBounds (3), "LENGTH", length,
+                      length >= 0.995f ? "INF" : juce::String (juce::roundToInt (length * 100.0f)));
+        return;
     }
+
+    if (currentFrame.isValid())
+            g.drawImage (currentFrame, juce::Rectangle<float> (0, 0, design, design),
+                         juce::RectanglePlacement::stretchToFit);
+    
+        juce::ColourGradient shade (juce::Colours::transparentBlack, 360.0f, 555.0f,
+                                    juce::Colours::black.withAlpha (0.58f),
+                                    360.0f, 720.0f, false);
+        g.setGradientFill (shade);
+        g.fillRect (0.0f, 535.0f, 720.0f, 185.0f);
+    
+        if (processor.isRunning())
+        {
+            g.setColour (juce::Colour (0xfff23a36));
+            g.drawRect (juce::Rectangle<float> (8.0f, 8.0f, 704.0f, 704.0f), 3.0f);
+            g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
+            g.drawText (juce::String::fromUTF8 (u8"● REC"),
+                        24, 20, 130, 28, juce::Justification::centredLeft);
+        }
+        else
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.74f));
+            g.setFont (juce::FontOptions (12.0f));
+            g.drawText ("REC", 24, 20, 80, 28, juce::Justification::centredLeft);
+        }
+    
+        g.setColour (juce::Colours::white.withAlpha (0.88f));
+        g.setFont (juce::FontOptions (14.0f));
+        g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
+    
+        g.setFont (juce::FontOptions (12.0f));
+        g.setColour (juce::Colours::white.withAlpha (0.74f));
+        g.drawText ("X " + juce::String (processor.getMidiControllerX()).paddedLeft ('0', 3)
+                    + "   Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
+                    28, 660, 240, 22, juce::Justification::centredLeft);
+    
+        const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
+            processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+        if (processor.isRunning())
+            g.drawText (effectMode == 0 ? "CHORD" : "DREAMY",
+                        286, 660, 120, 22, juce::Justification::centredLeft);
+    
+        const int motion = processor.getMotionState();
+        if (motion != 0)
+        {
+            g.setColour (motion == 1 ? juce::Colour (0xfff23a36)
+                                     : juce::Colours::white.withAlpha (0.82f));
+            g.drawText (motion == 1 ? "MOTION REC" : "MOTION PLAY",
+                        430, 660, 170, 22, juce::Justification::centredLeft);
+        }
 }
 
 
@@ -554,6 +672,7 @@ void RealtimeChordFxAudioProcessorEditor::updateMidiControllerFromPoint (juce::P
 void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
     const auto p = toDesign (e.position);
+    dragging = DragParam::none;
     if (midiControlConfigVisible)
     {
         if (p.x >= 590 && p.y <= 66) { midiControlConfigVisible = false; repaint(); return; }
@@ -687,23 +806,71 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (p.x >= 575 && p.y <= 70) { configVisible = true; refreshAudioInputs(); repaint(); return; }
 
+    const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
-    if (p.x <= 170 && p.y <= 70)
-        processor.toggleRunState();
+    if (effectMode == 0)
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            if (parameterBounds (i).contains (p))
+            {
+                dragging = (i == 0 ? DragParam::complex
+                                   : i == 1 ? DragParam::bar
+                                            : i == 2 ? DragParam::width
+                                                     : DragParam::length);
+                setParameterFromX (dragging, p.x);
+                repaint();
+                return;
+            }
+        }
+
+        const bool midiControlOn =
+            processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
+        if (midiControlOn)
+        {
+            if (p.x <= 170 && p.y <= 70)
+                processor.toggleRunState();
+            else
+            {
+                xyDragging = true;
+                updateMidiControllerFromPoint (p);
+            }
+        }
+        else
+        {
+            processor.toggleRunState();
+        }
+    }
     else
     {
-        xyDragging = true;
-        updateMidiControllerFromPoint (p);
+        if (p.x <= 170 && p.y <= 70)
+            processor.toggleRunState();
+        else
+        {
+            xyDragging = true;
+            updateMidiControllerFromPoint (p);
+        }
     }
+
     repaint();
 }
 
 void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 {
-    if (midiControlConfigVisible || configVisible) return;
+    if (midiControlConfigVisible || configVisible)
+        return;
+
     if (xyDragging)
     {
         updateMidiControllerFromPoint (toDesign (e.position));
+        repaint();
+        return;
+    }
+
+    if (dragging != DragParam::none)
+    {
+        setParameterFromX (dragging, toDesign (e.position).x);
         repaint();
     }
 }

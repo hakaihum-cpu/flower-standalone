@@ -155,7 +155,6 @@ private:
     std::array<float, dreamyVoiceCount> dreamyPlaybackSpeed { 1.3348398f, 2.0f };
     std::array<bool, dreamyVoiceCount> dreamyVoiceActive { false, false };
     uint32_t dreamyRandomState = 0x44524541u;
-    std::array<float, 2> dreamyWetLowpass { 0.0f, 0.0f };
     juce::AudioBuffer<float> dreamyDelayBuffer;
     int dreamyDelayWritePosition = 0;
     std::array<float, 2> dreamyDelayLowpass { 0.0f, 0.0f };
