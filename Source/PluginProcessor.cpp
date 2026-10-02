@@ -610,8 +610,8 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
         juce::Reverb::Parameters reverbParams;
         reverbParams.roomSize = 0.38f + 0.57f * ambience;
         reverbParams.damping = 0.62f;
-        reverbParams.wetLevel = 0.52f * ambience;
-        reverbParams.dryLevel = 1.0f;
+        reverbParams.wetLevel = 0.26f * ambience;
+        reverbParams.dryLevel = 0.50f;
         reverbParams.width = 1.0f;
         reverbParams.freezeMode = 0.0f;
         dreamyReverb.setParameters (reverbParams);
