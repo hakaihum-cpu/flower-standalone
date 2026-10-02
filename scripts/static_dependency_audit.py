@@ -241,6 +241,9 @@ for need in [
     "chorus",
     "reverb",
     "chooseForNote",
+    "recaptureTransitionRemaining",
+    "transitionSamplesRemaining",
+    "softProtect (float sample)",
 ]:
     if need not in renderers:
         fail(f"CHORD A/B renderer contract missing: {need}")
@@ -260,6 +263,10 @@ for need in [
     "chordBRandomFx.setProbability",
     "chordBRandomFx.chooseForNote",
     "chordBRandomFx.processSample",
+    "softProtectBuffer (buffer)",
+    "dreamyDelaySamplesSmoothed",
+    "dreamyAmbienceSmoothed",
+    "dreamyPostWasEnabled",
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
@@ -383,3 +390,19 @@ print("[PASS] JUCER module set matches proven FLOWER Golden")
 print("[PASS] JUCE 9.0.2 dependency closure verified")
 print("[PASS] Android RECORD_AUDIO exporter contract verified")
 print("[PASS] known-good AN-10..AN-15 CircleCI controls preserved")
+
+
+# Noise-hardening contracts.
+if "std::clamp (left, -0.72f, 0.72f)" in renderers or "std::clamp (right, -0.72f, 0.72f)" in renderers:
+    fail("CHORD-B hard clamp must not return; use soft-knee protection")
+
+for need in [
+    "sampleRate * 0.006",
+    "sampleRate * 0.005",
+    "targetDelaySamples",
+    "delaySmoothing",
+    "readFrac",
+    "dreamyDelayBuffer.clear()",
+]:
+    if need not in renderers and need not in dreamy:
+        fail(f"noise-hardening contract missing: {need}")
