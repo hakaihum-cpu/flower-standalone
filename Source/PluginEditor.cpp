@@ -923,8 +923,15 @@ void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
     {
         xyDragging = false;
         processor.releaseMidiControllerTouch();
-        repaint();
     }
+
+    if (dragging == DragParam::hold)
+        processor.notifyChordAHoldChanged();
+
+    if (dragging != DragParam::none)
+        dragging = DragParam::none;
+
+    repaint();
 }
 
 bool RealtimeChordFxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
