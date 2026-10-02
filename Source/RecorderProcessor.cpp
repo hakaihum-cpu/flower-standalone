@@ -212,7 +212,7 @@ void RecorderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
 
     handleClock (midi, numSamples);
 
-    for (int ch = 0; ch < buffer.getNumOutputChannels(); ++ch)
+    for (int ch = 0; ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, numSamples);
 
     if (playSlot >= 0)
@@ -224,7 +224,7 @@ void RecorderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         while (outPos < numSamples && playPosition < length)
         {
             const float s = src[playPosition++];
-            for (int ch = 0; ch < buffer.getNumOutputChannels(); ++ch)
+            for (int ch = 0; ch < getTotalNumOutputChannels(); ++ch)
                 buffer.addSample (ch, outPos, s);
             ++outPos;
         }
