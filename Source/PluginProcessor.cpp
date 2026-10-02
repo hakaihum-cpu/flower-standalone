@@ -3,6 +3,33 @@
 #include "ParameterIDs.h"
 #include <cmath>
 
+namespace
+{
+float softProtectSample (float sample) noexcept
+{
+    constexpr float threshold = 0.90f;
+    constexpr float ceiling = 0.995f;
+    const float magnitude = std::abs (sample);
+    if (magnitude <= threshold)
+        return sample;
+
+    const float knee = ceiling - threshold;
+    const float shaped =
+        threshold + knee * std::tanh ((magnitude - threshold) / knee);
+    return std::copysign (shaped, sample);
+}
+
+void softProtectBuffer (juce::AudioBuffer<float>& buffer) noexcept
+{
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    {
+        auto* data = buffer.getWritePointer (channel);
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            data[sample] = softProtectSample (data[sample]);
+    }
+}
+}
+
 RealtimeChordFxAudioProcessor::RealtimeChordFxAudioProcessor()
     : juce::AudioProcessor (BusesProperties()
         .withInput ("Input", juce::AudioChannelSet::stereo(), true)
@@ -67,6 +94,14 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     dreamyDelayBuffer.setSize (2, dreamyDelaySamples, false, true, false);
     dreamyDelayBuffer.clear();
     dreamyDelayWritePosition = 0;
+    {
+        const float y0 = juce::jlimit (0.0f, 1.0f,
+            (float) controllerY.load (std::memory_order_relaxed) / 127.0f);
+        dreamyDelaySamplesSmoothed =
+            (float) (currentSampleRate * (0.16 + 0.36 * y0));
+    }
+    dreamyAmbienceSmoothed = 0.0f;
+    dreamyPostWasEnabled = false;
     dreamyReverb.setSampleRate (currentSampleRate);
     dreamyReverb.reset();
 
@@ -257,7 +292,10 @@ void RealtimeChordFxAudioProcessor::processChordAudio (juce::AudioBuffer<float>&
     }
 
     if (running.load (std::memory_order_relaxed) && haveChord)
+    {
         processChordReverb (buffer);
+        softProtectBuffer (buffer);
+    }
 }
 
 void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buffer)
@@ -305,6 +343,7 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
     {
         processChordReverb (buffer);
         buffer.applyGain (0.86f); // explicit CHORD-B output headroom
+        softProtectBuffer (buffer)
     }
 }
 
@@ -345,7 +384,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         lastChordMode = chordMode;
         sineArpeggiator.reset();
         chordBRandomFx.reset();
-        chordReverb.reset();
+        // Preserve the common CHORD reverb tail across A/B switches.
         if (haveChord)
         {
             sampleChordRenderer.setPlan (currentPlan.midiNotes, lastInputMidiFloat, true);
