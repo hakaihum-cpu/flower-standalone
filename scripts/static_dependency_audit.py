@@ -216,7 +216,7 @@ for need in [
     "dreamyReverb",
     "std::pow (x * y, 1.35f)",
     "0.46f * ambience",
-    "0.52f * ambience",
+    "0.26f * ambience",
 ]:
     if need not in src and need not in dreamy:
         fail(f"Dreamy anti-fizz/ambience contract missing: {need}")
