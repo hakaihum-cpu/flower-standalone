@@ -129,6 +129,7 @@ for bad in [
 
 for need in [
     '"HOLD"',
+    '"EFFECT"',
     '"REVERB"',
     "reverbSteps",
     "std::pow (dreamyX * dreamyY, 1.35f)",
@@ -230,6 +231,16 @@ for need in [
     "0.020f + hold * 0.140f",
     "class SineArpeggiator",
     "triggerRandomNote",
+    "consumeNoteTrigger",
+    "class ChordBRandomFx",
+    "shortDelay",
+    "longDelay",
+    "tapeDelay",
+    "tapeSim",
+    "bitcrush",
+    "chorus",
+    "reverb",
+    "chooseForNote",
 ]:
     if need not in renderers:
         fail(f"CHORD A/B renderer contract missing: {need}")
@@ -245,6 +256,10 @@ for need in [
     "sampleChordRenderer.pushInput",
     "ParamID::hold",
     "notifyChordAHoldChanged",
+    "ParamID::effect",
+    "chordBRandomFx.setProbability",
+    "chordBRandomFx.chooseForNote",
+    "chordBRandomFx.processSample",
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
