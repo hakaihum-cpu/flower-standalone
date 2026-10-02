@@ -212,13 +212,14 @@ void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
     // layer is audible.
     if (mode == 0)
     {
-        sampleChordRenderer.reset();
         sineArpeggiator.reset();
         chordReverb.reset();
 
         if (haveChord)
         {
-            sampleChordRenderer.setPlan (currentPlan.midiNotes, lastInputMidiFloat, false);
+            // CHORD-A keeps a private raw-input history even while DREAMY is
+            // selected, then captures the latest phrase when CHORD returns.
+            sampleChordRenderer.setPlan (currentPlan.midiNotes, lastInputMidiFloat, true);
             sineArpeggiator.setPlan (currentPlan.midiNotes);
         }
     }
@@ -327,12 +328,11 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     if (effectMode == 0 && chordMode != lastChordMode)
     {
         lastChordMode = chordMode;
-        sampleChordRenderer.reset();
         sineArpeggiator.reset();
         chordReverb.reset();
         if (haveChord)
         {
-            sampleChordRenderer.setPlan (currentPlan.midiNotes, lastInputMidiFloat);
+            sampleChordRenderer.setPlan (currentPlan.midiNotes, lastInputMidiFloat, true);
             sineArpeggiator.setPlan (currentPlan.midiNotes);
         }
     }
