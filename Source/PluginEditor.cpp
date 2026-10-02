@@ -249,9 +249,6 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
 {
     const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
-    const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
-        processor.state().getRawParameterValue (ParamID::chordMode)->load()));
-
     if (effectMode == 0)
     {
         if (currentFrame.isValid())
