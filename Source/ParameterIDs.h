@@ -16,4 +16,6 @@ inline constexpr const char* midiYCC = "midiYCC";
 inline constexpr const char* midiKey = "midiKey";
 inline constexpr const char* midiScale = "midiScale";
 inline constexpr const char* motionBars = "motionBars";
+inline constexpr const char* chordMidiOut = "chordMidiOut";
+inline constexpr const char* chordMidiChannel = "chordMidiChannel";
 }

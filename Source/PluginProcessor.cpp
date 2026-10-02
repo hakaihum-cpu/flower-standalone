@@ -36,6 +36,11 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     motionPositionTicks = 0;
     motionTargetTicks = motionTicksPerBar;
     motionSamplesUntilNextTick = 0.0;
+    activeChordMidiNoteCount = 0;
+    activeChordMidiChannel = 1;
+    chordMidiRefreshRequested = false;
+    chordMidiStopRequested = false;
+    chordMidiGateOpen = false;
 }
 
 void RealtimeChordFxAudioProcessor::toggleRunState() noexcept
@@ -108,6 +113,10 @@ void RealtimeChordFxAudioProcessor::applyChord (const chordfx::ChordPlan& plan)
     const float length = apvts.getRawParameterValue (ParamID::length)->load();
     if (length >= 0.995f) gateSamplesRemaining = -1.0;
     else gateSamplesRemaining = std::max (1.0, barIntervalSamples() * (0.08 + 0.92 * length));
+
+    chordMidiGateOpen = true;
+    chordMidiRefreshRequested = true;
+    chordMidiStopRequested = false;
 }
 
 void RealtimeChordFxAudioProcessor::advanceProgression()
@@ -187,9 +196,14 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             visualFrame.store (controllerFrameForXY (controllerX.load(), controllerY.load()), std::memory_order_relaxed);
         samplesUntilChange = gateSamplesRemaining = 0.0;
         midiClockTicks = 0;
+        chordMidiGateOpen = false;
+        chordMidiStopRequested = true;
+        chordMidiRefreshRequested = false;
         const juce::SpinLock::ScopedLockType lock (labelLock);
         chordLabel = "--";
     }
+
+    processChordMidi (midi);
 
     float blockPeak = 0.0f;
     for (int i = 0; i < n; ++i)
@@ -210,7 +224,16 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             const bool gated = gateSamplesRemaining < 0.0 || gateSamplesRemaining > 0.0;
             const float wet = pitchBank.processSample (mono);
             out = gated ? wet : 0.0f;
-            if (gateSamplesRemaining > 0.0) gateSamplesRemaining -= 1.0;
+            if (gateSamplesRemaining > 0.0)
+            {
+                gateSamplesRemaining -= 1.0;
+                if (gateSamplesRemaining <= 0.0)
+                {
+                    gateSamplesRemaining = 0.0;
+                    chordMidiGateOpen = false;
+                    chordMidiStopRequested = true;
+                }
+            }
 
             const float length = apvts.getRawParameterValue (ParamID::length)->load();
             if (! midiClockMode && length < 0.995f)
@@ -475,6 +498,56 @@ void RealtimeChordFxAudioProcessor::processInternalMotionClock (int numSamples)
     motionSamplesUntilNextTick -= numSamples;
 }
 
+
+void RealtimeChordFxAudioProcessor::stopActiveChordMidi (juce::MidiBuffer& out)
+{
+    for (int i = 0; i < activeChordMidiNoteCount; ++i)
+        out.addEvent (juce::MidiMessage::noteOff (activeChordMidiChannel, activeChordMidiNotes[(size_t) i]), 0);
+
+    activeChordMidiNoteCount = 0;
+}
+
+void RealtimeChordFxAudioProcessor::processChordMidi (juce::MidiBuffer& out)
+{
+    const bool enabled = apvts.getRawParameterValue (ParamID::chordMidiOut)->load() >= 0.5f;
+    const int channel = juce::jlimit (1, 16,
+        juce::roundToInt (apvts.getRawParameterValue (ParamID::chordMidiChannel)->load()));
+    const bool shouldSound = enabled
+                          && running.load (std::memory_order_relaxed)
+                          && haveChord
+                          && chordMidiGateOpen
+                          && ! currentPlan.midiNotes.empty();
+
+    if (chordMidiStopRequested || ! shouldSound)
+    {
+        stopActiveChordMidi (out);
+        chordMidiStopRequested = false;
+        if (! shouldSound)
+        {
+            chordMidiRefreshRequested = false;
+            return;
+        }
+    }
+
+    const bool channelChanged = activeChordMidiNoteCount > 0 && activeChordMidiChannel != channel;
+    if (channelChanged || chordMidiRefreshRequested || activeChordMidiNoteCount == 0)
+    {
+        stopActiveChordMidi (out);
+
+        activeChordMidiChannel = channel;
+        activeChordMidiNoteCount = juce::jmin ((int) currentPlan.midiNotes.size(), maxChordMidiNotes);
+
+        for (int i = 0; i < activeChordMidiNoteCount; ++i)
+        {
+            const int note = juce::jlimit (0, 127, currentPlan.midiNotes[(size_t) i]);
+            activeChordMidiNotes[(size_t) i] = note;
+            out.addEvent (juce::MidiMessage::noteOn (activeChordMidiChannel, note, (juce::uint8) 127), 0);
+        }
+
+        chordMidiRefreshRequested = false;
+    }
+}
+
 void RealtimeChordFxAudioProcessor::setParameterActual (const char* id, float actual)
 {
     if (auto* p = apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (actual));
@@ -530,6 +603,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::midiKey, "MIDI KEY", juce::StringArray { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0));
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::midiScale, "MIDI SCALE", juce::StringArray { "Chromatic", "Major", "Natural Minor", "Major Pent", "Minor Pent" }, 0));
     p.add (std::make_unique<juce::AudioParameterInt> (ParamID::motionBars, "MOTION BARS", 1, maxMotionBars, 1));
+    p.add (std::make_unique<juce::AudioParameterBool> (ParamID::chordMidiOut, "CHORD MIDI OUT", false));
+    p.add (std::make_unique<juce::AudioParameterInt> (ParamID::chordMidiChannel, "CHORD MIDI CH", 1, 16, 1));
     return p;
 }
 

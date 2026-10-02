@@ -72,6 +72,8 @@ private:
     void processMotionTick();
     void processInternalMotionClock (int numSamples);
     void applyMotionPoint (int x, int y);
+    void processChordMidi (juce::MidiBuffer&);
+    void stopActiveChordMidi (juce::MidiBuffer&);
 
     juce::AudioProcessorValueTreeState apvts;
     chordfx::YinPitchDetector pitchDetector;
@@ -116,6 +118,14 @@ private:
     int motionPositionTicks = 0;
     int motionTargetTicks = motionTicksPerBar;
     double motionSamplesUntilNextTick = 0.0;
+
+    static constexpr int maxChordMidiNotes = 16;
+    std::array<int, maxChordMidiNotes> activeChordMidiNotes {};
+    int activeChordMidiNoteCount = 0;
+    int activeChordMidiChannel = 1;
+    bool chordMidiRefreshRequested = false;
+    bool chordMidiStopRequested = false;
+    bool chordMidiGateOpen = false;
 
     mutable juce::SpinLock labelLock;
     juce::String chordLabel { "--" };
