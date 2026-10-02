@@ -194,30 +194,29 @@ std::vector<int> TheoryEngine::makeVoicing (int rootPc, const std::vector<int>& 
     std::vector<int> notes;
     notes.reserve (intervals.size());
 
-    const int anchor = std::clamp (lastInputMidi, 0, 127);
-    const int anchorPc = pitchClass (anchor);
+    // CHORD-A/B share one absolute generated-note register: C4..B5.
+    // The detected input determines harmony, but generated voices never leave
+    // this two-octave range. The dry live input may of course be outside it.
+    const int anchor = std::clamp (lastInputMidi, 60, 83);
 
     for (size_t i = 0; i < intervals.size(); ++i)
     {
         const int targetPc = pitchClass (rootPc + intervals[i]);
-        int delta = pitchClass (targetPc - anchorPc);
-        if (delta > 6) delta -= 12;
+        const int lower = 60 + targetPc; // C4..B4
+        const int upper = lower + 12;    // C5..B5
 
-        int n = anchor + delta;
-        while (n < 48) n += 12;   // generated-note floor C3
-        while (n > 96) n -= 12;
+        int n = std::abs (upper - anchor) < std::abs (lower - anchor)
+              ? upper : lower;
 
-        // WIDTH opens the chord without forcing every voice into C4-C6 or
-        // requiring two-octave pitch shifts from a low live note.
-        if (i > 0 && width > 0.58f)
+        // WIDTH spreads later chord members across the available two octaves
+        // without ever escaping C4..B5.
+        if (i > 0 && width > 0.52f)
         {
-            const bool spread = width > 0.82f || ((i & 1u) != 0u);
-            const int candidate = n + (spread ? 12 : 0);
-            if (candidate <= 96 && candidate - anchor <= 19)
-                n = candidate;
+            const bool useUpper = width > 0.80f || ((i & 1u) != 0u);
+            n = useUpper ? upper : lower;
         }
 
-        notes.push_back (std::clamp (n, 48, 96));
+        notes.push_back (std::clamp (n, 60, 83));
     }
 
     std::sort (notes.begin(), notes.end());
