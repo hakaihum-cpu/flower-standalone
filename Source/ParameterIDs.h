@@ -1,6 +1,7 @@
 #pragma once
 namespace ParamID
 {
+inline constexpr const char* effectMode = "effectMode";
 inline constexpr const char* complex = "complex";
 inline constexpr const char* bar = "bar";
 inline constexpr const char* width = "width";
