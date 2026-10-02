@@ -236,7 +236,10 @@ ChordPlan TheoryEngine::buildPlan (int degree, bool forceAnchorResponse)
     plan.rootPitchClass = degreeRootPc;
 
     // First note is intentionally third-less: one note cannot establish major/minor.
-    if (forceAnchorResponse && mode == Mode::ambiguous)
+    if (forceAnchorResponse
+        && mode == Mode::ambiguous
+        && pitchClass (lastInputMidi) == tonicPitchClass
+        && degree == 0)
     {
         plan.label = noteName (degreeRootPc) + "5(add9)";
         plan.midiNotes = makeVoicing (degreeRootPc, { 0, 7, 14 });
