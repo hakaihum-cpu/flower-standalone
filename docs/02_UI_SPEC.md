@@ -73,6 +73,10 @@ When MIDI CONTROL is ON:
 - Dry live input remains audible as the performance anchor.
 - CHORD-A captures a real recent input phrase and resamples that same phrase simultaneously at the ChordPlan target pitches. HOLD=0 preserves the approved minimum of 240 ms capture / 20 ms seam crossfade. HOLD can extend them together up to 2000 ms / 160 ms; it never makes either value shorter than the approved minimum. HOLD is CHORD-A only. The final HOLD value is committed on touch release with one recapture, avoiding repeated capture work during a drag. It must not reduce the source to one/two pitch periods, PSOLA grains, or a micro-loop oscillator. BAR progression reuses the captured phrase rather than recapturing silence.
 - CHORD-B uses the same ChordPlan but renders random constituent notes with a sine-wave arpeggiator at an eighth-note step.
+- CHORD-B EFFECT is a 0..100% per-note effect probability. At 0 every generated sine note is dry; at 100 every generated note selects one random effect. Intermediate values randomly alternate between dry and effected notes.
+- The seven equally selectable CHORD-B effects are Short Delay, Long Delay, Tape Delay, Tape Sim, Bitcrush, Chorus, and Reverb.
+- The random effect processor receives only the generated sine layer, never the live input. Delay/Tape Delay/Reverb tails may continue across later arpeggiator steps even when the next note selects a different effect or no effect.
+- CHORD-B shows EFFECT in the same compact indicator slot used by HOLD in CHORD-A; the four approved COMPLEX/BAR/WIDTH/LENGTH bars remain unmoved.
 - CHORD-A and CHORD-B both pass through the shared fixed reverb stage.
 - TD-PSOLA is not on the audible CHORD-A/B path.
 - No legacy fixed-grain GranularPitchBank is compiled into the EFFECTS app.
