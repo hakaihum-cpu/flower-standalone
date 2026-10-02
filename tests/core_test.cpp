@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 int main()
 {
@@ -45,6 +46,15 @@ int main()
         assert (containsPc (p, 4));
     }
 
+    // Chromatic anchor must also remain present as a colour tone.
+    p = theory.noteOn (61); // Db
+    assert (containsPc (p, 1));
+    for (int i=0;i<80;++i)
+    {
+        p = theory.advance();
+        assert (containsPc (p, 1));
+    }
+
     chordfx::YinPitchDetector yin;
     yin.prepare (48000.0, 1024, 256);
     chordfx::PitchEstimate est;
@@ -72,7 +82,9 @@ int main()
     chordfx::PsolaVoice psola;
     psola.prepare (800);
     double psolaEnergy = 0.0;
-    for (int i=0;i<48000;++i)
+    std::vector<float> psolaTail;
+    psolaTail.reserve (24000);
+    for (int i=0;i<72000;++i)
     {
         double saw = 0.0;
         for (int h=1; h<=12; ++h)
@@ -80,9 +92,26 @@ int main()
         const float x = (float) (saw * 0.12);
         const float y = psola.process (x, 48000.0f/150.0f, 1.5f);
         assert (std::isfinite (y));
-        if (i > 12000) psolaEnergy += (double) y * (double) y;
+        if (i >= 48000)
+        {
+            psolaEnergy += (double) y * (double) y;
+            psolaTail.push_back (y);
+        }
     }
     assert (psolaEnergy > 0.01);
+
+    auto toneMagnitude = [&psolaTail] (double hz)
+    {
+        double re = 0.0, im = 0.0;
+        for (size_t i=0; i<psolaTail.size(); ++i)
+        {
+            const double ph = 2.0*M_PI*hz*(double)i/48000.0;
+            re += psolaTail[i] * std::cos (ph);
+            im -= psolaTail[i] * std::sin (ph);
+        }
+        return std::sqrt (re*re + im*im);
+    };
+    assert (toneMagnitude (225.0) > toneMagnitude (150.0) * 1.2);
 
     std::cout << "core tests passed\n";
 }
