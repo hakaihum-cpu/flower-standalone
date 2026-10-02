@@ -198,28 +198,42 @@ for need in [
 if "pitchBank" in dreamy or "GranularPitchBank" in (R / "Source/PluginProcessor.h").read_text():
     fail("obsolete generated-audio pitch shifter must not remain in Processor")
 
-psola = (R / "Source/PsolaHarmonyBank.h").read_text()
+renderers = (R / "Source/ChordRenderers.h").read_text()
 for need in [
-    "class PsolaVoice",
-    "placeGrain",
-    "readHermite",
-    "PsolaHarmonyBank",
-    "allocation-free",
+    "class SampleChordRenderer",
+    "captureRecentPhrase",
+    "sampleRate * 0.090",
+    "class SineArpeggiator",
+    "triggerRandomNote",
 ]:
-    if need not in psola:
-        fail(f"TD-PSOLA contract missing: {need}")
+    if need not in renderers:
+        fail(f"CHORD A/B renderer contract missing: {need}")
+
 for need in [
     "ParamID::effectMode",
     '"MODE", juce::StringArray { "CHORD", "DREAMY" }, 0',
+    "ParamID::chordMode",
+    '"CHORD ENGINE", juce::StringArray { "A", "B" }, 0',
     "processChordAudio (buffer)",
+    "processChordB (buffer)",
     "processDreamy (buffer)",
-    "updateChordRatios",
-    "psolaTargetPeriod",
+    "sampleChordRenderer.pushInput",
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
+
+processor_header = (R / "Source/PluginProcessor.h").read_text()
+for bad in [
+    "PsolaHarmonyBank",
+    "psolaTargetPeriod",
+    "psolaCurrentPeriod",
+    "updateChordRatios",
+]:
+    if bad in dreamy or bad in processor_header:
+        fail(f"obsolete PSOLA path remains in active processor: {bad}")
+
 if 'if (effectMode == 0)' not in dreamy:
-    fail("CHORD and DREAMY must be mutually exclusive audio paths")
+    fail("CHORD and DREAMY audible paths must remain mode-separated")
 for need in [
     "dreamyDelayBuffer",
     "dreamyReverb",
