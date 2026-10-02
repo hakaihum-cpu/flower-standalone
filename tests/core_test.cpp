@@ -20,6 +20,17 @@ int main()
         for (int n : p.midiNotes) { assert(n >= 48); assert(n <= 96); }
     }
 
+    // Regression: a low input must not be forced into a fixed C4/C5 voicing.
+    chordfx::TheoryEngine lowTheory;
+    lowTheory.setWidth (0.35f);
+    auto low = lowTheory.noteOn (45); // A2
+    assert (! low.midiNotes.empty());
+    for (int n : low.midiNotes)
+    {
+        assert (n >= 48);              // existing C3 hard floor
+        assert (n - 45 <= 16);         // no +24 semitone chipmunk jump
+    }
+
     chordfx::YinPitchDetector yin;
     yin.prepare (48000.0, 1024, 256);
     chordfx::PitchEstimate est;

@@ -7,7 +7,10 @@ namespace chordfx
 void GranularPitchBank::prepare (double sr, int)
 {
     sampleRate = sr > 1000.0 ? sr : 48000.0;
-    grainSize = sampleRate >= 88200.0 ? 1024 : 512;
+    // 512 samples at 48 kHz (~10.7 ms) was too short for voice/guitar and
+    // produced a strong metallic/robotic texture. Use a longer 50%-overlapped
+    // grain while keeping the same lightweight two-grain structure.
+    grainSize = sampleRate >= 88200.0 ? 2048 : 1024;
     hopSize = grainSize / 2;
     ring.assign ((size_t) grainSize * 8u, 0.0f);
     reset();
@@ -26,7 +29,7 @@ void GranularPitchBank::setTargetRatios (const std::vector<float>& ratios)
     {
         auto& v = voices[(size_t) i];
         v.enabled = i < (int) ratios.size();
-        if (v.enabled) v.ratio = std::clamp (ratios[(size_t) i], 0.25f, 4.0f);
+        if (v.enabled) v.ratio = std::clamp (ratios[(size_t) i], 0.5f, 2.5f);
     }
 }
 
@@ -82,6 +85,8 @@ float GranularPitchBank::processSample (float input)
         }
         sum += voiceOut;
     }
-    return activeVoices > 0 ? sum / std::sqrt ((float) activeVoices) : 0.0f;
+    // Average active voices rather than applying 1/sqrt(N) gain. The previous
+    // law could raise peak level as voices were added and clip the Android output.
+    return activeVoices > 0 ? sum / (float) activeVoices : 0.0f;
 }
 }

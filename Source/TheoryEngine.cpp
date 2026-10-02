@@ -118,21 +118,37 @@ std::vector<int> TheoryEngine::makeVoicing (int rootPc, const std::vector<int>& 
     std::vector<int> notes;
     notes.reserve (intervals.size());
 
-    // Close position begins around C4. WIDTH progressively spreads bass and upper voices.
-    int root = 60 + pitchClass (rootPc - 0);
-    while (pitchClass (root) != pitchClass (rootPc)) ++root;
-    while (root > 71) root -= 12;
-
-    const int bassDrop = width > 0.55f ? 12 : 0;
-    root = std::max (48, root - bassDrop); // hard floor C3
+    // Build the chord around the actual input register instead of forcing every
+    // harmony into the C4-C6 area. Large upward transpositions were driving the
+    // granular shifter into its extreme ratio limit and producing chipmunk/robotic
+    // output. Keep each pitch class near the live input, while preserving the
+    // existing hard floor at C3.
+    const int anchor = std::clamp (lastInputMidi, 0, 127);
+    const int anchorPc = pitchClass (anchor);
 
     for (size_t i = 0; i < intervals.size(); ++i)
     {
-        int n = root + intervals[i];
-        if (i >= 1 && width > 0.35f) n += 12 * (width > 0.72f ? (int) i / 2 : 0);
-        if (i >= 2 && width > 0.82f) n += 12;
-        n = std::max (48, std::min (96, n));
-        notes.push_back (n);
+        const int targetPc = pitchClass (rootPc + intervals[i]);
+        int delta = pitchClass (targetPc - anchorPc);
+        if (delta > 6)
+            delta -= 12;
+
+        int n = anchor + delta;
+
+        while (n < 48) n += 12; // hard floor C3
+        while (n > 96) n -= 12;
+
+        // WIDTH may spread upper voices by one octave, but never by more than
+        // one octave from the live input when the C3 floor allows it.
+        if (width > 0.55f && i >= 1)
+        {
+            const bool spreadThisVoice = (width > 0.82f) || ((i & 1u) != 0u);
+            const int candidate = n + (spreadThisVoice ? 12 : 0);
+            if (candidate <= 96 && candidate - anchor <= 12)
+                n = candidate;
+        }
+
+        notes.push_back (std::clamp (n, 48, 96));
     }
 
     std::sort (notes.begin(), notes.end());
