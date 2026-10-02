@@ -113,6 +113,28 @@ for need in [
 ]:
     if need not in main_screen:
         fail(f"CHORD/DREAMY mode-specific main UI missing: {need}")
+chord_return = main_screen.find("return;")
+if chord_return < 0:
+    fail("CHORD main-screen return boundary missing")
+chord_screen = main_screen[:chord_return]
+for bad in [
+    '"CHORD-A"',
+    '"CHORD-B"',
+    '"MOTION REC"',
+    '"MOTION PLAY"',
+    '"X " + juce::String',
+]:
+    if bad in chord_screen:
+        fail(f"CHORD main UI drifted from approved pre-MIDI-controller baseline: {bad}")
+
+for need in [
+    '"REVERB"',
+    "reverbSteps",
+    "std::pow (dreamyX * dreamyY, 1.35f)",
+]:
+    if need not in main_screen:
+        fail(f"DREAMY reverb indicator missing: {need}")
+
 if "isKeyCurrentlyDown" in editor:
     fail("Android Motion REC must not rely on JUCE Android isKeyCurrentlyDown()")
 for need in [
@@ -202,7 +224,7 @@ renderers = (R / "Source/ChordRenderers.h").read_text()
 for need in [
     "class SampleChordRenderer",
     "captureRecentPhrase",
-    "sampleRate * 0.090",
+    "sampleRate * 0.240",
     "class SineArpeggiator",
     "triggerRandomNote",
 ]:
@@ -218,7 +240,6 @@ for need in [
     "processChordB (buffer)",
     "processDreamy (buffer)",
     "sampleChordRenderer.pushInput",
-    "controllerTouch.load (std::memory_order_acquire)",
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
