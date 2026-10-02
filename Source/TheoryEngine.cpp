@@ -21,6 +21,29 @@ constexpr float transition[7][7] = {
 };
 
 float clamp01 (float v) { return std::max (0.0f, std::min (1.0f, v)); }
+
+void baseChord (bool minorContext, int degree,
+                std::vector<int>& intervals, std::string& suffix)
+{
+    if (! minorContext)
+    {
+        static constexpr int quality[7] = { 0, 1, 1, 0, 0, 1, 2 };
+        const int q = quality[degree];
+        intervals = q == 0 ? std::vector<int>{0,4,7}
+                           : q == 1 ? std::vector<int>{0,3,7}
+                                    : std::vector<int>{0,3,6};
+        suffix = q == 0 ? "" : q == 1 ? "m" : "dim";
+    }
+    else
+    {
+        static constexpr int quality[7] = { 1, 2, 0, 1, 1, 0, 0 };
+        const int q = quality[degree];
+        intervals = q == 0 ? std::vector<int>{0,4,7}
+                           : q == 1 ? std::vector<int>{0,3,7}
+                                    : std::vector<int>{0,3,6};
+        suffix = q == 0 ? "" : q == 1 ? "m" : "dim";
+    }
+}
 }
 
 TheoryEngine::TheoryEngine() : rng (0x43485244u) {}
@@ -77,30 +100,83 @@ ChordPlan TheoryEngine::noteOn (int detectedMidiNote)
 
     updateModeEvidence (lastInputMidi);
 
-    const auto& scale = mode == Mode::minor ? minorScale : majorScale;
-    const int rel = pitchClass (lastInputMidi - tonicPitchClass);
-    int bestDegree = 0;
-    int bestDistance = 99;
+    // Do not treat the incoming note as an implied root. Prefer a chord degree
+    // in which the live note is already a chord member, so the dry input can be
+    // root/third/fifth/etc. while the generated voices fill the remaining tones.
+    std::array<float, 7> weights {};
+    bool haveCompatibleDegree = false;
     for (int d = 0; d < 7; ++d)
     {
-        int dist = std::abs (scale[(size_t) d] - rel);
-        dist = std::min (dist, 12 - dist);
-        if (dist < bestDistance) { bestDistance = dist; bestDegree = d; }
+        if (! degreeContainsAnchor (d))
+            continue;
+        haveCompatibleDegree = true;
+        weights[(size_t) d] = transition[currentDegree][d] + 0.04f;
     }
-    currentDegree = bestDegree;
+
+    if (haveCompatibleDegree)
+    {
+        std::discrete_distribution<int> dist (weights.begin(), weights.end());
+        currentDegree = dist (rng);
+    }
+    else
+    {
+        // Chromatic/non-diatonic anchor: stay musically close, then buildPlan()
+        // adds that pitch class as a colour tone if the base chord lacks it.
+        const auto& scale = mode == Mode::minor ? minorScale : majorScale;
+        const int rel = pitchClass (lastInputMidi - tonicPitchClass);
+        int bestDegree = 0;
+        int bestDistance = 99;
+        for (int d = 0; d < 7; ++d)
+        {
+            int dist = std::abs (scale[(size_t) d] - rel);
+            dist = std::min (dist, 12 - dist);
+            if (dist < bestDistance) { bestDistance = dist; bestDegree = d; }
+        }
+        currentDegree = bestDegree;
+    }
+
     return buildPlan (currentDegree, true);
+}
+
+bool TheoryEngine::degreeContainsAnchor (int degree) const
+{
+    const bool minorContext = mode == Mode::minor;
+    const auto& scale = minorContext ? minorScale : majorScale;
+    const int rootPc = pitchClass (tonicPitchClass + scale[(size_t) degree]);
+    std::vector<int> intervals;
+    std::string suffix;
+    baseChord (minorContext, degree, intervals, suffix);
+    const int anchorPc = pitchClass (lastInputMidi);
+
+    for (const int interval : intervals)
+        if (pitchClass (rootPc + interval) == anchorPc)
+            return true;
+    return false;
 }
 
 int TheoryEngine::chooseNextDegree()
 {
     std::array<float, 7> weights {};
+    bool anyCompatible = false;
+    for (int i = 0; i < 7; ++i)
+        anyCompatible = anyCompatible || degreeContainsAnchor (i);
+
     for (int i = 0; i < 7; ++i)
     {
+        if (anyCompatible && ! degreeContainsAnchor (i))
+        {
+            weights[(size_t) i] = 0.0f;
+            continue;
+        }
+
         float w = transition[currentDegree][i];
-        // More complex settings permit less conventional jumps without making them equiprobable.
+        // COMPLEX increases the chance of less-common transitions, but the
+        // current live pitch remains a hard chord-member constraint whenever
+        // a compatible diatonic degree exists.
         const float adventurous = 0.035f + 0.11f * complexity;
         weights[(size_t) i] = w * (1.0f - 0.28f * complexity) + adventurous;
     }
+
     std::discrete_distribution<int> dist (weights.begin(), weights.end());
     return dist (rng);
 }
@@ -118,21 +194,30 @@ std::vector<int> TheoryEngine::makeVoicing (int rootPc, const std::vector<int>& 
     std::vector<int> notes;
     notes.reserve (intervals.size());
 
-    // Close position begins around C4. WIDTH progressively spreads bass and upper voices.
-    int root = 60 + pitchClass (rootPc - 0);
-    while (pitchClass (root) != pitchClass (rootPc)) ++root;
-    while (root > 71) root -= 12;
-
-    const int bassDrop = width > 0.55f ? 12 : 0;
-    root = std::max (48, root - bassDrop); // hard floor C3
+    const int anchor = std::clamp (lastInputMidi, 0, 127);
+    const int anchorPc = pitchClass (anchor);
 
     for (size_t i = 0; i < intervals.size(); ++i)
     {
-        int n = root + intervals[i];
-        if (i >= 1 && width > 0.35f) n += 12 * (width > 0.72f ? (int) i / 2 : 0);
-        if (i >= 2 && width > 0.82f) n += 12;
-        n = std::max (48, std::min (96, n));
-        notes.push_back (n);
+        const int targetPc = pitchClass (rootPc + intervals[i]);
+        int delta = pitchClass (targetPc - anchorPc);
+        if (delta > 6) delta -= 12;
+
+        int n = anchor + delta;
+        while (n < 48) n += 12;   // generated-note floor C3
+        while (n > 96) n -= 12;
+
+        // WIDTH opens the chord without forcing every voice into C4-C6 or
+        // requiring two-octave pitch shifts from a low live note.
+        if (i > 0 && width > 0.58f)
+        {
+            const bool spread = width > 0.82f || ((i & 1u) != 0u);
+            const int candidate = n + (spread ? 12 : 0);
+            if (candidate <= 96 && candidate - anchor <= 19)
+                n = candidate;
+        }
+
+        notes.push_back (std::clamp (n, 48, 96));
     }
 
     std::sort (notes.begin(), notes.end());
@@ -161,24 +246,10 @@ ChordPlan TheoryEngine::buildPlan (int degree, bool forceAnchorResponse)
     // Diatonic quality.
     std::vector<int> intervals;
     std::string suffix;
-    if (! minorContext)
-    {
-        static constexpr int quality[7] = { 0, 1, 1, 0, 0, 1, 2 }; // maj,min,dim
-        const int q = quality[degree];
-        intervals = q == 0 ? std::vector<int>{0,4,7}
-                           : q == 1 ? std::vector<int>{0,3,7}
-                                    : std::vector<int>{0,3,6};
-        suffix = q == 0 ? "" : q == 1 ? "m" : "dim";
-    }
-    else
-    {
-        static constexpr int quality[7] = { 1, 2, 0, 1, 1, 0, 0 };
-        const int q = quality[degree];
-        intervals = q == 0 ? std::vector<int>{0,4,7}
-                           : q == 1 ? std::vector<int>{0,3,7}
-                                    : std::vector<int>{0,3,6};
-        suffix = q == 0 ? "" : q == 1 ? "m" : "dim";
-    }
+    baseChord (minorContext, degree, intervals, suffix);
+    const auto baseIntervals = intervals;
+    const auto baseSuffix = suffix;
+    const int baseRootPc = degreeRootPc;
 
     std::uniform_real_distribution<float> uni (0.0f, 1.0f);
     const float r = uni (rng);
@@ -221,6 +292,32 @@ ChordPlan TheoryEngine::buildPlan (int degree, bool forceAnchorResponse)
         {
             plan.rootPitchClass = pitchClass (tonicPitchClass + 1); // bII7 tritone substitute
             intervals = {0,4,7,10}; suffix = "7"; plan.substituted = true;
+        }
+    }
+
+    const int anchorPc = pitchClass (lastInputMidi);
+    auto containsAnchor = [&] (int rootPc, const std::vector<int>& ivals)
+    {
+        for (const int interval : ivals)
+            if (pitchClass (rootPc + interval) == anchorPc)
+                return true;
+        return false;
+    };
+
+    if (! containsAnchor (plan.rootPitchClass, intervals))
+    {
+        if (containsAnchor (baseRootPc, baseIntervals))
+        {
+            plan.rootPitchClass = baseRootPc;
+            intervals = baseIntervals;
+            suffix = baseSuffix;
+            plan.substituted = false;
+        }
+        else
+        {
+            // Chromatic input: keep the chosen harmony but add the live pitch
+            // class explicitly as a colour tone rather than dropping the anchor.
+            intervals.push_back (pitchClass (anchorPc - plan.rootPitchClass));
         }
     }
 
