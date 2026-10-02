@@ -283,14 +283,17 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
 
         if (audible)
         {
-            buffer.setSample (0, i, dryLeft * 0.84f + arp * 0.72f);
+            buffer.setSample (0, i, dryLeft * 0.68f + arp * 0.52f);
             if (channels > 1)
-                buffer.setSample (1, i, dryRight * 0.84f + arp * 0.72f);
+                buffer.setSample (1, i, dryRight * 0.68f + arp * 0.52f);
         }
     }
 
     if (running.load (std::memory_order_relaxed) && haveChord)
+    {
         processChordReverb (buffer);
+        buffer.applyGain (0.86f); // explicit CHORD-B output headroom
+    }
 }
 
 void RealtimeChordFxAudioProcessor::processChordReverb (juce::AudioBuffer<float>& buffer)
@@ -478,10 +481,12 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
     // Map the accepted performance effect gate directly:
     // effect enabled -> running, Dreamy mode -> effectMode, performance gate
     // -> current XY touch / Motion playback.
+    // XY values are latched on touch release. Dreamy continues using the
+    // last X/Y position until the next touch; touch state itself is only for
+    // interaction/MIDI note-off handling.
     const bool enabled =
         running.load (std::memory_order_acquire)
-        && apvts.getRawParameterValue (ParamID::effectMode)->load() >= 0.5f
-        && controllerTouch.load (std::memory_order_acquire);
+        && apvts.getRawParameterValue (ParamID::effectMode)->load() >= 0.5f;
     const float x = juce::jlimit (0.0f, 1.0f,
         (float) controllerX.load (std::memory_order_relaxed) / 127.0f);
     const float y = juce::jlimit (0.0f, 1.0f,
