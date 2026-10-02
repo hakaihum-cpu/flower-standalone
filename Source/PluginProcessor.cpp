@@ -248,22 +248,24 @@ void RealtimeChordFxAudioProcessor::processChordAudio (juce::AudioBuffer<float>&
     if (n <= 0 || channels <= 0)
         return;
 
-    const bool harmonyEnabled =
+    const bool canTrack =
         running.load (std::memory_order_acquire)
         && haveChord
-        && chordMidiGateOpen
         && chordRatioCount > 0
         && pitchSamplesSinceValid < juce::roundToInt (currentSampleRate * 0.20);
+    const bool audibleHarmony = canTrack && chordMidiGateOpen;
 
     for (int i = 0; i < n; ++i)
     {
         const float dry = buffer.getSample (0, i);
-
-        if (! harmonyEnabled)
+        if (! canTrack)
             continue;
 
         psolaCurrentPeriod += 0.0025f * (psolaTargetPeriod - psolaCurrentPeriod);
         const float harmony = psolaHarmony.processSample (dry, psolaCurrentPeriod);
+
+        if (! audibleHarmony)
+            continue;
 
         // Keep the actual live input as the immediate anchor voice. Only the
         // other chord tones are delayed/resynthesised by PSOLA.
@@ -272,6 +274,7 @@ void RealtimeChordFxAudioProcessor::processChordAudio (juce::AudioBuffer<float>&
             buffer.setSample (ch, i, out);
     }
 }
+
 
 void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
