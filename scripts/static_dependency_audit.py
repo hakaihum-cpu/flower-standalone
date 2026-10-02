@@ -218,6 +218,7 @@ for need in [
     "processChordB (buffer)",
     "processDreamy (buffer)",
     "sampleChordRenderer.pushInput",
+    "controllerTouch.load (std::memory_order_acquire)",
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
