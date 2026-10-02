@@ -6,7 +6,7 @@
 - When slot 9 reaches 5 seconds, recording stops automatically and the app enters PLAY mode.
 - Each tile displays its recorded waveform.
 - Tapping a populated tile plays that slot from the beginning. Multiple different tiles can play at the same time.
-- RANDOM mode chooses among populated slots. A new random slot is started on a clock beat only when no slot is currently playing; it does not chop an already playing five-second sample.
+- RANDOM mode uses an independent random playback voice. Its switch interval is randomly chosen from 1, 2, 3, 4, or 5 seconds each time. When the interval expires, RANDOM cuts its current slot even mid-playback and immediately switches to another populated slot. Manual multi-tap voices continue independently.
 - Clock source: INTERNAL or MIDI clock (24 PPQN).
 - INTERNAL BPM range: 30-300.
 - UI repaint target: 20 Hz for waveform/playhead motion.
