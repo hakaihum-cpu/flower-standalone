@@ -443,6 +443,14 @@ public:
             default: left = right = input; break;
         }
 
+        // Time-based effects keep decaying after a later note selects a
+        // different effect or NONE. This lets LONG DELAY/REVERB actually
+        // produce their tails across arpeggiator steps.
+        if (effect != shortDelay) { left += shortL; right += shortR; }
+        if (effect != longDelay)  { left += longL;  right += longR; }
+        if (effect != tapeDelay)  { left += tapeDelayL; right += tapeDelayR; }
+        if (effect != reverb)     { left += revL; right += revR; }
+
         // Keep the generated layer safely below full scale before the existing
         // CHORD-B mix/reverb headroom stage.
         left = std::clamp (left, -0.72f, 0.72f);
