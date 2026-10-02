@@ -187,6 +187,92 @@ void RealtimeChordFxAudioProcessor::handleMidiClock (const juce::MidiBuffer& mid
     }
 }
 
+void RealtimeChordFxAudioProcessor::updateChordRatios()
+{
+    chordRatios.fill (1.0f);
+    chordRatioCount = 0;
+
+    const int anchorMidi = detectedMidi.load (std::memory_order_relaxed);
+    if (anchorMidi < 0 || currentPlan.midiNotes.empty())
+    {
+        psolaHarmony.setRatios (chordRatios, 0);
+        return;
+    }
+
+    const int anchorPc = (anchorMidi % 12 + 12) % 12;
+    for (const int note : currentPlan.midiNotes)
+    {
+        const int pc = (note % 12 + 12) % 12;
+        if (pc == anchorPc)
+            continue; // the live dry input is this chord member
+
+        float semitones = (float) note - lastInputMidiFloat;
+
+        // Use the nearest useful octave of each target pitch class. The chord
+        // identity comes from pitch class; this keeps PSOLA inside +/-1 octave.
+        while (semitones > 12.0f) semitones -= 12.0f;
+        while (semitones < -12.0f) semitones += 12.0f;
+
+        const float ratio = std::pow (2.0f, semitones / 12.0f);
+        bool duplicate = false;
+        for (int i = 0; i < chordRatioCount; ++i)
+            duplicate = duplicate || std::abs (chordRatios[(size_t) i] - ratio) < 0.012f;
+
+        if (! duplicate && chordRatioCount < chordfx::PsolaHarmonyBank::maxVoices)
+            chordRatios[(size_t) chordRatioCount++] = ratio;
+    }
+
+    psolaHarmony.setRatios (chordRatios, chordRatioCount);
+}
+
+void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
+{
+    psolaHarmony.reset();
+    chordRatioCount = 0;
+    if (mode == 0 && haveChord)
+        updateChordRatios();
+
+    dreamyVoiceActive = { false, false };
+    dreamyWetLowpass = { 0.0f, 0.0f };
+    dreamyDelayLowpass = { 0.0f, 0.0f };
+    dreamyDelayWritePosition = 0;
+    if (dreamyDelayBuffer.getNumSamples() > 0)
+        dreamyDelayBuffer.clear();
+    dreamyReverb.reset();
+}
+
+void RealtimeChordFxAudioProcessor::processChordAudio (juce::AudioBuffer<float>& buffer)
+{
+    const int n = buffer.getNumSamples();
+    const int channels = buffer.getNumChannels();
+    if (n <= 0 || channels <= 0)
+        return;
+
+    const bool harmonyEnabled =
+        running.load (std::memory_order_acquire)
+        && haveChord
+        && chordMidiGateOpen
+        && chordRatioCount > 0
+        && pitchSamplesSinceValid < juce::roundToInt (currentSampleRate * 0.20);
+
+    for (int i = 0; i < n; ++i)
+    {
+        const float dry = buffer.getSample (0, i);
+
+        if (! harmonyEnabled)
+            continue;
+
+        psolaCurrentPeriod += 0.0025f * (psolaTargetPeriod - psolaCurrentPeriod);
+        const float harmony = psolaHarmony.processSample (dry, psolaCurrentPeriod);
+
+        // Keep the actual live input as the immediate anchor voice. Only the
+        // other chord tones are delayed/resynthesised by PSOLA.
+        const float out = dry * 0.78f + harmony * 0.62f;
+        for (int ch = 0; ch < channels; ++ch)
+            buffer.setSample (ch, i, out);
+    }
+}
+
 void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -195,6 +281,14 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         juce::jmax (1, juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels()));
     const bool midiClockMode =
         apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
+    const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
+        apvts.getRawParameterValue (ParamID::effectMode)->load()));
+
+    if (effectMode != lastEffectMode)
+    {
+        lastEffectMode = effectMode;
+        resetModeAudioState (effectMode);
+    }
 
     handleMotionCommand();
     if (midiClockMode) handleMidiClock (midi);
@@ -207,9 +301,12 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     {
         pitchDetector.reset();
         theory.reset();
+        psolaHarmony.reset();
         haveChord = false;
         pendingMidi = -1;
         stableCount = 0;
+        chordRatioCount = 0;
+        pitchSamplesSinceValid = 1000000;
         detectedMidi.store (-1, std::memory_order_relaxed);
 
         visualFrame.store (controllerFrameForXY (controllerX.load(), controllerY.load()),
@@ -220,6 +317,11 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         chordMidiGateOpen = false;
         chordMidiStopRequested = true;
         chordMidiRefreshRequested = false;
+        dreamyVoiceActive = { false, false };
+        dreamyWetLowpass = { 0.0f, 0.0f };
+        dreamyDelayLowpass = { 0.0f, 0.0f };
+        dreamyReverb.reset();
+
         const juce::SpinLock::ScopedLockType lock (labelLock);
         chordLabel = "--";
     }
@@ -228,8 +330,6 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     double squareSum = 0.0;
     int nonZeroSamples = 0;
 
-    // Build a clean stereo dry buffer from the selected live input. The audio
-    // effect path no longer uses generated chord voices.
     for (int i = 0; i < n; ++i)
     {
         float mono = 0.0f;
@@ -243,9 +343,20 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         if (absolute > 1.0e-6f)
             ++nonZeroSamples;
 
+        if (pitchSamplesSinceValid < 100000000)
+            ++pitchSamplesSinceValid;
+
         const auto estimate = pitchDetector.pushSample (mono);
         if (estimate.valid)
+        {
+            psolaTargetPeriod = juce::jlimit (
+                8.0f, (float) (currentSampleRate / 60.0),
+                (float) (currentSampleRate / estimate.hz));
+            if (pitchSamplesSinceValid > juce::roundToInt (currentSampleRate * 0.20))
+                psolaCurrentPeriod = psolaTargetPeriod;
+            pitchSamplesSinceValid = 0;
             acceptPitch (estimate);
+        }
 
         if (buffer.getNumChannels() >= 1) buffer.setSample (0, i, mono);
         if (buffer.getNumChannels() >= 2) buffer.setSample (1, i, mono);
@@ -260,8 +371,8 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
                       + 0.18f * blockPeak,
                       std::memory_order_relaxed);
 
-    // Keep the theory engine only for optional CHORD MIDI OUT. It no longer
-    // creates the audible signal.
+    // Theory keeps running in either audio mode because CHORD MIDI OUT may be
+    // used independently from the audible CHORD/DREAMY selection.
     if (running.load (std::memory_order_relaxed) && haveChord)
     {
         if (gateSamplesRemaining > 0.0)
@@ -286,9 +397,10 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     processChordMidi (midi);
 
-    // Always feed live input into the Dreamy history. Running only controls
-    // whether the wet micro-loop layer is heard, matching the accepted effect.
-    processDreamy (buffer);
+    if (effectMode == 0)
+        processChordAudio (buffer);
+    else
+        processDreamy (buffer);
 }
 
 void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buffer)
