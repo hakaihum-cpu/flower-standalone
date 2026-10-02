@@ -1,6 +1,0 @@
-local_key,type,summary,status,notes
-CHORD-1,Story,Bootstrap isolated Android standalone project,IN PROGRESS,"Local bootstrap only until dedicated repo/Jira project exists"
-CHORD-2,Story,Theory-guided realtime chord engine,IN PROGRESS,"YIN + TheoryEngine + pitch bank MVP"
-CHORD-3,Story,User-supplied 300-frame visual sequence,IN PROGRESS,"Exact JPEG bytes packed; no generated substitution"
-CHORD-4,Story,Minimal touch UI and REC/CLEAR interaction,IN PROGRESS,"Text/thin bars; background tap transport"
-CHORD-5,Story,Audio input selection and iRig detection,IN PROGRESS,"JUCE device enumeration; hardware verification pending"
