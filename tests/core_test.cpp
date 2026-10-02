@@ -31,6 +31,11 @@ int main()
     }
 
     // New live note becomes the new hard anchor without being forced to root.
+    // While tonality is still ambiguous, a changed note must still survive
+    // the bootstrap path as an actual chord member.
+    p = theory.noteOn (62); // D
+    assert (containsPc (p, 2));
+
     p = theory.noteOn (64); // E
     assert (containsPc (p, 4));
     for (int i=0;i<200;++i)
