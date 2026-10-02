@@ -71,7 +71,7 @@ When MIDI CONTROL is ON:
 - Generated ChordPlan notes are constrained to MIDI 60..83 (C4..B5).
 - The generated ChordPlan must contain the live pitch class.
 - Dry live input remains audible as the performance anchor.
-- CHORD-A captures a real recent input phrase (about 240 ms) when a new stable input pitch is detected, then resamples that same phrase simultaneously at the ChordPlan target pitches. It must not reduce the source to one/two pitch periods, PSOLA grains, or a micro-loop oscillator. BAR progression reuses the captured phrase rather than recapturing silence.
+- CHORD-A captures a real recent input phrase and resamples that same phrase simultaneously at the ChordPlan target pitches. HOLD=0 preserves the approved minimum of 240 ms capture / 20 ms seam crossfade. HOLD can extend them together up to 2000 ms / 160 ms; it never makes either value shorter than the approved minimum. HOLD is CHORD-A only. The final HOLD value is committed on touch release with one recapture, avoiding repeated capture work during a drag. It must not reduce the source to one/two pitch periods, PSOLA grains, or a micro-loop oscillator. BAR progression reuses the captured phrase rather than recapturing silence.
 - CHORD-B uses the same ChordPlan but renders random constituent notes with a sine-wave arpeggiator at an eighth-note step.
 - CHORD-A and CHORD-B both pass through the shared fixed reverb stage.
 - TD-PSOLA is not on the audible CHORD-A/B path.
