@@ -167,12 +167,19 @@ for need in [
     if need not in theory:
         fail(f"harmony register contract missing: {need}")
 for need in [
-    "2048 : 1024",
+    "fftSize = 1024",
+    "hopSize = 256",
+    "previousAnalysisPhase",
+    "analysisTrueBin",
+    "sumPhase",
+    "synthWeightedBin",
     "0.5f, 2.5f",
-    "sum / (float) activeVoices",
 ]:
-    if need not in granular:
-        fail(f"pitch-shifter quality guard missing: {need}")
+    if need not in granular and need not in (R / "Source/GranularPitchBank.h").read_text():
+        fail(f"phase-vocoder quality guard missing: {need}")
+for forbidden in ["struct Grain", "readLinear", "launchCounter", "grainSize"]:
+    if forbidden in granular or forbidden in (R / "Source/GranularPitchBank.h").read_text():
+        fail(f"obsolete granular shifter token still present: {forbidden}")
 if "single unstable YIN estimate" not in processor:
     fail("pitch-ratio stability guard missing")
 

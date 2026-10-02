@@ -96,8 +96,10 @@ On the target Android device with iRig Stream connected, CONFIG must expose enou
 ## Harmony pitch-quality constraints
 - Generated audio voicings must be placed around the current accepted input-note register instead of a fixed C4/C5 register.
 - The existing generated-note hard floor at C3 (MIDI 48) remains.
-- Avoid unnecessary two-octave upward shifts that drive the granular pitch shifter into extreme ratios.
-- Granular pitch shifting uses 1024-sample grains at normal Android sample rates and 2048 samples at >=88.2 kHz, with 50% overlap.
+- Avoid unnecessary two-octave upward shifts that drive the pitch shifter into extreme ratios.
+- The legacy fixed-grain overlap/resample shifter is not accepted: a 220 Hz sine at ratio 2.0 must produce 440 Hz as the dominant component rather than the former ~408/502 Hz sidebands.
+- Pitch shifting uses an internal 1024-point, hop-256 phase-vocoder analysis/synthesis path. The analysis FFT is shared by all harmony voices.
+- No new external audio library or JUCE-only dependency is introduced into the core pitch-shifter source; the existing dependency-free C++ preflight remains valid.
 - Per-voice pitch ratio is constrained to 0.5..2.5 as a safety bound.
-- Multi-voice granular output is averaged by active voice count to reduce clipping/flattened transients.
+- Multi-voice output is averaged by active voice count to reduce clipping/flattened transients.
 - A single unstable pitch-detector estimate must not immediately retune all active harmony voices. Accepted-note bend/vibrato may follow with smoothing.

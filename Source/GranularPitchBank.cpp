@@ -29,7 +29,7 @@ void GranularPitchBank::reset()
     analysisPrimed = false;
     inputHistory.fill (0.0f);
     outputRing.fill (0.0f);
-    spectrum.fill ({ 0.0f, 0.0f });
+    spectrum.fill (std::complex<float> { 0.0f, 0.0f });
     previousAnalysisPhase.fill (0.0f);
     analysisMagnitude.fill (0.0f);
     analysisTrueBin.fill (0.0f);
@@ -183,7 +183,7 @@ void GranularPitchBank::processFrame()
             voice.synthWeightedBin[(size_t) target] += magnitude * shiftedTrueBin;
         }
 
-        spectrum.fill ({ 0.0f, 0.0f });
+        spectrum.fill (std::complex<float> { 0.0f, 0.0f });
 
         for (int k = 0; k < numBins; ++k)
         {
