@@ -26,6 +26,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     theory.reset();
     sampleChordRenderer.prepare (currentSampleRate);
     sineArpeggiator.prepare (currentSampleRate);
+    chordBRandomFx.prepare (currentSampleRate);
     pendingMidi = -1;
     stableCount = 0;
     haveChord = false;
@@ -214,6 +215,7 @@ void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
     if (mode == 0)
     {
         sineArpeggiator.reset();
+        chordBRandomFx.reset();
         chordReverb.reset();
 
         if (haveChord)
@@ -269,7 +271,9 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
 
     const float bpm = apvts.getRawParameterValue (ParamID::internalBpm)->load();
     const float length = apvts.getRawParameterValue (ParamID::length)->load();
+    const float effectAmount = apvts.getRawParameterValue (ParamID::effect)->load();
     sineArpeggiator.setTiming (bpm, length);
+    chordBRandomFx.setProbability (effectAmount);
 
     const bool audible =
         running.load (std::memory_order_acquire)
@@ -282,11 +286,18 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
         const float dryRight = channels > 1 ? buffer.getSample (1, i) : dryLeft;
         const float arp = sineArpeggiator.renderSample (audible);
 
+        if (sineArpeggiator.consumeNoteTrigger())
+            chordBRandomFx.chooseForNote();
+
+        float effectedLeft = arp;
+        float effectedRight = arp;
+        chordBRandomFx.processSample (arp, effectedLeft, effectedRight);
+
         if (audible)
         {
-            buffer.setSample (0, i, dryLeft * 0.68f + arp * 0.52f);
+            buffer.setSample (0, i, dryLeft * 0.68f + effectedLeft * 0.52f);
             if (channels > 1)
-                buffer.setSample (1, i, dryRight * 0.68f + arp * 0.52f);
+                buffer.setSample (1, i, dryRight * 0.68f + effectedRight * 0.52f);
         }
     }
 
@@ -354,6 +365,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         theory.reset();
         sampleChordRenderer.reset();
         sineArpeggiator.reset();
+        chordBRandomFx.reset();
         chordReverb.reset();
         haveChord = false;
         pendingMidi = -1;
@@ -1062,6 +1074,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::width, "WIDTH", 0.0f, 1.0f, 0.35f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::length, "LENGTH", 0.0f, 1.0f, 0.70f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hold, "HOLD", 0.0f, 1.0f, 0.0f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::effect, "EFFECT", 0.0f, 1.0f, 0.0f));
     p.add (std::make_unique<juce::AudioParameterInt> (ParamID::midiChannel, "MIDI CH", 1, 16, 1));
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::clockMode, "CLOCK", juce::StringArray { "Internal", "MIDI" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::internalBpm, "BPM", 40.0f, 240.0f, 120.0f));
