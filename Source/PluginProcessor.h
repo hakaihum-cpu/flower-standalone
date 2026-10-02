@@ -89,6 +89,7 @@ private:
     chordfx::TheoryEngine theory;
     chordfx::SampleChordRenderer sampleChordRenderer;
     chordfx::SineArpeggiator sineArpeggiator;
+    chordfx::ChordBRandomFx chordBRandomFx;
     juce::Reverb chordReverb;
 
     double currentSampleRate = 48000.0;
