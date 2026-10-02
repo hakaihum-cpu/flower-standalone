@@ -180,11 +180,12 @@ void RealtimeChordFxAudioProcessorEditor::setParameterFromX (DragParam which, fl
     if (which == DragParam::bar) idx = 1;
     else if (which == DragParam::width) idx = 2;
     else if (which == DragParam::length) idx = 3;
-    auto r = parameterBounds (idx);
+    auto r = which == DragParam::hold ? holdBounds() : parameterBounds (idx);
     const float norm = juce::jlimit (0.0f, 1.0f, (x - r.getX()) / r.getWidth());
     if (which == DragParam::complex) setNorm (ParamID::complex, norm);
     else if (which == DragParam::width) setNorm (ParamID::width, norm);
     else if (which == DragParam::length) setNorm (ParamID::length, norm);
+    else if (which == DragParam::hold) setNorm (ParamID::hold, norm);
     else if (which == DragParam::bar)
     {
         const int step = juce::jlimit (0, 3, juce::roundToInt (norm * 3.0f));
@@ -196,6 +197,11 @@ juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::parameterBounds (int
 {
     const float x = 28.0f + i * 173.0f;
     return { x, 625.0f, 148.0f, 64.0f };
+}
+
+juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::holdBounds() const
+{
+    return { 548.0f, 516.0f, 144.0f, 56.0f };
 }
 
 juce::String RealtimeChordFxAudioProcessorEditor::noteText (int midi) const
@@ -250,6 +256,8 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
 {
     const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+    const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::chordMode)->load()));
 
     if (effectMode == 0)
     {
@@ -275,6 +283,16 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
         g.drawText ("IN  " + noteText (processor.getDetectedMidi()) + "    CHORD  " + processor.getChordLabel(),
                     28, 578, 520, 28, juce::Justification::centredLeft);
         g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
+
+        if (chordMode == 0)
+        {
+            const float hold = juce::jlimit (0.0f, 1.0f,
+                processor.state().getRawParameterValue (ParamID::hold)->load());
+            const int captureMs = juce::roundToInt (240.0f + hold * 1760.0f);
+            const int crossfadeMs = juce::roundToInt (20.0f + hold * 140.0f);
+            paintBar (g, holdBounds(), "HOLD", hold,
+                      juce::String (captureMs) + "/" + juce::String (crossfadeMs) + "ms");
+        }
 
         const float complex = processor.state().getRawParameterValue (ParamID::complex)->load();
         const int bar = juce::jlimit (0, 3, juce::roundToInt (processor.state().getRawParameterValue (ParamID::bar)->load()));
@@ -837,6 +855,16 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
                 repaint();
                 return;
             }
+        }
+
+        const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
+            processor.state().getRawParameterValue (ParamID::chordMode)->load()));
+        if (chordMode == 0 && holdBounds().contains (p))
+        {
+            dragging = DragParam::hold;
+            setParameterFromX (dragging, p.x);
+            repaint();
+            return;
         }
 
         const bool midiControlOn =
