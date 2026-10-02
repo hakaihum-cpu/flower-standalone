@@ -66,7 +66,8 @@ private:
     void beginRandomPlayback (int slot);
     void stopRandomPlayback();
     void scheduleNextRandomSwitch();
-    void updateRandomPlayback (int numSamples);
+    void updateRandomModeState();
+    void mixRandomPlayback (juce::AudioBuffer<float>& buffer, int numSamples);
     void handleClock (const juce::MidiBuffer& midi, int numSamples);
     int chooseRandomValidSlot();
 
@@ -97,6 +98,8 @@ private:
     std::atomic<int> uiRecordingSlot { -1 };
     std::array<std::atomic<bool>, kSlots> uiPlaying;
     std::array<std::atomic<float>, kSlots> uiPlaybackProgress;
+    std::atomic<int> uiRandomSlot { -1 };
+    std::atomic<float> uiRandomProgress { 0.0f };
 
     double internalBeatSamplesRemaining = 0.0;
     int midiClockTicks = 0;
