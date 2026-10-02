@@ -102,16 +102,6 @@ void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e
     samplesUntilChange = barIntervalSamples();
 }
 
-void RealtimeChordFxAudioProcessor::refreshPitchRatios()
-{
-    if (! haveChord || currentPlan.midiNotes.empty()) return;
-    std::vector<float> ratios;
-    ratios.reserve (currentPlan.midiNotes.size());
-    for (int target : currentPlan.midiNotes)
-        ratios.push_back (std::pow (2.0f, ((float) target - lastInputMidiFloat) / 12.0f));
-    pitchBank.setTargetRatios (ratios);
-}
-
 void RealtimeChordFxAudioProcessor::applyChord (const chordfx::ChordPlan& plan)
 {
     if (plan.midiNotes.empty()) return;
@@ -121,10 +111,6 @@ void RealtimeChordFxAudioProcessor::applyChord (const chordfx::ChordPlan& plan)
         const juce::SpinLock::ScopedLockType lock (labelLock);
         chordLabel = plan.label;
     }
-    if (apvts.getRawParameterValue (ParamID::midiControl)->load() < 0.5f)
-        visualFrame.store ((visualFrame.load (std::memory_order_relaxed) + 1) % 300,
-                           std::memory_order_relaxed);
-
     const float length = apvts.getRawParameterValue (ParamID::length)->load();
     if (length >= 0.995f) gateSamplesRemaining = -1.0;
     else gateSamplesRemaining = std::max (1.0, barIntervalSamples() * (0.08 + 0.92 * length));
@@ -210,11 +196,8 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         stableCount = 0;
         detectedMidi.store (-1, std::memory_order_relaxed);
 
-        if (apvts.getRawParameterValue (ParamID::midiControl)->load() < 0.5f)
-            visualFrame.store (0, std::memory_order_relaxed);
-        else
-            visualFrame.store (controllerFrameForXY (controllerX.load(), controllerY.load()),
-                               std::memory_order_relaxed);
+        visualFrame.store (controllerFrameForXY (controllerX.load(), controllerY.load()),
+                           std::memory_order_relaxed);
 
         samplesUntilChange = gateSamplesRemaining = 0.0;
         midiClockTicks = 0;

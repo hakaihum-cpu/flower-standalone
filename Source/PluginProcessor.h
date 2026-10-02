@@ -4,7 +4,6 @@
 #include <array>
 #include <cstdint>
 #include <string>
-#include "GranularPitchBank.h"
 #include "TheoryEngine.h"
 #include "YinPitchDetector.h"
 
@@ -64,7 +63,6 @@ public:
 private:
     void acceptPitch (const chordfx::PitchEstimate& estimate);
     void applyChord (const chordfx::ChordPlan& plan);
-    void refreshPitchRatios();
     double barIntervalSamples() const;
     void handleMidiClock (const juce::MidiBuffer& midi);
     void advanceProgression();
@@ -83,7 +81,6 @@ private:
     juce::AudioProcessorValueTreeState apvts;
     chordfx::YinPitchDetector pitchDetector;
     chordfx::TheoryEngine theory;
-    chordfx::GranularPitchBank pitchBank;
 
     double currentSampleRate = 48000.0;
     std::atomic<bool> running { false };
@@ -104,8 +101,8 @@ private:
     double gateSamplesRemaining = 0.0;
     int midiClockTicks = 0;
     bool midiClockRunning = false;
-    std::atomic<int> controllerX { 0 };
-    std::atomic<int> controllerY { 0 };
+    std::atomic<int> controllerX { 36 };
+    std::atomic<int> controllerY { 36 };
     std::atomic<bool> controllerTouch { false };
     std::atomic<bool> controllerDirty { false };
     int activeControllerNoteX = -1;
