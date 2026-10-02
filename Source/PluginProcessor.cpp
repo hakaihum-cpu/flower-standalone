@@ -401,8 +401,8 @@ void RealtimeChordFxAudioProcessor::handleMotionCommand()
             motionLengthTicks = motionPositionTicks;
             motionPositionTicks = 0;
             motionState.store (2, std::memory_order_relaxed);
-            controllerTouch.store (true, std::memory_order_relaxed);
-            controllerDirty.store (true, std::memory_order_release);
+            applyMotionPoint ((int) motionX[0], (int) motionY[0]);
+            motionPositionTicks = motionLengthTicks > 1 ? 1 : 0;
         }
         else
         {
@@ -443,8 +443,8 @@ void RealtimeChordFxAudioProcessor::processMotionTick()
             motionState.store (motionLengthTicks > 0 ? 2 : 0, std::memory_order_relaxed);
             if (motionLengthTicks > 0)
             {
-                controllerTouch.store (true, std::memory_order_relaxed);
-                controllerDirty.store (true, std::memory_order_release);
+                applyMotionPoint ((int) motionX[0], (int) motionY[0]);
+                motionPositionTicks = motionLengthTicks > 1 ? 1 : 0;
             }
         }
         return;
