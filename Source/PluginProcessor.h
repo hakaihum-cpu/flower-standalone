@@ -64,7 +64,7 @@ public:
 
 private:
     void acceptPitch (const chordfx::PitchEstimate& estimate);
-    void applyChord (const chordfx::ChordPlan& plan);
+    void applyChord (const chordfx::ChordPlan& plan, bool recaptureSample);
     double barIntervalSamples() const;
     void handleMidiClock (const juce::MidiBuffer& midi);
     void advanceProgression();
