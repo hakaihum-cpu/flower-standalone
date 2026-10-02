@@ -413,6 +413,8 @@ void RealtimeChordFxAudioProcessor::handleMotionCommand()
 
     motionTargetTicks = juce::jlimit (1, maxMotionBars,
         juce::roundToInt (apvts.getRawParameterValue (ParamID::motionBars)->load())) * motionTicksPerBar;
+    controllerTouch.store (false, std::memory_order_relaxed);
+    controllerDirty.store (true, std::memory_order_release);
     motionLengthTicks = 0;
     motionPositionTicks = 0;
     motionSamplesUntilNextTick = 0.0;

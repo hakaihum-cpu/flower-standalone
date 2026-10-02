@@ -117,6 +117,7 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
     : juce::AudioProcessorEditor (&p), processor (p)
 {
     setOpaque (true);
+    setWantsKeyboardFocus (true);
 #if JUCE_ANDROID
     // On Android use the host's actual logical content bounds instead of forcing
     // a 720x720 density-independent editor, which can be clipped on 720px panels.
@@ -246,6 +247,15 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
                     28, 548, 240, 22, juce::Justification::centredLeft);
         if (! processor.isRunning())
             g.drawText ("REC", 24, 20, 80, 28, juce::Justification::centredLeft);
+
+        const int motion = processor.getMotionState();
+        if (motion != 0)
+        {
+            g.setColour (motion == 1 ? juce::Colour (0xfff23a36)
+                                     : juce::Colours::white.withAlpha (0.82f));
+            g.drawText (motion == 1 ? "MOTION REC" : "MOTION PLAY",
+                        270, 548, 170, 22, juce::Justification::centredLeft);
+        }
     }
 
     const float complex = processor.state().getRawParameterValue (ParamID::complex)->load();
@@ -413,6 +423,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics
     const int ycc = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiYCC)->load());
     const int key = juce::jlimit (0, 11, juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiKey)->load()));
     const int scale = juce::jlimit (0, 4, juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiScale)->load()));
+    const int motionBars = juce::jlimit (1, 16, juce::roundToInt (processor.state().getRawParameterValue (ParamID::motionBars)->load()));
 
     g.setColour (juce::Colours::white.withAlpha (0.92f));
     g.setFont (juce::FontOptions (20.0f));
@@ -444,19 +455,20 @@ void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics
     row (414, "SCALE", scales[scale]);
     row (456, "PRESET", juce::String (midiPresetSlot)
                            + (processor.hasMidiControllerPreset (midiPresetSlot) ? "  SAVED" : "  EMPTY"));
+    row (498, "MOTION BARS", juce::String (motionBars));
 
     g.setColour (juce::Colours::white.withAlpha (0.82f));
-    g.drawText ("LOAD", 110, 510, 180, 42, juce::Justification::centred);
-    g.drawText ("SAVE", 430, 510, 180, 42, juce::Justification::centred);
+    g.drawText ("LOAD", 110, 542, 180, 38, juce::Justification::centred);
+    g.drawText ("SAVE", 430, 542, 180, 38, juce::Justification::centred);
 
-    g.setFont (juce::FontOptions (15.0f));
+    g.setFont (juce::FontOptions (14.0f));
     g.drawText ("X " + juce::String (processor.getMidiControllerX()).paddedLeft ('0', 3)
                 + "     Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
-                180, 570, 360, 30, juce::Justification::centred);
-    g.setFont (juce::FontOptions (12.0f));
+                180, 588, 360, 26, juce::Justification::centred);
+    g.setFont (juce::FontOptions (11.5f));
     g.setColour (juce::Colours::white.withAlpha (0.52f));
-    g.drawText ("X: left 0 -> right 127    Y: bottom 0 -> top 127", 54, 614, 560, 24, juce::Justification::centredLeft);
-    g.drawText ("CLOCK: 40-240 BPM / 24 PPQN. One CLOCK axis at a time.", 54, 638, 610, 24, juce::Justification::centredLeft);
+    g.drawText ("L1: REC -> PLAY    R1: CLEAR    96 motion ticks / bar", 54, 618, 610, 22, juce::Justification::centredLeft);
+    g.drawText ("X 0..127 / Y 0..127. CLOCK uses 24 PPQN.", 54, 640, 610, 22, juce::Justification::centredLeft);
     if (midiPresetMessage.isNotEmpty())
         g.drawText (midiPresetMessage, 54, 666, 560, 22, juce::Justification::centredLeft);
 }
@@ -587,7 +599,12 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             midiPresetSlot = juce::jlimit (1, 8, midiPresetSlot + dir);
             midiPresetMessage.clear();
         }
-        else if (p.y >= 504 && p.y < 560)
+        else if (p.y >= 496 && p.y < 538)
+        {
+            const int v = juce::roundToInt (processor.state().getRawParameterValue (ParamID::motionBars)->load());
+            setChoiceActual (ParamID::motionBars, juce::jlimit (1, 16, v + dir));
+        }
+        else if (p.y >= 540 && p.y < 584)
         {
             if (p.x < 360)
                 midiPresetMessage = processor.loadMidiControllerPreset (midiPresetSlot)
@@ -681,4 +698,25 @@ void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
         processor.releaseMidiControllerTouch();
         repaint();
     }
+}
+
+bool RealtimeChordFxAudioProcessorEditor::keyStateChanged (bool)
+{
+    const bool l1Now = juce::KeyPress::isKeyCurrentlyDown (juce::KeyPress::F17Key);
+    const bool r1Now = juce::KeyPress::isKeyCurrentlyDown (juce::KeyPress::F18Key);
+    const bool changed = (l1Now != l1Down) || (r1Now != r1Down);
+
+    if (l1Now && ! l1Down)
+        processor.toggleMotionRecord();
+
+    if (r1Now && ! r1Down)
+        processor.clearMotion();
+
+    l1Down = l1Now;
+    r1Down = r1Now;
+
+    if (changed)
+        repaint();
+
+    return changed;
 }

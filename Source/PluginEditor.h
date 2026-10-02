@@ -16,6 +16,7 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
+    bool keyStateChanged (bool isKeyDown) override;
 
 private:
     struct AudioInputOption { juce::String type; juce::String name; };
@@ -53,6 +54,8 @@ private:
     int selectedMidiOutput = -1;
     int midiPresetSlot = 1;
     juce::String midiPresetMessage;
+    bool l1Down = false;
+    bool r1Down = false;
 
     static constexpr float design = 720.0f;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RealtimeChordFxAudioProcessorEditor)
