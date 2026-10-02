@@ -161,6 +161,9 @@ private:
     juce::AudioBuffer<float> dreamyDelayBuffer;
     int dreamyDelayWritePosition = 0;
     std::array<float, 2> dreamyDelayLowpass { 0.0f, 0.0f };
+    float dreamyDelaySamplesSmoothed = 0.0f;
+    float dreamyAmbienceSmoothed = 0.0f;
+    bool dreamyPostWasEnabled = false;
     juce::Reverb dreamyReverb;
 
     mutable juce::SpinLock labelLock;
