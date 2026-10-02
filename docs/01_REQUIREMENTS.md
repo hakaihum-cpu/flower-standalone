@@ -75,3 +75,17 @@ On the target Android device with iRig Stream connected, CONFIG must expose enou
 - Internal CLOCK derives the motion tick from BPM. MIDI CLOCK mode advances motion from received MIDI clock ticks.
 - Playback replays both X and Y, including the associated 300-frame XY visual selection and MIDI controller output.
 - Motion data itself is temporary and is not stored in controller presets; MOTION BARS is normal saved parameter state.
+
+
+## Chord generator MIDI output
+- CONFIG -> MIDI SETTINGS includes CHORD OUT ON/OFF; default is OFF.
+- CHORD CH is independently selectable from 1..16.
+- The physical MIDI OUT device is shared with the existing MIDI controller output selection.
+- When enabled, every generated ChordPlan.midiNotes voicing is emitted as MIDI Note On messages on CHORD CH.
+- On chord changes, active generated notes are sent Note Off before the new generated chord is sent Note On.
+- When LENGTH closes the generated-audio gate, the active MIDI chord is also sent Note Off.
+- REC stop/CLEAR sends Note Off for all active generated chord notes.
+- Switching CHORD OUT OFF sends Note Off for all active generated chord notes.
+- Changing CHORD CH while a generated chord is active sends Note Off on the previous channel before re-triggering the same current chord on the new channel.
+- CHORD OUT is independent of MIDI CONTROL. The generator can send chord MIDI while XY MIDI CONTROL is OFF.
+- CHORD OUT and CHORD CH are normal saved parameters; they are not part of the eight XY-controller preset slots.

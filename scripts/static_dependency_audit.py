@@ -87,7 +87,7 @@ for bad in ["SynthVoice", "juce::Synthesiser", "SineVoice", "FLOWER", "MIYAKO"]:
     if bad in src:
         fail(f"forbidden cross-project/synth token in product source: {bad}")
 for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● REC",
-             "MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY"]:
+             "MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
     if need not in src:
         fail(f"UI/requirement token missing: {need}")
 
@@ -123,6 +123,22 @@ for need in [
 ]:
     if need not in src and need not in motion:
         fail(f"Motion REC contract missing: {need}")
+
+chord_midi = (R / "Source/PluginProcessor.cpp").read_text()
+for need in [
+    "ParamID::chordMidiOut",
+    "ParamID::chordMidiChannel",
+    "processChordMidi",
+    "stopActiveChordMidi",
+    "chordMidiGateOpen",
+    "chordMidiRefreshRequested",
+    "chordMidiStopRequested",
+]:
+    if need not in src and need not in chord_midi:
+        fail(f"Chord MIDI contract missing: {need}")
+
+if 'std::make_unique<juce::AudioParameterBool> (ParamID::chordMidiOut, "CHORD MIDI OUT", false)' not in chord_midi:
+    fail("CHORD MIDI OUT must default OFF")
 
 gamepad_patch = (R / "scripts/patch_juce_android_gamepad_keys.py").read_text()
 for need in [

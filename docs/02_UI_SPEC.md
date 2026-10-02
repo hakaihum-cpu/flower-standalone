@@ -44,3 +44,11 @@ When MIDI CONTROL is ON:
 - MIDI SETTINGS includes MOTION BARS 1..16.
 - Main screen shows MOTION REC while recording and MOTION PLAY while looping.
 - Holding L1/R1 must not retrigger repeatedly; actions occur on physical press transitions.
+
+
+## Chord MIDI output controls
+- MIDI SETTINGS adds CHORD OUT and CHORD CH.
+- CHORD OUT default is OFF.
+- CHORD CH is 1..16 and independent from the XY MIDI CH.
+- MIDI OUT remains the common destination device for XY/Motion and generated-chord MIDI.
+- No new panel or decorative control is introduced; the existing text-row style is retained.
