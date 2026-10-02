@@ -30,6 +30,12 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     haveChord = false;
     samplesUntilChange = 0.0;
     gateSamplesRemaining = 0.0;
+    motionState.store (0, std::memory_order_relaxed);
+    motionCommand.store (0, std::memory_order_relaxed);
+    motionLengthTicks = 0;
+    motionPositionTicks = 0;
+    motionTargetTicks = motionTicksPerBar;
+    motionSamplesUntilNextTick = 0.0;
 }
 
 void RealtimeChordFxAudioProcessor::toggleRunState() noexcept
@@ -126,19 +132,30 @@ void RealtimeChordFxAudioProcessor::handleMidiClock (const juce::MidiBuffer& mid
     for (const auto meta : midi)
     {
         const auto& m = meta.getMessage();
-        if (m.isMidiStart()) { midiClockTicks = 0; midiClockRunning = true; }
+        if (m.isMidiStart())
+        {
+            midiClockTicks = 0;
+            midiClockRunning = true;
+            if (motionState.load (std::memory_order_relaxed) == 2)
+                motionPositionTicks = 0;
+        }
         else if (m.isMidiContinue()) midiClockRunning = true;
         else if (m.isMidiStop()) midiClockRunning = false;
-        else if (m.isMidiClock() && midiClockRunning && running.load (std::memory_order_relaxed))
+        else if (m.isMidiClock() && midiClockRunning)
         {
-            ++midiClockTicks;
-            const int barIndex = juce::jlimit (0, 3, juce::roundToInt (apvts.getRawParameterValue (ParamID::bar)->load()));
-            static constexpr int ticks[] { 24, 48, 96, 192 }; // 4/4, 24 PPQN
-            const float length = apvts.getRawParameterValue (ParamID::length)->load();
-            if (length < 0.995f && midiClockTicks >= ticks[barIndex])
+            processMotionTick();
+
+            if (running.load (std::memory_order_relaxed))
             {
-                midiClockTicks = 0;
-                advanceProgression();
+                ++midiClockTicks;
+                const int barIndex = juce::jlimit (0, 3, juce::roundToInt (apvts.getRawParameterValue (ParamID::bar)->load()));
+                static constexpr int ticks[] { 24, 48, 96, 192 }; // 4/4, 24 PPQN
+                const float length = apvts.getRawParameterValue (ParamID::length)->load();
+                if (length < 0.995f && midiClockTicks >= ticks[barIndex])
+                {
+                    midiClockTicks = 0;
+                    advanceProgression();
+                }
             }
         }
     }
@@ -150,7 +167,9 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     const int n = buffer.getNumSamples();
     const int inChannels = juce::jmax (1, getTotalNumInputChannels());
     const bool midiClockMode = apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
+    handleMotionCommand();
     if (midiClockMode) handleMidiClock (midi);
+    else processInternalMotionClock (n);
     midi.clear();
     processMidiController (midi, n);
 
@@ -342,6 +361,118 @@ void RealtimeChordFxAudioProcessor::processMidiController (juce::MidiBuffer& out
     controllerClockSamplesUntilNext -= numSamples;
 }
 
+
+void RealtimeChordFxAudioProcessor::applyMotionPoint (int x, int y)
+{
+    x = juce::jlimit (0, 127, x);
+    y = juce::jlimit (0, 127, y);
+    controllerX.store (x, std::memory_order_relaxed);
+    controllerY.store (y, std::memory_order_relaxed);
+    controllerTouch.store (true, std::memory_order_relaxed);
+    controllerDirty.store (true, std::memory_order_release);
+    if (apvts.getRawParameterValue (ParamID::midiControl)->load() >= 0.5f)
+        visualFrame.store (controllerFrameForXY (x, y), std::memory_order_relaxed);
+}
+
+void RealtimeChordFxAudioProcessor::handleMotionCommand()
+{
+    const int command = motionCommand.exchange (0, std::memory_order_acq_rel);
+    if (command == 0) return;
+
+    if (command == 2)
+    {
+        motionState.store (0, std::memory_order_relaxed);
+        motionLengthTicks = 0;
+        motionPositionTicks = 0;
+        motionSamplesUntilNextTick = 0.0;
+        controllerTouch.store (false, std::memory_order_relaxed);
+        controllerDirty.store (true, std::memory_order_release);
+        return;
+    }
+
+    if (apvts.getRawParameterValue (ParamID::midiControl)->load() < 0.5f)
+        return;
+
+    const int state = motionState.load (std::memory_order_relaxed);
+    if (state == 1)
+    {
+        if (motionPositionTicks > 0)
+        {
+            motionLengthTicks = motionPositionTicks;
+            motionPositionTicks = 0;
+            motionState.store (2, std::memory_order_relaxed);
+            controllerTouch.store (true, std::memory_order_relaxed);
+            controllerDirty.store (true, std::memory_order_release);
+        }
+        else
+        {
+            motionState.store (0, std::memory_order_relaxed);
+        }
+        return;
+    }
+
+    motionTargetTicks = juce::jlimit (1, maxMotionBars,
+        juce::roundToInt (apvts.getRawParameterValue (ParamID::motionBars)->load())) * motionTicksPerBar;
+    motionLengthTicks = 0;
+    motionPositionTicks = 0;
+    motionSamplesUntilNextTick = 0.0;
+    motionState.store (1, std::memory_order_relaxed);
+}
+
+void RealtimeChordFxAudioProcessor::processMotionTick()
+{
+    if (apvts.getRawParameterValue (ParamID::midiControl)->load() < 0.5f)
+        return;
+
+    const int state = motionState.load (std::memory_order_relaxed);
+    if (state == 1)
+    {
+        if (motionPositionTicks < motionTargetTicks && motionPositionTicks < maxMotionTicks)
+        {
+            motionX[(size_t) motionPositionTicks] = (juce::uint8) juce::jlimit (0, 127, controllerX.load (std::memory_order_relaxed));
+            motionY[(size_t) motionPositionTicks] = (juce::uint8) juce::jlimit (0, 127, controllerY.load (std::memory_order_relaxed));
+            ++motionPositionTicks;
+        }
+
+        if (motionPositionTicks >= motionTargetTicks || motionPositionTicks >= maxMotionTicks)
+        {
+            motionLengthTicks = motionPositionTicks;
+            motionPositionTicks = 0;
+            motionState.store (motionLengthTicks > 0 ? 2 : 0, std::memory_order_relaxed);
+            if (motionLengthTicks > 0)
+            {
+                controllerTouch.store (true, std::memory_order_relaxed);
+                controllerDirty.store (true, std::memory_order_release);
+            }
+        }
+        return;
+    }
+
+    if (state == 2 && motionLengthTicks > 0)
+    {
+        const int pos = juce::jlimit (0, motionLengthTicks - 1, motionPositionTicks);
+        applyMotionPoint ((int) motionX[(size_t) pos], (int) motionY[(size_t) pos]);
+        motionPositionTicks = (motionPositionTicks + 1) % motionLengthTicks;
+    }
+}
+
+void RealtimeChordFxAudioProcessor::processInternalMotionClock (int numSamples)
+{
+    if (motionState.load (std::memory_order_relaxed) == 0)
+        return;
+
+    const double bpm = juce::jlimit (40.0, 240.0,
+        (double) apvts.getRawParameterValue (ParamID::internalBpm)->load());
+    const double interval = currentSampleRate * 60.0 / (bpm * 24.0);
+
+    while (motionSamplesUntilNextTick < (double) numSamples)
+    {
+        processMotionTick();
+        motionSamplesUntilNextTick += interval;
+    }
+    motionSamplesUntilNextTick -= numSamples;
+}
+
 void RealtimeChordFxAudioProcessor::setParameterActual (const char* id, float actual)
 {
     if (auto* p = apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (actual));
@@ -396,6 +527,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterInt> (ParamID::midiYCC, "MIDI Y CC", 0, 127, 74));
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::midiKey, "MIDI KEY", juce::StringArray { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 0));
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::midiScale, "MIDI SCALE", juce::StringArray { "Chromatic", "Major", "Natural Minor", "Major Pent", "Minor Pent" }, 0));
+    p.add (std::make_unique<juce::AudioParameterInt> (ParamID::motionBars, "MOTION BARS", 1, maxMotionBars, 1));
     return p;
 }
 

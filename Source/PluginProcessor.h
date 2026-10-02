@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include <atomic>
+#include <array>
 #include <string>
 #include "GranularPitchBank.h"
 #include "TheoryEngine.h"
@@ -52,6 +53,9 @@ public:
     bool saveMidiControllerPreset (int slot);
     bool loadMidiControllerPreset (int slot);
     bool hasMidiControllerPreset (int slot) const;
+    void toggleMotionRecord() noexcept { motionCommand.store (1, std::memory_order_release); }
+    void clearMotion() noexcept { motionCommand.store (2, std::memory_order_release); }
+    int getMotionState() const noexcept { return motionState.load (std::memory_order_relaxed); }
 
 private:
     void acceptPitch (const chordfx::PitchEstimate& estimate);
@@ -64,6 +68,10 @@ private:
     int quantiseControllerNote (int value) const;
     int controllerFrameForXY (int x, int y) const noexcept;
     void setParameterActual (const char* id, float actual);
+    void handleMotionCommand();
+    void processMotionTick();
+    void processInternalMotionClock (int numSamples);
+    void applyMotionPoint (int x, int y);
 
     juce::AudioProcessorValueTreeState apvts;
     chordfx::YinPitchDetector pitchDetector;
@@ -96,6 +104,18 @@ private:
     int activeControllerChannelY = 1;
     double controllerClockSamplesUntilNext = 0.0;
     bool controllerClockRunning = false;
+
+    static constexpr int motionTicksPerBar = 96;
+    static constexpr int maxMotionBars = 16;
+    static constexpr int maxMotionTicks = motionTicksPerBar * maxMotionBars;
+    std::array<juce::uint8, maxMotionTicks> motionX {};
+    std::array<juce::uint8, maxMotionTicks> motionY {};
+    std::atomic<int> motionCommand { 0 }; // 1=toggle record, 2=clear
+    std::atomic<int> motionState { 0 };   // 0=empty/stopped, 1=recording, 2=playing
+    int motionLengthTicks = 0;
+    int motionPositionTicks = 0;
+    int motionTargetTicks = motionTicksPerBar;
+    double motionSamplesUntilNextTick = 0.0;
 
     mutable juce::SpinLock labelLock;
     juce::String chordLabel { "--" };
