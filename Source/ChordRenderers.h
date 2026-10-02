@@ -15,8 +15,8 @@ public:
     void prepare (double sr)
     {
         sampleRate = sr > 1000.0 ? sr : 48000.0;
-        history.assign ((size_t) std::max (4096.0, sampleRate * 0.35), 0.0f);
-        capture.assign ((size_t) std::max (4096.0, sampleRate * 0.12), 0.0f);
+        history.assign ((size_t) std::max (4096.0, sampleRate * 0.60), 0.0f);
+        capture.assign ((size_t) std::max (4096.0, sampleRate * 0.28), 0.0f);
         reset();
     }
 
@@ -92,11 +92,11 @@ private:
         if (history.empty() || capture.empty())
             return;
 
-        // Capture a real recent phrase (~90 ms), not one/two pitch periods.
-        // This keeps timbral evolution and avoids turning the input into a
-        // periodic oscillator/vocoder-like source.
+        // Capture a substantially longer real phrase (~240 ms), not one/two
+        // pitch periods. The earlier ~90 ms loop repeated too quickly and
+        // produced a metallic/comb-like character.
         const int wanted = std::clamp (
-            (int) std::lround (sampleRate * 0.090),
+            (int) std::lround (sampleRate * 0.240),
             256,
             (int) capture.size());
 
@@ -142,10 +142,11 @@ private:
                  + frac * (capture[(size_t) i1] - capture[(size_t) i0]);
         };
 
-        // Crossfade only across the loop seam (~8 ms). Most of the captured
-        // phrase is played untouched, so this remains a sampler-style source.
+        // Crossfade only across the loop seam (~20 ms). Most of the captured
+        // phrase remains untouched while the longer seam suppresses metallic
+        // repetition/clicks.
         const int xf = std::clamp (
-            (int) std::lround (sampleRate * 0.008),
+            (int) std::lround (sampleRate * 0.020),
             16,
             std::max (16, captureLength / 4));
 
@@ -220,7 +221,7 @@ public:
         if (! gateOpen || noteCount <= 0)
         {
             envelope *= 0.992f;
-            const float out = std::sin (phase) * envelope * 0.32f;
+            const float out = std::sin (phase) * envelope * 0.22f;
             phase += 6.28318530717958647692 * frequency / sampleRate;
             if (phase >= 6.28318530717958647692)
                 phase -= 6.28318530717958647692;
@@ -240,7 +241,7 @@ public:
         const float coeff = target > envelope ? 0.018f : 0.0065f;
         envelope += coeff * (target - envelope);
 
-        const float out = std::sin (phase) * envelope * 0.32f;
+        const float out = std::sin (phase) * envelope * 0.22f;
         phase += 6.28318530717958647692 * frequency / sampleRate;
         if (phase >= 6.28318530717958647692)
             phase -= 6.28318530717958647692;
@@ -269,8 +270,9 @@ private:
         currentNoteIndex = index;
         const int midi = notes[(size_t) index];
         frequency = 440.0 * std::pow (2.0, ((double) midi - 69.0) / 12.0);
-        phase = 0.0;
-        envelope *= 0.25f;
+        // Keep oscillator phase and envelope continuous across note changes.
+        // Resetting both on every random step caused sharp discontinuities
+        // that were perceived as clipping/crackle.
         noteSamplesRemaining = noteGateSamples;
     }
 
