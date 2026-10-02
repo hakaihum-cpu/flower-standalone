@@ -3,13 +3,13 @@
 Design space: 720 x 720 logical square, scaled to actual display bounds.
 
 ## Main screen
-- Fullscreen current supplied frame.
+- Fullscreen current supplied EFFECTS frame.
 - No decorative knobs.
 - Bottom readability gradient only.
-- Thin bars/text for COMPLEX, BAR, WIDTH, LENGTH.
-- Status text: detected note and current chord.
 - Small `CONFIG` text at top-right.
 - Running only: 3px red border inset 8px and `● REC` at top-left.
+- Bottom status shows shared X/Y and the active mode name `CHORD` or `DREAMY`.
+- The legacy always-visible IN/CHORD/COMPLEX/BAR/WIDTH/LENGTH block is not shown.
 
 ## Touch
 - Main image/background: REC toggle.
@@ -19,6 +19,7 @@ Design space: 720 x 720 logical square, scaled to actual display bounds.
 
 ## CONFIG screen
 Same current supplied frame behind a dark translucent layer.
+- MODE row: CHORD / DREAMY, default CHORD.
 - Audio input names as plain text/radio marks.
 - iRig detection text plus the Android physical input product name when available.
 - Thin input meter.
@@ -64,3 +65,15 @@ When MIDI CONTROL is ON:
 
 - Main EFFECTS screen must not show legacy IN/CHORD/COMPLEX/BAR/WIDTH/LENGTH generator UI while Dreamy audio mode is active.
 - Legacy generator parameter hit areas must also be absent; the main surface outside REC/CONFIG is Dreamy XY.
+
+## CHORD audio mode
+- Dry live input is the anchor voice.
+- Additional voices are TD-PSOLA harmonies driven by the current YIN period.
+- The generated ChordPlan must contain the live pitch class.
+- No legacy fixed-grain GranularPitchBank is compiled into the EFFECTS app.
+
+## DREAMY audio mode
+- Uses the accepted FLOWER Master micro-loop core, not the old chord pitch shifter.
+- Wet micro-loop output is low-pass smoothed to reduce high-frequency fizz.
+- The original Dreamy X/Y mapping remains active.
+- Additional delay/reverb depth is derived from X*Y; top-right is strongest.
