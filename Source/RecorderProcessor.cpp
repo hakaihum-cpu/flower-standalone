@@ -10,6 +10,8 @@ RecorderAudioProcessor::RecorderAudioProcessor()
     for (auto& v : validSamples) v.store (0);
     for (auto& slot : peaks)
         for (auto& p : slot) p.store (0.0f);
+    for (auto& p : uiPlaying) p.store (false);
+    for (auto& p : uiPlaybackProgress) p.store (0.0f);
 }
 
 bool RecorderAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -34,11 +36,14 @@ void RecorderAudioProcessor::prepareToPlay (double sampleRate, int)
     writeSlot = -1;
     writePosition = 0;
     recordingWasEnabled = false;
-    playSlot = -1;
-    playPosition = 0;
+    playPositions.fill (0);
+    requestedPlayMask.store (0u);
     uiRecordingSlot.store (-1);
-    uiPlaybackSlot.store (-1);
-    uiPlaybackProgress.store (0.0f);
+    for (int i = 0; i < kSlots; ++i)
+    {
+        uiPlaying[(size_t) i].store (false);
+        uiPlaybackProgress[(size_t) i].store (0.0f);
+    }
     internalBeatSamplesRemaining = 0.0;
     midiClockTicks = 0;
 }
@@ -51,7 +56,21 @@ void RecorderAudioProcessor::setInternalBpm (int bpm) noexcept
 void RecorderAudioProcessor::requestPlaySlot (int slot) noexcept
 {
     if (juce::isPositiveAndBelow (slot, kSlots))
-        requestedPlay.store (slot);
+        requestedPlayMask.fetch_or (1u << (uint32_t) slot);
+}
+
+bool RecorderAudioProcessor::isSlotPlaying (int slot) const noexcept
+{
+    return juce::isPositiveAndBelow (slot, kSlots)
+        ? uiPlaying[(size_t) slot].load()
+        : false;
+}
+
+float RecorderAudioProcessor::getSlotPlaybackProgress (int slot) const noexcept
+{
+    return juce::isPositiveAndBelow (slot, kSlots)
+        ? uiPlaybackProgress[(size_t) slot].load()
+        : 0.0f;
 }
 
 int RecorderAudioProcessor::getValidSamples (int slot) const noexcept
@@ -69,13 +88,9 @@ float RecorderAudioProcessor::getPeak (int slot, int bin) const noexcept
 void RecorderAudioProcessor::beginRecordingSegment()
 {
     writeSlot = (writeSlot + 1) % kSlots;
-    if (playSlot == writeSlot)
-    {
-        playSlot = -1;
-        playPosition = 0;
-        uiPlaybackSlot.store (-1);
-        uiPlaybackProgress.store (0.0f);
-    }
+    playPositions[(size_t) writeSlot] = 0;
+    uiPlaying[(size_t) writeSlot].store (false);
+    uiPlaybackProgress[(size_t) writeSlot].store (0.0f);
 
     writePosition = 0;
     slotBuffers[(size_t) writeSlot].clear();
@@ -97,10 +112,9 @@ void RecorderAudioProcessor::beginPlayback (int slot)
     if (slot == uiRecordingSlot.load()) return;
     if (validSamples[(size_t) slot].load() <= 0) return;
 
-    playSlot = slot;
-    playPosition = 0;
-    uiPlaybackSlot.store (slot);
-    uiPlaybackProgress.store (0.0f);
+    playPositions[(size_t) slot] = 0;
+    uiPlaying[(size_t) slot].store (true);
+    uiPlaybackProgress[(size_t) slot].store (0.0f);
 }
 
 int RecorderAudioProcessor::chooseRandomValidSlot()
@@ -119,7 +133,12 @@ int RecorderAudioProcessor::chooseRandomValidSlot()
 
 void RecorderAudioProcessor::maybeStartRandomPlayback()
 {
-    if (! randomEnabled.load() || playSlot >= 0) return;
+    if (! randomEnabled.load()) return;
+
+    for (int i = 0; i < kSlots; ++i)
+        if (uiPlaying[(size_t) i].load())
+            return;
+
     const int slot = chooseRandomValidSlot();
     if (slot >= 0) beginPlayback (slot);
 }
@@ -190,6 +209,14 @@ void RecorderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             if (writePosition >= segmentSamples)
             {
                 finishRecordingSegment();
+
+                if (writeSlot == kSlots - 1)
+                {
+                    recordingEnabled.store (false);
+                    recordingWasEnabled = false;
+                    break;
+                }
+
                 beginRecordingSegment();
             }
 
@@ -203,39 +230,53 @@ void RecorderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             while (a > old && ! peak.compare_exchange_weak (old, a)) {}
             ++writePosition;
             validSamples[(size_t) writeSlot].store (writePosition);
+
+            if (writePosition >= segmentSamples && writeSlot == kSlots - 1)
+            {
+                finishRecordingSegment();
+                recordingEnabled.store (false);
+                recordingWasEnabled = false;
+                break;
+            }
         }
     }
 
-    const int requested = requestedPlay.exchange (-1);
-    if (requested >= 0)
-        beginPlayback (requested);
+    const uint32_t requests = requestedPlayMask.exchange (0u);
+    for (int slot = 0; slot < kSlots; ++slot)
+        if ((requests & (1u << (uint32_t) slot)) != 0u)
+            beginPlayback (slot);
 
     handleClock (midi, numSamples);
 
     for (int ch = 0; ch < getTotalNumOutputChannels(); ++ch)
         buffer.clear (ch, 0, numSamples);
 
-    if (playSlot >= 0)
+    for (int slot = 0; slot < kSlots; ++slot)
     {
-        const int length = validSamples[(size_t) playSlot].load();
-        const float* src = slotBuffers[(size_t) playSlot].getReadPointer (0);
+        if (! uiPlaying[(size_t) slot].load())
+            continue;
+
+        const int length = validSamples[(size_t) slot].load();
+        const float* src = slotBuffers[(size_t) slot].getReadPointer (0);
+        int& position = playPositions[(size_t) slot];
         int outPos = 0;
 
-        while (outPos < numSamples && playPosition < length)
+        while (outPos < numSamples && position < length)
         {
-            const float s = src[playPosition++];
+            const float s = src[position++];
             for (int ch = 0; ch < getTotalNumOutputChannels(); ++ch)
                 buffer.addSample (ch, outPos, s);
             ++outPos;
         }
 
-        uiPlaybackProgress.store (length > 0 ? (float) playPosition / (float) length : 0.0f);
-        if (playPosition >= length)
+        uiPlaybackProgress[(size_t) slot].store (
+            length > 0 ? (float) position / (float) length : 0.0f);
+
+        if (position >= length)
         {
-            playSlot = -1;
-            playPosition = 0;
-            uiPlaybackSlot.store (-1);
-            uiPlaybackProgress.store (0.0f);
+            position = 0;
+            uiPlaying[(size_t) slot].store (false);
+            uiPlaybackProgress[(size_t) slot].store (0.0f);
         }
     }
 }
