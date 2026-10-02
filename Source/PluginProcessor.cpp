@@ -24,6 +24,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     currentSampleRate = sr > 1000.0 ? sr : 48000.0;
     pitchDetector.prepare (currentSampleRate, 1024, 256);
     theory.reset();
+    psolaHarmony.prepare (currentSampleRate);
     pendingMidi = -1;
     stableCount = 0;
     haveChord = false;
@@ -40,6 +41,12 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordMidiRefreshRequested = false;
     chordMidiStopRequested = false;
     chordMidiGateOpen = false;
+    lastEffectMode = juce::jlimit (0, 1, juce::roundToInt (
+        apvts.getRawParameterValue (ParamID::effectMode)->load()));
+    psolaTargetPeriod = psolaCurrentPeriod = (float) (currentSampleRate / 200.0);
+    pitchSamplesSinceValid = 1000000;
+    chordRatios.fill (1.0f);
+    chordRatioCount = 0;
 
     const int dreamySamples =
         juce::jmax (4096, juce::roundToInt (currentSampleRate * 2.5));
@@ -54,6 +61,14 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     dreamyPlaybackSpeed = { 1.3348398f, 2.0f };
     dreamyVoiceActive = { false, false };
     dreamyRandomState = 0x44524541u;
+    dreamyWetLowpass = { 0.0f, 0.0f };
+    dreamyDelayLowpass = { 0.0f, 0.0f };
+    const int dreamyDelaySamples = juce::jmax (4096, juce::roundToInt (currentSampleRate * 2.0));
+    dreamyDelayBuffer.setSize (2, dreamyDelaySamples, false, true, false);
+    dreamyDelayBuffer.clear();
+    dreamyDelayWritePosition = 0;
+    dreamyReverb.setSampleRate (currentSampleRate);
+    dreamyReverb.reset();
 
     inputPeakRaw.store (0.0f, std::memory_order_relaxed);
     inputRmsRaw.store (0.0f, std::memory_order_relaxed);
@@ -118,6 +133,7 @@ void RealtimeChordFxAudioProcessor::applyChord (const chordfx::ChordPlan& plan)
     chordMidiGateOpen = true;
     chordMidiRefreshRequested = true;
     chordMidiStopRequested = false;
+    updateChordRatios();
 }
 
 void RealtimeChordFxAudioProcessor::advanceProgression()
@@ -756,6 +772,8 @@ bool RealtimeChordFxAudioProcessor::hasMidiControllerPreset (int slot) const
 juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcessor::createParameterLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout p;
+    p.add (std::make_unique<juce::AudioParameterChoice> (
+        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::complex, "COMPLEX", 0.0f, 1.0f, 0.25f));
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::bar, "BAR", juce::StringArray { "1/4", "1/2", "1", "2" }, 2));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::width, "WIDTH", 0.0f, 1.0f, 0.35f));
