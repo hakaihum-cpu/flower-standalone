@@ -1,7 +1,7 @@
 # Requirements
 
 ## Audio behaviour
-1. Accept a live mono or stereo musical input signal.
+1. Accept a live mono or stereo musical input signal. Android standalone prefers 2-in/2-out and falls back to 1-in/2-out only when the device cannot open two inputs.
 2. CONFIG has MODE = CHORD / DREAMY. Default is CHORD.
 3. Stopped state is dry bypass in both modes.
 4. CHORD mode uses the live monophonic input itself as the immediate anchor voice. The anchor is never pitch-shifted away.
@@ -101,3 +101,12 @@ On the target Android device with iRig Stream connected, CONFIG must expose enou
 - Changing CHORD CH while a generated chord is active sends Note Off on the previous channel before re-triggering the same current chord on the new channel.
 - CHORD OUT is independent of MIDI CONTROL. The generator can send chord MIDI while XY MIDI CONTROL is OFF.
 - CHORD OUT and CHORD CH are normal saved parameters; they are not part of the eight XY-controller preset slots.
+
+
+## Stereo input contract
+- Android standalone first requests 2 input / 2 output channels.
+- If a device cannot open two inputs, it falls back to 1 input / 2 outputs.
+- JUCER permits both `{1,2}` and `{2,2}`.
+- DREAMY preserves incoming L/R.
+- CHORD preserves the stereo dry anchor while generated PSOLA harmony is centre-derived from L+R analysis.
+- PEAK/RMS/NONZERO diagnostics inspect every active input channel.

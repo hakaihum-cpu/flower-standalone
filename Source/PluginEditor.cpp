@@ -137,7 +137,14 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
         holder->stopPlaying();
         holder->deviceManager.closeAudioDevice();
 
-        const auto audioError = holder->deviceManager.initialise (1, 2, nullptr, true);
+        auto audioError = holder->deviceManager.initialise (2, 2, nullptr, true);
+
+        if (audioError.isNotEmpty())
+        {
+            juce::Logger::writeToLog (
+                "RealtimeChordFX stereo input initialise failed; falling back to mono: " + audioError);
+            audioError = holder->deviceManager.initialise (1, 2, nullptr, true);
+        }
 
         if (audioError.isNotEmpty())
             juce::Logger::writeToLog ("RealtimeChordFX Android audio initialise failed: " + audioError);

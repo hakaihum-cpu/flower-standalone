@@ -5,7 +5,7 @@
 
 RealtimeChordFxAudioProcessor::RealtimeChordFxAudioProcessor()
     : juce::AudioProcessor (BusesProperties()
-        .withInput ("Input", juce::AudioChannelSet::mono(), true)
+        .withInput ("Input", juce::AudioChannelSet::stereo(), true)
         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "CHORDFX_STATE", createParameterLayout())
 {
@@ -261,21 +261,23 @@ void RealtimeChordFxAudioProcessor::processChordAudio (juce::AudioBuffer<float>&
 
     for (int i = 0; i < n; ++i)
     {
-        const float dry = buffer.getSample (0, i);
+        const float dryLeft = buffer.getSample (0, i);
+        const float dryRight = channels > 1 ? buffer.getSample (1, i) : dryLeft;
+        const float analysis = 0.5f * (dryLeft + dryRight);
         if (! canTrack)
             continue;
 
         psolaCurrentPeriod += 0.0025f * (psolaTargetPeriod - psolaCurrentPeriod);
-        const float harmony = psolaHarmony.processSample (dry, psolaCurrentPeriod);
+        const float harmony = psolaHarmony.processSample (analysis, psolaCurrentPeriod);
 
         if (! audibleHarmony)
             continue;
 
-        // Keep the actual live input as the immediate anchor voice. Only the
-        // other chord tones are delayed/resynthesised by PSOLA.
-        const float out = dry * 0.78f + harmony * 0.62f;
-        for (int ch = 0; ch < channels; ++ch)
-            buffer.setSample (ch, i, out);
+        // Keep the actual stereo live input as the immediate anchor voice.
+        // PSOLA analyses L+R only and adds the generated harmony in the centre.
+        buffer.setSample (0, i, dryLeft * 0.78f + harmony * 0.62f);
+        if (channels > 1)
+            buffer.setSample (1, i, dryRight * 0.78f + harmony * 0.62f);
     }
 }
 
@@ -336,19 +338,24 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     float blockPeak = 0.0f;
     double squareSum = 0.0;
     int nonZeroSamples = 0;
+    int measuredSamples = 0;
 
     for (int i = 0; i < n; ++i)
     {
-        float mono = 0.0f;
-        for (int ch = 0; ch < availableInputChannels; ++ch)
-            mono += buffer.getSample (ch, i);
-        mono /= (float) availableInputChannels;
+        const float left = buffer.getSample (0, i);
+        const float right = availableInputChannels > 1 ? buffer.getSample (1, i) : left;
+        const float mono = 0.5f * (left + right);
 
-        const float absolute = std::abs (mono);
-        blockPeak = juce::jmax (blockPeak, absolute);
-        squareSum += (double) mono * (double) mono;
-        if (absolute > 1.0e-6f)
-            ++nonZeroSamples;
+        for (int ch = 0; ch < availableInputChannels; ++ch)
+        {
+            const float sampleValue = buffer.getSample (ch, i);
+            const float absolute = std::abs (sampleValue);
+            blockPeak = juce::jmax (blockPeak, absolute);
+            squareSum += (double) sampleValue * (double) sampleValue;
+            if (absolute > 1.0e-6f)
+                ++nonZeroSamples;
+            ++measuredSamples;
+        }
 
         if (pitchSamplesSinceValid < 100000000)
             ++pitchSamplesSinceValid;
@@ -365,14 +372,21 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             acceptPitch (estimate);
         }
 
-        if (buffer.getNumChannels() >= 1) buffer.setSample (0, i, mono);
-        if (buffer.getNumChannels() >= 2) buffer.setSample (1, i, mono);
+        // Preserve discrete stereo input. Mono devices are duplicated only as
+        // a compatibility fallback.
+        buffer.setSample (0, i, left);
+        if (buffer.getNumChannels() >= 2)
+            buffer.setSample (1, i, right);
     }
 
     inputPeakRaw.store (blockPeak, std::memory_order_relaxed);
-    inputRmsRaw.store (n > 0 ? (float) std::sqrt (squareSum / (double) n) : 0.0f,
+    inputRmsRaw.store (measuredSamples > 0
+                       ? (float) std::sqrt (squareSum / (double) measuredSamples)
+                       : 0.0f,
                        std::memory_order_relaxed);
-    inputNonZeroRatio.store (n > 0 ? (float) nonZeroSamples / (float) n : 0.0f,
+    inputNonZeroRatio.store (measuredSamples > 0
+                             ? (float) nonZeroSamples / (float) measuredSamples
+                             : 0.0f,
                              std::memory_order_relaxed);
     inputLevel.store (0.82f * inputLevel.load (std::memory_order_relaxed)
                       + 0.18f * blockPeak,

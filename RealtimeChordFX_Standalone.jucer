@@ -3,7 +3,7 @@
  pluginFormats="buildStandalone" companyName="LocalBuild" version="0.1.0"
  bundleIdentifier="local.realtimechordfx.standalone" pluginName="Realtime Chord FX"
  pluginDesc="Real-time theory-guided chord generator effect" pluginManufacturer="LocalBuild"
- pluginManufacturerCode="RcfX" pluginCode="RCF1" pluginChannelConfigs="{1,2}"
+ pluginManufacturerCode="RcfX" pluginCode="RCF1" pluginChannelConfigs="{1,2},{2,2}"
  pluginIsSynth="0" pluginWantsMidiIn="1" pluginProducesMidiOut="1"
  pluginIsMidiEffectPlugin="0" pluginCharacteristicsValue="pluginWantsMidiIn,pluginProducesMidiOut"
  displaySplashScreen="0" useAppConfig="0" addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1">

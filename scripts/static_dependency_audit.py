@@ -117,6 +117,7 @@ for need in [
     "getProductName",
     "GET_DEVICES_INPUTS",
     "setResizable (true, false)",
+    "initialise (2, 2, nullptr, true)",
     "initialise (1, 2, nullptr, true)",
     "closeAudioDevice",
     "startPlaying",
@@ -242,8 +243,8 @@ if root.attrib.get("pluginWantsMidiIn") != "1":
     fail("MIDI input required")
 if root.attrib.get("pluginProducesMidiOut") != "1":
     fail("MIDI controller output must be enabled")
-if root.attrib.get("pluginChannelConfigs") != "{1,2}":
-    fail("expected mono input / stereo output channel config {1,2}")
+if root.attrib.get("pluginChannelConfigs") != "{1,2},{2,2}":
+    fail("expected mono/stereo input -> stereo output channel configs {1,2},{2,2}")
 
 android = root.find("./EXPORTFORMATS/ANDROIDSTUDIO")
 if android is None:
