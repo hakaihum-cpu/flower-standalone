@@ -55,16 +55,15 @@ When MIDI CONTROL is ON:
 - No new panel or decorative control is introduced; the existing text-row style is retained.
 
 
-## EFFECTS Dreamy surface
+## EFFECTS shared surface
 - Keep the RealtimeChordFX/EFFECTS 300-frame visual surface. Do not import FLOWER screen layout, 100-frame UI, CONFIG, ARP, Delay, or Granular controls.
 - Top-left remains REC start/stop.
-- Main image area outside controls is always XY for Dreamy.
+- Main image area outside controls is the shared XY surface in both CHORD and DREAMY.
 - X/Y readout remains on the EFFECTS screen.
-- With MIDI CONTROL ON, Dreamy XY and MIDI XY share the same 0..127 coordinates.
-- CONFIG keeps the EFFECTS style and adds iRig PEAK/RMS/NONZERO diagnostics only.
-
-- Main EFFECTS screen must not show legacy IN/CHORD/COMPLEX/BAR/WIDTH/LENGTH generator UI while Dreamy audio mode is active.
-- Legacy generator parameter hit areas must also be absent; the main surface outside REC/CONFIG is Dreamy XY.
+- DREAMY uses the XY values for its original Dreamy mapping plus the new upper-right ambience depth.
+- With MIDI CONTROL ON, the same XY values are also sent by the MIDI controller mode.
+- CONFIG keeps the EFFECTS style and iRig PEAK/RMS/NONZERO diagnostics.
+- Main EFFECTS screen must not restore the old always-visible IN/CHORD/COMPLEX/BAR/WIDTH/LENGTH block.
 
 ## CHORD audio mode
 - Dry live input is the anchor voice.
