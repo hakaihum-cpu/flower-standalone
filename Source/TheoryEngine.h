@@ -38,6 +38,7 @@ private:
 
     ChordPlan buildPlan (int degree, bool forceAnchorResponse);
     int chooseNextDegree();
+    bool degreeContainsAnchor (int degree) const;
     void updateModeEvidence (int midiNote);
     std::vector<int> makeVoicing (int rootPc, const std::vector<int>& intervals) const;
     static int pitchClass (int midi) noexcept;
