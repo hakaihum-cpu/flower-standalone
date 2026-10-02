@@ -15,8 +15,8 @@ public:
     void prepare (double sr)
     {
         sampleRate = sr > 1000.0 ? sr : 48000.0;
-        history.assign ((size_t) std::max (4096.0, sampleRate * 0.60), 0.0f);
-        capture.assign ((size_t) std::max (4096.0, sampleRate * 0.28), 0.0f);
+        history.assign ((size_t) std::max (4096.0, sampleRate * 2.20), 0.0f);
+        capture.assign ((size_t) std::max (4096.0, sampleRate * 2.05), 0.0f);
         reset();
     }
 
@@ -41,6 +41,21 @@ public:
         history[(size_t) writePosition] = sample;
         writePosition = (writePosition + 1) % (int) history.size();
         historyFilled = std::min (historyFilled + 1, (int) history.size());
+    }
+
+    void setHold (float amount01) noexcept
+    {
+        hold = std::clamp (amount01, 0.0f, 1.0f);
+    }
+
+    float captureSeconds() const noexcept
+    {
+        return 0.240f + hold * 1.760f;
+    }
+
+    float crossfadeSeconds() const noexcept
+    {
+        return 0.020f + hold * 0.140f;
     }
 
     void setPlan (const std::vector<int>& midiNotes, float sourceMidiFloat,
@@ -92,11 +107,10 @@ private:
         if (history.empty() || capture.empty())
             return;
 
-        // Capture a substantially longer real phrase (~240 ms), not one/two
-        // pitch periods. The earlier ~90 ms loop repeated too quickly and
-        // produced a metallic/comb-like character.
+        // HOLD=0 preserves the approved 240 ms minimum. HOLD extends the
+        // captured phrase continuously up to 2.0 s without ever shortening it.
         const int wanted = std::clamp (
-            (int) std::lround (sampleRate * 0.240),
+            (int) std::lround (sampleRate * (double) captureSeconds()),
             256,
             (int) capture.size());
 
@@ -142,11 +156,10 @@ private:
                  + frac * (capture[(size_t) i1] - capture[(size_t) i0]);
         };
 
-        // Crossfade only across the loop seam (~20 ms). Most of the captured
-        // phrase remains untouched while the longer seam suppresses metallic
-        // repetition/clicks.
+        // HOLD=0 preserves the approved 20 ms seam. It grows with HOLD up to
+        // 160 ms, while the clamp below keeps it below one quarter of capture.
         const int xf = std::clamp (
-            (int) std::lround (sampleRate * 0.020),
+            (int) std::lround (sampleRate * (double) crossfadeSeconds()),
             16,
             std::max (16, captureLength / 4));
 
@@ -169,6 +182,7 @@ private:
     int captureLength = 0;
     int targetCount = 0;
     float sourceMidi = 60.0f;
+    float hold = 0.0f;
     std::array<double, maxVoices> phase {};
     std::array<double, maxVoices> ratio { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
 };
