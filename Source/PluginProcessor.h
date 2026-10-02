@@ -6,7 +6,6 @@
 #include <string>
 #include "TheoryEngine.h"
 #include "YinPitchDetector.h"
-#include "PsolaHarmonyBank.h"
 #include "ChordRenderers.h"
 
 class RealtimeChordFxAudioProcessor final : public juce::AudioProcessor
@@ -78,7 +77,6 @@ private:
     void applyMotionPoint (int x, int y);
     void processChordMidi (juce::MidiBuffer&);
     void stopActiveChordMidi (juce::MidiBuffer&);
-    void updateChordRatios();
     void processChordAudio (juce::AudioBuffer<float>&); // CHORD-A: captured-input chord
     void processChordB (juce::AudioBuffer<float>&);     // CHORD-B: random sine arpeggiator
     void processChordReverb (juce::AudioBuffer<float>&);
@@ -88,7 +86,6 @@ private:
     juce::AudioProcessorValueTreeState apvts;
     chordfx::YinPitchDetector pitchDetector;
     chordfx::TheoryEngine theory;
-    chordfx::PsolaHarmonyBank psolaHarmony; // retained only for rollback/reference; no audible CHORD path
     chordfx::SampleChordRenderer sampleChordRenderer;
     chordfx::SineArpeggiator sineArpeggiator;
     juce::Reverb chordReverb;
@@ -114,11 +111,7 @@ private:
     bool midiClockRunning = false;
     int lastEffectMode = 0; // 0=CHORD, 1=DREAMY
     int lastChordMode = 0;  // 0=CHORD-A, 1=CHORD-B
-    float psolaTargetPeriod = 240.0f;
-    float psolaCurrentPeriod = 240.0f;
     int pitchSamplesSinceValid = 1000000;
-    std::array<float, chordfx::PsolaHarmonyBank::maxVoices> chordRatios { 1.0f, 1.0f, 1.0f, 1.0f };
-    int chordRatioCount = 0;
     std::atomic<int> controllerX { 36 };
     std::atomic<int> controllerY { 36 };
     std::atomic<bool> controllerTouch { false };
