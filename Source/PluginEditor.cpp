@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "ParameterIDs.h"
+#include <cmath>
 #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 #if JUCE_ANDROID
  #include <jni.h>
