@@ -39,6 +39,7 @@ Discrete: 1/4, 1/2, 1, 2 bars. Time signature is 4/4. Determines the progression
 - Explicit `iRig Streamer DETECTED / NOT DETECTED` status. Detection checks both JUCE-selectable input names and Android `AudioManager.getDevices(GET_DEVICES_INPUTS)` / `AudioDeviceInfo.getProductName()` so a generic JUCE route name does not hide the physical USB device name.
 - Input level meter.
 - CONFIG diagnostics show numeric input level in dBFS, actual JUCE input route, actual output route, active input-channel count, sample rate, and the most recent route-open error. This diagnostic display must not change routing by itself.
+- When `iRig Stream` is selected as the input on Android/JUCE Oboe, and the same device type exposes a matching iRig Stream output endpoint, the app pairs ROUTE OUT to that iRig endpoint for full-duplex operation. Selecting a non-iRig input after this restores System Default output when available.
 - MIDI CH 1..16.
 - CLOCK: Internal / MIDI.
 - BPM is shown only for Internal because BAR timing cannot be defined without an internal tempo.

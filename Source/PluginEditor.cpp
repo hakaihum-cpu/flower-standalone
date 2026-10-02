@@ -324,6 +324,53 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioInput (int index)
     juce::AudioDeviceManager::AudioDeviceSetup setup; dm.getAudioDeviceSetup (setup);
     setup.inputDeviceName = option.name;
     setup.useDefaultInputChannels = true;
+
+    // JUCE/Oboe uses the output stream as the realtime callback master and reads
+    // the input stream from that callback. On RG Rotate, an iRig input combined
+    // with the system-default output can yield a silent/empty USB input stream.
+    // When the selected input is iRig Stream, explicitly pair it with the matching
+    // iRig output endpoint if Android/JUCE exposes one.
+    if (auto* type = dm.getCurrentDeviceTypeObject())
+    {
+        const auto outputs = type->getDeviceNames (false);
+        const bool selectingIrig = option.name.containsIgnoreCase ("iRig")
+                                && option.name.containsIgnoreCase ("Stream");
+
+        if (selectingIrig)
+        {
+            juce::String matchedOutput;
+            for (const auto& outputName : outputs)
+            {
+                if (outputName == option.name)
+                {
+                    matchedOutput = outputName;
+                    break;
+                }
+
+                if (matchedOutput.isEmpty()
+                    && outputName.containsIgnoreCase ("iRig")
+                    && outputName.containsIgnoreCase ("Stream"))
+                    matchedOutput = outputName;
+            }
+
+            if (matchedOutput.isNotEmpty())
+            {
+                setup.outputDeviceName = matchedOutput;
+                setup.useDefaultOutputChannels = true;
+            }
+        }
+        else if (setup.outputDeviceName.containsIgnoreCase ("iRig"))
+        {
+            for (const auto& outputName : outputs)
+                if (outputName.containsIgnoreCase ("System Default"))
+                {
+                    setup.outputDeviceName = outputName;
+                    setup.useDefaultOutputChannels = true;
+                    break;
+                }
+        }
+    }
+
     const auto error = dm.setAudioDeviceSetup (setup, true);
     lastAudioRouteError = error;
     if (error.isEmpty())
