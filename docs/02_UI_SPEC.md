@@ -70,13 +70,14 @@ When MIDI CONTROL is ON:
 - Generated ChordPlan notes are constrained to MIDI 60..83 (C4..B5).
 - The generated ChordPlan must contain the live pitch class.
 - Dry live input remains audible as the performance anchor.
-- CHORD-A captures a short periodic segment from the live input only when a new stable input pitch is detected, then replays that captured source simultaneously at the ChordPlan target pitches. BAR progression reuses the captured source rather than recapturing silence.
-- CHORD-B uses the same ChordPlan but renders random constituent notes with a sine arpeggiator at an eighth-note step.
+- CHORD-A captures a real recent input phrase (about 90 ms) when a new stable input pitch is detected, then resamples that same phrase simultaneously at the ChordPlan target pitches. It must not reduce the source to one/two pitch periods, PSOLA grains, or a micro-loop oscillator. BAR progression reuses the captured phrase rather than recapturing silence.
+- CHORD-B uses the same ChordPlan but renders random constituent notes with a sine-wave arpeggiator at an eighth-note step.
 - CHORD-A and CHORD-B both pass through the shared fixed reverb stage.
 - TD-PSOLA is not on the audible CHORD-A/B path.
 - No legacy fixed-grain GranularPitchBank is compiled into the EFFECTS app.
 
 ## DREAMY audio mode
+- Dreamy history is fed continuously from the raw live input even while CHORD is selected, matching the accepted standalone effect behaviour; only the wet layer is gated by DREAMY selection.
 - Uses the accepted FLOWER Master micro-loop core, not the old chord pitch shifter.
 - Wet micro-loop output is low-pass smoothed to reduce high-frequency fizz.
 - The original Dreamy X/Y mapping remains active.
