@@ -53,8 +53,8 @@ public:
 
     void requestPlaySlot (int slot) noexcept;
     int getRecordingSlot() const noexcept { return uiRecordingSlot.load(); }
-    int getPlaybackSlot() const noexcept { return uiPlaybackSlot.load(); }
-    float getPlaybackProgress() const noexcept { return uiPlaybackProgress.load(); }
+    bool isSlotPlaying (int slot) const noexcept;
+    float getSlotPlaybackProgress (int slot) const noexcept;
     int getValidSamples (int slot) const noexcept;
     float getPeak (int slot, int bin) const noexcept;
     float getInputLevel() const noexcept { return inputLevel.load(); }
@@ -77,9 +77,8 @@ private:
     int writePosition = 0;
     bool recordingWasEnabled = false;
 
-    int playSlot = -1;
-    int playPosition = 0;
-    std::atomic<int> requestedPlay { -1 };
+    std::array<int, kSlots> playPositions {};
+    std::atomic<uint32_t> requestedPlayMask { 0u };
 
     std::atomic<bool> recordingEnabled { false };
     std::atomic<bool> randomEnabled { false };
@@ -88,8 +87,8 @@ private:
     std::atomic<float> inputLevel { 0.0f };
 
     std::atomic<int> uiRecordingSlot { -1 };
-    std::atomic<int> uiPlaybackSlot { -1 };
-    std::atomic<float> uiPlaybackProgress { 0.0f };
+    std::array<std::atomic<bool>, kSlots> uiPlaying;
+    std::array<std::atomic<float>, kSlots> uiPlaybackProgress;
 
     double internalBeatSamplesRemaining = 0.0;
     int midiClockTicks = 0;
