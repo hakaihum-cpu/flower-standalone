@@ -249,63 +249,43 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
 {
     const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+
     if (effectMode == 0)
     {
         if (currentFrame.isValid())
-                g.drawImage (currentFrame, juce::Rectangle<float> (0, 0, design, design), juce::RectanglePlacement::stretchToFit);
-        
-            // Only a soft readability strip; the supplied frames remain the visual focus.
-            juce::ColourGradient shade (juce::Colours::transparentBlack, 360.0f, 520.0f,
-                                        juce::Colours::black.withAlpha (0.70f), 360.0f, 720.0f, false);
-            g.setGradientFill (shade);
-            g.fillRect (0.0f, 500.0f, 720.0f, 220.0f);
-        
-            if (processor.isRunning())
-            {
-                g.setColour (juce::Colour (0xfff23a36));
-                g.drawRect (juce::Rectangle<float> (8.0f, 8.0f, 704.0f, 704.0f), 3.0f);
-                g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
-                g.drawText (juce::String::fromUTF8 (u8"● REC"), 24, 20, 130, 28, juce::Justification::centredLeft);
-            }
-        
-            g.setColour (juce::Colours::white.withAlpha (0.88f));
-            g.setFont (juce::FontOptions (14.0f));
-            g.drawText ("IN  " + noteText (processor.getDetectedMidi()) + "    CHORD  " + processor.getChordLabel(),
-                        28, 578, 520, 28, juce::Justification::centredLeft);
-            g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
-        
-            const bool midiControlOn = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
-            if (midiControlOn)
-            {
-                g.setFont (juce::FontOptions (12.0f));
-                g.setColour (juce::Colours::white.withAlpha (0.74f));
-                g.drawText ("X " + juce::String (processor.getMidiControllerX()).paddedLeft ('0', 3)
-                            + "   Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
-                            28, 548, 240, 22, juce::Justification::centredLeft);
-                if (! processor.isRunning())
-                    g.drawText ("REC", 24, 20, 80, 28, juce::Justification::centredLeft);
-        
-                const int motion = processor.getMotionState();
-                if (motion != 0)
-                {
-                    g.setColour (motion == 1 ? juce::Colour (0xfff23a36)
-                                             : juce::Colours::white.withAlpha (0.82f));
-                    g.drawText (motion == 1 ? "MOTION REC" : "MOTION PLAY",
-                                270, 548, 170, 22, juce::Justification::centredLeft);
-                }
-            }
-        
-            const float complex = processor.state().getRawParameterValue (ParamID::complex)->load();
-            const int bar = juce::jlimit (0, 3, juce::roundToInt (processor.state().getRawParameterValue (ParamID::bar)->load()));
-            const float width = processor.state().getRawParameterValue (ParamID::width)->load();
-            const float length = processor.state().getRawParameterValue (ParamID::length)->load();
-            static constexpr const char* bars[] { "1/4", "1/2", "1 BAR", "2 BAR" };
-        
-            paintBar (g, parameterBounds (0), "COMPLEX", complex, juce::String (juce::roundToInt (complex * 100.0f)));
-            paintBar (g, parameterBounds (1), "BAR", bar / 3.0f, bars[bar]);
-            paintBar (g, parameterBounds (2), "WIDTH", width, juce::String (juce::roundToInt (width * 100.0f)));
-            paintBar (g, parameterBounds (3), "LENGTH", length,
-                      length >= 0.995f ? "INF" : juce::String (juce::roundToInt (length * 100.0f)));
+            g.drawImage (currentFrame, juce::Rectangle<float> (0, 0, design, design), juce::RectanglePlacement::stretchToFit);
+
+        // Exact CHORD visual restored from golden/chordfx-android-2026-10-02.
+        juce::ColourGradient shade (juce::Colours::transparentBlack, 360.0f, 520.0f,
+                                    juce::Colours::black.withAlpha (0.70f), 360.0f, 720.0f, false);
+        g.setGradientFill (shade);
+        g.fillRect (0.0f, 500.0f, 720.0f, 220.0f);
+
+        if (processor.isRunning())
+        {
+            g.setColour (juce::Colour (0xfff23a36));
+            g.drawRect (juce::Rectangle<float> (8.0f, 8.0f, 704.0f, 704.0f), 3.0f);
+            g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
+            g.drawText (juce::String::fromUTF8 (u8"● REC"), 24, 20, 130, 28, juce::Justification::centredLeft);
+        }
+
+        g.setColour (juce::Colours::white.withAlpha (0.88f));
+        g.setFont (juce::FontOptions (14.0f));
+        g.drawText ("IN  " + noteText (processor.getDetectedMidi()) + "    CHORD  " + processor.getChordLabel(),
+                    28, 578, 520, 28, juce::Justification::centredLeft);
+        g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
+
+        const float complex = processor.state().getRawParameterValue (ParamID::complex)->load();
+        const int bar = juce::jlimit (0, 3, juce::roundToInt (processor.state().getRawParameterValue (ParamID::bar)->load()));
+        const float width = processor.state().getRawParameterValue (ParamID::width)->load();
+        const float length = processor.state().getRawParameterValue (ParamID::length)->load();
+        static constexpr const char* bars[] { "1/4", "1/2", "1 BAR", "2 BAR" };
+
+        paintBar (g, parameterBounds (0), "COMPLEX", complex, juce::String (juce::roundToInt (complex * 100.0f)));
+        paintBar (g, parameterBounds (1), "BAR", bar / 3.0f, bars[bar]);
+        paintBar (g, parameterBounds (2), "WIDTH", width, juce::String (juce::roundToInt (width * 100.0f)));
+        paintBar (g, parameterBounds (3), "LENGTH", length,
+                  length >= 0.995f ? "INF" : juce::String (juce::roundToInt (length * 100.0f)));
         return;
     }
 
@@ -338,6 +318,25 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
         g.setFont (juce::FontOptions (14.0f));
         g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
     
+        const float dreamyX = juce::jlimit (0.0f, 1.0f, processor.getMidiControllerX() / 127.0f);
+        const float dreamyY = juce::jlimit (0.0f, 1.0f, processor.getMidiControllerY() / 127.0f);
+        const float reverbAmount = std::pow (dreamyX * dreamyY, 1.35f);
+        const int reverbSteps = juce::jlimit (0, 10, juce::roundToInt (reverbAmount * 10.0f));
+
+        g.setFont (juce::FontOptions (11.5f));
+        g.setColour (juce::Colours::white.withAlpha (0.74f));
+        g.drawText ("REVERB", 28, 626, 90, 18, juce::Justification::centredLeft);
+        for (int i = 0; i < 10; ++i)
+        {
+            const auto r = juce::Rectangle<float> (102.0f + i * 14.0f, 631.0f, 9.0f, 7.0f);
+            if (i < reverbSteps)
+                g.fillRect (r);
+            else
+                g.drawRect (r, 1.0f);
+        }
+        g.drawText (juce::String (juce::roundToInt (reverbAmount * 100.0f)),
+                    248, 626, 52, 18, juce::Justification::centredRight);
+
         g.setFont (juce::FontOptions (12.0f));
         g.setColour (juce::Colours::white.withAlpha (0.74f));
         g.drawText ("X " + juce::String (processor.getMidiControllerX()).paddedLeft ('0', 3)
