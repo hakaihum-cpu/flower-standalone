@@ -104,6 +104,7 @@ for need in [
     "closeAudioDevice",
     "startPlaying",
     "setWantsKeyboardFocus (true)",
+    "grabKeyboardFocus",
     "keyPressed",
     "keyStateChanged",
     "KeyPress::F17Key",
