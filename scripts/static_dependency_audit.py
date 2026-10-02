@@ -128,6 +128,7 @@ for bad in [
         fail(f"CHORD main UI drifted from approved pre-MIDI-controller baseline: {bad}")
 
 for need in [
+    '"HOLD"',
     '"REVERB"',
     "reverbSteps",
     "std::pow (dreamyX * dreamyY, 1.35f)",
@@ -224,7 +225,9 @@ renderers = (R / "Source/ChordRenderers.h").read_text()
 for need in [
     "class SampleChordRenderer",
     "captureRecentPhrase",
-    "sampleRate * 0.240",
+    "void setHold (float amount01)",
+    "0.240f + hold * 1.760f",
+    "0.020f + hold * 0.140f",
     "class SineArpeggiator",
     "triggerRandomNote",
 ]:
@@ -240,6 +243,8 @@ for need in [
     "processChordB (buffer)",
     "processDreamy (buffer)",
     "sampleChordRenderer.pushInput",
+    "ParamID::hold",
+    "notifyChordAHoldChanged",
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
