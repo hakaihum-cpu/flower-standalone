@@ -157,6 +157,25 @@ for need in [
     if need not in gamepad_patch:
         fail(f"physical-key bridge contract missing: {need}")
 
+theory = (R / "Source/TheoryEngine.cpp").read_text()
+granular = (R / "Source/GranularPitchBank.cpp").read_text()
+processor = (R / "Source/PluginProcessor.cpp").read_text()
+for need in [
+    "const int anchor = std::clamp (lastInputMidi",
+    "actual input register",
+]:
+    if need not in theory:
+        fail(f"harmony register contract missing: {need}")
+for need in [
+    "2048 : 1024",
+    "0.5f, 2.5f",
+    "sum / (float) activeVoices",
+]:
+    if need not in granular:
+        fail(f"pitch-shifter quality guard missing: {need}")
+if "single unstable YIN estimate" not in processor:
+    fail("pitch-ratio stability guard missing")
+
 # JUCER: exact module set proven by FLOWER Golden and complete JUCE 9.0.2 dependency closure.
 root = ET.parse(JUCER).getroot()
 if root.attrib.get("pluginFormats") != "buildStandalone":

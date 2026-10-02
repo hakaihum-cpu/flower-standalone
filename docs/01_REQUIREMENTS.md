@@ -91,3 +91,13 @@ On the target Android device with iRig Stream connected, CONFIG must expose enou
 - Changing CHORD CH while a generated chord is active sends Note Off on the previous channel before re-triggering the same current chord on the new channel.
 - CHORD OUT is independent of MIDI CONTROL. The generator can send chord MIDI while XY MIDI CONTROL is OFF.
 - CHORD OUT and CHORD CH are normal saved parameters; they are not part of the eight XY-controller preset slots.
+
+
+## Harmony pitch-quality constraints
+- Generated audio voicings must be placed around the current accepted input-note register instead of a fixed C4/C5 register.
+- The existing generated-note hard floor at C3 (MIDI 48) remains.
+- Avoid unnecessary two-octave upward shifts that drive the granular pitch shifter into extreme ratios.
+- Granular pitch shifting uses 1024-sample grains at normal Android sample rates and 2048 samples at >=88.2 kHz, with 50% overlap.
+- Per-voice pitch ratio is constrained to 0.5..2.5 as a safety bound.
+- Multi-voice granular output is averaged by active voice count to reduce clipping/flattened transients.
+- A single unstable pitch-detector estimate must not immediately retune all active harmony voices. Accepted-note bend/vibrato may follow with smoothing.
