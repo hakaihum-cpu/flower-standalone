@@ -107,6 +107,10 @@ void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e
 
     const int previous = detectedMidi.load (std::memory_order_relaxed);
     if (midi == previous) return;
+
+    // A genuinely new played note starts a new PSOLA source phrase. This avoids
+    // grains from the previous pitch leaking into the new anchor.
+    psolaHarmony.reset();
     detectedMidi.store (midi, std::memory_order_relaxed);
 
     if (! running.load (std::memory_order_acquire)) return;
