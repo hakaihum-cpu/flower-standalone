@@ -8,18 +8,18 @@ Design space: 720 x 720 logical square, scaled to actual display bounds.
 - Bottom readability gradient only.
 - Small `CONFIG` text at top-right.
 - Running only: 3px red border inset 8px and `● REC` at top-left.
-- CHORD mode restores the original CHORD screen: IN/CHORD readout plus COMPLEX/BAR/WIDTH/LENGTH controls.
+- CHORD-A and CHORD-B share the original CHORD screen: IN/CHORD readout plus COMPLEX/BAR/WIDTH/LENGTH controls.
 - DREAMY mode keeps the XY-focused EFFECTS screen.
 
 ## Touch
-- CHORD mode: original CHORD interaction is restored. Bottom four parameter cells drag horizontally; with MIDI CONTROL OFF the remaining image/background toggles REC; with MIDI CONTROL ON the image is XY and top-left is REC.
+- CHORD-A / CHORD-B: original CHORD interaction is restored. Bottom four parameter cells drag horizontally; with MIDI CONTROL OFF the remaining image/background toggles REC; with MIDI CONTROL ON the image is XY and top-left is REC.
 - DREAMY mode: top-left is REC and the remaining image is Dreamy XY.
 - CONFIG label opens config.
 - Parameter interaction never toggles REC.
 
 ## CONFIG screen
 Same current supplied frame behind a dark translucent layer.
-- MODE row: CHORD / DREAMY, default CHORD.
+- MODE row cycles CHORD-A / CHORD-B / DREAMY, default CHORD-A. Legacy effectMode remains CHORD/DREAMY internally so existing DREAMY saved states keep their meaning.
 - Audio input names as plain text/radio marks.
 - iRig detection text plus the Android physical input product name when available.
 - Thin input meter.
@@ -63,12 +63,17 @@ When MIDI CONTROL is ON:
 - DREAMY uses the XY values for its original Dreamy mapping plus the new upper-right ambience depth.
 - With MIDI CONTROL ON, the same XY values are also sent by the MIDI controller mode.
 - CONFIG keeps the EFFECTS style and iRig PEAK/RMS/NONZERO diagnostics.
-- Main EFFECTS screen must not restore the old always-visible IN/CHORD/COMPLEX/BAR/WIDTH/LENGTH block.
+- DREAMY must not show the CHORD IN/CHORD/COMPLEX/BAR/WIDTH/LENGTH block; both CHORD modes do show it.
 
-## CHORD audio mode
-- Dry live input is the anchor voice.
-- Additional voices are TD-PSOLA harmonies driven by the current YIN period.
+## CHORD audio modes
+- TheoryEngine is shared by CHORD-A and CHORD-B.
+- Generated ChordPlan notes are constrained to MIDI 60..83 (C4..B5).
 - The generated ChordPlan must contain the live pitch class.
+- Dry live input remains audible as the performance anchor.
+- CHORD-A captures a short periodic segment from the live input only when a new stable input pitch is detected, then replays that captured source simultaneously at the ChordPlan target pitches. BAR progression reuses the captured source rather than recapturing silence.
+- CHORD-B uses the same ChordPlan but renders random constituent notes with a sine arpeggiator at an eighth-note step.
+- CHORD-A and CHORD-B both pass through the shared fixed reverb stage.
+- TD-PSOLA is not on the audible CHORD-A/B path.
 - No legacy fixed-grain GranularPitchBank is compiled into the EFFECTS app.
 
 ## DREAMY audio mode
