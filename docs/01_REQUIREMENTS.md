@@ -34,6 +34,7 @@ Discrete: 1/4, 1/2, 1, 2 bars. Time signature is 4/4. Determines the progression
 
 ## CONFIG
 - Audio input list/select.
+- On RG Rotate, JUCE-selectable input names containing `RG Rotate` are excluded from the CONFIG input list before the six-row display limit. This does not affect Android physical-device detection or other USB/external inputs.
 - Current input/detection status.
 - Explicit `iRig Streamer DETECTED / NOT DETECTED` status. Detection checks both JUCE-selectable input names and Android `AudioManager.getDevices(GET_DEVICES_INPUTS)` / `AudioDeviceInfo.getProductName()` so a generic JUCE route name does not hide the physical USB device name.
 - Input level meter.

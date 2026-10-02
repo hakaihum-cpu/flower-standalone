@@ -97,6 +97,7 @@ if "isKeyCurrentlyDown" in editor:
 for need in [
     "#include <juce_core/native/juce_JNIHelpers_android.h>",
     "getAndroidPhysicalInputNames",
+    'name.containsIgnoreCase ("RG Rotate")',
     "getProductName",
     "GET_DEVICES_INPUTS",
     "setResizable (true, false)",

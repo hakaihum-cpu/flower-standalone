@@ -299,6 +299,12 @@ void RealtimeChordFxAudioProcessorEditor::refreshAudioInputs()
         const auto names = type->getDeviceNames (true);
         for (const auto& name : names)
         {
+            // RG Rotate exposes several internal/built-in routes that are not useful
+            // as selectable sources for this app. Filter them before the six-row UI limit
+            // so an external USB input can occupy the visible list when JUCE exposes it.
+            if (name.containsIgnoreCase ("RG Rotate"))
+                continue;
+
             const int idx = (int) audioInputs.size();
             audioInputs.push_back ({ type->getTypeName(), name });
             if (type->getTypeName() == currentType &&
