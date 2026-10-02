@@ -28,7 +28,7 @@ int main()
         p = theory.advance();
         assert (! p.midiNotes.empty());
         assert (containsPc (p, 0));
-        for (int n : p.midiNotes) { assert(n >= 48); assert(n <= 96); }
+        for (int n : p.midiNotes) { assert(n >= 60); assert(n <= 83); }
     }
 
     // New live note becomes the new hard anchor without being forced to root.
