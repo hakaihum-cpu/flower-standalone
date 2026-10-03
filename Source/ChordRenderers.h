@@ -31,11 +31,6 @@ public:
         sourceMidi = 60.0f;
         phase.fill (0.0);
         ratio.fill (1.0);
-        lastRenderedOutput = 0.0f;
-        recaptureStartOutput = 0.0f;
-        recaptureTransitionRemaining = 0;
-        recaptureTransitionTotal =
-            std::max (32, (int) std::lround (sampleRate * 0.005));
     }
 
     void pushInput (float sample) noexcept
@@ -67,23 +62,20 @@ public:
                   bool recapture = true) noexcept
     {
         sourceMidi = sourceMidiFloat;
-        const int previousCount = targetCount;
         targetCount = std::min ((int) midiNotes.size(), maxVoices);
 
         for (int i = 0; i < targetCount; ++i)
         {
             const int note = std::clamp (midiNotes[(size_t) i], 60, 83);
             ratio[(size_t) i] = std::pow (2.0, ((double) note - (double) sourceMidi) / 12.0);
-
-            // Progression changes reuse the same captured phrase. Preserve the
-            // current read phase for existing voices so a BAR change cannot
-            // jump the waveform back to sample zero.
-            if (recapture || captureLength <= 0 || i >= previousCount)
-                phase[(size_t) i] = 0.0;
+            phase[(size_t) i] = 0.0;
         }
 
         for (int i = targetCount; i < maxVoices; ++i)
+        {
             ratio[(size_t) i] = 1.0;
+            phase[(size_t) i] = 0.0;
+        }
 
         if (recapture || captureLength <= 0)
             captureRecentPhrase();
@@ -92,11 +84,7 @@ public:
     float renderSample (bool gateOpen) noexcept
     {
         if (! gateOpen || captureLength < 64 || targetCount <= 0)
-        {
-            lastRenderedOutput = 0.0f;
-            recaptureTransitionRemaining = 0;
             return 0.0f;
-        }
 
         float sum = 0.0f;
         for (int voice = 0; voice < targetCount; ++voice)
@@ -108,22 +96,7 @@ public:
                 phase[(size_t) voice] -= (double) captureLength;
         }
 
-        float output =
-            sum / std::sqrt ((float) std::max (1, targetCount));
-
-        if (recaptureTransitionRemaining > 0)
-        {
-            const float t = 1.0f
-                - (float) recaptureTransitionRemaining
-                  / (float) std::max (1, recaptureTransitionTotal);
-            output =
-                recaptureStartOutput
-                + (output - recaptureStartOutput) * t;
-            --recaptureTransitionRemaining;
-        }
-
-        lastRenderedOutput = output;
-        return output;
+        return sum / std::sqrt ((float) std::max (1, targetCount));
     }
 
     bool hasCapture() const noexcept { return captureLength >= 64; }
@@ -160,8 +133,6 @@ private:
             capture[(size_t) i] -= (float) mean;
 
         captureLength = wanted;
-        recaptureStartOutput = lastRenderedOutput;
-        recaptureTransitionRemaining = recaptureTransitionTotal;
         phase.fill (0.0);
     }
 
@@ -212,10 +183,6 @@ private:
     int targetCount = 0;
     float sourceMidi = 60.0f;
     float hold = 0.0f;
-    float lastRenderedOutput = 0.0f;
-    float recaptureStartOutput = 0.0f;
-    int recaptureTransitionRemaining = 0;
-    int recaptureTransitionTotal = 240;
     std::array<double, maxVoices> phase {};
     std::array<double, maxVoices> ratio { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
 };
