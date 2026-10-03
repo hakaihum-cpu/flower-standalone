@@ -35,6 +35,7 @@ void PhysicalViolin::writeDelay(DelayLine& delay, float sample) {
 
 void PhysicalViolin::prepare(double sampleRate) {
     sampleRate_ = sampleRate > 1000.0 ? sampleRate : 48000.0;
+    modelRate_ = sampleRate_ * static_cast<double>(kOversample);
 
     const int openNotes[kStrings] = {55, 62, 69, 76}; // G3 D4 A4 E5
     for (int i = 0; i < kStrings; ++i) {
@@ -141,7 +142,6 @@ void PhysicalViolin::noteOn(int note, int velocity) {
     s.velocity = clampValue(velocity, 1, 127);
     s.targetFundamental = midiToHz(note);
     s.ampStage = 1;
-    s.startupAssist = 1.0f;
 
     if (!legato) {
         const int open = s.openNote;
@@ -154,13 +154,6 @@ void PhysicalViolin::noteOn(int note, int velocity) {
         s.fundamental = s.targetFundamental = midiToHz(note);
         s.ampEnv = 0.0f;
         s.ampStage = 1;
-        s.startupAssist = 1.0f;
-
-        // A deterministic displacement seeds the travelling wave. It is not a
-        // sample layer; sustained energy still comes only from bow interaction.
-        const float seed = 0.012f * (0.35f + 0.65f * (s.velocity / 127.0f));
-        writeDelay(s.bridgeDelay, seed);
-        writeDelay(s.neckDelay, -seed);
     }
 }
 
@@ -305,120 +298,93 @@ float PhysicalViolin::processString(StringState& s) {
         return 0.0f;
     }
 
-    // Finger movement changes the physical round-trip delay rather than shifting
-    // an already-generated tone.
+    // Keep pitch changes smooth at the audio rate. The actual delay loop runs
+    // four times faster below so short high-register delays remain resolvable.
     s.fundamental += (s.targetFundamental - s.fundamental) * 0.0028;
-
-    s.vibratoPhase += 2.0 * kPi * 5.35 / sampleRate_;
-    if (s.vibratoPhase >= 2.0 * kPi) s.vibratoPhase -= 2.0 * kPi;
-
-    const double bendSemis =
-        (static_cast<double>(pitchBend_) - 8192.0) / 8192.0 * 2.0;
-    const double vibCents =
-        std::sin(s.vibratoPhase) * (18.0 * vibratoDepth_);
-    const double frequency =
-        s.fundamental * std::pow(2.0, bendSemis / 12.0 + vibCents / 1200.0);
-
-    // One full waveguide round trip is approximately Fs/f0. A small correction
-    // accounts for the reflection filter phase delay.
-    float totalDelay = static_cast<float>(sampleRate_ / std::max(40.0, frequency) - 1.6);
-    totalDelay = clampValue(totalDelay, 6.0f, static_cast<float>(kDelaySize - 8));
-
-    // Distance from bridge. Keep the bow away from either exact end.
-    const float bridgeFraction = 0.045f + 0.255f * bowPosition_;
-    float bridgeSamples = totalDelay * bridgeFraction;
-    bridgeSamples = clampValue(bridgeSamples, 2.0f, totalDelay - 2.0f);
-    const float neckSamples = std::max(2.0f, totalDelay - bridgeSamples);
-
-    const float bridgeArrival = readDelay(s.bridgeDelay, bridgeSamples);
-    const float nutArrival = readDelay(s.neckDelay, neckSamples);
-
-    // Lossy bridge reflection removes the metallic infinite-ring behaviour of
-    // the first modal prototype. Nut reflection remains nearly rigid.
-    s.bridgeFilter += (bridgeArrival - s.bridgeFilter) * 0.20f;
-    const float bridgeReflected = -0.982f * s.bridgeFilter;
-    const float nutReflected = -0.996f * nutArrival;
-
-    const float stringVelocity = bridgeReflected + nutReflected;
 
     const int effectivePressure = s.pressure > 0 ? s.pressure : channelPressure_;
     const float pressureExpression = effectivePressure > 0
         ? (0.40f + 0.60f * (effectivePressure / 127.0f))
         : 1.0f;
     const float velocityExpression = 0.35f + 0.65f * (s.velocity / 127.0f);
-
     const bool bowed = s.keyDown || (s.pendingRelease && sustainDown_);
-    const float targetBow = bowed ? velocityExpression * pressureExpression : 0.0f;
-    const float envelopeRate = bowed ? 0.0045f : 0.0016f;
-    s.bowEnvelope += (targetBow - s.bowEnvelope) * envelopeRate;
 
-    // The bow velocity is a physical control, not output gain.
-    const float bowVelocity = 0.025f + 0.34f * bowSpeed_;
-    const float relativeVelocity = bowVelocity - stringVelocity;
+    // Convert the old 48 kHz smoothing rates to the oversampled model rate.
+    const float rateScale = static_cast<float>(sampleRate_ / modelRate_);
+    const float bowAttack = 1.0f - std::pow(1.0f - 0.0045f, rateScale);
+    const float bowRelease = 1.0f - std::pow(1.0f - 0.0016f, rateScale);
 
-    // Stable nonlinear friction curve. Near zero relative velocity the bow
-    // sticks strongly; as slip velocity rises coupling falls. This gives the
-    // delay loop a periodic bowed-string source instead of broadband excitation.
-    const float pressure = clampValue(bowPressure_ * s.bowEnvelope, 0.0f, 1.2f);
-    const float absRel = std::fabs(relativeVelocity);
-    const float slope = 3.2f + (1.0f - pressure) * 3.0f;
-    const float tableArg = std::max(0.75f, 0.75f + absRel * slope);
-    float frictionGain = std::pow(tableArg, -4.0f);
-    frictionGain = clampValue(frictionGain, 0.0f, 1.0f);
+    float accumulated = 0.0f;
 
-    // No bow pressure means no energy injection. The previous prototype kept
-    // a constant 0.28 coupling term here, so even after Note Off the virtual
-    // bow could continue feeding the delay loop indefinitely.
-    // For the first few tens of milliseconds, guarantee that every newly
-    // allocated physical voice enters the stick/slip regime. Without this,
-    // some pitches could receive a voice but remain effectively non-speaking.
-    const float startupCoupling = 0.20f * s.startupAssist;
-    const float coupling = 1.12f * pressure + startupCoupling;
-    float junctionVelocity =
-        relativeVelocity * frictionGain * coupling;
+    for (int os = 0; os < kOversample; ++os) {
+        s.vibratoPhase += 2.0 * kPi * 5.35 / modelRate_;
+        if (s.vibratoPhase >= 2.0 * kPi) s.vibratoPhase -= 2.0 * kPi;
 
-    const float startupDecay = std::exp(-1.0f / (0.025f * static_cast<float>(sampleRate_)));
-    s.startupAssist *= startupDecay;
-    if (s.startupAssist < 0.0001f) s.startupAssist = 0.0f;
+        const double bendSemis =
+            (static_cast<double>(pitchBend_) - 8192.0) / 8192.0 * 2.0;
+        const double vibCents =
+            std::sin(s.vibratoPhase) * (18.0 * vibratoDepth_);
+        const double frequency =
+            s.fundamental * std::pow(2.0, bendSemis / 12.0 + vibCents / 1200.0);
 
-    const float frictionSlew = bowed ? 0.24f : 0.42f;
-    s.frictionState += (junctionVelocity - s.frictionState) * frictionSlew;
-    if (!bowed && s.bowEnvelope < 0.0010f && std::fabs(s.frictionState) < 0.00005f) {
-        s.frictionState = 0.0f;
+        // STK-style bowed-string delay split. Four-times internal rate keeps
+        // even C8 long enough for the bow/bridge sections to remain stable.
+        float baseDelay = static_cast<float>(modelRate_ / std::max(40.0, frequency) - 4.0);
+        baseDelay = clampValue(baseDelay, 0.6f, static_cast<float>(kDelaySize - 8));
+
+        // CC74 controls bow position. Default 42/127 maps close to the
+        // established STK beta ratio (~0.127).
+        const float beta = clampValue(0.045f + 0.255f * bowPosition_, 0.035f, 0.40f);
+        const float bridgeSamples = clampValue(baseDelay * beta, 0.6f, baseDelay - 0.6f);
+        const float neckSamples = clampValue(baseDelay * (1.0f - beta), 0.6f, baseDelay - 0.6f);
+
+        const float bridgeArrival = readDelay(s.bridgeDelay, bridgeSamples);
+        const float nutArrival = readDelay(s.neckDelay, neckSamples);
+
+        // One-pole bridge loss filter, following the stable STK Bowed topology.
+        const float pole = clampValue(
+            0.75f - static_cast<float>(0.2 * 22050.0 / modelRate_),
+            0.0f, 0.95f);
+        const float b0 = 1.0f - pole;
+        s.bridgeFilter = b0 * 0.95f * bridgeArrival + pole * s.bridgeFilter;
+
+        const float bridgeReflection = -s.bridgeFilter;
+        const float nutReflection = -nutArrival;
+        const float stringVelocity = bridgeReflection + nutReflection;
+
+        const float targetBow = bowed ? velocityExpression * pressureExpression : 0.0f;
+        s.bowEnvelope +=
+            (targetBow - s.bowEnvelope) * (bowed ? bowAttack : bowRelease);
+
+        // STK BowTable form: pressure changes the friction-curve slope rather
+        // than multiplying the injected velocity. This avoids the DC fixed
+        // point that made the old implementation silent above roughly C5.
+        const float bowVelocity =
+            (0.03f + 0.20f * bowSpeed_) * s.bowEnvelope;
+        const float deltaV = bowVelocity - stringVelocity;
+        const float normalizedPressure =
+            clampValue(bowPressure_ * pressureExpression, 0.0f, 1.0f);
+        const float slope = 5.0f - 4.0f * normalizedPressure;
+        const float tableInput = (deltaV + 0.001f) * slope;
+        float friction =
+            std::pow(std::fabs(tableInput) + 0.75f, -4.0f);
+        friction = clampValue(friction, 0.01f, 0.98f);
+
+        const float newVelocity = bowed ? deltaV * friction : 0.0f;
+
+        writeDelay(s.neckDelay,
+                   clampValue(bridgeReflection + newVelocity, -1.0f, 1.0f));
+        writeDelay(s.bridgeDelay,
+                   clampValue(nutReflection + newVelocity, -1.0f, 1.0f));
+
+        // Bridge travelling-wave output. No pitch-dependent makeup gain is
+        // required now that the physical loop itself remains oscillatory.
+        const float bridgeOut = readDelay(s.bridgeDelay, bridgeSamples);
+        accumulated += bridgeOut;
     }
-    junctionVelocity = clampValue(s.frictionState, -0.55f, 0.55f);
 
-    float towardBridge = nutReflected + junctionVelocity;
-    float towardNut = bridgeReflected + junctionVelocity;
-
-    towardBridge = clampValue(towardBridge, -0.95f, 0.95f);
-    towardNut = clampValue(towardNut, -0.95f, 0.95f);
-
-    writeDelay(s.bridgeDelay, towardBridge);
-    writeDelay(s.neckDelay, towardNut);
-
-    // The bridge-arriving travelling wave is the actual string signal.
-    // Keep a small differentiated component for bow articulation, but the
-    // periodic string component remains dominant.
-    const float bridgeDelta = bridgeArrival - s.lastBridge;
-    s.lastBridge = bridgeArrival;
-    float bridgeSignal = bridgeArrival * 0.92f + bridgeDelta * 0.20f;
-
-    // A shorter waveguide stores less displacement energy per cycle, so the
-    // unnormalised model gets progressively quieter as pitch rises. Compensate
-    // at the string/bridge boundary rather than with a global EQ so each voice
-    // reaches the shared body at a comparable playing level.
-    const float referenceHz = static_cast<float>(midiToHz(60.0)); // C4
-    const float pitchLevelComp = clampValue(
-        std::sqrt(static_cast<float>(frequency) / referenceHz),
-        0.82f, 2.35f);
-    bridgeSignal *= pitchLevelComp;
-    bridgeSignal = clampValue(bridgeSignal, -1.0f, 1.0f);
-
-    const float energy = bridgeSignal * bridgeSignal;
-    s.energyFollower += (energy - s.energyFollower) * 0.0015f;
-    s.age++;
-
+    s.age += kOversample;
+    float bridgeSignal = accumulated / static_cast<float>(kOversample);
     if (!std::isfinite(bridgeSignal)) {
         const int open = s.openNote;
         s = StringState{};
@@ -428,7 +394,7 @@ float PhysicalViolin::processString(StringState& s) {
         return 0.0f;
     }
 
-    return bridgeSignal * amp;
+    return clampValue(bridgeSignal * amp, -1.0f, 1.0f);
 }
 
 float PhysicalViolin::processBody(float bridgeInput) {
