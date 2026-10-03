@@ -27,18 +27,12 @@ public:
 
 private:
     static constexpr int kStrings = 4;
-    static constexpr int kMaxModes = 24;
+    static constexpr int kDelaySize = 2048;
     static constexpr int kBodyModes = 14;
 
-    struct StringMode {
-        float y1 = 0.0f;
-        float y2 = 0.0f;
-        float a1 = 0.0f;
-        float a2 = 0.0f;
-        float excite = 0.0f;
-        float phiBow = 0.0f;
-        float bridgeWeight = 0.0f;
-        bool enabled = false;
+    struct DelayLine {
+        std::array<float, kDelaySize> data{};
+        int writeIndex = 0;
     };
 
     struct StringState {
@@ -49,15 +43,20 @@ private:
         bool active = false;
         bool keyDown = false;
         bool pendingRelease = false;
+
         float bowEnvelope = 0.0f;
         float frictionState = 0.0f;
+        float bridgeFilter = 0.0f;
+        float lastBridge = 0.0f;
         float energyFollower = 0.0f;
+
         double fundamental = 196.0;
         double targetFundamental = 196.0;
         double vibratoPhase = 0.0;
-        int coeffCountdown = 0;
         uint64_t age = 0;
-        std::array<StringMode, kMaxModes> modes{};
+
+        DelayLine bridgeDelay{};
+        DelayLine neckDelay{};
     };
 
     struct BodyMode {
@@ -81,8 +80,9 @@ private:
     std::array<BodyMode, kBodyModes> body_{};
 
     static double midiToHz(double note);
+    static float readDelay(const DelayLine& delay, float delaySamples);
+    static void writeDelay(DelayLine& delay, float sample);
     int chooseString(int note) const;
-    void updateStringCoefficients(StringState& s);
     float processString(StringState& s);
     float processBody(float bridgeInput);
 };
