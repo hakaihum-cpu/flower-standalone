@@ -181,8 +181,11 @@ void AudioEngine::render(float* out,int32_t frames) {
         float l=0.f,r=0.f;
         for(auto& v:voices_) renderVoice(v,l,r);
         dreamy_.process(l,r);
-        out[i*2]=std::tanh(l*0.82f);
-        out[i*2+1]=std::tanh(r*0.82f);
+        // Captured EP source peaks are conservative (about -18 to -11 dBFS at V127).
+        // Apply a fixed ~+10 dB master gain here; keep tanh as a soft limiter for polyphonic peaks.
+        constexpr float MASTER_GAIN = 3.2f;
+        out[i*2]=std::tanh(l*MASTER_GAIN);
+        out[i*2+1]=std::tanh(r*MASTER_GAIN);
     }
 }
 
