@@ -104,6 +104,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
         NativeEngine.setDreamy(dreamy);
         NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
+        pianoView.controlChange(103, Math.max(0, Math.min(127, Math.round(dreamX * 1.27f))));
+        pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(dreamY * 1.27f))));
         NativeEngine.controlChange(10, bowPressure);
         NativeEngine.controlChange(11, bowSpeed);
         NativeEngine.controlChange(74, bowPosition);
@@ -285,11 +287,13 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         addSlider(root, "X %", 100, dreamX, v -> {
             dreamX = v;
             NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
+            pianoView.controlChange(103, Math.max(0, Math.min(127, Math.round(v * 1.27f))));
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_DREAM_X, v).apply();
         });
         addSlider(root, "Y %", 100, dreamY, v -> {
             dreamY = v;
             NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
+            pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(v * 1.27f))));
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_DREAM_Y, v).apply();
         });
         addSlider(root, "MIX %", 100, dreamMix, v -> {
