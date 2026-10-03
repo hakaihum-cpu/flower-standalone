@@ -385,8 +385,7 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
     if (running.load (std::memory_order_relaxed) && haveChord)
     {
         processChordReverb (buffer);
-        buffer.applyGain (0.80f); // extra CHORD-B output headroom
-        softProtectBuffer (buffer);
+        buffer.applyGain (0.80f); // explicit CHORD-B output headroom
     }
 }
 
@@ -412,29 +411,63 @@ void RealtimeChordFxAudioProcessor::applyOutputSafety (
         return;
 
     if (active && ! outputSafetyWasActive)
+    {
         outputSafetyGain = 0.0f;
+        outputLimiterGain = 1.0f;
+    }
 
     const float rampStep =
-        1.0f / juce::jmax (1.0f, (float) currentSampleRate * 0.008f);
+        1.0f / juce::jmax (
+            1.0f, (float) currentSampleRate * 0.012f);
+    const float releaseStep =
+        1.0f / juce::jmax (
+            1.0f, (float) currentSampleRate * 0.080f);
+    constexpr float ceiling = 0.92f;
 
     for (int sample = 0; sample < samples; ++sample)
     {
         if (active)
-            outputSafetyGain = juce::jmin (1.0f, outputSafetyGain + rampStep);
+            outputSafetyGain =
+                juce::jmin (1.0f, outputSafetyGain + rampStep);
         else
             outputSafetyGain = 1.0f;
 
+        float peak = 0.0f;
         for (int channel = 0; channel < channels; ++channel)
         {
             float value = buffer.getSample (channel, sample);
             if (! std::isfinite (value))
                 value = 0.0f;
-
-            if (active)
-                value *= outputSafetyGain;
-
-            buffer.setSample (channel, sample, softProtectSample (value));
+            buffer.setSample (channel, sample, value);
+            peak = juce::jmax (peak, std::abs (value));
         }
+
+        if (active)
+        {
+            const float effectivePeak = peak * outputSafetyGain;
+            const float wantedGain =
+                effectivePeak > ceiling
+                    ? ceiling / effectivePeak
+                    : 1.0f;
+
+            if (wantedGain < outputLimiterGain)
+                outputLimiterGain = wantedGain;
+            else
+                outputLimiterGain =
+                    juce::jmin (
+                        1.0f, outputLimiterGain + releaseStep);
+        }
+        else
+        {
+            outputLimiterGain = 1.0f;
+        }
+
+        const float gain =
+            outputSafetyGain * outputLimiterGain;
+        for (int channel = 0; channel < channels; ++channel)
+            buffer.setSample (
+                channel, sample,
+                buffer.getSample (channel, sample) * gain);
     }
 
     outputSafetyWasActive = active;
@@ -514,6 +547,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         dreamyVisualSamplesUntilUpdate = 0;
         dreamyVisualSequence = 0;
         outputSafetyGain = 0.0f;
+        outputLimiterGain = 1.0f;
         outputSafetyWasActive = false;
         dreamyPostWasEnabled = false;
         dreamyReverb.reset();
@@ -779,8 +813,15 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
                 auto& localPosition = dreamyLocalPosition[static_cast<size_t> (voice)];
                 auto& playbackSpeed = dreamyPlaybackSpeed[static_cast<size_t> (voice)];
 
+                const bool lifecycleExpired =
+                    loopLength > 0
+                    && outputPhase >= loopLength * (3 + voice);
+                const bool atLoopBoundary =
+                    loopLength > 0
+                    && localPosition >= (float) loopLength;
+
                 if (! active || loopLength <= 0
-                    || outputPhase >= loopLength * (3 + voice))
+                    || (lifecycleExpired && atLoopBoundary))
                 {
                     const float lengthScale = voice == 0 ? 0.82f : 1.18f;
                     loopLength = juce::jlimit (
@@ -810,10 +851,10 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
                     loopStart = wrapIndex (
                         dreamyWritePosition - lookback);
                     outputPhase = 0;
-                    localPosition =
-                        voice == 0
-                            ? 0.0f
-                            : static_cast<float> (loopLength) * 0.43f;
+                    // Start every new fragment at the Hann-window zero.
+                    // Random loop start/length still differentiates the voices,
+                    // without injecting a near-full-level fragment mid-wave.
+                    localPosition = 0.0f;
 
                     // Voice 1 is a perfect fifth (+5); voice 2 is an octave (+12).
                     playbackSpeed = voice == 0 ? 1.3348398f : 2.0f;
@@ -943,9 +984,10 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
                 const float delayWrite =
                     softProtectSample (
                         current[channel] + delayed[other] * feedback);
-                const float mixed =
-                    softProtectSample (
-                        current[channel] + delayed[channel] * delayMix);
+                float mixed =
+                    current[channel] + delayed[channel] * delayMix;
+                if (! std::isfinite (mixed))
+                    mixed = 0.0f;
                 dreamyDelayBuffer.setSample (
                     channel, dreamyDelayWritePosition, delayWrite);
                 buffer.setSample (
@@ -960,7 +1002,7 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
         reverbParams.roomSize = 0.38f + 0.57f * ambience;
         reverbParams.damping = 0.62f;
         reverbParams.wetLevel = 0.26f * ambience;
-        reverbParams.dryLevel = 0.50f;
+        reverbParams.dryLevel = 1.0f - 0.18f * ambience;
         reverbParams.width = 1.0f;
         reverbParams.freezeMode = 0.0f;
         dreamyReverb.setParameters (reverbParams);
@@ -984,9 +1026,6 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
         dreamyReverb.reset();
         dreamyPostWasEnabled = false;
     }
-
-    if (enabled)
-        softProtectBuffer (buffer);
 
 }
 
