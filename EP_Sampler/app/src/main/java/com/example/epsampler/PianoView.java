@@ -57,7 +57,7 @@ public final class PianoView extends View {
     private boolean keyOverlayVisible = false;
     private final SparseIntArray touchNotes = new SparseIntArray();
     private static final int AUDITION_LOW_NOTE = 55;   // G3
-    private static final int AUDITION_HIGH_NOTE = 83;  // B5
+    private static final int AUDITION_HIGH_NOTE = 96;  // C7
 
     private final Finger[] left = new Finger[5];
     private final Finger[] right = new Finger[5];
@@ -375,7 +375,7 @@ public final class PianoView extends View {
 
         text.setTextSize(14f*u);
         text.setColor(Color.argb(240, 244, 237, 224));
-        c.drawText("TEMP KEY  G3–B5", left, top-12f*u, text);
+        c.drawText("TEMP KEY  G3–C7", left, top-12f*u, text);
 
         int whiteCount = 0;
         for (int n=AUDITION_LOW_NOTE; n<=AUDITION_HIGH_NOTE; n++) if (!isBlack(n)) whiteCount++;
