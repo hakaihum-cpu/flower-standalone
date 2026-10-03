@@ -16,6 +16,23 @@ double PhysicalViolin::midiToHz(double note) {
     return 440.0 * std::pow(2.0, (note - 69.0) / 12.0);
 }
 
+float PhysicalViolin::readDelay(const DelayLine& delay, float delaySamples) {
+    delaySamples = clampValue(delaySamples, 1.0f, static_cast<float>(kDelaySize - 3));
+    float readPos = static_cast<float>(delay.writeIndex) - delaySamples;
+    while (readPos < 0.0f) readPos += static_cast<float>(kDelaySize);
+
+    const int i0 = static_cast<int>(readPos) % kDelaySize;
+    const int i1 = (i0 + 1) % kDelaySize;
+    const float frac = readPos - std::floor(readPos);
+    return delay.data[i0] + (delay.data[i1] - delay.data[i0]) * frac;
+}
+
+void PhysicalViolin::writeDelay(DelayLine& delay, float sample) {
+    delay.data[delay.writeIndex] = sample;
+    delay.writeIndex++;
+    if (delay.writeIndex >= kDelaySize) delay.writeIndex = 0;
+}
+
 void PhysicalViolin::prepare(double sampleRate) {
     sampleRate_ = sampleRate > 1000.0 ? sampleRate : 48000.0;
 
@@ -27,20 +44,20 @@ void PhysicalViolin::prepare(double sampleRate) {
         strings_[i].targetFundamental = strings_[i].fundamental;
     }
 
-    // Compact shared violin-body approximation. Frequencies are intentionally broad,
-    // not a claim to reproduce a specific historical instrument.
+    // Shared body is deliberately subtle in v0.2. The previous version let the
+    // body resonators dominate the string and sounded like resonance/noise.
     const float frequencies[kBodyModes] = {
         275.f, 390.f, 455.f, 525.f, 610.f, 720.f, 860.f,
         1040.f, 1250.f, 1510.f, 1850.f, 2250.f, 2750.f, 3350.f
     };
     const float gains[kBodyModes] = {
-        0.085f, 0.075f, 0.105f, 0.120f, 0.110f, 0.095f, 0.078f,
-        0.070f, 0.062f, 0.058f, 0.052f, 0.047f, 0.041f, 0.034f
+        0.055f, 0.050f, 0.064f, 0.070f, 0.066f, 0.058f, 0.052f,
+        0.047f, 0.042f, 0.038f, 0.034f, 0.030f, 0.026f, 0.022f
     };
 
     for (int i = 0; i < kBodyModes; ++i) {
         const double f = frequencies[i];
-        const double decaySeconds = 0.18 + 0.012 * i;
+        const double decaySeconds = 0.11 + 0.009 * i;
         const double r = std::exp(-1.0 / (decaySeconds * sampleRate_));
         const double w = 2.0 * kPi * f / sampleRate_;
         body_[i] = BodyMode{};
@@ -61,6 +78,7 @@ void PhysicalViolin::reset() {
         strings_[i].fundamental = midiToHz(open);
         strings_[i].targetFundamental = strings_[i].fundamental;
     }
+
     for (auto& m : body_) {
         m.y1 = 0.0f;
         m.y2 = 0.0f;
@@ -75,8 +93,6 @@ int PhysicalViolin::chooseString(int note) const {
         const auto& s = strings_[i];
         if (note < s.openNote || note > s.openNote + 24) continue;
 
-        // Prefer a free string, then a currently matching string, then the highest
-        // sensible open string (smallest finger distance).
         int score = (note - s.openNote) * 10;
         if (s.active) score += 500;
         if (s.active && s.note == note) score -= 700;
@@ -90,8 +106,6 @@ int PhysicalViolin::chooseString(int note) const {
 
     if (best >= 0) return best;
 
-    // Outside the ideal two-octave-per-string range: use the closest physically
-    // reachable string rather than creating a fifth synthetic voice.
     for (int i = kStrings - 1; i >= 0; --i) {
         if (note >= strings_[i].openNote) return i;
     }
@@ -105,25 +119,30 @@ void PhysicalViolin::noteOn(int note, int velocity) {
 
     auto& s = strings_[idx];
     const bool legato = s.active;
+
     s.active = true;
     s.keyDown = true;
     s.pendingRelease = false;
     s.note = note;
     s.velocity = clampValue(velocity, 1, 127);
     s.targetFundamental = midiToHz(note);
+
     if (!legato) {
-        s.fundamental = s.targetFundamental;
-        s.bowEnvelope = 0.0f;
-        s.frictionState = 0.0f;
-        s.energyFollower = 0.0f;
-        s.age = 0;
-        s.vibratoPhase = 0.0;
-        for (auto& m : s.modes) {
-            m.y1 = 0.0f;
-            m.y2 = 0.0f;
-        }
+        const int open = s.openNote;
+        s = StringState{};
+        s.openNote = open;
+        s.active = true;
+        s.keyDown = true;
+        s.note = note;
+        s.velocity = clampValue(velocity, 1, 127);
+        s.fundamental = s.targetFundamental = midiToHz(note);
+
+        // Small deterministic seed only starts the waveguide; sustained energy
+        // must come from bow/string interaction, not noise playback.
+        const float seed = 0.0025f * (s.velocity / 127.0f);
+        writeDelay(s.bridgeDelay, seed);
+        writeDelay(s.neckDelay, -seed);
     }
-    s.coeffCountdown = 0;
 }
 
 void PhysicalViolin::noteOff(int note, bool sustainDown) {
@@ -131,8 +150,7 @@ void PhysicalViolin::noteOff(int note, bool sustainDown) {
     for (auto& s : strings_) {
         if (s.active && s.note == note && s.keyDown) {
             s.keyDown = false;
-            if (sustainDown_) s.pendingRelease = true;
-            else s.pendingRelease = false;
+            s.pendingRelease = sustainDown_;
         }
     }
 }
@@ -170,7 +188,6 @@ void PhysicalViolin::channelPressure(int value) {
 
 void PhysicalViolin::pitchBend(int value14) {
     pitchBend_ = clampValue(value14, 0, 16383);
-    for (auto& s : strings_) s.coeffCountdown = 0;
 }
 
 void PhysicalViolin::setBowPressure(float normalized) {
@@ -183,145 +200,140 @@ void PhysicalViolin::setBowSpeed(float normalized) {
 
 void PhysicalViolin::setBowPosition(float normalized) {
     bowPosition_ = clampValue(normalized, 0.0f, 1.0f);
-    for (auto& s : strings_) s.coeffCountdown = 0;
 }
 
 void PhysicalViolin::setVibratoDepth(float normalized) {
     vibratoDepth_ = clampValue(normalized, 0.0f, 1.0f);
 }
 
-void PhysicalViolin::updateStringCoefficients(StringState& s) {
-    const double bendSemis = (static_cast<double>(pitchBend_) - 8192.0) / 8192.0 * 2.0;
-    const double vibCents = std::sin(s.vibratoPhase) * (22.0 * vibratoDepth_);
-    const double pitchRatio = std::pow(2.0, bendSemis / 12.0 + vibCents / 1200.0);
-    const double base = s.fundamental * pitchRatio;
-
-    // bowPosition_ is defined as distance from bridge: 0 = almost at bridge,
-    // 1 = toward the finger. Keep it inside a numerically useful physical range.
-    const double fromBridge = 0.035 + 0.265 * bowPosition_;
-    const double xBow = 1.0 - fromBridge;
-
-    for (int i = 0; i < kMaxModes; ++i) {
-        const int n = i + 1;
-        // Tiny stiffness term gives bowed-string brightness without pushing the
-        // upper partials far into inharmonic territory.
-        const double stiffness = 1.0 + 0.000018 * n * n;
-        const double f = base * n * stiffness;
-        auto& m = s.modes[i];
-
-        if (f >= std::min(15500.0, sampleRate_ * 0.43)) {
-            m.enabled = false;
-            continue;
-        }
-
-        const double damping = 1.8 + 0.20 * n + 0.0015 * f;
-        const double r = std::exp(-damping / sampleRate_);
-        const double w = 2.0 * kPi * f / sampleRate_;
-
-        m.a1 = static_cast<float>(2.0 * r * std::cos(w));
-        m.a2 = static_cast<float>(-r * r);
-        m.phiBow = static_cast<float>(std::sin(n * kPi * xBow));
-        m.excite = m.phiBow * (0.0038f / static_cast<float>(n));
-        m.bridgeWeight = ((n & 1) ? -1.0f : 1.0f) *
-                         std::min(1.0f, 0.075f * static_cast<float>(n));
-        m.enabled = true;
-    }
-    s.coeffCountdown = 24;
-}
-
 float PhysicalViolin::processString(StringState& s) {
     if (!s.active) return 0.0f;
 
-    // Finger movement changes effective string length. Smooth it just enough to
-    // avoid zippering while retaining a genuine legato/glissando response.
-    s.fundamental += (s.targetFundamental - s.fundamental) * 0.0035;
-
-    const float pressureFromVelocity = 0.30f + 0.70f * (s.velocity / 127.0f);
-    const int effectivePressure = s.pressure > 0 ? s.pressure : channelPressure_;
-    const float pressureExpression = effectivePressure > 0
-        ? (0.35f + 0.65f * (effectivePressure / 127.0f))
-        : 1.0f;
-
-    const bool bowed = s.keyDown || (s.pendingRelease && sustainDown_);
-    const float targetBow = bowed ? pressureFromVelocity * pressureExpression : 0.0f;
-    const float bowAttack = bowed ? 0.0038f : 0.0018f;
-    s.bowEnvelope += (targetBow - s.bowEnvelope) * bowAttack;
+    // Finger movement changes the physical round-trip delay rather than shifting
+    // an already-generated tone.
+    s.fundamental += (s.targetFundamental - s.fundamental) * 0.0028;
 
     s.vibratoPhase += 2.0 * kPi * 5.35 / sampleRate_;
-    if (s.vibratoPhase > 2.0 * kPi) s.vibratoPhase -= 2.0 * kPi;
+    if (s.vibratoPhase >= 2.0 * kPi) s.vibratoPhase -= 2.0 * kPi;
 
-    if (--s.coeffCountdown <= 0) updateStringCoefficients(s);
+    const double bendSemis =
+        (static_cast<double>(pitchBend_) - 8192.0) / 8192.0 * 2.0;
+    const double vibCents =
+        std::sin(s.vibratoPhase) * (18.0 * vibratoDepth_);
+    const double frequency =
+        s.fundamental * std::pow(2.0, bendSemis / 12.0 + vibCents / 1200.0);
 
-    float bowPointVelocity = 0.0f;
-    for (const auto& m : s.modes) {
-        if (!m.enabled) continue;
-        const float modalVelocity = (m.y1 - m.y2) * static_cast<float>(sampleRate_);
-        bowPointVelocity += modalVelocity * m.phiBow * 0.018f;
-    }
+    // One full waveguide round trip is approximately Fs/f0. A small correction
+    // accounts for the reflection filter phase delay.
+    float totalDelay = static_cast<float>(sampleRate_ / std::max(40.0, frequency) - 1.6);
+    totalDelay = clampValue(totalDelay, 6.0f, static_cast<float>(kDelaySize - 8));
 
-    // Stateful stick/slip approximation. The velocity-dependent friction curve
-    // deliberately has a high static region and a lower dynamic region.
-    const float physicalBowSpeed = 0.035f + 0.46f * bowSpeed_;
-    const float relativeVelocity = physicalBowSpeed - bowPointVelocity;
-    const float ar = std::fabs(relativeVelocity);
-    const float transition = 0.090f;
-    const float muStatic = 0.92f;
-    const float muDynamic = 0.24f;
-    const float mu = muDynamic + (muStatic - muDynamic) *
-        std::exp(-(ar * ar) / (transition * transition));
-    const float direction = std::tanh(relativeVelocity * 28.0f);
+    // Distance from bridge. Keep the bow away from either exact end.
+    const float bridgeFraction = 0.045f + 0.255f * bowPosition_;
+    float bridgeSamples = totalDelay * bridgeFraction;
+    bridgeSamples = clampValue(bridgeSamples, 2.0f, totalDelay - 2.0f);
+    const float neckSamples = std::max(2.0f, totalDelay - bridgeSamples);
 
-    const float forceTarget =
-        bowPressure_ * s.bowEnvelope * mu * direction;
-    s.frictionState += (forceTarget - s.frictionState) * 0.16f;
-    const float force = clampValue(s.frictionState, -1.2f, 1.2f);
+    const float bridgeArrival = readDelay(s.bridgeDelay, bridgeSamples);
+    const float nutArrival = readDelay(s.neckDelay, neckSamples);
 
-    float bridge = 0.0f;
-    float energy = 0.0f;
+    // Lossy bridge reflection removes the metallic infinite-ring behaviour of
+    // the first modal prototype. Nut reflection remains nearly rigid.
+    s.bridgeFilter += (bridgeArrival - s.bridgeFilter) * 0.20f;
+    const float bridgeReflected = -0.982f * s.bridgeFilter;
+    const float nutReflected = -0.996f * nutArrival;
 
-    for (auto& m : s.modes) {
-        if (!m.enabled) continue;
-        float y = m.a1 * m.y1 + m.a2 * m.y2 + force * m.excite;
-        if (!std::isfinite(y)) y = 0.0f;
-        y = clampValue(y, -2.0f, 2.0f);
+    const float stringVelocity = bridgeReflected + nutReflected;
 
-        m.y2 = m.y1;
-        m.y1 = y;
+    const int effectivePressure = s.pressure > 0 ? s.pressure : channelPressure_;
+    const float pressureExpression = effectivePressure > 0
+        ? (0.40f + 0.60f * (effectivePressure / 127.0f))
+        : 1.0f;
+    const float velocityExpression = 0.35f + 0.65f * (s.velocity / 127.0f);
 
-        bridge += y * m.bridgeWeight;
-        energy += y * y;
-    }
+    const bool bowed = s.keyDown || (s.pendingRelease && sustainDown_);
+    const float targetBow = bowed ? velocityExpression * pressureExpression : 0.0f;
+    const float envelopeRate = bowed ? 0.0045f : 0.0016f;
+    s.bowEnvelope += (targetBow - s.bowEnvelope) * envelopeRate;
 
-    bridge *= 0.30f;
-    s.energyFollower += (energy - s.energyFollower) * 0.0025f;
+    // The bow velocity is a physical control, not output gain.
+    const float bowVelocity = 0.025f + 0.34f * bowSpeed_;
+    const float relativeVelocity = bowVelocity - stringVelocity;
+
+    // Stable nonlinear friction curve. Near zero relative velocity the bow
+    // sticks strongly; as slip velocity rises coupling falls. This gives the
+    // delay loop a periodic bowed-string source instead of broadband excitation.
+    const float pressure = clampValue(bowPressure_ * s.bowEnvelope, 0.0f, 1.2f);
+    const float absRel = std::fabs(relativeVelocity);
+    const float slope = 3.2f + (1.0f - pressure) * 3.0f;
+    const float tableArg = std::max(0.75f, 0.75f + absRel * slope);
+    float frictionGain = std::pow(tableArg, -4.0f);
+    frictionGain = clampValue(frictionGain, 0.0f, 1.0f);
+
+    float junctionVelocity =
+        relativeVelocity * frictionGain * (0.28f + 1.05f * pressure);
+    s.frictionState += (junctionVelocity - s.frictionState) * 0.24f;
+    junctionVelocity = clampValue(s.frictionState, -0.55f, 0.55f);
+
+    float towardBridge = nutReflected + junctionVelocity;
+    float towardNut = bridgeReflected + junctionVelocity;
+
+    towardBridge = clampValue(towardBridge, -0.95f, 0.95f);
+    towardNut = clampValue(towardNut, -0.95f, 0.95f);
+
+    writeDelay(s.bridgeDelay, towardBridge);
+    writeDelay(s.neckDelay, towardNut);
+
+    // The bridge-arriving travelling wave is the actual string signal.
+    // Keep a small differentiated component for bow articulation, but the
+    // periodic string component remains dominant.
+    const float bridgeDelta = bridgeArrival - s.lastBridge;
+    s.lastBridge = bridgeArrival;
+    float bridgeSignal = bridgeArrival * 0.92f + bridgeDelta * 0.20f;
+    bridgeSignal = clampValue(bridgeSignal, -1.0f, 1.0f);
+
+    const float energy = bridgeSignal * bridgeSignal;
+    s.energyFollower += (energy - s.energyFollower) * 0.0015f;
     s.age++;
 
-    // After bow release, let the string/body ring naturally before freeing it.
-    if (!s.keyDown && !s.pendingRelease && s.bowEnvelope < 0.0005f &&
-        s.energyFollower < 1.0e-7f && s.age > static_cast<uint64_t>(sampleRate_ * 0.10)) {
-        s.active = false;
-        s.note = -1;
-        s.pressure = 0;
+    if (!s.keyDown && !s.pendingRelease &&
+        s.bowEnvelope < 0.0004f &&
+        s.energyFollower < 2.0e-8f &&
+        s.age > static_cast<uint64_t>(sampleRate_ * 0.12)) {
+        const int open = s.openNote;
+        s = StringState{};
+        s.openNote = open;
+        s.fundamental = midiToHz(open);
+        s.targetFundamental = s.fundamental;
     }
 
-    return clampValue(bridge, -1.5f, 1.5f);
+    if (!std::isfinite(bridgeSignal)) {
+        const int open = s.openNote;
+        s = StringState{};
+        s.openNote = open;
+        s.fundamental = midiToHz(open);
+        s.targetFundamental = s.fundamental;
+        return 0.0f;
+    }
+
+    return bridgeSignal;
 }
 
 float PhysicalViolin::processBody(float bridgeInput) {
-    float sum = 0.0f;
+    float bodySum = 0.0f;
+
     for (auto& m : body_) {
         float y = m.a1 * m.y1 + m.a2 * m.y2 + bridgeInput * m.gain;
         if (!std::isfinite(y)) y = 0.0f;
-        y = clampValue(y, -3.0f, 3.0f);
+        y = clampValue(y, -1.5f, 1.5f);
         m.y2 = m.y1;
         m.y1 = y;
-        sum += y;
+        bodySum += y;
     }
 
-    // A little direct bridge component preserves articulation; the resonant term
-    // supplies the shared wooden-body character for all four strings.
-    const float out = bridgeInput * 0.42f + sum * 0.18f;
-    return std::tanh(out * 1.8f);
+    // Dry string is intentionally dominant. Body is coloration, not the source.
+    const float out = bridgeInput * 0.88f + bodySum * 0.055f;
+    return std::tanh(out * 1.35f);
 }
 
 float PhysicalViolin::process() {
@@ -332,7 +344,9 @@ float PhysicalViolin::process() {
         reset();
         return 0.0f;
     }
-    return processBody(clampValue(bridge, -2.0f, 2.0f));
+
+    bridge = clampValue(bridge * 0.72f, -1.5f, 1.5f);
+    return processBody(bridge);
 }
 
 int PhysicalViolin::activeVoices() const {
