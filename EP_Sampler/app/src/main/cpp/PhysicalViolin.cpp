@@ -170,8 +170,11 @@ void PhysicalViolin::sustainChanged(bool down) {
 void PhysicalViolin::allNotesOff() {
     sustainDown_ = false;
     for (auto& s : strings_) {
-        s.keyDown = false;
-        s.pendingRelease = false;
+        const int open = s.openNote;
+        s = StringState{};
+        s.openNote = open;
+        s.fundamental = midiToHz(open);
+        s.targetFundamental = s.fundamental;
     }
 }
 
