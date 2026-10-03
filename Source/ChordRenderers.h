@@ -86,6 +86,10 @@ public:
         if (! gateOpen || captureLength < 64 || targetCount <= 0)
             return 0.0f;
 
+        const int seam = crossfadeSamples();
+        const double loopSpan =
+            (double) std::max (1, captureLength - seam);
+
         float sum = 0.0f;
         for (int voice = 0; voice < targetCount; ++voice)
         {
@@ -93,7 +97,7 @@ public:
             phase[(size_t) voice] += ratio[(size_t) voice];
 
             while (phase[(size_t) voice] >= (double) captureLength)
-                phase[(size_t) voice] -= (double) captureLength;
+                phase[(size_t) voice] -= loopSpan;
         }
 
         return sum / std::sqrt ((float) std::max (1, targetCount));
@@ -156,22 +160,34 @@ private:
                  + frac * (capture[(size_t) i1] - capture[(size_t) i0]);
         };
 
-        // HOLD=0 preserves the approved 20 ms seam. It grows with HOLD up to
-        // 160 ms, while the clamp below keeps it below one quarter of capture.
-        const int xf = std::clamp (
-            (int) std::lround (sampleRate * (double) crossfadeSeconds()),
-            16,
-            std::max (16, captureLength / 4));
+        // Crossfade the END of the loop into the matching beginning segment.
+        // On wrap, renderSample skips the already-overlapped head so the last
+        // crossfaded sample continues into the same waveform instead of
+        // jumping back to sample zero.
+        const int xf = crossfadeSamples();
+        const double seamStart =
+            (double) captureLength - (double) xf;
 
-        if (position < (double) xf)
+        if (position >= seamStart)
         {
-            const float t = (float) (position / (double) xf);
-            const float a = readLinear (position + (double) captureLength - (double) xf);
-            const float b = readLinear (position);
-            return a + (b - a) * t;
+            const double headPosition = position - seamStart;
+            const float t =
+                (float) (headPosition / (double) std::max (1, xf));
+            const float tail = readLinear (position);
+            const float head = readLinear (headPosition);
+            return tail + (head - tail) * t;
         }
 
         return readLinear (position);
+    }
+
+    int crossfadeSamples() const noexcept
+    {
+        return std::clamp (
+            (int) std::lround (
+                sampleRate * (double) crossfadeSeconds()),
+            16,
+            std::max (16, captureLength / 4));
     }
 
     double sampleRate = 48000.0;
@@ -195,6 +211,9 @@ public:
     void prepare (double sr)
     {
         sampleRate = sr > 1000.0 ? sr : 48000.0;
+        frequencySlewCoefficient =
+            1.0 - std::exp (
+                -1.0 / std::max (1.0, sampleRate * 0.0025));
         reset();
     }
 
@@ -206,6 +225,7 @@ public:
         currentMidiNote = -1;
         phase = 0.0;
         frequency = 440.0;
+        targetFrequency = 440.0;
         envelope = 0.0f;
         stepSamplesRemaining = 0;
         noteSamplesRemaining = 0;
@@ -220,6 +240,7 @@ public:
             notes[(size_t) i] = std::clamp (midiNotes[(size_t) i], 60, 83);
         currentNoteIndex = -1;
         previousNoteIndex = -1;
+        currentMidiNote = -1;
         stepSamplesRemaining = 0;
         noteSamplesRemaining = 0;
         noteTriggered = false;
@@ -242,6 +263,9 @@ public:
 
     float renderSample (bool gateOpen) noexcept
     {
+        frequency += frequencySlewCoefficient
+                   * (targetFrequency - frequency);
+
         if (! gateOpen || noteCount <= 0)
         {
             envelope *= 0.992f;
@@ -317,7 +341,8 @@ private:
         currentNoteIndex = index;
         const int midi = notes[(size_t) index];
         currentMidiNote = midi;
-        frequency = 440.0 * std::pow (2.0, ((double) midi - 69.0) / 12.0);
+        targetFrequency =
+            440.0 * std::pow (2.0, ((double) midi - 69.0) / 12.0);
         // Keep oscillator phase and envelope continuous across note changes.
         // Resetting both on every random step caused sharp discontinuities
         // that were perceived as clipping/crackle.
@@ -333,6 +358,8 @@ private:
     int currentMidiNote = -1;
     double phase = 0.0;
     double frequency = 440.0;
+    double targetFrequency = 440.0;
+    double frequencySlewCoefficient = 0.01;
     float envelope = 0.0f;
     int stepSamples = 12000;
     int stepSamplesRemaining = 0;
