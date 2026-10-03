@@ -379,8 +379,15 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         loadBankUri(uri);
     }
 
+    @Override protected void onPause() {
+        if (pianoView != null) pianoView.panicAuditionKeyboard();
+        NativeEngine.controlChange(123, 0);
+        super.onPause();
+    }
+
     @Override protected void onDestroy() {
         if (midiController != null) midiController.stop();
+        NativeEngine.controlChange(123, 0);
         NativeEngine.stop();
         super.onDestroy();
     }
