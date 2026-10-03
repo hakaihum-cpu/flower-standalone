@@ -1,0 +1,35 @@
+EP Sampler FLAC processing report
+Date: 2026-10-03
+
+Input
+- 24 FLAC files: V016/V032/V048/V064/V080/V096/V112/V127 x RR1/RR2/RR3
+- 48 kHz / 24-bit / stereo
+- 38,016,250 frames each = 792.005208 s
+
+Findings
+- RR1/RR2/RR3 are byte-identical within every velocity layer (SHA-256 identical).
+- Therefore there are 8 unique PCM sources, not 24 distinct performances.
+- Note timing matches the capture manifest: first Note On at 2.000 s, then 9.000 s slots.
+- Every file ends at 792.005208 s, so the final C8 release is 48,250 frames (~1.0052 s), not 3 s.
+- The final 100 ms is digital silence for every velocity layer, so the C8 tail is not audibly truncated at EOF.
+
+Bank strategy
+- EPBANK1 remains logically 88 keys x 8 velocities x 3 RR x 2 parts = 4,224 index entries.
+- Identical RR entries share the same PCM offsets instead of storing the same PCM three times.
+- PCM is preserved at 48 kHz / stereo / 24-bit.
+- No normalization, limiting, compression, or level modification is applied.
+
+Generated bank
+- File: epbank_24bit_dedup.bin
+- Size: 1,824,881,416 bytes (1.700 GiB)
+- SHA-256: b44f5ecfc61387ef6d4a59cc0a4b0d207efd6406e63f00433ee429e94344a67b
+- Entries: 4,224
+- Missing logical keys: 0
+- Duplicate logical keys: 0
+- Android SampleBank.cpp host load test: PASS
+- Representative FLAC -> bank PCM byte comparisons: PASS
+
+Builder
+- tools/build_bank_flac_dedup.py
+- Requires ffmpeg + ffprobe.
+- It validates all 24 FLACs, detects exact duplicates by SHA-256, preserves all RR index entries, and clamps only slices that reach actual EOF.

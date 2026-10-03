@@ -1,0 +1,11 @@
+After rendering, place the 24 files in one folder:
+
+EP_V016_RR1.wav ... EP_V127_RR3.wav
+
+Do not put individual sliced notes here. The bank builder uses tools/capture_manifest.csv.
+
+Build command example:
+python tools/build_bank.py bank_input -o epbank.bin --target-bits 24
+
+Then start the app, tap the small BANK indicator at the top-left, and select epbank.bin.
+The app copies it into its private storage and memory-maps it.

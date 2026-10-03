@@ -1,0 +1,309 @@
+package com.example.epsampler;
+
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.view.MotionEvent;
+import android.view.View;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
+
+public final class PianoView extends View {
+    interface ActionListener {
+        void onToggleDreamy();
+        void onChooseBank();
+    }
+
+    private ActionListener actionListener;
+    private final Bitmap background;
+    private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final boolean[] held = new boolean[128];
+    private final int[] velocities = new int[128];
+    private final int[] polyPressure = new int[128];
+    private int channelPressure = 0;
+    private int cc7 = 127, cc11 = 127, cc64 = 0, cc103 = 36, cc104 = 36;
+    private int pitchBend = 8192;
+    private int midiConnections = 0;
+    private boolean dreamy = true;
+    private String bankStatus = "BANK —";
+
+    private final Finger[] left = new Finger[5];
+    private final Finger[] right = new Finger[5];
+    private RectF imageRect = new RectF();
+
+    // Coordinates measured from the supplied 1191 x 896 reference image.
+    private static final float SRC_W = 1191f, SRC_H = 896f;
+    private static final RectF KEYBOARD = new RectF(151f, 472f, 1078f, 606f);
+
+    PianoView(Context context) {
+        super(context);
+        setKeepScreenOn(true);
+        setBackgroundColor(Color.BLACK);
+        background = BitmapFactory.decodeResource(getResources(), R.drawable.piano_reference);
+        text.setTypeface(android.graphics.Typeface.create("sans", android.graphics.Typeface.NORMAL));
+        for (int i = 0; i < 5; i++) { left[i] = new Finger(); right[i] = new Finger(); }
+    }
+
+    void setActionListener(ActionListener l) { actionListener = l; }
+    void setDreamy(boolean on) { dreamy = on; invalidate(); }
+    void setBankStatus(String s) { bankStatus = s; invalidate(); }
+    void setMidiConnections(int count) { midiConnections = count; invalidate(); }
+    void setChannelPressure(int v) { channelPressure = clamp7(v); invalidate(); }
+    void setPitchBend(int v) { pitchBend = Math.max(0, Math.min(16383, v)); invalidate(); }
+
+    void noteOn(int note, int velocity) {
+        if (note < 0 || note > 127) return;
+        held[note] = true; velocities[note] = clamp7(velocity);
+        assignHands(); invalidate();
+    }
+    void noteOff(int note) {
+        if (note < 0 || note > 127) return;
+        held[note] = false; polyPressure[note] = 0;
+        assignHands(); invalidate();
+    }
+    void polyPressure(int note, int value) {
+        if (note >= 0 && note < 128) polyPressure[note] = clamp7(value);
+        invalidate();
+    }
+    void controlChange(int cc, int value) {
+        if (cc == 7) cc7 = clamp7(value);
+        else if (cc == 11) cc11 = clamp7(value);
+        else if (cc == 64) cc64 = clamp7(value);
+        else if (cc == 103) cc103 = clamp7(value);
+        else if (cc == 104) cc104 = clamp7(value);
+        invalidate();
+    }
+
+    private static int clamp7(int v) { return Math.max(0, Math.min(127, v)); }
+
+    @Override protected void onDraw(Canvas c) {
+        super.onDraw(c);
+        float scale = Math.min(getWidth() / SRC_W, getHeight() / SRC_H);
+        float dw = SRC_W * scale, dh = SRC_H * scale;
+        float leftPad = (getWidth() - dw) * 0.5f;
+        float topPad = (getHeight() - dh) * 0.5f;
+        imageRect.set(leftPad, topPad, leftPad + dw, topPad + dh);
+        c.drawBitmap(background, null, imageRect, paint);
+
+        drawPressedKeys(c, scale, leftPad, topPad);
+        drawHands(c, scale, leftPad, topPad);
+        drawIndicators(c);
+    }
+
+    private void drawPressedKeys(Canvas c, float s, float ox, float oy) {
+        for (int note = 21; note <= 108; note++) {
+            if (!held[note]) continue;
+            RectF r = keyRect(note);
+            if (r == null) continue;
+            r = new RectF(ox + r.left*s, oy + r.top*s, ox + r.right*s, oy + r.bottom*s);
+            int a = 34 + Math.round(velocities[note] / 127f * 60f);
+            paint.setColor(Color.argb(a, 255, 245, 215));
+            c.drawRoundRect(r, 2f*s, 2f*s, paint);
+        }
+    }
+
+    private RectF keyRect(int note) {
+        if (note < 21 || note > 108) return null;
+        boolean black = isBlack(note);
+        int whiteIndex = whiteIndex(note);
+        float whiteW = KEYBOARD.width() / 52f;
+        if (!black) {
+            float x = KEYBOARD.left + whiteIndex * whiteW;
+            return new RectF(x + 1, KEYBOARD.top, x + whiteW - 1, KEYBOARD.bottom);
+        }
+        int prevWhite = whiteIndexBeforeBlack(note);
+        float center = KEYBOARD.left + (prevWhite + 1) * whiteW;
+        float bw = whiteW * 0.58f;
+        return new RectF(center - bw/2, KEYBOARD.top, center + bw/2, KEYBOARD.top + KEYBOARD.height()*0.57f);
+    }
+
+    private static boolean isBlack(int note) {
+        int pc = note % 12;
+        return pc == 1 || pc == 3 || pc == 6 || pc == 8 || pc == 10;
+    }
+
+    private static int whiteIndex(int note) {
+        int idx = 0;
+        for (int n = 21; n < note; n++) if (!isBlack(n)) idx++;
+        return idx;
+    }
+
+    private static int whiteIndexBeforeBlack(int note) {
+        int idx = -1;
+        for (int n = 21; n < note; n++) if (!isBlack(n)) idx++;
+        return Math.max(0, idx);
+    }
+
+    private float keyCenterX(int note) {
+        RectF r = keyRect(note);
+        return r == null ? KEYBOARD.centerX() : r.centerX();
+    }
+
+    private void assignHands() {
+        List<Integer> active = new ArrayList<>();
+        for (int n = 21; n <= 108; n++) if (held[n]) active.add(n);
+        active.sort(Comparator.naturalOrder());
+
+        List<Integer> l = new ArrayList<>(), r = new ArrayList<>();
+        for (int n : active) {
+            if (n <= 60) l.add(n); else r.add(n);
+        }
+        // If one side has too many notes, keep the five nearest to its natural range.
+        if (l.size() > 5) l = new ArrayList<>(l.subList(Math.max(0, l.size()-5), l.size()));
+        if (r.size() > 5) r = new ArrayList<>(r.subList(0, 5));
+        targetHand(left, l, true);
+        targetHand(right, r, false);
+    }
+
+    private void targetHand(Finger[] fingers, List<Integer> notes, boolean isLeft) {
+        float neutralX = isLeft ? 474f : 720f;
+        float neutralY = 568f;
+        for (int i = 0; i < fingers.length; i++) {
+            Finger f = fingers[i];
+            float spread = (i - 2) * 14f;
+            f.targetX = neutralX + spread;
+            f.targetY = neutralY - (i == 0 || i == 4 ? 5 : 14);
+            f.active = false;
+        }
+        int[][] slots = { {}, {2}, {1,3}, {1,2,3}, {0,1,3,4}, {0,1,2,3,4} };
+        int count = Math.min(5, notes.size());
+        if (count > 0) {
+            int[] use = slots[count];
+            for (int j = 0; j < count; j++) {
+                int fingerIndex = use[j];
+                int note = notes.get(j);
+                Finger f = fingers[fingerIndex];
+                f.targetX = keyCenterX(note);
+                RectF kr = keyRect(note);
+                f.targetY = (kr == null) ? neutralY : (isBlack(note) ? kr.bottom - 5 : kr.top + kr.height()*0.68f);
+                f.active = held[note];
+            }
+        }
+        for (Finger f : fingers) {
+            if (!f.initialized) { f.x = f.targetX; f.y = f.targetY; f.initialized = true; }
+        }
+    }
+
+    private void drawHands(Canvas c, float s, float ox, float oy) {
+        boolean animating = false;
+        animating |= drawHand(c, left, true, s, ox, oy);
+        animating |= drawHand(c, right, false, s, ox, oy);
+        if (animating) postInvalidateOnAnimation();
+    }
+
+    private boolean drawHand(Canvas c, Finger[] fingers, boolean isLeft, float s, float ox, float oy) {
+        float palmX = 0f, palmY = 0f;
+        boolean moving = false;
+        for (Finger f : fingers) {
+            float dx = f.targetX - f.x, dy = f.targetY - f.y;
+            f.x += dx * 0.16f; f.y += dy * 0.16f;
+            if (Math.abs(dx) + Math.abs(dy) > 0.8f) moving = true;
+            palmX += f.x; palmY += f.y;
+        }
+        palmX /= 5f;
+        palmY = palmY / 5f + 35f;
+
+        paint.setStrokeWidth(Math.max(1.4f, 2.0f*s));
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setColor(Color.argb(80, 248, 236, 210));
+        for (int i = 0; i < 5; i++) {
+            Finger f = fingers[i];
+            float fx = ox + f.x*s, fy = oy + f.y*s;
+            float px = ox + palmX*s, py = oy + palmY*s;
+            float knuckleX = px + (fx-px)*0.50f + (i-2)*2.5f*s;
+            float knuckleY = py + (fy-py)*0.48f;
+            c.drawLine(px, py, knuckleX, knuckleY, paint);
+            c.drawLine(knuckleX, knuckleY, fx, fy, paint);
+            if (f.active) {
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(Color.argb(115, 255, 244, 215));
+                c.drawCircle(fx, fy, Math.max(2.5f, 4.0f*s), paint);
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setColor(Color.argb(80, 248, 236, 210));
+            }
+        }
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.argb(25, 248, 236, 210));
+        c.drawOval(new RectF(ox+(palmX-25)*s, oy+(palmY-14)*s, ox+(palmX+25)*s, oy+(palmY+14)*s), paint);
+        return moving;
+    }
+
+    private void drawIndicators(Canvas c) {
+        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
+        float pad = 14f*u;
+        float h = 18f*u;
+        paint.setColor(Color.argb(105, 0, 0, 0));
+        c.drawRoundRect(new RectF(pad*0.5f, pad*0.45f, getWidth()-pad*0.5f, pad*0.45f + h*2.25f), 7*u, 7*u, paint);
+
+        text.setTextSize(10.5f*u);
+        text.setColor(Color.argb(210, 236, 229, 216));
+        float y = pad*0.45f + 13f*u;
+        c.drawText(midiConnections > 0 ? "MIDI  ●" : "MIDI  ○", pad, y, text);
+        c.drawText(bankStatus, pad + 62*u, y, text);
+
+        c.drawText("VEL", pad, y + 16*u, text);
+        drawMicroBar(c, pad + 26*u, y + 12.5f*u, maxHeldVelocity()/127f, 48*u, 3*u);
+        c.drawText("AT", pad + 83*u, y + 16*u, text);
+        drawMicroBar(c, pad + 101*u, y + 12.5f*u, Math.max(channelPressure,maxPolyPressure())/127f, 34*u, 3*u);
+        c.drawText("VOL", pad + 144*u, y + 16*u, text);
+        drawMicroBar(c, pad + 172*u, y + 12.5f*u, cc7/127f, 34*u, 3*u);
+        c.drawText("EXP", pad + 215*u, y + 16*u, text);
+        drawMicroBar(c, pad + 243*u, y + 12.5f*u, cc11/127f, 34*u, 3*u);
+        c.drawText("DX", pad + 286*u, y + 16*u, text);
+        drawMicroBar(c, pad + 304*u, y + 12.5f*u, cc103/127f, 25*u, 3*u);
+        c.drawText("DY", pad + 337*u, y + 16*u, text);
+        drawMicroBar(c, pad + 355*u, y + 12.5f*u, cc104/127f, 25*u, 3*u);
+        c.drawText(cc64 >= 64 ? "SUS ●" : "SUS ○", pad + 391*u, y + 16*u, text);
+
+        String dr = dreamy ? "DREAMY  ●" : "DREAMY  ○";
+        float tw = text.measureText(dr);
+        c.drawText(dr, getWidth()-pad-tw, y, text);
+        float cents = (pitchBend - 8192) / 8192f * 200f;
+        String pb = String.format(java.util.Locale.US, "PB %+3.0fc", cents);
+        float pw = text.measureText(pb);
+        c.drawText(pb, getWidth()-pad-pw, y+16*u, text);
+    }
+
+    private void drawMicroBar(Canvas c, float x, float y, float value, float w, float h) {
+        value = Math.max(0f, Math.min(1f, value));
+        paint.setColor(Color.argb(65, 235, 228, 215));
+        c.drawRect(x, y, x+w, y+h, paint);
+        paint.setColor(Color.argb(175, 245, 236, 217));
+        c.drawRect(x, y, x+w*value, y+h, paint);
+    }
+
+    private int maxHeldVelocity() {
+        int m = 0; for (int i=0;i<128;i++) if (held[i]) m = Math.max(m, velocities[i]); return m;
+    }
+    private int maxPolyPressure() {
+        int m = 0; for (int v : polyPressure) m = Math.max(m, v); return m;
+    }
+
+    @Override public boolean onTouchEvent(MotionEvent e) {
+        if (e.getAction() != MotionEvent.ACTION_UP) return true;
+        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
+        if (e.getY() < 48*u && e.getX() > getWidth()*0.72f) {
+            if (actionListener != null) actionListener.onToggleDreamy();
+            return true;
+        }
+        if (e.getY() < 48*u && e.getX() < getWidth()*0.45f) {
+            if (actionListener != null) actionListener.onChooseBank();
+            return true;
+        }
+        return true;
+    }
+
+    private static final class Finger {
+        float x, y, targetX, targetY;
+        boolean initialized = false;
+        boolean active = false;
+    }
+}
