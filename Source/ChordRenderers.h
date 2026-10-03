@@ -542,10 +542,11 @@ public:
         {
             return type != effect && (! transitioning || type != oldEffect);
         };
-        if (tailAllowed (shortDelay)) { left += shortL; right += shortR; }
-        if (tailAllowed (longDelay))  { left += longL; right += longR; }
-        if (tailAllowed (tapeDelay))  { left += tapeDelayOutL; right += tapeDelayOutR; }
-        if (tailAllowed (reverb))     { left += revL; right += revR; }
+        constexpr float tailReturn = 0.22f;
+        if (tailAllowed (shortDelay)) { left += shortL * tailReturn; right += shortR * tailReturn; }
+        if (tailAllowed (longDelay))  { left += longL * tailReturn; right += longR * tailReturn; }
+        if (tailAllowed (tapeDelay))  { left += tapeDelayOutL * tailReturn; right += tapeDelayOutR * tailReturn; }
+        if (tailAllowed (reverb))     { left += revL * tailReturn; right += revR * tailReturn; }
 
         // Soft-knee protection avoids the high-frequency edge created by the
         // previous hard clamp while still bounding accumulated effect tails.
