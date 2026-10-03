@@ -3,6 +3,36 @@
 #include "ParameterIDs.h"
 #include <cmath>
 
+namespace
+{
+float softProtectSample (float sample) noexcept
+{
+    if (! std::isfinite (sample))
+        return 0.0f;
+
+    constexpr float threshold = 0.90f;
+    constexpr float ceiling = 0.995f;
+    const float magnitude = std::abs (sample);
+    if (magnitude <= threshold)
+        return sample;
+
+    const float knee = ceiling - threshold;
+    const float shaped =
+        threshold + knee * std::tanh ((magnitude - threshold) / knee);
+    return std::copysign (shaped, sample);
+}
+
+void softProtectBuffer (juce::AudioBuffer<float>& buffer) noexcept
+{
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    {
+        auto* data = buffer.getWritePointer (channel);
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            data[sample] = softProtectSample (data[sample]);
+    }
+}
+}
+
 RealtimeChordFxAudioProcessor::RealtimeChordFxAudioProcessor()
     : juce::AudioProcessor (BusesProperties()
         .withInput ("Input", juce::AudioChannelSet::stereo(), true)
@@ -26,6 +56,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     theory.reset();
     sampleChordRenderer.prepare (currentSampleRate);
     sineArpeggiator.prepare (currentSampleRate);
+    chordBRandomFx.prepare (currentSampleRate);
     pendingMidi = -1;
     stableCount = 0;
     haveChord = false;
@@ -66,6 +97,17 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     dreamyDelayBuffer.setSize (2, dreamyDelaySamples, false, true, false);
     dreamyDelayBuffer.clear();
     dreamyDelayWritePosition = 0;
+    {
+        const float y0 = juce::jlimit (0.0f, 1.0f,
+            (float) controllerY.load (std::memory_order_relaxed) / 127.0f);
+        dreamyDelaySamplesSmoothed =
+            (float) (currentSampleRate * (0.16 + 0.36 * y0));
+    }
+    dreamyAmbienceSmoothed = 0.0f;
+    dreamyVisualEnvelope = 0.0f;
+    dreamyVisualPreviousMono = 0.0f;
+    dreamyVisualSamplesUntilUpdate = 0;
+    dreamyPostWasEnabled = false;
     dreamyReverb.setSampleRate (currentSampleRate);
     dreamyReverb.reset();
 
@@ -214,6 +256,7 @@ void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
     if (mode == 0)
     {
         sineArpeggiator.reset();
+        chordBRandomFx.reset();
         chordReverb.reset();
 
         if (haveChord)
@@ -269,7 +312,9 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
 
     const float bpm = apvts.getRawParameterValue (ParamID::internalBpm)->load();
     const float length = apvts.getRawParameterValue (ParamID::length)->load();
+    const float effectAmount = apvts.getRawParameterValue (ParamID::effect)->load();
     sineArpeggiator.setTiming (bpm, length);
+    chordBRandomFx.setProbability (effectAmount);
 
     const bool audible =
         running.load (std::memory_order_acquire)
@@ -282,18 +327,26 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
         const float dryRight = channels > 1 ? buffer.getSample (1, i) : dryLeft;
         const float arp = sineArpeggiator.renderSample (audible);
 
+        if (sineArpeggiator.consumeNoteTrigger())
+            chordBRandomFx.chooseForNote();
+
+        float effectedLeft = arp;
+        float effectedRight = arp;
+        chordBRandomFx.processSample (arp, effectedLeft, effectedRight);
+
         if (audible)
         {
-            buffer.setSample (0, i, dryLeft * 0.68f + arp * 0.52f);
+            buffer.setSample (0, i, dryLeft * 0.68f + effectedLeft * 0.52f);
             if (channels > 1)
-                buffer.setSample (1, i, dryRight * 0.68f + arp * 0.52f);
+                buffer.setSample (1, i, dryRight * 0.68f + effectedRight * 0.52f);
         }
     }
 
     if (running.load (std::memory_order_relaxed) && haveChord)
     {
         processChordReverb (buffer);
-        buffer.applyGain (0.86f); // explicit CHORD-B output headroom
+        buffer.applyGain (0.80f); // extra CHORD-B output headroom
+        softProtectBuffer (buffer);
     }
 }
 
@@ -333,6 +386,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     {
         lastChordMode = chordMode;
         sineArpeggiator.reset();
+        chordBRandomFx.reset();
         chordReverb.reset();
         if (haveChord)
         {
@@ -354,6 +408,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         theory.reset();
         sampleChordRenderer.reset();
         sineArpeggiator.reset();
+        chordBRandomFx.reset();
         chordReverb.reset();
         haveChord = false;
         pendingMidi = -1;
@@ -370,7 +425,14 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         chordMidiStopRequested = true;
         chordMidiRefreshRequested = false;
         dreamyVoiceActive = { false, false };
-            dreamyDelayLowpass = { 0.0f, 0.0f };
+        dreamyDelayLowpass = { 0.0f, 0.0f };
+        dreamyDelayBuffer.clear();
+        dreamyDelayWritePosition = 0;
+        dreamyAmbienceSmoothed = 0.0f;
+        dreamyVisualEnvelope = 0.0f;
+        dreamyVisualPreviousMono = 0.0f;
+        dreamyVisualSamplesUntilUpdate = 0;
+        dreamyPostWasEnabled = false;
         dreamyReverb.reset();
 
         const juce::SpinLock::ScopedLockType lock (labelLock);
@@ -503,7 +565,58 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
         (float) controllerY.load (std::memory_order_relaxed) / 127.0f);
     const float bpm = juce::jlimit (50.0f, 200.0f,
         apvts.getRawParameterValue (ParamID::internalBpm)->load());
-    const float ambience = enabled ? std::pow (x * y, 1.35f) : 0.0f;
+    const float ambienceTarget =
+        enabled ? std::pow (x * y, 1.35f) : 0.0f;
+    const float ambienceAlpha =
+        1.0f - std::exp (
+            -(float) numSamples
+            / juce::jmax (1.0f, (float) currentSampleRate * 0.050f));
+    dreamyAmbienceSmoothed +=
+        ambienceAlpha * (ambienceTarget - dreamyAmbienceSmoothed);
+    const float ambience =
+        juce::jlimit (0.0f, 1.0f, dreamyAmbienceSmoothed);
+
+    // DREAMY visuals: XY chooses the base cell, while actual audio movement
+    // shifts only a few neighbouring frames inside the same row. This keeps
+    // the user's latched XY position intact while making the image respond to
+    // changing sound.
+    float changePeak = 0.0f;
+    float levelPeak = 0.0f;
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        const float left = buffer.getSample (0, sample);
+        const float right = channels > 1 ? buffer.getSample (1, sample) : left;
+        const float mono = 0.5f * (left + right);
+        changePeak = juce::jmax (
+            changePeak, std::abs (mono - dreamyVisualPreviousMono));
+        levelPeak = juce::jmax (levelPeak, std::abs (mono));
+        dreamyVisualPreviousMono = mono;
+    }
+
+    const float visualTarget = juce::jlimit (
+        0.0f, 1.0f, changePeak * 5.0f + levelPeak * 0.45f);
+    dreamyVisualEnvelope =
+        0.82f * dreamyVisualEnvelope + 0.18f * visualTarget;
+
+    dreamyVisualSamplesUntilUpdate -= numSamples;
+    if (enabled && dreamyVisualSamplesUntilUpdate <= 0)
+    {
+        const int baseFrame = controllerFrameForXY (
+            controllerX.load (std::memory_order_relaxed),
+            controllerY.load (std::memory_order_relaxed));
+        const int row = baseFrame / 20;
+        const int baseColumn = baseFrame % 20;
+        const int audioOffset = juce::jlimit (
+            0, 4, juce::roundToInt (dreamyVisualEnvelope * 4.0f));
+        int reactiveColumn = baseColumn + audioOffset;
+        if (reactiveColumn > 19)
+            reactiveColumn = baseColumn - audioOffset;
+        const int frame =
+            row * 20 + juce::jlimit (0, 19, reactiveColumn);
+        visualFrame.store (frame, std::memory_order_relaxed);
+        dreamyVisualSamplesUntilUpdate =
+            juce::jmax (1, juce::roundToInt (currentSampleRate / 12.0));
+    }
 
     const auto wrapIndex = [capacity] (int position)
     {
@@ -661,21 +774,41 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
     }
 
 
-    // EFFECTS-only post stage: the accepted Dreamy core above remains unchanged.
-    // Delay/Reverb are added after Dreamy and increase only toward the upper-right.
-    if (enabled && ambience > 0.001f && dreamyDelayBuffer.getNumSamples() > 0)
+    // EFFECTS-only post stage. Delay time and ambience are smoothed so XY
+    // motion cannot jump a read head or reverb mix from one block to the next.
+    const bool postEnabled =
+        enabled && ambience > 0.001f
+        && dreamyDelayBuffer.getNumSamples() > 0;
+
+    if (postEnabled)
     {
         const int delayCapacity = dreamyDelayBuffer.getNumSamples();
-        const int delaySamples = juce::jlimit (
-            1, delayCapacity - 1,
-            juce::roundToInt (currentSampleRate * (0.16 + 0.36 * y)));
+        const float targetDelaySamples =
+            (float) (currentSampleRate * (0.16 + 0.36 * y));
+        const float delaySmoothing =
+            1.0f - std::exp (
+                -1.0f / juce::jmax (1.0f, (float) currentSampleRate * 0.030f));
         const float delayMix = 0.46f * ambience;
         const float feedback = 0.18f + 0.42f * ambience;
 
         for (int sample = 0; sample < numSamples; ++sample)
         {
-            const int readPos =
-                (dreamyDelayWritePosition - delaySamples + delayCapacity) % delayCapacity;
+            dreamyDelaySamplesSmoothed +=
+                delaySmoothing
+                * (targetDelaySamples - dreamyDelaySamplesSmoothed);
+
+            double readPosition =
+                (double) dreamyDelayWritePosition
+                - (double) dreamyDelaySamplesSmoothed;
+            while (readPosition < 0.0)
+                readPosition += (double) delayCapacity;
+            while (readPosition >= (double) delayCapacity)
+                readPosition -= (double) delayCapacity;
+
+            const int read0 = (int) std::floor (readPosition);
+            const int read1 = (read0 + 1) % delayCapacity;
+            const float readFrac =
+                (float) (readPosition - (double) read0);
 
             float current[2] { 0.0f, 0.0f };
             float delayed[2] { 0.0f, 0.0f };
@@ -683,7 +816,11 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
             for (int channel = 0; channel < channels; ++channel)
             {
                 current[channel] = buffer.getSample (channel, sample);
-                const float rawDelay = dreamyDelayBuffer.getSample (channel, readPos);
+                const float a =
+                    dreamyDelayBuffer.getSample (channel, read0);
+                const float b =
+                    dreamyDelayBuffer.getSample (channel, read1);
+                const float rawDelay = a + (b - a) * readFrac;
                 auto& lp = dreamyDelayLowpass[(size_t) channel];
                 lp += 0.24f * (rawDelay - lp);
                 delayed[channel] = lp;
@@ -692,12 +829,16 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
             for (int channel = 0; channel < channels; ++channel)
             {
                 const int other = channels > 1 ? 1 - channel : channel;
+                const float delayWrite =
+                    softProtectSample (
+                        current[channel] + delayed[other] * feedback);
+                const float mixed =
+                    softProtectSample (
+                        current[channel] + delayed[channel] * delayMix);
                 dreamyDelayBuffer.setSample (
-                    channel, dreamyDelayWritePosition,
-                    current[channel] + delayed[other] * feedback);
+                    channel, dreamyDelayWritePosition, delayWrite);
                 buffer.setSample (
-                    channel, sample,
-                    current[channel] + delayed[channel] * delayMix);
+                    channel, sample, mixed);
             }
 
             dreamyDelayWritePosition =
@@ -717,8 +858,25 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
             dreamyReverb.processStereo (
                 buffer.getWritePointer (0), buffer.getWritePointer (1), numSamples);
         else
-            dreamyReverb.processMono (buffer.getWritePointer (0), numSamples);
+            dreamyReverb.processMono (
+                buffer.getWritePointer (0), numSamples);
+
+        dreamyPostWasEnabled = true;
     }
+    else if (dreamyPostWasEnabled)
+    {
+        // Never freeze an old tail and revive it on the next DREAMY entry.
+        // At this point the post-stage wet level is already near zero.
+        dreamyDelayBuffer.clear();
+        dreamyDelayWritePosition = 0;
+        dreamyDelayLowpass = { 0.0f, 0.0f };
+        dreamyReverb.reset();
+        dreamyPostWasEnabled = false;
+    }
+
+    if (enabled)
+        softProtectBuffer (buffer);
+
 }
 
 
@@ -1062,6 +1220,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::width, "WIDTH", 0.0f, 1.0f, 0.35f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::length, "LENGTH", 0.0f, 1.0f, 0.70f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hold, "HOLD", 0.0f, 1.0f, 0.0f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::effect, "EFFECT", 0.0f, 1.0f, 0.0f));
     p.add (std::make_unique<juce::AudioParameterInt> (ParamID::midiChannel, "MIDI CH", 1, 16, 1));
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::clockMode, "CLOCK", juce::StringArray { "Internal", "MIDI" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::internalBpm, "BPM", 40.0f, 240.0f, 120.0f));
