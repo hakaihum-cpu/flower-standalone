@@ -129,6 +129,7 @@ for bad in [
 
 for need in [
     '"HOLD"',
+    '"EFFECT"',
     '"REVERB"',
     "reverbSteps",
     "std::pow (dreamyX * dreamyY, 1.35f)",
@@ -222,6 +223,29 @@ if "pitchBank" in dreamy or "GranularPitchBank" in (R / "Source/PluginProcessor.
     fail("obsolete generated-audio pitch shifter must not remain in Processor")
 
 renderers = (R / "Source/ChordRenderers.h").read_text()
+
+# CHORD-A is frozen to the approved HOLD baseline behavior. Noise hardening must
+# stay in CHORD-B/DREAMY and must not alter the accepted sampled-input renderer.
+a0 = renderers.find("class SampleChordRenderer")
+a1 = renderers.find("class SineArpeggiator", a0)
+if a0 < 0 or a1 < 0:
+    fail("CHORD-A renderer boundaries missing")
+chord_a_renderer = renderers[a0:a1]
+for need in [
+    "phase[(size_t) i] = 0.0;",
+    "phase.fill (0.0);",
+    "return sum / std::sqrt",
+]:
+    if need not in chord_a_renderer:
+        fail(f"CHORD-A approved renderer drift: {need}")
+for bad in [
+    "recaptureTransitionRemaining",
+    "recaptureStartOutput",
+    "lastRenderedOutput",
+]:
+    if bad in chord_a_renderer:
+        fail(f"CHORD-A must remain on approved renderer; unexpected token: {bad}")
+
 for need in [
     "class SampleChordRenderer",
     "captureRecentPhrase",
@@ -230,9 +254,48 @@ for need in [
     "0.020f + hold * 0.140f",
     "class SineArpeggiator",
     "triggerRandomNote",
+    "consumeNoteTrigger",
+    "class ChordBRandomFx",
+    "shortDelay",
+    "longDelay",
+    "tapeDelay",
+    "tapeSim",
+    "bitcrush",
+    "chorus",
+    "reverb",
+    "chooseForNote",
+    "transitionSamplesRemaining",
+    "currentMidiNote",
+    "std::abs (notes[(size_t) i] - currentMidiNote) <= 7",
+    "tailReturn = 0.22f",
+    "softProtect (float sample)",
+    "std::isfinite (sample)",
+    "softProtect (input + dl * feedback)",
+    "softProtect (input + (wetL * 0.38f + wetR * 0.14f))",
 ]:
     if need not in renderers:
         fail(f"CHORD A/B renderer contract missing: {need}")
+
+processor_header = (R / "Source/PluginProcessor.h").read_text()
+
+pa0 = dreamy.find("void RealtimeChordFxAudioProcessor::processChordAudio")
+pa1 = dreamy.find("void RealtimeChordFxAudioProcessor::processChordB", pa0)
+if pa0 < 0 or pa1 < 0:
+    fail("CHORD-A processor boundaries missing")
+chord_a_audio = dreamy[pa0:pa1]
+if "softProtectBuffer (buffer)" in chord_a_audio:
+    fail("CHORD-A approved mix drift: soft protection must not alter CHORD-A")
+for need in [
+    "dryLeft * 0.78f + chord * 0.46f",
+    "processChordReverb (buffer)",
+]:
+    if need not in chord_a_audio:
+        fail(f"CHORD-A approved mix drift: {need}")
+
+switch0 = dreamy.find("if (effectMode == 0 && chordMode != lastChordMode)")
+switch1 = dreamy.find("handleMotionCommand()", switch0)
+if switch0 < 0 or switch1 < 0 or "chordReverb.reset();" not in dreamy[switch0:switch1]:
+    fail("CHORD-A/B approved switch behavior drift: chordReverb.reset missing")
 
 for need in [
     "ParamID::effectMode",
@@ -244,12 +307,33 @@ for need in [
     "processDreamy (buffer)",
     "sampleChordRenderer.pushInput",
     "ParamID::hold",
-    "notifyChordAHoldChanged",
+    "ParamID::effect",
+    "chordBRandomFx.setProbability",
+    "chordBRandomFx.chooseForNote",
+    "chordBRandomFx.processSample",
+    "softProtectBuffer (buffer)",
+    "dreamyDelaySamplesSmoothed",
+    "dreamyAmbienceSmoothed",
+    "dreamyPostWasEnabled",
+    "buffer.applyGain (0.80f)",
+    "dreamyVisualEnvelope",
+    "dreamyVisualSequence",
+    "changePeak",
+    "static constexpr int dx[8]",
+    "static constexpr int dy[8]",
+    "currentSampleRate / 12.0",
+    "softProtectSample (",
+    "const float delayWrite",
+    "const float mixed",
+    "applyOutputSafety (buffer, outputActive)",
+    "currentSampleRate * 0.008f",
+    "outputSafetyGain",
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
 
-processor_header = (R / "Source/PluginProcessor.h").read_text()
+if "notifyChordAHoldChanged" not in processor_header:
+    fail("CHORD/DREAMY mode contract missing: notifyChordAHoldChanged")
 for bad in [
     "PsolaHarmonyBank",
     "psolaTargetPeriod",
@@ -361,6 +445,20 @@ for need in [
     if need not in patch:
         fail(f"known-good native parallelism patch drift: {need}")
 
+# Noise-hardening contracts.
+if "std::clamp (left, -0.72f, 0.72f)" in renderers or "std::clamp (right, -0.72f, 0.72f)" in renderers:
+    fail("CHORD-B hard clamp must not return; use soft-knee protection")
+
+for need in [
+    "sampleRate * 0.006",
+    "targetDelaySamples",
+    "delaySmoothing",
+    "readFrac",
+    "dreamyDelayBuffer.clear()",
+]:
+    if need not in renderers and need not in dreamy:
+        fail(f"noise-hardening contract missing: {need}")
+
 print("[PASS] exact 300-frame visual bank SHA/size verified")
 print("[PASS] product source isolated; synth/cross-project tokens absent")
 print("[PASS] Android input/JNI/startup contract verified")
@@ -368,3 +466,4 @@ print("[PASS] JUCER module set matches proven FLOWER Golden")
 print("[PASS] JUCE 9.0.2 dependency closure verified")
 print("[PASS] Android RECORD_AUDIO exporter contract verified")
 print("[PASS] known-good AN-10..AN-15 CircleCI controls preserved")
+print("[PASS] CHORD/Dreamy noise-hardening contracts verified")
