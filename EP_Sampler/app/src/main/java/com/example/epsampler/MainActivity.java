@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.provider.Settings;
 import android.view.View;
+import android.view.KeyEvent;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.widget.ArrayAdapter;
@@ -321,6 +322,42 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 .setNegativeButton("CANCEL", null).show();
     }
 
+    @Override public void onRecorderRecord() {
+        NativeEngine.recorderToggleRecording();
+        pianoView.invalidate();
+    }
+
+    @Override public void onRecorderClear() {
+        NativeEngine.recorderClear();
+        pianoView.invalidate();
+    }
+
+    @Override public void onRecorderRandom() {
+        NativeEngine.recorderToggleRandom();
+        pianoView.invalidate();
+    }
+
+    @Override public void onRecorderClock() {
+        NativeEngine.recorderToggleClock();
+        pianoView.invalidate();
+    }
+
+    @Override public void onRecorderBpm(int bpm) {
+        NativeEngine.recorderSetBpm(bpm);
+        pianoView.invalidate();
+    }
+
+    @Override public void onRecorderTile(int slot) {
+        if (NativeEngine.recorderIsRecording()
+                && slot != NativeEngine.recorderRecordingSlot()
+                && NativeEngine.recorderValidSamples(slot) == 0) {
+            NativeEngine.recorderRecordSlot(slot);
+        } else {
+            NativeEngine.recorderPlaySlot(slot);
+        }
+        pianoView.invalidate();
+    }
+
     @Override public void onChooseBank() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -343,6 +380,15 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_BANK_URI, uri.toString()).apply();
         loadBankUri(uri);
+    }
+
+    @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getKeyCode() == KeyEvent.KEYCODE_BUTTON_SELECT) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0)
+                pianoView.toggleRecorderDrawer();
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override protected void onDestroy() {

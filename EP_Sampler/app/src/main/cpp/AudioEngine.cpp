@@ -36,6 +36,7 @@ bool AudioEngine::start() {
     space_.setParameters(spaceMix_, spaceDecay_);
     tape_.setParameters(tapeWow_, tapeFlutter_, tapeDrive_);
     dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_);
+    recorder_.prepare(sampleRate_);
     if (AAudioStream_requestStart(stream_) != AAUDIO_OK) { stop(); return false; }
     return true;
 }
@@ -88,6 +89,15 @@ void AudioEngine::setSpaceParameters(int mix,int decay){ push({Event::SPACE_PARA
 void AudioEngine::setTape(bool on){ push({Event::TAPE,on?1:0,0,0}); }
 void AudioEngine::setTapeParameters(int wow,int flutter,int drive){ push({Event::TAPE_PARAMS,wow,flutter,drive}); }
 void AudioEngine::setDreamyParameters(int x,int y,int mix){ push({Event::DREAMY_PARAMS,x,y,mix}); }
+
+void AudioEngine::recorderToggleRecording(){ recorder_.toggleRecording(); }
+void AudioEngine::recorderToggleRandom(){ recorder_.toggleRandom(); }
+void AudioEngine::recorderClear(){ recorder_.requestClear(); }
+void AudioEngine::recorderPlaySlot(int slot){ recorder_.requestPlaySlot(slot); }
+void AudioEngine::recorderRecordSlot(int slot){ recorder_.requestRecordSlot(slot); }
+void AudioEngine::recorderToggleClock(){ recorder_.toggleMidiClockMode(); }
+void AudioEngine::recorderSetBpm(int bpm){ recorder_.setInternalBpm(bpm); }
+void AudioEngine::recorderMidiRealtime(int status){ recorder_.handleMidiRealtime(status); }
 
 void AudioEngine::handle(const Event& e) {
     switch(e.type) {
@@ -245,8 +255,16 @@ void AudioEngine::render(float* out,int32_t frames) {
         constexpr float MASTER_GAIN = 3.2f;
         const float boostGain = std::pow(10.0f, float(std::clamp(boostDb_,0,6)) / 20.0f);
         const float outGain = MASTER_GAIN * boostGain;
-        out[i*2]=std::tanh(l*outGain);
-        out[i*2+1]=std::tanh(r*outGain);
+
+        // Recorder captures the EP-Sampler's finished sound (FX + BOOST) but does
+        // not re-record its own tile playback, so RANDOM/manual playback cannot
+        // create a feedback loop.
+        const float baseL = std::tanh(l*outGain);
+        const float baseR = std::tanh(r*outGain);
+        float mixedL = baseL, mixedR = baseR;
+        recorder_.process(baseL, baseR, mixedL, mixedR);
+        out[i*2]=std::clamp(mixedL, -1.0f, 1.0f);
+        out[i*2+1]=std::clamp(mixedR, -1.0f, 1.0f);
     }
 }
 

@@ -117,9 +117,16 @@ final class MidiController {
         void feed(byte[] bytes, int off, int count) {
             for (int i = off; i < off + count; i++) {
                 int b = bytes[i] & 0xFF;
-                if (b >= 0xF8) continue; // MIDI realtime messages may appear anywhere.
+                if (b >= 0xF8) {
+                    NativeEngine.recorderMidiRealtime(b);
+                    continue; // MIDI realtime messages may appear anywhere.
+                }
                 if ((b & 0x80) != 0) {
-                    if (b >= 0xF0) { runningStatus = 0; dataCount = 0; needed = 0; continue; }
+                    if (b >= 0xF0) {
+                        if (b == 0xFA || b == 0xFB || b == 0xFC)
+                            NativeEngine.recorderMidiRealtime(b);
+                        runningStatus = 0; dataCount = 0; needed = 0; continue;
+                    }
                     runningStatus = b;
                     dataCount = 0;
                     int type = b & 0xF0;

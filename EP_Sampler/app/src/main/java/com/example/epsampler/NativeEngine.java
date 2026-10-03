@@ -25,4 +25,23 @@ public final class NativeEngine {
     public static native void setTape(boolean enabled);
     public static native void setTapeParameters(int wow, int flutter, int drive);
     public static native void setDreamyParameters(int x, int y, int mix);
+
+    public static native void recorderToggleRecording();
+    public static native void recorderToggleRandom();
+    public static native void recorderClear();
+    public static native void recorderPlaySlot(int slot);
+    public static native void recorderRecordSlot(int slot);
+    public static native void recorderToggleClock();
+    public static native void recorderSetBpm(int bpm);
+    public static native void recorderMidiRealtime(int status);
+    public static native boolean recorderIsRecording();
+    public static native boolean recorderIsRandom();
+    public static native boolean recorderIsMidiClock();
+    public static native int recorderBpm();
+    public static native int recorderRecordingSlot();
+    public static native boolean recorderSlotPlaying(int slot);
+    public static native float recorderSlotProgress(int slot);
+    public static native int recorderValidSamples(int slot);
+    public static native float[] recorderPeaks(int slot);
+    public static native float recorderInputLevel();
 }

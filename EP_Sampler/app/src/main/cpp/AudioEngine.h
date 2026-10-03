@@ -9,6 +9,7 @@
 #include "DreamyEffect.h"
 #include "SpaceEffect.h"
 #include "TapeEffect.h"
+#include "IntegratedRecorder.h"
 
 class AudioEngine {
 public:
@@ -34,6 +35,25 @@ public:
     void setTape(bool enabled);
     void setTapeParameters(int wow, int flutter, int drive);
     void setDreamyParameters(int x, int y, int mix);
+
+    void recorderToggleRecording();
+    void recorderToggleRandom();
+    void recorderClear();
+    void recorderPlaySlot(int slot);
+    void recorderRecordSlot(int slot);
+    void recorderToggleClock();
+    void recorderSetBpm(int bpm);
+    void recorderMidiRealtime(int status);
+    bool recorderRecording() const { return recorder_.isRecording(); }
+    bool recorderRandom() const { return recorder_.isRandom(); }
+    bool recorderMidiClock() const { return recorder_.isMidiClockMode(); }
+    int recorderBpm() const { return recorder_.internalBpm(); }
+    int recorderRecordingSlot() const { return recorder_.recordingSlot(); }
+    bool recorderSlotPlaying(int slot) const { return recorder_.isSlotPlaying(slot); }
+    float recorderSlotProgress(int slot) const { return recorder_.slotProgress(slot); }
+    int recorderValidSamples(int slot) const { return recorder_.validSamples(slot); }
+    float recorderPeak(int slot, int bin) const { return recorder_.peak(slot, bin); }
+    float recorderInputLevel() const { return recorder_.inputLevel(); }
 
 private:
     AudioEngine();
@@ -79,6 +99,7 @@ private:
     DreamyEffect dreamy_;
     SpaceEffect space_;
     TapeEffect tape_;
+    IntegratedRecorder recorder_;
     int boosterStep_ = 0;
     int boostDb_ = 0;
     float spaceMix_ = 0.50f, spaceDecay_ = 0.50f;

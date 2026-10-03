@@ -26,3 +26,30 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setBoo
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setSpaceParameters(JNIEnv*,jclass,jint mix,jint decay){AudioEngine::instance().setSpaceParameters(mix,decay);}
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setTapeParameters(JNIEnv*,jclass,jint wow,jint flutter,jint drive){AudioEngine::instance().setTapeParameters(wow,flutter,drive);}
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setDreamyParameters(JNIEnv*,jclass,jint x,jint y,jint mix){AudioEngine::instance().setDreamyParameters(x,y,mix);}
+
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_recorderToggleRecording(JNIEnv*,jclass){AudioEngine::instance().recorderToggleRecording();}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_recorderToggleRandom(JNIEnv*,jclass){AudioEngine::instance().recorderToggleRandom();}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_recorderClear(JNIEnv*,jclass){AudioEngine::instance().recorderClear();}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_recorderPlaySlot(JNIEnv*,jclass,jint slot){AudioEngine::instance().recorderPlaySlot(slot);}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_recorderRecordSlot(JNIEnv*,jclass,jint slot){AudioEngine::instance().recorderRecordSlot(slot);}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_recorderToggleClock(JNIEnv*,jclass){AudioEngine::instance().recorderToggleClock();}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_recorderSetBpm(JNIEnv*,jclass,jint bpm){AudioEngine::instance().recorderSetBpm(bpm);}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_recorderMidiRealtime(JNIEnv*,jclass,jint status){AudioEngine::instance().recorderMidiRealtime(status);}
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_recorderIsRecording(JNIEnv*,jclass){return AudioEngine::instance().recorderRecording();}
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_recorderIsRandom(JNIEnv*,jclass){return AudioEngine::instance().recorderRandom();}
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_recorderIsMidiClock(JNIEnv*,jclass){return AudioEngine::instance().recorderMidiClock();}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_recorderBpm(JNIEnv*,jclass){return AudioEngine::instance().recorderBpm();}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_recorderRecordingSlot(JNIEnv*,jclass){return AudioEngine::instance().recorderRecordingSlot();}
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_recorderSlotPlaying(JNIEnv*,jclass,jint slot){return AudioEngine::instance().recorderSlotPlaying(slot);}
+extern "C" JNIEXPORT jfloat JNICALL Java_com_example_epsampler_NativeEngine_recorderSlotProgress(JNIEnv*,jclass,jint slot){return AudioEngine::instance().recorderSlotProgress(slot);}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_recorderValidSamples(JNIEnv*,jclass,jint slot){return AudioEngine::instance().recorderValidSamples(slot);}
+extern "C" JNIEXPORT jfloatArray JNICALL Java_com_example_epsampler_NativeEngine_recorderPeaks(JNIEnv* env,jclass,jint slot){
+    constexpr int bins=IntegratedRecorder::kPeakBins;
+    jfloatArray out=env->NewFloatArray(bins);
+    if(!out) return nullptr;
+    jfloat values[bins];
+    for(int i=0;i<bins;i++) values[i]=AudioEngine::instance().recorderPeak(slot,i);
+    env->SetFloatArrayRegion(out,0,bins,values);
+    return out;
+}
+extern "C" JNIEXPORT jfloat JNICALL Java_com_example_epsampler_NativeEngine_recorderInputLevel(JNIEnv*,jclass){return AudioEngine::instance().recorderInputLevel();}
