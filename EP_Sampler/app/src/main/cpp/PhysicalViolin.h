@@ -50,6 +50,7 @@ private:
         float bridgeFilter = 0.0f;
         float lastBridge = 0.0f;
         float energyFollower = 0.0f;
+        float startupAssist = 0.0f;
         float ampEnv = 0.0f;
         uint8_t ampStage = 0; // 0 off, 1 attack, 2 decay, 3 sustain, 4 release
 
