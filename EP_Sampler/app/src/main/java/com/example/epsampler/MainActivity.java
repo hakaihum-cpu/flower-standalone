@@ -20,7 +20,7 @@ import android.widget.TextView;
 
 public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener {
     private static final int PICK_BANK = 1001;
-    private static final String PREFS = "ep_sampler";
+    private static final String PREFS = "violin_physical";
     private static final String KEY_BANK_URI = "bank_uri";
     private static final String KEY_BOOST = "boost_step";
     private static final String KEY_SPACE = "space_mode";
