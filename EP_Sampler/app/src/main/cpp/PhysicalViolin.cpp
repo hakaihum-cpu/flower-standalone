@@ -403,6 +403,16 @@ float PhysicalViolin::processString(StringState& s) {
     const float bridgeDelta = bridgeArrival - s.lastBridge;
     s.lastBridge = bridgeArrival;
     float bridgeSignal = bridgeArrival * 0.92f + bridgeDelta * 0.20f;
+
+    // A shorter waveguide stores less displacement energy per cycle, so the
+    // unnormalised model gets progressively quieter as pitch rises. Compensate
+    // at the string/bridge boundary rather than with a global EQ so each voice
+    // reaches the shared body at a comparable playing level.
+    const float referenceHz = static_cast<float>(midiToHz(60.0)); // C4
+    const float pitchLevelComp = clampValue(
+        std::sqrt(static_cast<float>(frequency) / referenceHz),
+        0.82f, 2.35f);
+    bridgeSignal *= pitchLevelComp;
     bridgeSignal = clampValue(bridgeSignal, -1.0f, 1.0f);
 
     const float energy = bridgeSignal * bridgeSignal;
