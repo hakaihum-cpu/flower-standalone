@@ -561,6 +561,9 @@ public:
 private:
     static float softProtect (float sample) noexcept
     {
+        if (! std::isfinite (sample))
+            return 0.0f;
+
         constexpr float threshold = 0.52f;
         constexpr float ceiling = 0.74f;
         const float magnitude = std::abs (sample);
@@ -593,8 +596,10 @@ private:
         const int i0 = (int) position;
         const int i1 = (i0 + 1) % (int) buffer.size();
         const float frac = (float) (position - (double) i0);
-        return buffer[(size_t) i0]
-             + frac * (buffer[(size_t) i1] - buffer[(size_t) i0]);
+        const float value =
+            buffer[(size_t) i0]
+            + frac * (buffer[(size_t) i1] - buffer[(size_t) i0]);
+        return std::isfinite (value) ? value : 0.0f;
     }
 
     void processDelayPair (float input,
@@ -617,8 +622,10 @@ private:
 
         const float dl = bufferL[(size_t) read];
         const float dr = bufferR[(size_t) read];
-        bufferL[(size_t) writePosition] = input + dl * feedback;
-        bufferR[(size_t) writePosition] = input + dr * feedback;
+        bufferL[(size_t) writePosition] =
+            softProtect (input + dl * feedback);
+        bufferR[(size_t) writePosition] =
+            softProtect (input + dr * feedback);
 
         left = input * 0.76f + dl * wet;
         right = input * 0.76f + dr * wet;
@@ -639,8 +646,10 @@ private:
         const float dl = readInterpolated (tapeDelayL, readPos);
         const float dr = readInterpolated (tapeDelayR, readPos - sampleRate * 0.003);
 
-        tapeFeedbackLpL += 0.16f * (dl - tapeFeedbackLpL);
-        tapeFeedbackLpR += 0.16f * (dr - tapeFeedbackLpR);
+        tapeFeedbackLpL =
+            softProtect (tapeFeedbackLpL + 0.16f * (dl - tapeFeedbackLpL));
+        tapeFeedbackLpR =
+            softProtect (tapeFeedbackLpR + 0.16f * (dr - tapeFeedbackLpR));
         tapeDelayL[(size_t) tapeDelayWrite] =
             std::tanh (input + tapeFeedbackLpL * 0.33f);
         tapeDelayR[(size_t) tapeDelayWrite] =
@@ -696,9 +705,9 @@ private:
                          + reverbR[(size_t) bR] * 0.42f;
 
         reverbL[(size_t) reverbWrite] =
-            input + (wetL * 0.38f + wetR * 0.14f);
+            softProtect (input + (wetL * 0.38f + wetR * 0.14f));
         reverbR[(size_t) reverbWrite] =
-            input + (wetR * 0.38f + wetL * 0.14f);
+            softProtect (input + (wetR * 0.38f + wetL * 0.14f));
 
         left = input * 0.70f + wetL * 0.42f;
         right = input * 0.70f + wetR * 0.42f;
