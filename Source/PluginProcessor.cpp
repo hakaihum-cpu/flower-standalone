@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ParameterIDs.h"
+#include <algorithm>
 #include <cmath>
 
 namespace
@@ -22,15 +23,6 @@ float softProtectSample (float sample) noexcept
     return std::copysign (shaped, sample);
 }
 
-void softProtectBuffer (juce::AudioBuffer<float>& buffer) noexcept
-{
-    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-    {
-        auto* data = buffer.getWritePointer (channel);
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-            data[sample] = softProtectSample (data[sample]);
-    }
-}
 }
 
 RealtimeChordFxAudioProcessor::RealtimeChordFxAudioProcessor()
