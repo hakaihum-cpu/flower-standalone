@@ -30,6 +30,7 @@ private:
     static constexpr int kStrings = 4;
     static constexpr int kDelaySize = 2048;
     static constexpr int kBodyModes = 14;
+    static constexpr int kOversample = 4;
 
     struct DelayLine {
         std::array<float, kDelaySize> data{};
@@ -46,11 +47,7 @@ private:
         bool pendingRelease = false;
 
         float bowEnvelope = 0.0f;
-        float frictionState = 0.0f;
         float bridgeFilter = 0.0f;
-        float lastBridge = 0.0f;
-        float energyFollower = 0.0f;
-        float startupAssist = 0.0f;
         float ampEnv = 0.0f;
         uint8_t ampStage = 0; // 0 off, 1 attack, 2 decay, 3 sustain, 4 release
 
@@ -72,6 +69,7 @@ private:
     };
 
     double sampleRate_ = 48000.0;
+    double modelRate_ = 192000.0;
     float bowPressure_ = 0.56f;
     float bowSpeed_ = 0.58f;
     float bowPosition_ = 0.12f;
