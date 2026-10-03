@@ -7,11 +7,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.example.epsampler'
+        applicationId 'com.example.epviolin'
         minSdk 26
         targetSdk 35
         versionCode 1
-        versionName '0.1'
+        versionName '0.1-pm'
 
         externalNativeBuild {
             cmake {
