@@ -11,14 +11,18 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.SystemClock;
+import android.util.Base64;
 import android.view.View;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 final class PerformanceVideoBackground {
-    private static final String ASSET_NAME = "violin_bg.vbg";
+    private static final int ASSET_CHUNKS = 8;
 
     private final View host;
     private volatile Bitmap[] frames;
@@ -79,32 +83,47 @@ final class PerformanceVideoBackground {
         new Thread(() -> {
             Bitmap[] loaded = null;
             int count = 0;
-            int fps = 10;
-            try (InputStream raw = context.getAssets().open(ASSET_NAME);
-                 BufferedInputStream in = new BufferedInputStream(raw, 64 * 1024)) {
-                byte[] magic = new byte[4];
-                if (readFully(in, magic, 0, 4) != 4 ||
-                        magic[0] != 'V' || magic[1] != 'B' || magic[2] != 'G' || magic[3] != '1') {
-                    return;
-                }
-                count = readLeInt(in);
-                int width = readLeInt(in);
-                fps = readLeInt(in);
-                if (count <= 0 || count > 240 || width < 64 || width > 720 || fps < 1 || fps > 30) {
-                    return;
+            int fps = 2;
+            try {
+                StringBuilder base64 = new StringBuilder(100000);
+                for (int i = 0; i < ASSET_CHUNKS; i++) {
+                    String name = String.format(java.util.Locale.US, "violin_bg_%02d.b64", i);
+                    try (InputStream chunk = context.getAssets().open(name);
+                         ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                        byte[] buffer = new byte[4096];
+                        int n;
+                        while ((n = chunk.read(buffer)) >= 0) out.write(buffer, 0, n);
+                        base64.append(out.toString(StandardCharsets.US_ASCII.name()).trim());
+                    }
                 }
 
-                loaded = new Bitmap[count];
-                for (int i = 0; i < count; i++) {
-                    int size = readLeInt(in);
-                    if (size <= 0 || size > 1024 * 1024) return;
-                    byte[] encoded = new byte[size];
-                    if (readFully(in, encoded, 0, size) != size) return;
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(encoded, 0, size);
-                    if (bitmap == null) return;
-                    loaded[i] = bitmap;
+                byte[] packed = Base64.decode(base64.toString(), Base64.DEFAULT);
+                try (BufferedInputStream in = new BufferedInputStream(
+                        new ByteArrayInputStream(packed), 64 * 1024)) {
+                    byte[] magic = new byte[4];
+                    if (readFully(in, magic, 0, 4) != 4 ||
+                            magic[0] != 'V' || magic[1] != 'B' || magic[2] != 'G' || magic[3] != '1') {
+                        return;
+                    }
+                    count = readLeInt(in);
+                    int width = readLeInt(in);
+                    fps = readLeInt(in);
+                    if (count <= 0 || count > 240 || width < 64 || width > 720 || fps < 1 || fps > 30) {
+                        return;
+                    }
+
+                    loaded = new Bitmap[count];
+                    for (int i = 0; i < count; i++) {
+                        int size = readLeInt(in);
+                        if (size <= 0 || size > 1024 * 1024) return;
+                        byte[] encoded = new byte[size];
+                        if (readFully(in, encoded, 0, size) != size) return;
+                        Bitmap bitmap = BitmapFactory.decodeByteArray(encoded, 0, size);
+                        if (bitmap == null) return;
+                        loaded[i] = bitmap;
+                    }
                 }
-            } catch (IOException ignored) {
+            } catch (IOException | IllegalArgumentException ignored) {
                 return;
             }
 
@@ -187,12 +206,19 @@ final class PerformanceVideoBackground {
 
         advance();
 
-        int index = Math.max(0, Math.min(count - 1, (int) framePosition));
+        int index = Math.max(0, Math.min(count - 1, (int) Math.floor(framePosition)));
+        int nextIndex = (index + 1) % count;
+        float blend = framePosition - (float) Math.floor(framePosition);
         Bitmap frame = local[index];
-        if (frame == null) return false;
+        Bitmap next = local[nextIndex];
+        if (frame == null || next == null) return false;
 
-        if (dreamy) drawDreamy(canvas, frame, destination, index);
-        else canvas.drawBitmap(frame, null, destination, normalPaint);
+        if (dreamy) {
+            drawCrossfade(canvas, frame, next, destination, blend);
+            drawDreamy(canvas, frame, destination, index);
+        } else {
+            drawCrossfade(canvas, frame, next, destination, blend);
+        }
 
         // Keep the existing white UI legible without hiding the video.
         canvas.drawRect(destination, shadePaint);
@@ -237,6 +263,17 @@ final class PerformanceVideoBackground {
 
         framePosition += direction * dt * sourceFps * speed;
         wrapFramePosition();
+    }
+
+    private void drawCrossfade(Canvas canvas, Bitmap a, Bitmap b, RectF destination, float blend) {
+        blend = Math.max(0.0f, Math.min(1.0f, blend));
+        normalPaint.setAlpha(255);
+        canvas.drawBitmap(a, null, destination, normalPaint);
+        if (blend > 0.01f) {
+            normalPaint.setAlpha(Math.round(255.0f * blend));
+            canvas.drawBitmap(b, null, destination, normalPaint);
+            normalPaint.setAlpha(255);
+        }
     }
 
     private void drawDreamy(Canvas canvas, Bitmap frame, RectF destination, int frameIndex) {
