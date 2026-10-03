@@ -488,6 +488,19 @@ public final class PianoView extends View {
         invalidate();
     }
 
+    void panicAuditionKeyboard() {
+        releaseAllAuditionNotes();
+        java.util.Arrays.fill(held, false);
+        java.util.Arrays.fill(polyPressure, 0);
+        invalidate();
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        panicAuditionKeyboard();
+        NativeEngine.controlChange(123, 0);
+        super.onDetachedFromWindow();
+    }
+
     private int effectButtonAt(float x, float y) {
         float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
         float pad = 12f*u;
