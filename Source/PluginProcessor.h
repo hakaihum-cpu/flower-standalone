@@ -89,6 +89,7 @@ private:
     chordfx::TheoryEngine theory;
     chordfx::SampleChordRenderer sampleChordRenderer;
     chordfx::SineArpeggiator sineArpeggiator;
+    chordfx::ChordBRandomFx chordBRandomFx;
     juce::Reverb chordReverb;
 
     double currentSampleRate = 48000.0;
@@ -160,6 +161,12 @@ private:
     juce::AudioBuffer<float> dreamyDelayBuffer;
     int dreamyDelayWritePosition = 0;
     std::array<float, 2> dreamyDelayLowpass { 0.0f, 0.0f };
+    float dreamyDelaySamplesSmoothed = 0.0f;
+    float dreamyAmbienceSmoothed = 0.0f;
+    float dreamyVisualEnvelope = 0.0f;
+    float dreamyVisualPreviousMono = 0.0f;
+    int dreamyVisualSamplesUntilUpdate = 0;
+    bool dreamyPostWasEnabled = false;
     juce::Reverb dreamyReverb;
 
     mutable juce::SpinLock labelLock;
