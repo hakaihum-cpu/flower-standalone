@@ -86,17 +86,15 @@ void PhysicalViolin::reset() {
 }
 
 int PhysicalViolin::chooseString(int note) const {
-    // This instrument uses four violin-like physical voices, but each voice may
-    // cover the full playable keyboard range. The earlier implementation tied
-    // each voice to a strict open-string +24 semitone range; in the upper
-    // register that left only one or two eligible voices and destroyed
-    // polyphony.
+    // Retrigger the same pitch on the same voice before consuming a new voice.
+    for (int i = 0; i < kStrings; ++i) {
+        if (strings_[i].active && strings_[i].note == note) return i;
+    }
+
     int best = -1;
     int bestScore = 1000000;
 
-    // First choice: any completely free voice. Keep a loose preference for the
-    // open string nearest the requested pitch so the four voices retain their
-    // G/D/A/E character without becoming hard range restrictions.
+    // Prefer a truly free voice, loosely preserving G/D/A/E character.
     for (int i = 0; i < kStrings; ++i) {
         const auto& voice = strings_[i];
         if (voice.active) continue;
@@ -108,13 +106,19 @@ int PhysicalViolin::chooseString(int note) const {
     }
     if (best >= 0) return best;
 
-    // If all four voices are occupied, retrigger the same note on its current
-    // voice when possible.
+    // Next steal a voice already in release / no longer held.
+    best = -1;
     for (int i = 0; i < kStrings; ++i) {
-        if (strings_[i].active && strings_[i].note == note) return i;
+        const auto& voice = strings_[i];
+        if (voice.keyDown || voice.pendingRelease) continue;
+        if (best < 0 || voice.ampEnv < strings_[best].ampEnv ||
+            (voice.ampEnv == strings_[best].ampEnv && voice.age > strings_[best].age)) {
+            best = i;
+        }
     }
+    if (best >= 0) return best;
 
-    // True four-voice stealing only when all voices are busy: steal the oldest.
+    // Only when all four are genuinely held: steal the oldest.
     best = 0;
     for (int i = 1; i < kStrings; ++i) {
         if (strings_[i].age > strings_[best].age) best = i;
@@ -136,6 +140,7 @@ void PhysicalViolin::noteOn(int note, int velocity) {
     s.note = note;
     s.velocity = clampValue(velocity, 1, 127);
     s.targetFundamental = midiToHz(note);
+    s.ampStage = 1;
 
     if (!legato) {
         const int open = s.openNote;
@@ -146,6 +151,8 @@ void PhysicalViolin::noteOn(int note, int velocity) {
         s.note = note;
         s.velocity = clampValue(velocity, 1, 127);
         s.fundamental = s.targetFundamental = midiToHz(note);
+        s.ampEnv = 0.0f;
+        s.ampStage = 1;
 
         // Small deterministic seed only starts the waveguide; sustained energy
         // must come from bow/string interaction, not noise playback.
@@ -161,6 +168,7 @@ void PhysicalViolin::noteOff(int note, bool sustainDown) {
         if (s.active && s.note == note && s.keyDown) {
             s.keyDown = false;
             s.pendingRelease = sustainDown_;
+            if (!sustainDown_) s.ampStage = 4;
         }
     }
 }
@@ -172,6 +180,7 @@ void PhysicalViolin::sustainChanged(bool down) {
         for (auto& s : strings_) {
             if (s.active && s.pendingRelease && !s.keyDown) {
                 s.pendingRelease = false;
+                s.ampStage = 4;
             }
         }
     }
@@ -219,8 +228,80 @@ void PhysicalViolin::setVibratoDepth(float normalized) {
     vibratoDepth_ = clampValue(normalized, 0.0f, 1.0f);
 }
 
+void PhysicalViolin::setAdsr(float attackMs, float decayMs, float sustain, float releaseMs) {
+    attackMs_ = clampValue(attackMs, 0.0f, 5000.0f);
+    decayMs_ = clampValue(decayMs, 0.0f, 5000.0f);
+    sustain_ = clampValue(sustain, 0.0f, 1.0f);
+    releaseMs_ = clampValue(releaseMs, 0.0f, 5000.0f);
+}
+
+float PhysicalViolin::processAmpEnvelope(StringState& s) {
+    constexpr uint8_t OFF = 0, ATTACK = 1, DECAY = 2, SUSTAIN = 3, RELEASE = 4;
+
+    switch (s.ampStage) {
+        case ATTACK: {
+            if (attackMs_ <= 0.1f) {
+                s.ampEnv = 1.0f;
+                s.ampStage = DECAY;
+            } else {
+                s.ampEnv += 1000.0f / (attackMs_ * static_cast<float>(sampleRate_));
+                if (s.ampEnv >= 1.0f) {
+                    s.ampEnv = 1.0f;
+                    s.ampStage = DECAY;
+                }
+            }
+            break;
+        }
+        case DECAY: {
+            if (decayMs_ <= 0.1f || sustain_ >= 0.9999f) {
+                s.ampEnv = sustain_;
+                s.ampStage = SUSTAIN;
+            } else {
+                const float step = (1.0f - sustain_) * 1000.0f /
+                    (decayMs_ * static_cast<float>(sampleRate_));
+                s.ampEnv -= step;
+                if (s.ampEnv <= sustain_) {
+                    s.ampEnv = sustain_;
+                    s.ampStage = SUSTAIN;
+                }
+            }
+            break;
+        }
+        case SUSTAIN:
+            s.ampEnv = sustain_;
+            break;
+        case RELEASE: {
+            if (releaseMs_ <= 0.1f) {
+                s.ampEnv = 0.0f;
+                s.ampStage = OFF;
+            } else {
+                s.ampEnv -= 1000.0f / (releaseMs_ * static_cast<float>(sampleRate_));
+                if (s.ampEnv <= 0.0f) {
+                    s.ampEnv = 0.0f;
+                    s.ampStage = OFF;
+                }
+            }
+            break;
+        }
+        default:
+            s.ampEnv = 0.0f;
+            break;
+    }
+    return clampValue(s.ampEnv, 0.0f, 1.0f);
+}
+
 float PhysicalViolin::processString(StringState& s) {
     if (!s.active) return 0.0f;
+
+    const float amp = processAmpEnvelope(s);
+    if (!s.keyDown && !s.pendingRelease && s.ampStage == 0 && amp <= 0.0f) {
+        const int open = s.openNote;
+        s = StringState{};
+        s.openNote = open;
+        s.fundamental = midiToHz(open);
+        s.targetFundamental = s.fundamental;
+        return 0.0f;
+    }
 
     // Finger movement changes the physical round-trip delay rather than shifting
     // an already-generated tone.
@@ -316,18 +397,6 @@ float PhysicalViolin::processString(StringState& s) {
     s.energyFollower += (energy - s.energyFollower) * 0.0015f;
     s.age++;
 
-    if (!s.keyDown && !s.pendingRelease &&
-        s.bowEnvelope < 0.0004f &&
-        std::fabs(s.frictionState) < 0.00005f &&
-        s.energyFollower < 2.0e-8f &&
-        s.age > static_cast<uint64_t>(sampleRate_ * 0.12)) {
-        const int open = s.openNote;
-        s = StringState{};
-        s.openNote = open;
-        s.fundamental = midiToHz(open);
-        s.targetFundamental = s.fundamental;
-    }
-
     if (!std::isfinite(bridgeSignal)) {
         const int open = s.openNote;
         s = StringState{};
@@ -337,7 +406,7 @@ float PhysicalViolin::processString(StringState& s) {
         return 0.0f;
     }
 
-    return bridgeSignal;
+    return bridgeSignal * amp;
 }
 
 float PhysicalViolin::processBody(float bridgeInput) {
@@ -353,20 +422,26 @@ float PhysicalViolin::processBody(float bridgeInput) {
     }
 
     // Dry string is intentionally dominant. Body is coloration, not the source.
-    const float out = bridgeInput * 0.88f + bodySum * 0.055f;
-    return std::tanh(out * 1.35f);
+    const float out = bridgeInput * 0.90f + bodySum * 0.045f;
+    return std::tanh(out * 1.10f);
 }
 
 float PhysicalViolin::process() {
     float bridge = 0.0f;
-    for (auto& s : strings_) bridge += processString(s);
+    int sounding = 0;
+    for (auto& s : strings_) {
+        const float v = processString(s);
+        bridge += v;
+        if (s.active && s.ampEnv > 0.0001f) sounding++;
+    }
 
     if (!std::isfinite(bridge)) {
         reset();
         return 0.0f;
     }
 
-    bridge = clampValue(bridge * 0.72f, -1.5f, 1.5f);
+    const float polyNorm = sounding > 1 ? 1.0f / std::sqrt(static_cast<float>(sounding)) : 1.0f;
+    bridge = clampValue(bridge * 0.72f * polyNorm, -1.35f, 1.35f);
     return processBody(bridge);
 }
 
