@@ -39,7 +39,7 @@ public final class PianoView extends View {
     private final int[] velocities = new int[128];
     private final int[] polyPressure = new int[128];
     private int channelPressure = 0;
-    private int cc7 = 127, cc11 = 127, cc64 = 0, cc103 = 36, cc104 = 36;
+    private int cc1 = 14, cc7 = 127, cc10 = 74, cc11 = 74, cc64 = 0, cc74 = 42, cc103 = 36, cc104 = 36;
     private int pitchBend = 8192;
     private int midiConnections = 0;
     private boolean dreamy = true;
@@ -47,7 +47,7 @@ public final class PianoView extends View {
     private int boosterStep = 0;
     private int boostDb = 0;
     private int spaceMode = 0;
-    private String bankStatus = "BANK —";
+    private String bankStatus = "MODEL READY";
     private int downButton = -1;
     private long downTimeMs = 0L;
 
@@ -301,7 +301,7 @@ public final class PianoView extends View {
         drawMicroBar(c, pad + 130f*u, barY-5f*u, Math.max(channelPressure,maxPolyPressure())/127f, 48f*u, 6f*u);
         c.drawText("VOL", pad + 191f*u, row2, text);
         drawMicroBar(c, pad + 229f*u, barY-5f*u, cc7/127f, 48f*u, 6f*u);
-        c.drawText("EXP", pad + 290f*u, row2, text);
+        c.drawText("BOW", pad + 290f*u, row2, text);
         drawMicroBar(c, pad + 329f*u, barY-5f*u, cc11/127f, 48f*u, 6f*u);
         c.drawText(cc64 >= 64 ? "SUS ●" : "SUS ○", pad + 390f*u, row2, text);
 
