@@ -7,6 +7,9 @@ namespace
 {
 float softProtectSample (float sample) noexcept
 {
+    if (! std::isfinite (sample))
+        return 0.0f;
+
     constexpr float threshold = 0.90f;
     constexpr float ceiling = 0.995f;
     const float magnitude = std::abs (sample);
@@ -829,12 +832,16 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
             for (int channel = 0; channel < channels; ++channel)
             {
                 const int other = channels > 1 ? 1 - channel : channel;
+                const float delayWrite =
+                    softProtectSample (
+                        current[channel] + delayed[other] * feedback);
+                const float mixed =
+                    softProtectSample (
+                        current[channel] + delayed[channel] * delayMix);
                 dreamyDelayBuffer.setSample (
-                    channel, dreamyDelayWritePosition,
-                    current[channel] + delayed[other] * feedback);
+                    channel, dreamyDelayWritePosition, delayWrite);
                 buffer.setSample (
-                    channel, sample,
-                    current[channel] + delayed[channel] * delayMix);
+                    channel, sample, mixed);
             }
 
             dreamyDelayWritePosition =
