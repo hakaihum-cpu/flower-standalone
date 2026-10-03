@@ -134,12 +134,14 @@ void RecorderAudioProcessorEditor::paint (juce::Graphics& g)
     for (int i = 0; i < RecorderAudioProcessor::kSlots; ++i)
         drawTile (g, i);
 
-    const auto rec = juce::Rectangle<float> (30, 676, 145, 30);
-    const auto rnd = juce::Rectangle<float> (187, 676, 145, 30);
-    const auto clk = juce::Rectangle<float> (344, 676, 145, 30);
-    const auto bpm = juce::Rectangle<float> (501, 676, 189, 30);
+    const auto rec = juce::Rectangle<float> (30, 676, 100, 30);
+    const auto clear = juce::Rectangle<float> (140, 676, 100, 30);
+    const auto rnd = juce::Rectangle<float> (250, 676, 120, 30);
+    const auto clk = juce::Rectangle<float> (380, 676, 140, 30);
+    const auto bpm = juce::Rectangle<float> (530, 676, 160, 30);
 
     drawButton (g, rec, processor.isRecording() ? juce::String::fromUTF8 (u8"● REC") : "REC", processor.isRecording());
+    drawButton (g, clear, "CLEAR", false);
     drawButton (g, rnd, "RANDOM", processor.isRandomMode());
     drawButton (g, clk, processor.isMidiClockMode() ? "MIDI" : "INTERNAL", processor.isMidiClockMode());
     drawButton (g, bpm, processor.isMidiClockMode() ? "BPM  MIDI" : "BPM  " + juce::String (processor.getInternalBpm()), false);
@@ -147,7 +149,7 @@ void RecorderAudioProcessorEditor::paint (juce::Graphics& g)
 
 void RecorderAudioProcessorEditor::setBpmFromX (float x)
 {
-    const auto r = juce::Rectangle<float> (501, 676, 189, 30);
+    const auto r = juce::Rectangle<float> (530, 676, 160, 30);
     if (! r.contains (x, r.getCentreY()) || processor.isMidiClockMode()) return;
     const float norm = juce::jlimit (0.0f, 1.0f, (x - r.getX()) / r.getWidth());
     processor.setInternalBpm (30 + juce::roundToInt (norm * 270.0f));
@@ -161,17 +163,24 @@ void RecorderAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     for (int i = 0; i < RecorderAudioProcessor::kSlots; ++i)
         if (tileBounds (i).contains (p))
         {
-            processor.requestPlaySlot (i);
+            if (processor.isRecording()
+                && i != processor.getRecordingSlot()
+                && processor.getValidSamples (i) == 0)
+                processor.requestRecordSlot (i);
+            else
+                processor.requestPlaySlot (i);
             return;
         }
 
-    if (juce::Rectangle<float> (30, 676, 145, 30).contains (p))
+    if (juce::Rectangle<float> (30, 676, 100, 30).contains (p))
         processor.toggleRecording();
-    else if (juce::Rectangle<float> (187, 676, 145, 30).contains (p))
+    else if (juce::Rectangle<float> (140, 676, 100, 30).contains (p))
+        processor.requestClear();
+    else if (juce::Rectangle<float> (250, 676, 120, 30).contains (p))
         processor.toggleRandomMode();
-    else if (juce::Rectangle<float> (344, 676, 145, 30).contains (p))
+    else if (juce::Rectangle<float> (380, 676, 140, 30).contains (p))
         processor.toggleClockMode();
-    else if (juce::Rectangle<float> (501, 676, 189, 30).contains (p))
+    else if (juce::Rectangle<float> (530, 676, 160, 30).contains (p))
     {
         draggingBpm = true;
         setBpmFromX (p.x);
