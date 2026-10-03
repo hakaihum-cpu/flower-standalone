@@ -224,8 +224,8 @@ if "pitchBank" in dreamy or "GranularPitchBank" in (R / "Source/PluginProcessor.
 
 renderers = (R / "Source/ChordRenderers.h").read_text()
 
-# CHORD-A is frozen to the approved HOLD baseline behavior. Noise hardening must
-# stay in CHORD-B/DREAMY and must not alter the accepted sampled-input renderer.
+# CHORD-A keeps the approved HOLD timing/mix contract. The only renderer-level
+# change allowed here is the corrected end-of-loop seam crossfade.
 a0 = renderers.find("class SampleChordRenderer")
 a1 = renderers.find("class SineArpeggiator", a0)
 if a0 < 0 or a1 < 0:
@@ -235,6 +235,12 @@ for need in [
     "phase[(size_t) i] = 0.0;",
     "phase.fill (0.0);",
     "return sum / std::sqrt",
+    "0.240f + hold * 1.760f",
+    "0.020f + hold * 0.140f",
+    "const int seam = crossfadeSamples()",
+    "const double loopSpan",
+    "const double seamStart",
+    "position >= seamStart",
 ]:
     if need not in chord_a_renderer:
         fail(f"CHORD-A approved renderer drift: {need}")
@@ -244,7 +250,7 @@ for bad in [
     "lastRenderedOutput",
 ]:
     if bad in chord_a_renderer:
-        fail(f"CHORD-A must remain on approved renderer; unexpected token: {bad}")
+        fail(f"CHORD-A unexpected renderer state: {bad}")
 
 for need in [
     "class SampleChordRenderer",
@@ -266,6 +272,9 @@ for need in [
     "chooseForNote",
     "transitionSamplesRemaining",
     "currentMidiNote",
+    "targetFrequency",
+    "frequencySlewCoefficient",
+    "sampleRate * 0.0025",
     "std::abs (notes[(size_t) i] - currentMidiNote) <= 7",
     "tailReturn = 0.22f",
     "softProtect (float sample)",
@@ -283,8 +292,6 @@ pa1 = dreamy.find("void RealtimeChordFxAudioProcessor::processChordB", pa0)
 if pa0 < 0 or pa1 < 0:
     fail("CHORD-A processor boundaries missing")
 chord_a_audio = dreamy[pa0:pa1]
-if "softProtectBuffer (buffer)" in chord_a_audio:
-    fail("CHORD-A approved mix drift: soft protection must not alter CHORD-A")
 for need in [
     "dryLeft * 0.78f + chord * 0.46f",
     "processChordReverb (buffer)",
@@ -311,7 +318,6 @@ for need in [
     "chordBRandomFx.setProbability",
     "chordBRandomFx.chooseForNote",
     "chordBRandomFx.processSample",
-    "softProtectBuffer (buffer)",
     "dreamyDelaySamplesSmoothed",
     "dreamyAmbienceSmoothed",
     "dreamyPostWasEnabled",
@@ -326,8 +332,17 @@ for need in [
     "const float delayWrite",
     "const float mixed",
     "applyOutputSafety (buffer, outputActive)",
-    "currentSampleRate * 0.008f",
+    "currentSampleRate * 0.012f",
+    "currentSampleRate * 0.080f",
     "outputSafetyGain",
+    "outputLimiterGain",
+    "constexpr float ceiling = 0.92f",
+    "pitchMidiHistory",
+    "std::sort (sorted.begin(), sorted.end())",
+    "currentSampleRate * 0.100",
+    "lifecycleExpired",
+    "atLoopBoundary",
+    "reverbParams.dryLevel = 1.0f - 0.18f * ambience",
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
@@ -356,8 +371,19 @@ for need in [
         fail(f"Dreamy anti-fizz/ambience contract missing: {need}")
 if "dreamyWetLowpass" in dreamy:
     fail("FLOWER Master Dreamy core must not be modified by in-core low-pass")
+if "softProtectBuffer (" in dreamy:
+    fail("stacked final soft clipping must not return; use linear output limiter")
 if "DspTap" not in (R / "THIRD_PARTY_NOTICES.md").read_text():
     fail("DspTap MIT attribution missing")
+
+core_test = (R / "tests/core_test.cpp").read_text()
+for need in [
+    "auto gPlan = theoryG.noteOn (67)",
+    "assert (! containsPc (gPlan, 8))",
+    "assert (gMidi == 67)",
+]:
+    if need not in core_test:
+        fail(f"G pitch/no-semitone regression test missing: {need}")
 
 theory = (R / "Source/TheoryEngine.cpp").read_text()
 for need in [
