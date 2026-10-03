@@ -37,6 +37,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_DREAM_MIX = "dream_mix";
     private static final String KEY_MIDI_CHANNEL = "midi_channel";
     private static final String KEY_MANUAL_SUSTAIN = "manual_sustain";
+    private static final String KEY_ATTACK_MS = "attack_ms";
+    private static final String KEY_DECAY_MS = "decay_ms";
+    private static final String KEY_SUSTAIN_PCT = "sustain_pct";
+    private static final String KEY_RELEASE_MS = "release_ms";
     private PianoView pianoView;
     private MidiController midiController;
     private volatile boolean dreamy = false;
@@ -53,6 +57,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int bowSpeed = 74;
     private int bowPosition = 42;
     private int vibratoDepth = 14;
+    private int attackMs = 20;
+    private int decayMs = 120;
+    private int sustainPct = 90;
+    private int releaseMs = 300;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -76,6 +84,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         dreamMix = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_MIX, 34);
         midiChannel = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_MIDI_CHANNEL, 0);
         manualSustain = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_MANUAL_SUSTAIN, false);
+        attackMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_ATTACK_MS, 20);
+        decayMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DECAY_MS, 120);
+        sustainPct = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SUSTAIN_PCT, 90);
+        releaseMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_RELEASE_MS, 300);
 
         pianoView.setBoosterStep(boosterStep);
         pianoView.setBoostDb(boostDb);
@@ -96,6 +108,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.controlChange(11, bowSpeed);
         NativeEngine.controlChange(74, bowPosition);
         NativeEngine.controlChange(1, vibratoDepth);
+        NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
         pianoView.controlChange(10, bowPressure);
         pianoView.controlChange(11, bowSpeed);
         pianoView.controlChange(74, bowPosition);
@@ -356,9 +369,29 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             NativeEngine.controlChange(1, v);
             pianoView.controlChange(1, v);
         });
+        addSlider(root, "ATTACK ms", 2000, attackMs, v -> {
+            attackMs = v;
+            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_ATTACK_MS, v).apply();
+        });
+        addSlider(root, "DECAY ms", 2000, decayMs, v -> {
+            decayMs = v;
+            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_DECAY_MS, v).apply();
+        });
+        addSlider(root, "SUSTAIN %", 100, sustainPct, v -> {
+            sustainPct = v;
+            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_SUSTAIN_PCT, v).apply();
+        });
+        addSlider(root, "RELEASE ms", 3000, releaseMs, v -> {
+            releaseMs = v;
+            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_RELEASE_MS, v).apply();
+        });
         new AlertDialog.Builder(this)
                 .setTitle("VIOLIN MODEL")
-                .setMessage("4 physical strings: G3 / D4 / A4 / E5\nNo sample bank is used.")
+                .setMessage("4 independent physical-model voices / G3-C8\nShared violin body; no sample bank.")
                 .setView(root)
                 .setPositiveButton("CLOSE", null)
                 .show();
