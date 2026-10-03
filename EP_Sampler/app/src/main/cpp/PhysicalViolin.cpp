@@ -270,9 +270,16 @@ float PhysicalViolin::processString(StringState& s) {
     float frictionGain = std::pow(tableArg, -4.0f);
     frictionGain = clampValue(frictionGain, 0.0f, 1.0f);
 
+    // No bow pressure means no energy injection. The previous prototype kept
+    // a constant 0.28 coupling term here, so even after Note Off the virtual
+    // bow could continue feeding the delay loop indefinitely.
     float junctionVelocity =
-        relativeVelocity * frictionGain * (0.28f + 1.05f * pressure);
-    s.frictionState += (junctionVelocity - s.frictionState) * 0.24f;
+        relativeVelocity * frictionGain * (1.12f * pressure);
+    const float frictionSlew = bowed ? 0.24f : 0.42f;
+    s.frictionState += (junctionVelocity - s.frictionState) * frictionSlew;
+    if (!bowed && s.bowEnvelope < 0.0010f && std::fabs(s.frictionState) < 0.00005f) {
+        s.frictionState = 0.0f;
+    }
     junctionVelocity = clampValue(s.frictionState, -0.55f, 0.55f);
 
     float towardBridge = nutReflected + junctionVelocity;
@@ -298,6 +305,7 @@ float PhysicalViolin::processString(StringState& s) {
 
     if (!s.keyDown && !s.pendingRelease &&
         s.bowEnvelope < 0.0004f &&
+        std::fabs(s.frictionState) < 0.00005f &&
         s.energyFollower < 2.0e-8f &&
         s.age > static_cast<uint64_t>(sampleRate_ * 0.12)) {
         const int open = s.openNote;
