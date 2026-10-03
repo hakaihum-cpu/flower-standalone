@@ -101,6 +101,9 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
             (float) (currentSampleRate * (0.16 + 0.36 * y0));
     }
     dreamyAmbienceSmoothed = 0.0f;
+    dreamyVisualEnvelope = 0.0f;
+    dreamyVisualPreviousMono = 0.0f;
+    dreamyVisualSamplesUntilUpdate = 0;
     dreamyPostWasEnabled = false;
     dreamyReverb.setSampleRate (currentSampleRate);
     dreamyReverb.reset();
@@ -342,7 +345,7 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
     if (running.load (std::memory_order_relaxed) && haveChord)
     {
         processChordReverb (buffer);
-        buffer.applyGain (0.86f); // explicit CHORD-B output headroom
+        buffer.applyGain (0.80f); // extra CHORD-B output headroom
         softProtectBuffer (buffer);
     }
 }
@@ -426,6 +429,9 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         dreamyDelayBuffer.clear();
         dreamyDelayWritePosition = 0;
         dreamyAmbienceSmoothed = 0.0f;
+        dreamyVisualEnvelope = 0.0f;
+        dreamyVisualPreviousMono = 0.0f;
+        dreamyVisualSamplesUntilUpdate = 0;
         dreamyPostWasEnabled = false;
         dreamyReverb.reset();
 
@@ -569,6 +575,45 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
         ambienceAlpha * (ambienceTarget - dreamyAmbienceSmoothed);
     const float ambience =
         juce::jlimit (0.0f, 1.0f, dreamyAmbienceSmoothed);
+
+    // DREAMY visuals: XY chooses the base cell, while actual audio movement
+    // shifts only a few neighbouring frames inside the same row. This keeps
+    // the user's latched XY position intact while making the image respond to
+    // changing sound.
+    float changePeak = 0.0f;
+    float levelPeak = 0.0f;
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        const float left = buffer.getSample (0, sample);
+        const float right = channels > 1 ? buffer.getSample (1, sample) : left;
+        const float mono = 0.5f * (left + right);
+        changePeak = juce::jmax (
+            changePeak, std::abs (mono - dreamyVisualPreviousMono));
+        levelPeak = juce::jmax (levelPeak, std::abs (mono));
+        dreamyVisualPreviousMono = mono;
+    }
+
+    const float visualTarget = juce::jlimit (
+        0.0f, 1.0f, changePeak * 5.0f + levelPeak * 0.45f);
+    dreamyVisualEnvelope =
+        0.82f * dreamyVisualEnvelope + 0.18f * visualTarget;
+
+    dreamyVisualSamplesUntilUpdate -= numSamples;
+    if (enabled && dreamyVisualSamplesUntilUpdate <= 0)
+    {
+        const int baseFrame = controllerFrameForXY (
+            controllerX.load (std::memory_order_relaxed),
+            controllerY.load (std::memory_order_relaxed));
+        const int row = baseFrame / 20;
+        const int baseColumn = baseFrame % 20;
+        const int audioOffset = juce::jlimit (
+            0, 4, juce::roundToInt (dreamyVisualEnvelope * 4.0f));
+        const int frame =
+            row * 20 + juce::jlimit (0, 19, baseColumn + audioOffset);
+        visualFrame.store (frame, std::memory_order_relaxed);
+        dreamyVisualSamplesUntilUpdate =
+            juce::jmax (1, juce::roundToInt (currentSampleRate / 12.0));
+    }
 
     const auto wrapIndex = [capacity] (int position)
     {
