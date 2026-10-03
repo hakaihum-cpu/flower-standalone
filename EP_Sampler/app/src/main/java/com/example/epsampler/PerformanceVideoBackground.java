@@ -11,14 +11,18 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.SystemClock;
+import android.util.Base64;
 import android.view.View;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 final class PerformanceVideoBackground {
-    private static final String ASSET_NAME = "violin_bg.vbg";
+    private static final int ASSET_CHUNKS = 6;
 
     private final View host;
     private volatile Bitmap[] frames;
@@ -80,31 +84,46 @@ final class PerformanceVideoBackground {
             Bitmap[] loaded = null;
             int count = 0;
             int fps = 2;
-            try (InputStream raw = context.getAssets().open(ASSET_NAME);
-                 BufferedInputStream in = new BufferedInputStream(raw, 64 * 1024)) {
-                byte[] magic = new byte[4];
-                if (readFully(in, magic, 0, 4) != 4 ||
-                        magic[0] != 'V' || magic[1] != 'B' || magic[2] != 'G' || magic[3] != '1') {
-                    return;
-                }
-                count = readLeInt(in);
-                int width = readLeInt(in);
-                fps = readLeInt(in);
-                if (count <= 0 || count > 240 || width < 64 || width > 720 || fps < 1 || fps > 30) {
-                    return;
+            try {
+                StringBuilder base64 = new StringBuilder(90000);
+                for (int i = 0; i < ASSET_CHUNKS; i++) {
+                    String name = String.format(java.util.Locale.US, "violin_bg_%02d.b64", i);
+                    try (InputStream chunk = context.getAssets().open(name);
+                         ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                        byte[] buffer = new byte[4096];
+                        int n;
+                        while ((n = chunk.read(buffer)) >= 0) out.write(buffer, 0, n);
+                        base64.append(out.toString(StandardCharsets.US_ASCII.name()).trim());
+                    }
                 }
 
-                loaded = new Bitmap[count];
-                for (int i = 0; i < count; i++) {
-                    int size = readLeInt(in);
-                    if (size <= 0 || size > 1024 * 1024) return;
-                    byte[] encoded = new byte[size];
-                    if (readFully(in, encoded, 0, size) != size) return;
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(encoded, 0, size);
-                    if (bitmap == null) return;
-                    loaded[i] = bitmap;
+                byte[] packed = Base64.decode(base64.toString(), Base64.DEFAULT);
+                try (BufferedInputStream in = new BufferedInputStream(
+                        new ByteArrayInputStream(packed), 64 * 1024)) {
+                    byte[] magic = new byte[4];
+                    if (readFully(in, magic, 0, 4) != 4 ||
+                            magic[0] != 'V' || magic[1] != 'B' || magic[2] != 'G' || magic[3] != '1') {
+                        return;
+                    }
+                    count = readLeInt(in);
+                    int width = readLeInt(in);
+                    fps = readLeInt(in);
+                    if (count <= 0 || count > 240 || width < 64 || width > 720 || fps < 1 || fps > 30) {
+                        return;
+                    }
+
+                    loaded = new Bitmap[count];
+                    for (int i = 0; i < count; i++) {
+                        int size = readLeInt(in);
+                        if (size <= 0 || size > 1024 * 1024) return;
+                        byte[] encoded = new byte[size];
+                        if (readFully(in, encoded, 0, size) != size) return;
+                        Bitmap bitmap = BitmapFactory.decodeByteArray(encoded, 0, size);
+                        if (bitmap == null) return;
+                        loaded[i] = bitmap;
+                    }
                 }
-            } catch (IOException ignored) {
+            } catch (IOException | IllegalArgumentException ignored) {
                 return;
             }
 
