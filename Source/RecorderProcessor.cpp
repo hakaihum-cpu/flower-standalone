@@ -38,6 +38,8 @@ void RecorderAudioProcessor::prepareToPlay (double sampleRate, int)
     recordingWasEnabled = false;
     playPositions.fill (0);
     requestedPlayMask.store (0u);
+    requestedRecordSlot.store (-1);
+    clearRequested.store (false);
     randomPlaySlot = -1;
     randomPlayPosition = 0;
     randomSamplesRemaining = 0;
@@ -65,6 +67,12 @@ void RecorderAudioProcessor::requestPlaySlot (int slot) noexcept
 {
     if (juce::isPositiveAndBelow (slot, kSlots))
         requestedPlayMask.fetch_or (1u << (uint32_t) slot);
+}
+
+void RecorderAudioProcessor::requestRecordSlot (int slot) noexcept
+{
+    if (juce::isPositiveAndBelow (slot, kSlots))
+        requestedRecordSlot.store (slot);
 }
 
 bool RecorderAudioProcessor::isSlotPlaying (int slot) const noexcept
@@ -100,7 +108,15 @@ float RecorderAudioProcessor::getPeak (int slot, int bin) const noexcept
 
 void RecorderAudioProcessor::beginRecordingSegment()
 {
-    writeSlot = (writeSlot + 1) % kSlots;
+    beginRecordingAtSlot ((writeSlot + 1) % kSlots);
+}
+
+void RecorderAudioProcessor::beginRecordingAtSlot (int slot)
+{
+    if (! juce::isPositiveAndBelow (slot, kSlots))
+        return;
+
+    writeSlot = slot;
     playPositions[(size_t) writeSlot] = 0;
     uiPlaying[(size_t) writeSlot].store (false);
     uiPlaybackProgress[(size_t) writeSlot].store (0.0f);
@@ -117,6 +133,32 @@ void RecorderAudioProcessor::finishRecordingSegment()
     if (writeSlot >= 0)
         validSamples[(size_t) writeSlot].store (juce::jlimit (0, segmentSamples, writePosition));
     uiRecordingSlot.store (-1);
+}
+
+void RecorderAudioProcessor::clearAllSlots()
+{
+    recordingEnabled.store (false);
+    recordingWasEnabled = false;
+    requestedPlayMask.store (0u);
+    requestedRecordSlot.store (-1);
+
+    writeSlot = -1;
+    writePosition = 0;
+    uiRecordingSlot.store (-1);
+
+    for (int slot = 0; slot < kSlots; ++slot)
+    {
+        slotBuffers[(size_t) slot].clear();
+        validSamples[(size_t) slot].store (0);
+        for (auto& p : peaks[(size_t) slot])
+            p.store (0.0f);
+
+        playPositions[(size_t) slot] = 0;
+        uiPlaying[(size_t) slot].store (false);
+        uiPlaybackProgress[(size_t) slot].store (0.0f);
+    }
+
+    stopRandomPlayback();
 }
 
 void RecorderAudioProcessor::beginPlayback (int slot)
@@ -179,6 +221,8 @@ void RecorderAudioProcessor::stopRandomPlayback()
     randomPlaySlot = -1;
     randomPlayPosition = 0;
     randomSamplesRemaining = 0;
+    uiRandomSlot.store (-1);
+    uiRandomProgress.store (0.0f);
 }
 
 void RecorderAudioProcessor::scheduleNextRandomSwitch()
@@ -329,12 +373,27 @@ void RecorderAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         for (int i = 0; i < numSamples; ++i) level = juce::jmax (level, std::abs (input[i]));
     inputLevel.store (0.85f * inputLevel.load() + 0.15f * level);
 
-    const bool shouldRecord = recordingEnabled.load();
+    if (clearRequested.exchange (false))
+        clearAllSlots();
+
+    bool shouldRecord = recordingEnabled.load();
     if (shouldRecord && ! recordingWasEnabled)
         beginRecordingSegment();
     else if (! shouldRecord && recordingWasEnabled)
         finishRecordingSegment();
     recordingWasEnabled = shouldRecord;
+
+    const int requestedSlot = requestedRecordSlot.exchange (-1);
+    if (shouldRecord
+        && juce::isPositiveAndBelow (requestedSlot, kSlots)
+        && requestedSlot != writeSlot
+        && validSamples[(size_t) requestedSlot].load() == 0)
+    {
+        finishRecordingSegment();
+        beginRecordingAtSlot (requestedSlot);
+    }
+
+    shouldRecord = recordingEnabled.load();
 
     if (shouldRecord && input != nullptr)
     {
