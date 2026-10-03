@@ -86,16 +86,16 @@ jobs:
             printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
             set +e
-            gradle :app:assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2 >> "$OLDPWD/$LOG" 2>&1 &
+            gradle :app:assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2 >> "$LOG" 2>&1 &
             GRADLE_PID=$!
-            echo "[diagnostic] gradle_pid=$GRADLE_PID" | tee -a "$OLDPWD/$LOG"
+            echo "[diagnostic] gradle_pid=$GRADLE_PID" | tee -a "$LOG"
 
             while kill -0 "$GRADLE_PID" 2>/dev/null; do
               {
                 echo "[heartbeat] $(date -u +%Y-%m-%dT%H:%M:%SZ)"
                 free -m || true
                 ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 16 || true
-              } | tee -a "$OLDPWD/$LOG"
+              } | tee -a "$LOG"
               sleep 30
             done
 
