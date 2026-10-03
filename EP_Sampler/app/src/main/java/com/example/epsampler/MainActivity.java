@@ -322,12 +322,33 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     @Override public void onChooseBank() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("application/octet-stream");
-        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/octet-stream", "application/x-binary", "*/*"});
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        startActivityForResult(intent, PICK_BANK);
+        LinearLayout root = dialogRoot();
+        addSlider(root, "BOW PRESSURE", 127, bowPressure, v -> {
+            bowPressure = v;
+            NativeEngine.controlChange(10, v);
+            pianoView.controlChange(10, v);
+        });
+        addSlider(root, "BOW SPEED", 127, bowSpeed, v -> {
+            bowSpeed = v;
+            NativeEngine.controlChange(11, v);
+            pianoView.controlChange(11, v);
+        });
+        addSlider(root, "BOW POSITION", 127, bowPosition, v -> {
+            bowPosition = v;
+            NativeEngine.controlChange(74, v);
+            pianoView.controlChange(74, v);
+        });
+        addSlider(root, "VIBRATO", 127, vibratoDepth, v -> {
+            vibratoDepth = v;
+            NativeEngine.controlChange(1, v);
+            pianoView.controlChange(1, v);
+        });
+        new AlertDialog.Builder(this)
+                .setTitle("VIOLIN MODEL")
+                .setMessage("4 physical strings: G3 / D4 / A4 / E5\nNo sample bank is used.")
+                .setView(root)
+                .setPositiveButton("CLOSE", null)
+                .show();
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
