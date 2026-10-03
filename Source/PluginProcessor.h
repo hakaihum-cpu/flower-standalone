@@ -163,6 +163,9 @@ private:
     std::array<float, 2> dreamyDelayLowpass { 0.0f, 0.0f };
     float dreamyDelaySamplesSmoothed = 0.0f;
     float dreamyAmbienceSmoothed = 0.0f;
+    float dreamyVisualEnvelope = 0.0f;
+    float dreamyVisualPreviousMono = 0.0f;
+    int dreamyVisualSamplesUntilUpdate = 0;
     bool dreamyPostWasEnabled = false;
     juce::Reverb dreamyReverb;
 
