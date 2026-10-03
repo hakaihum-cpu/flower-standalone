@@ -15,9 +15,16 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final int PICK_BANK = 1001;
     private static final String PREFS = "ep_sampler";
     private static final String KEY_BANK_URI = "bank_uri";
+    private static final String KEY_BOOST = "boost_step";
+    private static final String KEY_SPACE = "space_mode";
+    private static final String KEY_TAPE = "tape_on";
+    private static final String KEY_DREAMY = "dreamy_on";
     private PianoView pianoView;
     private MidiController midiController;
     private volatile boolean dreamy = true;
+    private int boosterStep = 0;
+    private int spaceMode = 0;
+    private boolean tape = false;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -26,8 +33,21 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.setActionListener(this);
         setContentView(pianoView);
 
+        boosterStep = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_BOOST, 0);
+        spaceMode = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SPACE, 0);
+        tape = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_TAPE, false);
+        dreamy = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_DREAMY, true);
+
+        pianoView.setBoosterStep(boosterStep);
+        pianoView.setSpaceMode(spaceMode);
+        pianoView.setTape(tape);
+        pianoView.setDreamy(dreamy);
+
         NativeEngine.start();
-        NativeEngine.setDreamy(true);
+        NativeEngine.setBoosterStep(boosterStep);
+        NativeEngine.setSpaceMode(spaceMode);
+        NativeEngine.setTape(tape);
+        NativeEngine.setDreamy(dreamy);
         loadExistingBank();
 
         midiController = new MidiController(this, this);
@@ -75,6 +95,28 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         dreamy = !dreamy;
         NativeEngine.setDreamy(dreamy);
         pianoView.setDreamy(dreamy);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_DREAMY, dreamy).apply();
+    }
+
+    @Override public void onCycleBooster() {
+        boosterStep = (boosterStep + 1) % 4;
+        NativeEngine.setBoosterStep(boosterStep);
+        pianoView.setBoosterStep(boosterStep);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_BOOST, boosterStep).apply();
+    }
+
+    @Override public void onCycleSpace() {
+        spaceMode = (spaceMode + 1) % 4;
+        NativeEngine.setSpaceMode(spaceMode);
+        pianoView.setSpaceMode(spaceMode);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_SPACE, spaceMode).apply();
+    }
+
+    @Override public void onToggleTape() {
+        tape = !tape;
+        NativeEngine.setTape(tape);
+        pianoView.setTape(tape);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_TAPE, tape).apply();
     }
 
     @Override public void onChooseBank() {

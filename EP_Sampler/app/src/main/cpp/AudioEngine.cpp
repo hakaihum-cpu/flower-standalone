@@ -31,6 +31,8 @@ bool AudioEngine::start() {
     sampleRate_ = AAudioStream_getSampleRate(stream_);
     dreamy_.prepare(sampleRate_);
     dreamy_.setXY(cc103_/127.f, cc104_/127.f);
+    space_.prepare(sampleRate_);
+    tape_.prepare(sampleRate_);
     if (AAudioStream_requestStart(stream_) != AAUDIO_OK) { stop(); return false; }
     return true;
 }
@@ -76,6 +78,9 @@ void AudioEngine::channelPressure(int p){ push({Event::CH_AT,p,0}); }
 void AudioEngine::controlChange(int c,int v){ push({Event::CC,c,v}); }
 void AudioEngine::pitchBend(int v){ push({Event::PITCH,v,0}); }
 void AudioEngine::setDreamy(bool on){ push({Event::DREAMY,on?1:0,0}); }
+void AudioEngine::setBoosterStep(int step){ push({Event::BOOST,step,0}); }
+void AudioEngine::setSpaceMode(int mode){ push({Event::SPACE_MODE,mode,0}); }
+void AudioEngine::setTape(bool on){ push({Event::TAPE,on?1:0,0}); }
 
 void AudioEngine::handle(const Event& e) {
     switch(e.type) {
@@ -100,6 +105,9 @@ void AudioEngine::handle(const Event& e) {
             break;
         case Event::PITCH: pitch_=std::clamp(e.a,0,16383); break;
         case Event::DREAMY: dreamy_.setEnabled(e.a!=0); break;
+        case Event::BOOST: boosterStep_=std::clamp(e.a,0,3); break;
+        case Event::SPACE_MODE: space_.setMode(e.a); break;
+        case Event::TAPE: tape_.setEnabled(e.a!=0); break;
     }
 }
 
@@ -181,11 +189,15 @@ void AudioEngine::render(float* out,int32_t frames) {
         float l=0.f,r=0.f;
         for(auto& v:voices_) renderVoice(v,l,r);
         dreamy_.process(l,r);
-        // Captured EP source peaks are conservative (about -18 to -11 dBFS at V127).
-        // Apply a fixed ~+10 dB master gain here; keep tanh as a soft limiter for polyphonic peaks.
+        tape_.process(l,r);
+        space_.process(l,r);
+
+        // Fixed master lift remains at ~+10 dB. BOOST adds 0/+2/+4/+6 dB on top.
         constexpr float MASTER_GAIN = 3.2f;
-        out[i*2]=std::tanh(l*MASTER_GAIN);
-        out[i*2+1]=std::tanh(r*MASTER_GAIN);
+        constexpr float BOOST_GAINS[4] = {1.0f, 1.2589254f, 1.5848932f, 1.9952623f};
+        const float outGain = MASTER_GAIN * BOOST_GAINS[std::clamp(boosterStep_,0,3)];
+        out[i*2]=std::tanh(l*outGain);
+        out[i*2+1]=std::tanh(r*outGain);
     }
 }
 

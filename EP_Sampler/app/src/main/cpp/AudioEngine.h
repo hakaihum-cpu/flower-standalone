@@ -7,6 +7,8 @@
 #include <string>
 #include "SampleBank.h"
 #include "DreamyEffect.h"
+#include "SpaceEffect.h"
+#include "TapeEffect.h"
 
 class AudioEngine {
 public:
@@ -25,6 +27,9 @@ public:
     void controlChange(int cc, int value);
     void pitchBend(int value14);
     void setDreamy(bool enabled);
+    void setBoosterStep(int step);
+    void setSpaceMode(int mode);
+    void setTape(bool enabled);
 
 private:
     AudioEngine();
@@ -33,7 +38,7 @@ private:
     AudioEngine& operator=(const AudioEngine&) = delete;
 
     struct Event {
-        enum Type : uint8_t { NOTE_ON, NOTE_OFF, POLY_AT, CH_AT, CC, PITCH, DREAMY } type;
+        enum Type : uint8_t { NOTE_ON, NOTE_OFF, POLY_AT, CH_AT, CC, PITCH, DREAMY, BOOST, SPACE_MODE, TAPE } type;
         int a=0,b=0;
     };
     static constexpr uint32_t QUEUE = 1024;
@@ -67,6 +72,9 @@ private:
 
     SampleBank bank_;
     DreamyEffect dreamy_;
+    SpaceEffect space_;
+    TapeEffect tape_;
+    int boosterStep_ = 0;
     AAudioStream* stream_=nullptr;
     int sampleRate_=48000;
     std::mutex bankMutex_;

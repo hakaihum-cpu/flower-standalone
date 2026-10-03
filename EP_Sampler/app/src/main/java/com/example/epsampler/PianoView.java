@@ -17,6 +17,9 @@ import java.util.List;
 
 public final class PianoView extends View {
     interface ActionListener {
+        void onCycleBooster();
+        void onCycleSpace();
+        void onToggleTape();
         void onToggleDreamy();
         void onChooseBank();
     }
@@ -33,6 +36,9 @@ public final class PianoView extends View {
     private int pitchBend = 8192;
     private int midiConnections = 0;
     private boolean dreamy = true;
+    private boolean tape = false;
+    private int boosterStep = 0;
+    private int spaceMode = 0;
     private String bankStatus = "BANK —";
 
     private final Finger[] left = new Finger[5];
@@ -54,6 +60,9 @@ public final class PianoView extends View {
 
     void setActionListener(ActionListener l) { actionListener = l; }
     void setDreamy(boolean on) { dreamy = on; invalidate(); }
+    void setTape(boolean on) { tape = on; invalidate(); }
+    void setBoosterStep(int step) { boosterStep = Math.max(0, Math.min(3, step)); invalidate(); }
+    void setSpaceMode(int mode) { spaceMode = Math.max(0, Math.min(3, mode)); invalidate(); }
     void setBankStatus(String s) { bankStatus = s; invalidate(); }
     void setMidiConnections(int count) { midiConnections = count; invalidate(); }
     void setChannelPressure(int v) { channelPressure = clamp7(v); invalidate(); }
@@ -62,12 +71,12 @@ public final class PianoView extends View {
     void noteOn(int note, int velocity) {
         if (note < 0 || note > 127) return;
         held[note] = true; velocities[note] = clamp7(velocity);
-        assignHands(); invalidate();
+        invalidate();
     }
     void noteOff(int note) {
         if (note < 0 || note > 127) return;
         held[note] = false; polyPressure[note] = 0;
-        assignHands(); invalidate();
+        invalidate();
     }
     void polyPressure(int note, int value) {
         if (note >= 0 && note < 128) polyPressure[note] = clamp7(value);
@@ -94,7 +103,6 @@ public final class PianoView extends View {
         c.drawBitmap(background, null, imageRect, paint);
 
         drawPressedKeys(c, scale, leftPad, topPad);
-        drawHands(c, scale, leftPad, topPad);
         drawIndicators(c);
     }
 
@@ -238,38 +246,67 @@ public final class PianoView extends View {
 
     private void drawIndicators(Canvas c) {
         float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
-        float pad = 14f*u;
-        float h = 18f*u;
-        paint.setColor(Color.argb(105, 0, 0, 0));
-        c.drawRoundRect(new RectF(pad*0.5f, pad*0.45f, getWidth()-pad*0.5f, pad*0.45f + h*2.25f), 7*u, 7*u, paint);
+        float pad = 12f*u;
+        float panelTop = 7f*u;
+        float panelBottom = 112f*u;
 
-        text.setTextSize(10.5f*u);
-        text.setColor(Color.argb(210, 236, 229, 216));
-        float y = pad*0.45f + 13f*u;
-        c.drawText(midiConnections > 0 ? "MIDI  ●" : "MIDI  ○", pad, y, text);
-        c.drawText(bankStatus, pad + 62*u, y, text);
+        paint.setColor(Color.argb(150, 0, 0, 0));
+        c.drawRoundRect(new RectF(pad*0.45f, panelTop, getWidth()-pad*0.45f, panelBottom),
+                10f*u, 10f*u, paint);
 
-        c.drawText("VEL", pad, y + 16*u, text);
-        drawMicroBar(c, pad + 26*u, y + 12.5f*u, maxHeldVelocity()/127f, 48*u, 3*u);
-        c.drawText("AT", pad + 83*u, y + 16*u, text);
-        drawMicroBar(c, pad + 101*u, y + 12.5f*u, Math.max(channelPressure,maxPolyPressure())/127f, 34*u, 3*u);
-        c.drawText("VOL", pad + 144*u, y + 16*u, text);
-        drawMicroBar(c, pad + 172*u, y + 12.5f*u, cc7/127f, 34*u, 3*u);
-        c.drawText("EXP", pad + 215*u, y + 16*u, text);
-        drawMicroBar(c, pad + 243*u, y + 12.5f*u, cc11/127f, 34*u, 3*u);
-        c.drawText("DX", pad + 286*u, y + 16*u, text);
-        drawMicroBar(c, pad + 304*u, y + 12.5f*u, cc103/127f, 25*u, 3*u);
-        c.drawText("DY", pad + 337*u, y + 16*u, text);
-        drawMicroBar(c, pad + 355*u, y + 12.5f*u, cc104/127f, 25*u, 3*u);
-        c.drawText(cc64 >= 64 ? "SUS ●" : "SUS ○", pad + 391*u, y + 16*u, text);
+        text.setColor(Color.argb(235, 244, 237, 224));
 
-        String dr = dreamy ? "DREAMY  ●" : "DREAMY  ○";
-        float tw = text.measureText(dr);
-        c.drawText(dr, getWidth()-pad-tw, y, text);
+        // Row 1: connection / bank / pitch. Roughly 2x the old text size.
+        text.setTextSize(18f*u);
+        float row1 = 30f*u;
+        c.drawText(midiConnections > 0 ? "MIDI ●" : "MIDI ○", pad, row1, text);
+        String bankShort = bankStatus != null && bankStatus.startsWith("BANK READY") ? "BANK READY" : bankStatus;
+        c.drawText(bankShort, pad + 95f*u, row1, text);
         float cents = (pitchBend - 8192) / 8192f * 200f;
         String pb = String.format(java.util.Locale.US, "PB %+3.0fc", cents);
         float pw = text.measureText(pb);
-        c.drawText(pb, getWidth()-pad-pw, y+16*u, text);
+        c.drawText(pb, getWidth()-pad-pw, row1, text);
+
+        // Row 2: performance meters, enlarged from the previous micro display.
+        text.setTextSize(15.5f*u);
+        float row2 = 57f*u;
+        float barY = 61f*u;
+        c.drawText("VEL", pad, row2, text);
+        drawMicroBar(c, pad + 34f*u, barY-5f*u, maxHeldVelocity()/127f, 58f*u, 6f*u);
+        c.drawText("AT", pad + 105f*u, row2, text);
+        drawMicroBar(c, pad + 130f*u, barY-5f*u, Math.max(channelPressure,maxPolyPressure())/127f, 48f*u, 6f*u);
+        c.drawText("VOL", pad + 191f*u, row2, text);
+        drawMicroBar(c, pad + 229f*u, barY-5f*u, cc7/127f, 48f*u, 6f*u);
+        c.drawText("EXP", pad + 290f*u, row2, text);
+        drawMicroBar(c, pad + 329f*u, barY-5f*u, cc11/127f, 48f*u, 6f*u);
+        c.drawText(cc64 >= 64 ? "SUS ●" : "SUS ○", pad + 390f*u, row2, text);
+
+        // Row 3: direct-touch effect controls.
+        String[] labels = new String[] {
+                boosterStep == 0 ? "BOOST OFF" : "BOOST +" + (boosterStep*2) + "dB",
+                "SPACE " + new String[]{"NONE","ROOM","HALL","SPACE"}[spaceMode],
+                tape ? "TAPE ON" : "TAPE OFF",
+                dreamy ? "DREAMY ON" : "DREAMY OFF",
+                "BANK"
+        };
+        float gap = 6f*u;
+        float bx0 = pad;
+        float by0 = 72f*u;
+        float bh = 30f*u;
+        float bw = (getWidth() - pad*2f - gap*4f) / 5f;
+        text.setTextSize(13.5f*u);
+        for (int i=0;i<5;i++) {
+            float l = bx0 + i*(bw+gap);
+            float rr = l + bw;
+            boolean active = (i==0 && boosterStep>0) || (i==1 && spaceMode>0) ||
+                    (i==2 && tape) || (i==3 && dreamy);
+            paint.setColor(active ? Color.argb(120, 238, 229, 207) : Color.argb(72, 238, 229, 207));
+            c.drawRoundRect(new RectF(l, by0, rr, by0+bh), 6f*u, 6f*u, paint);
+            text.setColor(active ? Color.rgb(24,24,22) : Color.argb(235,244,237,224));
+            float tw = text.measureText(labels[i]);
+            c.drawText(labels[i], l + (bw-tw)*0.5f, by0 + 20f*u, text);
+        }
+        text.setColor(Color.argb(235, 244, 237, 224));
     }
 
     private void drawMicroBar(Canvas c, float x, float y, float value, float w, float h) {
@@ -290,13 +327,24 @@ public final class PianoView extends View {
     @Override public boolean onTouchEvent(MotionEvent e) {
         if (e.getAction() != MotionEvent.ACTION_UP) return true;
         float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
-        if (e.getY() < 48*u && e.getX() > getWidth()*0.72f) {
-            if (actionListener != null) actionListener.onToggleDreamy();
-            return true;
-        }
-        if (e.getY() < 48*u && e.getX() < getWidth()*0.45f) {
-            if (actionListener != null) actionListener.onChooseBank();
-            return true;
+        float pad = 12f*u;
+        float gap = 6f*u;
+        float by0 = 72f*u;
+        float bh = 30f*u;
+        if (e.getY() >= by0 && e.getY() <= by0 + bh) {
+            float bw = (getWidth() - pad*2f - gap*4f) / 5f;
+            for (int i=0;i<5;i++) {
+                float l = pad + i*(bw+gap);
+                if (e.getX() >= l && e.getX() <= l+bw) {
+                    if (actionListener == null) return true;
+                    if (i==0) actionListener.onCycleBooster();
+                    else if (i==1) actionListener.onCycleSpace();
+                    else if (i==2) actionListener.onToggleTape();
+                    else if (i==3) actionListener.onToggleDreamy();
+                    else actionListener.onChooseBank();
+                    return true;
+                }
+            }
         }
         return true;
     }

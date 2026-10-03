@@ -5,7 +5,9 @@ add_library(epaudio SHARED
         native-lib.cpp
         AudioEngine.cpp
         SampleBank.cpp
-        DreamyEffect.cpp)
+        DreamyEffect.cpp
+        SpaceEffect.cpp
+        TapeEffect.cpp)
 
 find_library(log-lib log)
 find_library(android-lib android)

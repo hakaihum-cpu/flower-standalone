@@ -18,4 +18,7 @@ public final class NativeEngine {
     public static native void controlChange(int cc, int value);
     public static native void pitchBend(int value14);
     public static native void setDreamy(boolean enabled);
+    public static native void setBoosterStep(int step);
+    public static native void setSpaceMode(int mode);
+    public static native void setTape(boolean enabled);
 }
