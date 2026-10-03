@@ -221,6 +221,15 @@ void RealtimeChordFxAudioProcessor::applyChord (const chordfx::ChordPlan& plan, 
     chordMidiRefreshRequested = true;
     chordMidiStopRequested = false;
 
+    // A newly detected live note can reset sample phases and select a new
+    // oscillator target. Restart only the short output onset ramp here;
+    // automatic progression changes keep their continuous output.
+    if (recaptureSample)
+    {
+        outputSafetyGain = 0.0f;
+        outputLimiterGain = 1.0f;
+    }
+
     // Both CHORD renderers consume the exact same TheoryEngine plan.
     // HOLD affects only CHORD-A sample/crossfade duration.
     sampleChordRenderer.setHold (
