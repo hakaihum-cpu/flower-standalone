@@ -39,7 +39,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_MANUAL_SUSTAIN = "manual_sustain";
     private PianoView pianoView;
     private MidiController midiController;
-    private volatile boolean dreamy = true;
+    private volatile boolean dreamy = false;
     private int boosterStep = 0;
     private int spaceMode = 0;
     private boolean tape = false;
@@ -64,7 +64,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         boosterStep = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_BOOST, 0);
         spaceMode = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SPACE, 0);
         tape = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_TAPE, false);
-        dreamy = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_DREAMY, true);
+        dreamy = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_DREAMY, false);
         boostDb = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_BOOST_DB, boosterStep * 2);
         spaceMix = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SPACE_MIX, 50);
         spaceDecay = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SPACE_DECAY, 50);
