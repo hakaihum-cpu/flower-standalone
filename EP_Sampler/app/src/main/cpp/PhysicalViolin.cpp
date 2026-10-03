@@ -141,6 +141,7 @@ void PhysicalViolin::noteOn(int note, int velocity) {
     s.velocity = clampValue(velocity, 1, 127);
     s.targetFundamental = midiToHz(note);
     s.ampStage = 1;
+    s.startupAssist = 1.0f;
 
     if (!legato) {
         const int open = s.openNote;
@@ -153,10 +154,11 @@ void PhysicalViolin::noteOn(int note, int velocity) {
         s.fundamental = s.targetFundamental = midiToHz(note);
         s.ampEnv = 0.0f;
         s.ampStage = 1;
+        s.startupAssist = 1.0f;
 
-        // Small deterministic seed only starts the waveguide; sustained energy
-        // must come from bow/string interaction, not noise playback.
-        const float seed = 0.0025f * (s.velocity / 127.0f);
+        // A deterministic displacement seeds the travelling wave. It is not a
+        // sample layer; sustained energy still comes only from bow interaction.
+        const float seed = 0.012f * (0.35f + 0.65f * (s.velocity / 127.0f));
         writeDelay(s.bridgeDelay, seed);
         writeDelay(s.neckDelay, -seed);
     }
@@ -367,8 +369,18 @@ float PhysicalViolin::processString(StringState& s) {
     // No bow pressure means no energy injection. The previous prototype kept
     // a constant 0.28 coupling term here, so even after Note Off the virtual
     // bow could continue feeding the delay loop indefinitely.
+    // For the first few tens of milliseconds, guarantee that every newly
+    // allocated physical voice enters the stick/slip regime. Without this,
+    // some pitches could receive a voice but remain effectively non-speaking.
+    const float startupCoupling = 0.20f * s.startupAssist;
+    const float coupling = 1.12f * pressure + startupCoupling;
     float junctionVelocity =
-        relativeVelocity * frictionGain * (1.12f * pressure);
+        relativeVelocity * frictionGain * coupling;
+
+    const float startupDecay = std::exp(-1.0f / (0.025f * static_cast<float>(sampleRate_)));
+    s.startupAssist *= startupDecay;
+    if (s.startupAssist < 0.0001f) s.startupAssist = 0.0f;
+
     const float frictionSlew = bowed ? 0.24f : 0.42f;
     s.frictionState += (junctionVelocity - s.frictionState) * frictionSlew;
     if (!bowed && s.bowEnvelope < 0.0010f && std::fabs(s.frictionState) < 0.00005f) {
