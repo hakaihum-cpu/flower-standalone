@@ -4,7 +4,7 @@ project(epaudio)
 add_library(epaudio SHARED
         native-lib.cpp
         AudioEngine.cpp
-        SampleBank.cpp
+        PhysicalViolin.cpp
         DreamyEffect.cpp
         SpaceEffect.cpp
         TapeEffect.cpp)
