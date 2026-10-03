@@ -25,4 +25,5 @@ public final class NativeEngine {
     public static native void setTape(boolean enabled);
     public static native void setTapeParameters(int wow, int flutter, int drive);
     public static native void setDreamyParameters(int x, int y, int mix);
+    public static native void setAdsr(int attackMs, int decayMs, int sustainPct, int releaseMs);
 }
