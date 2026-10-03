@@ -180,12 +180,14 @@ void RealtimeChordFxAudioProcessorEditor::setParameterFromX (DragParam which, fl
     if (which == DragParam::bar) idx = 1;
     else if (which == DragParam::width) idx = 2;
     else if (which == DragParam::length) idx = 3;
-    auto r = which == DragParam::hold ? holdBounds() : parameterBounds (idx);
+    auto r = (which == DragParam::hold || which == DragParam::effect)
+        ? holdBounds() : parameterBounds (idx);
     const float norm = juce::jlimit (0.0f, 1.0f, (x - r.getX()) / r.getWidth());
     if (which == DragParam::complex) setNorm (ParamID::complex, norm);
     else if (which == DragParam::width) setNorm (ParamID::width, norm);
     else if (which == DragParam::length) setNorm (ParamID::length, norm);
     else if (which == DragParam::hold) setNorm (ParamID::hold, norm);
+    else if (which == DragParam::effect) setNorm (ParamID::effect, norm);
     else if (which == DragParam::bar)
     {
         const int step = juce::jlimit (0, 3, juce::roundToInt (norm * 3.0f));
@@ -292,6 +294,13 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
             const int crossfadeMs = juce::roundToInt (20.0f + hold * 140.0f);
             paintBar (g, holdBounds(), "HOLD", hold,
                       juce::String (captureMs) + "/" + juce::String (crossfadeMs) + "ms");
+        }
+        else
+        {
+            const float effect = juce::jlimit (0.0f, 1.0f,
+                processor.state().getRawParameterValue (ParamID::effect)->load());
+            paintBar (g, holdBounds(), "EFFECT", effect,
+                      juce::String (juce::roundToInt (effect * 100.0f)));
         }
 
         const float complex = processor.state().getRawParameterValue (ParamID::complex)->load();
@@ -859,9 +868,9 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
         const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
             processor.state().getRawParameterValue (ParamID::chordMode)->load()));
-        if (chordMode == 0 && holdBounds().contains (p))
+        if (holdBounds().contains (p))
         {
-            dragging = DragParam::hold;
+            dragging = chordMode == 0 ? DragParam::hold : DragParam::effect;
             setParameterFromX (dragging, p.x);
             repaint();
             return;
