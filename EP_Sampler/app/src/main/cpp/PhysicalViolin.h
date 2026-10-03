@@ -21,6 +21,7 @@ public:
     void setBowSpeed(float normalized);
     void setBowPosition(float normalized);
     void setVibratoDepth(float normalized);
+    void setAdsr(float attackMs, float decayMs, float sustain, float releaseMs);
 
     float process();
     int activeVoices() const;
@@ -49,6 +50,8 @@ private:
         float bridgeFilter = 0.0f;
         float lastBridge = 0.0f;
         float energyFollower = 0.0f;
+        float ampEnv = 0.0f;
+        uint8_t ampStage = 0; // 0 off, 1 attack, 2 decay, 3 sustain, 4 release
 
         double fundamental = 196.0;
         double targetFundamental = 196.0;
@@ -72,6 +75,10 @@ private:
     float bowSpeed_ = 0.58f;
     float bowPosition_ = 0.12f;
     float vibratoDepth_ = 0.10f;
+    float attackMs_ = 20.0f;
+    float decayMs_ = 120.0f;
+    float sustain_ = 0.90f;
+    float releaseMs_ = 300.0f;
     int channelPressure_ = 0;
     int pitchBend_ = 8192;
     bool sustainDown_ = false;
@@ -83,6 +90,7 @@ private:
     static float readDelay(const DelayLine& delay, float delaySamples);
     static void writeDelay(DelayLine& delay, float sample);
     int chooseString(int note) const;
+    float processAmpEnvelope(StringState& s);
     float processString(StringState& s);
     float processBody(float bridgeInput);
 };
