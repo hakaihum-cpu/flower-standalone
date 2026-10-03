@@ -22,7 +22,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 final class PerformanceVideoBackground {
-    private static final int ASSET_CHUNKS = 6;
+    private static final int ASSET_CHUNKS = 3;
 
     private final View host;
     private volatile Bitmap[] frames;
