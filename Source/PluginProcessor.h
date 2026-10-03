@@ -81,6 +81,7 @@ private:
     void processChordAudio (juce::AudioBuffer<float>&); // CHORD-A: captured-input chord
     void processChordB (juce::AudioBuffer<float>&);     // CHORD-B: random sine arpeggiator
     void processChordReverb (juce::AudioBuffer<float>&);
+    void applyOutputSafety (juce::AudioBuffer<float>&, bool active);
     void processDreamy (juce::AudioBuffer<float>&);
     void resetModeAudioState (int mode);
 
@@ -115,6 +116,8 @@ private:
     int lastEffectMode = 0; // 0=CHORD, 1=DREAMY
     int lastChordMode = 0;  // 0=CHORD-A, 1=CHORD-B
     int pitchSamplesSinceValid = 1000000;
+    float outputSafetyGain = 0.0f;
+    bool outputSafetyWasActive = false;
     std::atomic<int> controllerX { 36 };
     std::atomic<int> controllerY { 36 };
     std::atomic<bool> controllerTouch { false };
@@ -166,6 +169,7 @@ private:
     float dreamyVisualEnvelope = 0.0f;
     float dreamyVisualPreviousMono = 0.0f;
     int dreamyVisualSamplesUntilUpdate = 0;
+    int dreamyVisualSequence = 0;
     bool dreamyPostWasEnabled = false;
     juce::Reverb dreamyReverb;
 
