@@ -106,6 +106,9 @@ private:
 
     int pendingMidi = -1;
     int stableCount = 0;
+    std::array<float, 5> pitchMidiHistory {};
+    int pitchMidiHistoryCount = 0;
+    int pitchMidiHistoryIndex = 0;
     float lastInputMidiFloat = 60.0f;
     chordfx::ChordPlan currentPlan;
     bool haveChord = false;
@@ -117,6 +120,7 @@ private:
     int lastChordMode = 0;  // 0=CHORD-A, 1=CHORD-B
     int pitchSamplesSinceValid = 1000000;
     float outputSafetyGain = 0.0f;
+    float outputLimiterGain = 1.0f;
     bool outputSafetyWasActive = false;
     std::atomic<int> controllerX { 36 };
     std::atomic<int> controllerY { 36 };
