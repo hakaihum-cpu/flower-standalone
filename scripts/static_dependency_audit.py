@@ -223,6 +223,29 @@ if "pitchBank" in dreamy or "GranularPitchBank" in (R / "Source/PluginProcessor.
     fail("obsolete generated-audio pitch shifter must not remain in Processor")
 
 renderers = (R / "Source/ChordRenderers.h").read_text()
+
+# CHORD-A is frozen to the approved AN-56/HOLD behavior. Noise hardening must
+# stay in CHORD-B/DREAMY and must not alter the accepted sampled-input renderer.
+a0 = renderers.find("class SampleChordRenderer")
+a1 = renderers.find("class SineArpeggiator", a0)
+if a0 < 0 or a1 < 0:
+    fail("CHORD-A renderer boundaries missing")
+chord_a_renderer = renderers[a0:a1]
+for need in [
+    "phase[(size_t) i] = 0.0;",
+    "phase.fill (0.0);",
+    "return sum / std::sqrt",
+]:
+    if need not in chord_a_renderer:
+        fail(f"CHORD-A approved renderer drift: {need}")
+for bad in [
+    "recaptureTransitionRemaining",
+    "recaptureStartOutput",
+    "lastRenderedOutput",
+]:
+    if bad in chord_a_renderer:
+        fail(f"CHORD-A must remain on approved renderer; unexpected token: {bad}")
+
 for need in [
     "class SampleChordRenderer",
     "captureRecentPhrase",
@@ -241,7 +264,6 @@ for need in [
     "chorus",
     "reverb",
     "chooseForNote",
-    "recaptureTransitionRemaining",
     "transitionSamplesRemaining",
     "currentMidiNote",
     "std::abs (notes[(size_t) i] - currentMidiNote) <= 7",
@@ -255,6 +277,25 @@ for need in [
         fail(f"CHORD A/B renderer contract missing: {need}")
 
 processor_header = (R / "Source/PluginProcessor.h").read_text()
+
+pa0 = dreamy.find("void RealtimeChordFxAudioProcessor::processChordAudio")
+pa1 = dreamy.find("void RealtimeChordFxAudioProcessor::processChordB", pa0)
+if pa0 < 0 or pa1 < 0:
+    fail("CHORD-A processor boundaries missing")
+chord_a_audio = dreamy[pa0:pa1]
+if "softProtectBuffer (buffer)" in chord_a_audio:
+    fail("CHORD-A approved mix drift: soft protection must not alter CHORD-A")
+for need in [
+    "dryLeft * 0.78f + chord * 0.46f",
+    "processChordReverb (buffer)",
+]:
+    if need not in chord_a_audio:
+        fail(f"CHORD-A approved mix drift: {need}")
+
+switch0 = dreamy.find("if (effectMode == 0 && chordMode != lastChordMode)")
+switch1 = dreamy.find("handleMotionCommand()", switch0)
+if switch0 < 0 or switch1 < 0 or "chordReverb.reset();" not in dreamy[switch0:switch1]:
+    fail("CHORD-A/B approved switch behavior drift: chordReverb.reset missing")
 
 for need in [
     "ParamID::effectMode",
@@ -405,7 +446,6 @@ if "std::clamp (left, -0.72f, 0.72f)" in renderers or "std::clamp (right, -0.72f
 
 for need in [
     "sampleRate * 0.006",
-    "sampleRate * 0.005",
     "targetDelaySamples",
     "delaySmoothing",
     "readFrac",
