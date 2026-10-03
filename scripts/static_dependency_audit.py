@@ -243,6 +243,9 @@ for need in [
     "chooseForNote",
     "recaptureTransitionRemaining",
     "transitionSamplesRemaining",
+    "currentMidiNote",
+    "std::abs (notes[(size_t) i] - currentMidiNote) <= 7",
+    "tailReturn = 0.22f",
     "softProtect (float sample)",
 ]:
     if need not in renderers:
@@ -268,6 +271,11 @@ for need in [
     "dreamyDelaySamplesSmoothed",
     "dreamyAmbienceSmoothed",
     "dreamyPostWasEnabled",
+    "buffer.applyGain (0.80f)",
+    "dreamyVisualEnvelope",
+    "changePeak",
+    "audioOffset",
+    "currentSampleRate / 12.0",
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
