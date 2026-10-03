@@ -91,7 +91,10 @@ void AudioEngine::setSpaceMode(int mode){ push({Event::SPACE_MODE,mode,0,0}); }
 void AudioEngine::setSpaceParameters(int mix,int decay){ push({Event::SPACE_PARAMS,mix,decay,0}); }
 void AudioEngine::setTape(bool on){ push({Event::TAPE,on?1:0,0,0}); }
 void AudioEngine::setTapeParameters(int wow,int flutter,int drive){ push({Event::TAPE_PARAMS,wow,flutter,drive}); }
-void AudioEngine::setDreamyParameters(int x,int y,int mix){ push({Event::DREAMY_PARAMS,x,y,mix}); }
+void AudioEngine::setDreamyParameters(int x,int y,int mix){ push({Event::DREAMY_PARAMS,x,y,mix,0}); }
+void AudioEngine::setAdsr(int attackMs,int decayMs,int sustainPct,int releaseMs){
+    push({Event::ADSR,attackMs,decayMs,sustainPct,releaseMs});
+}
 
 void AudioEngine::handle(const Event& e) {
     switch(e.type) {
@@ -189,6 +192,13 @@ void AudioEngine::handle(const Event& e) {
             cc104_=std::clamp(int(std::lround(std::clamp(e.b,0,100)*1.27f)),0,127);
             dreamyMix_=std::clamp(e.c,0,100)/100.f;
             dreamy_.setParameters(cc103_/127.f,cc104_/127.f,dreamyMix_);
+            break;
+        case Event::ADSR:
+            violin_.setAdsr(
+                static_cast<float>(std::clamp(e.a,0,5000)),
+                static_cast<float>(std::clamp(e.b,0,5000)),
+                std::clamp(e.c,0,100)/100.0f,
+                static_cast<float>(std::clamp(e.d,0,5000)));
             break;
     }
 }
