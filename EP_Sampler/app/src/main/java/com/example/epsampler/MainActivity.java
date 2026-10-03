@@ -49,6 +49,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int dreamX = 28, dreamY = 28, dreamMix = 34;
     private int midiChannel = 0;
     private boolean manualSustain = false;
+    private int bowPressure = 74;
+    private int bowSpeed = 74;
+    private int bowPosition = 42;
+    private int vibratoDepth = 14;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -88,11 +92,19 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
         NativeEngine.setDreamy(dreamy);
         NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
+        NativeEngine.controlChange(10, bowPressure);
+        NativeEngine.controlChange(11, bowSpeed);
+        NativeEngine.controlChange(74, bowPosition);
+        NativeEngine.controlChange(1, vibratoDepth);
+        pianoView.controlChange(10, bowPressure);
+        pianoView.controlChange(11, bowSpeed);
+        pianoView.controlChange(74, bowPosition);
+        pianoView.controlChange(1, vibratoDepth);
+        pianoView.setBankStatus("MODEL READY");
         if (manualSustain) {
             NativeEngine.controlChange(64, 127);
             pianoView.controlChange(64, 127);
         }
-        loadExistingBank();
 
         midiController = new MidiController(this, this);
         midiController.setChannel(midiChannel);
@@ -299,7 +311,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         TextView cc = new TextView(this);
         cc.setText("\nMIDI CC\n" +
-                "7 Volume / 11 Expression / 64 Sustain\n" +
+                "1 Vibrato / 7 Volume / 10 Bow Pressure / 11 Bow Speed\n" +
+                "64 Sustain / 74 Bow Position\n" +
                 "20 Boost / 21 Space Mode / 22 Space Mix / 23 Space Decay\n" +
                 "24 Tape On-Off / 25 Wow / 26 Flutter / 27 Drive\n" +
                 "28 Dreamy On-Off / 103 Dreamy X / 104 Dreamy Y / 105 Dreamy Mix");
@@ -379,7 +392,11 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     @Override public void onControlChange(int cc, int value) {
         runOnUiThread(() -> {
             pianoView.controlChange(cc, value);
-            if (cc == 1) vibratoDepth = value;\n            else if (cc == 10) bowPressure = value;\n            else if (cc == 11) bowSpeed = value;\n            else if (cc == 74) bowPosition = value;\n            else if (cc == 20) { boostDb = Math.round(value * 6f / 127f); pianoView.setBoostDb(boostDb); }
+            if (cc == 1) vibratoDepth = value;
+            else if (cc == 10) bowPressure = value;
+            else if (cc == 11) bowSpeed = value;
+            else if (cc == 74) bowPosition = value;
+            else if (cc == 20) { boostDb = Math.round(value * 6f / 127f); pianoView.setBoostDb(boostDb); }
             else if (cc == 21) { spaceMode = Math.round(value * 3f / 127f); pianoView.setSpaceMode(spaceMode); }
             else if (cc == 22) spaceMix = Math.round(value * 100f / 127f);
             else if (cc == 23) spaceDecay = Math.round(value * 100f / 127f);
