@@ -2,16 +2,15 @@
 #include <android/log.h>
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,"EPSampler",__VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,"EPViolin",__VA_ARGS__)
 
 AudioEngine& AudioEngine::instance() { static AudioEngine e; return e; }
-AudioEngine::AudioEngine() { rrCounter_.fill(0); polyAT_.fill(0); }
 AudioEngine::~AudioEngine() { stop(); }
 
 bool AudioEngine::start() {
     if (stream_) return true;
+
     AAudioStreamBuilder* b=nullptr;
     if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) return false;
     AAudioStreamBuilder_setDirection(b, AAUDIO_DIRECTION_OUTPUT);
@@ -21,14 +20,26 @@ bool AudioEngine::start() {
     AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_EXCLUSIVE);
     AAudioStreamBuilder_setDataCallback(b, dataCallback, this);
     AAudioStreamBuilder_setErrorCallback(b, errorCallback, this);
+
     aaudio_result_t r = AAudioStreamBuilder_openStream(b, &stream_);
     if (r != AAUDIO_OK) {
         AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_SHARED);
         r = AAudioStreamBuilder_openStream(b, &stream_);
     }
     AAudioStreamBuilder_delete(b);
-    if (r != AAUDIO_OK || !stream_) { stream_=nullptr; return false; }
+
+    if (r != AAUDIO_OK || !stream_) {
+        stream_ = nullptr;
+        return false;
+    }
+
     sampleRate_ = AAudioStream_getSampleRate(stream_);
+    violin_.prepare(sampleRate_);
+    violin_.setBowPressure(0.58f);
+    violin_.setBowSpeed(0.58f);
+    violin_.setBowPosition(0.12f);
+    violin_.setVibratoDepth(0.10f);
+
     dreamy_.prepare(sampleRate_);
     dreamy_.setXY(cc103_/127.f, cc104_/127.f);
     space_.prepare(sampleRate_);
@@ -36,7 +47,11 @@ bool AudioEngine::start() {
     space_.setParameters(spaceMix_, spaceDecay_);
     tape_.setParameters(tapeWow_, tapeFlutter_, tapeDrive_);
     dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_);
-    if (AAudioStream_requestStart(stream_) != AAUDIO_OK) { stop(); return false; }
+
+    if (AAudioStream_requestStart(stream_) != AAUDIO_OK) {
+        stop();
+        return false;
+    }
     return true;
 }
 
@@ -44,33 +59,22 @@ void AudioEngine::stop() {
     if (!stream_) return;
     AAudioStream_requestStop(stream_);
     AAudioStream_close(stream_);
-    stream_=nullptr;
-}
-
-bool AudioEngine::loadBank(const std::string& path) {
-    std::lock_guard<std::mutex> g(bankMutex_);
-    for (auto& v: voices_) v.active=false;
-    return bank_.load(path);
-}
-
-bool AudioEngine::loadBankFd(int fd) {
-    std::lock_guard<std::mutex> g(bankMutex_);
-    for (auto& v: voices_) v.active=false;
-    return bank_.loadFd(fd);
+    stream_ = nullptr;
 }
 
 void AudioEngine::push(Event e) {
-    uint32_t w=write_.load(std::memory_order_relaxed);
-    uint32_t n=(w+1)%QUEUE;
-    if (n==read_.load(std::memory_order_acquire)) return;
-    queue_[w]=e;
-    write_.store(n,std::memory_order_release);
+    const uint32_t w = write_.load(std::memory_order_relaxed);
+    const uint32_t n = (w + 1) % QUEUE;
+    if (n == read_.load(std::memory_order_acquire)) return;
+    queue_[w] = e;
+    write_.store(n, std::memory_order_release);
 }
+
 bool AudioEngine::pop(Event& e) {
-    uint32_t r=read_.load(std::memory_order_relaxed);
-    if (r==write_.load(std::memory_order_acquire)) return false;
-    e=queue_[r];
-    read_.store((r+1)%QUEUE,std::memory_order_release);
+    const uint32_t r = read_.load(std::memory_order_relaxed);
+    if (r == write_.load(std::memory_order_acquire)) return false;
+    e = queue_[r];
+    read_.store((r + 1) % QUEUE, std::memory_order_release);
     return true;
 }
 
@@ -91,168 +95,135 @@ void AudioEngine::setDreamyParameters(int x,int y,int mix){ push({Event::DREAMY_
 
 void AudioEngine::handle(const Event& e) {
     switch(e.type) {
-        case Event::NOTE_ON: beginVoice(e.a,e.b); break;
-        case Event::NOTE_OFF: releaseVoice(e.a); break;
+        case Event::NOTE_ON:
+            if (e.b <= 0) violin_.noteOff(e.a, cc64_ >= 64);
+            else violin_.noteOn(e.a, e.b);
+            break;
+        case Event::NOTE_OFF:
+            violin_.noteOff(e.a, cc64_ >= 64);
+            break;
         case Event::POLY_AT:
-            if(e.a>=0&&e.a<128){ polyAT_[e.a]=std::clamp(e.b,0,127); for(auto& v:voices_) if(v.active&&v.note==e.a) v.targetBodyVelocity=float(v.velocity)+(127.f-v.velocity)*(polyAT_[e.a]/127.f); }
+            violin_.polyPressure(e.a, e.b);
             break;
         case Event::CH_AT:
-            channelAT_=std::clamp(e.a,0,127);
-            for(auto& v:voices_) if(v.active&&polyAT_[v.note]==0) v.targetBodyVelocity=float(v.velocity)+(127.f-v.velocity)*(channelAT_/127.f);
+            violin_.channelPressure(e.a);
             break;
         case Event::CC:
-            if(e.a==7) cc7_=std::clamp(e.b,0,127);
-            else if(e.a==11) cc11_=std::clamp(e.b,0,127);
-            else if(e.a==64){
-                bool was=cc64_>=64; cc64_=std::clamp(e.b,0,127); bool now=cc64_>=64;
-                if(was && !now) for(auto& v:voices_) if(v.active&&v.pendingRelease&&!v.keyDown){v.pendingRelease=false;v.releasing=true;v.releaseFrame=0.0;}
+            if (e.a == 7) {
+                cc7_ = std::clamp(e.b, 0, 127);
+            } else if (e.a == 1) {
+                violin_.setVibratoDepth(std::clamp(e.b,0,127) / 127.0f);
+            } else if (e.a == 10) {
+                violin_.setBowPressure(std::clamp(e.b,0,127) / 127.0f);
+            } else if (e.a == 11) {
+                violin_.setBowSpeed(std::clamp(e.b,0,127) / 127.0f);
+            } else if (e.a == 64) {
+                cc64_ = std::clamp(e.b,0,127);
+                violin_.sustainChanged(cc64_ >= 64);
+            } else if (e.a == 74) {
+                violin_.setBowPosition(std::clamp(e.b,0,127) / 127.0f);
+            } else if (e.a == 120 || e.a == 123) {
+                violin_.allNotesOff();
+            } else if (e.a==20) {
+                boostDb_=std::clamp(int(std::lround(e.b*6.0/127.0)),0,6);
+            } else if (e.a==21) {
+                space_.setMode(std::clamp(int(std::lround(e.b*3.0/127.0)),0,3));
+            } else if (e.a==22) {
+                spaceMix_=e.b/127.f; space_.setParameters(spaceMix_,spaceDecay_);
+            } else if (e.a==23) {
+                spaceDecay_=e.b/127.f; space_.setParameters(spaceMix_,spaceDecay_);
+            } else if (e.a==24) {
+                tape_.setEnabled(e.b>=64);
+            } else if (e.a==25) {
+                tapeWow_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_);
+            } else if (e.a==26) {
+                tapeFlutter_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_);
+            } else if (e.a==27) {
+                tapeDrive_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_);
+            } else if (e.a==28) {
+                dreamy_.setEnabled(e.b>=64);
+            } else if (e.a==103) {
+                cc103_=std::clamp(e.b,0,127);
+                dreamy_.setXY(cc103_/127.f, cc104_/127.f);
+            } else if (e.a==104) {
+                cc104_=std::clamp(e.b,0,127);
+                dreamy_.setXY(cc103_/127.f, cc104_/127.f);
+            } else if (e.a==105) {
+                dreamyMix_=e.b/127.f;
+                dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_);
             }
-            else if(e.a==20){ boostDb_=std::clamp(int(std::lround(e.b*6.0/127.0)),0,6); }
-            else if(e.a==21){ space_.setMode(std::clamp(int(std::lround(e.b*3.0/127.0)),0,3)); }
-            else if(e.a==22){ spaceMix_=e.b/127.f; space_.setParameters(spaceMix_,spaceDecay_); }
-            else if(e.a==23){ spaceDecay_=e.b/127.f; space_.setParameters(spaceMix_,spaceDecay_); }
-            else if(e.a==24){ tape_.setEnabled(e.b>=64); }
-            else if(e.a==25){ tapeWow_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_); }
-            else if(e.a==26){ tapeFlutter_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_); }
-            else if(e.a==27){ tapeDrive_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_); }
-            else if(e.a==28){ dreamy_.setEnabled(e.b>=64); }
-            else if(e.a==103){ cc103_=std::clamp(e.b,0,127); dreamy_.setXY(cc103_/127.f, cc104_/127.f); }
-            else if(e.a==104){ cc104_=std::clamp(e.b,0,127); dreamy_.setXY(cc103_/127.f, cc104_/127.f); }
-            else if(e.a==105){ dreamyMix_=e.b/127.f; dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_); }
             break;
-        case Event::PITCH: pitch_=std::clamp(e.a,0,16383); break;
-        case Event::DREAMY: dreamy_.setEnabled(e.a!=0); break;
+        case Event::PITCH:
+            pitch_=std::clamp(e.a,0,16383);
+            violin_.pitchBend(pitch_);
+            break;
+        case Event::DREAMY:
+            dreamy_.setEnabled(e.a!=0);
+            break;
         case Event::BOOST:
-            boosterStep_=std::clamp(e.a,0,3); boostDb_=boosterStep_*2; break;
+            boosterStep_=std::clamp(e.a,0,3);
+            boostDb_=boosterStep_*2;
+            break;
         case Event::BOOST_DB:
-            boostDb_=std::clamp(e.a,0,6); break;
-        case Event::SPACE_MODE: space_.setMode(e.a); break;
+            boostDb_=std::clamp(e.a,0,6);
+            break;
+        case Event::SPACE_MODE:
+            space_.setMode(e.a);
+            break;
         case Event::SPACE_PARAMS:
             spaceMix_=std::clamp(e.a,0,100)/100.f;
             spaceDecay_=std::clamp(e.b,0,100)/100.f;
-            space_.setParameters(spaceMix_, spaceDecay_);
+            space_.setParameters(spaceMix_,spaceDecay_);
             break;
-        case Event::TAPE: tape_.setEnabled(e.a!=0); break;
+        case Event::TAPE:
+            tape_.setEnabled(e.a!=0);
+            break;
         case Event::TAPE_PARAMS:
             tapeWow_=std::clamp(e.a,0,100)/100.f;
             tapeFlutter_=std::clamp(e.b,0,100)/100.f;
             tapeDrive_=std::clamp(e.c,0,100)/100.f;
-            tape_.setParameters(tapeWow_, tapeFlutter_, tapeDrive_);
+            tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_);
             break;
         case Event::DREAMY_PARAMS:
             cc103_=std::clamp(int(std::lround(std::clamp(e.a,0,100)*1.27f)),0,127);
             cc104_=std::clamp(int(std::lround(std::clamp(e.b,0,100)*1.27f)),0,127);
             dreamyMix_=std::clamp(e.c,0,100)/100.f;
-            dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_);
+            dreamy_.setParameters(cc103_/127.f,cc104_/127.f,dreamyMix_);
             break;
     }
 }
 
-void AudioEngine::beginVoice(int note,int velocity) {
-    if(!bank_.loaded() || note<21 || note>108) return;
-    Voice* pick=nullptr;
-    for(auto& v:voices_) if(!v.active){pick=&v;break;}
-    if(!pick) {
-        pick=&voices_[0];
-        for(auto& v:voices_) if(v.ageFrames > pick->ageFrames) pick=&v;
-    }
-    uint8_t rr = uint8_t((rrCounter_[note]++ % 3)+1);
-    *pick = Voice{};
-    pick->active=true; pick->keyDown=true; pick->note=note; pick->velocity=std::clamp(velocity,1,127); pick->rr=rr;
-    pick->bodyVelocity=float(pick->velocity); pick->targetBodyVelocity=float(pick->velocity);
-    int at = polyAT_[note] ? polyAT_[note] : channelAT_;
-    pick->targetBodyVelocity=float(pick->velocity)+(127.f-pick->velocity)*(at/127.f);
-    for(int i=0;i<8;i++){
-        pick->sus[i]=bank_.find(uint8_t(note),uint8_t(VELS[i]),rr,SampleBank::SUSTAIN);
-        pick->rel[i]=bank_.find(uint8_t(note),uint8_t(VELS[i]),rr,SampleBank::RELEASE);
-    }
-}
-
-void AudioEngine::releaseVoice(int note) {
-    for(auto& v:voices_) if(v.active&&v.note==note&&!v.releasing&&v.keyDown){
-        v.keyDown=false;
-        if(cc64_>=64) {
-            v.pendingRelease=true;
-        } else {
-            v.releasing=true;
-            v.releaseFrame=0.0;
-        }
-    }
-}
-
-void AudioEngine::bracket(float v,int& lo,int& hi,float& mix) {
-    if(v<=VELS[0]){lo=hi=0;mix=0;return;} if(v>=VELS[7]){lo=hi=7;mix=0;return;}
-    for(int i=0;i<7;i++) if(v>=VELS[i]&&v<=VELS[i+1]){lo=i;hi=i+1;mix=(v-VELS[i])/float(VELS[i+1]-VELS[i]);return;}
-    lo=hi=7;mix=0;
-}
-
-float AudioEngine::layerSample(const Voice& v,bool release,int layer,double frame,int ch) const {
-    const auto* e = release ? v.rel[layer] : v.sus[layer];
-    return bank_.read(e,frame,ch);
-}
-
-void AudioEngine::renderVoice(Voice& v,float& l,float& r) {
-    if(!v.active) return;
-    const int attackLock = int(0.250 * sampleRate_);
-    if(v.ageFrames > attackLock) v.bodyVelocity += (v.targetBodyVelocity-v.bodyVelocity)*0.0025f;
-    float requested = v.ageFrames <= attackLock ? float(v.velocity) : v.bodyVelocity;
-    int lo,hi; float mix; bracket(requested,lo,hi,mix);
-    double bendSemis = (double(pitch_)-8192.0)/8192.0*2.0;
-    double ratio = std::pow(2.0,bendSemis/12.0) * (double(bank_.sampleRate())/double(sampleRate_));
-
-    float sl=0,sr=0;
-    if(!v.releasing){
-        sl=layerSample(v,false,lo,v.frame,0)*(1-mix)+layerSample(v,false,hi,v.frame,0)*mix;
-        sr=layerSample(v,false,lo,v.frame,1)*(1-mix)+layerSample(v,false,hi,v.frame,1)*mix;
-        v.frame += ratio;
-        const auto* endRef=v.sus[hi]?v.sus[hi]:v.sus[lo];
-        if(!endRef) {
-            v.active=false;
-        } else if(v.frame>=endRef->frames) {
-            // A held sustain pedal must not force a premature NoteOff transition.
-            // Clamp to the final source frame until the pedal is released.
-            if(v.pendingRelease && cc64_>=64) v.frame=std::max(0.0, double(endRef->frames)-1.001);
-            else v.active=false;
-        }
-    } else {
-        const int xf=std::max(1,int(0.020*sampleRate_));
-        float x=std::clamp(float(v.releaseFrame)/float(xf),0.f,1.f);
-        float bodyL=layerSample(v,false,lo,v.frame,0)*(1-mix)+layerSample(v,false,hi,v.frame,0)*mix;
-        float bodyR=layerSample(v,false,lo,v.frame,1)*(1-mix)+layerSample(v,false,hi,v.frame,1)*mix;
-        float relL=layerSample(v,true,lo,v.releaseFrame,0)*(1-mix)+layerSample(v,true,hi,v.releaseFrame,0)*mix;
-        float relR=layerSample(v,true,lo,v.releaseFrame,1)*(1-mix)+layerSample(v,true,hi,v.releaseFrame,1)*mix;
-        sl=bodyL*(1-x)+relL*x; sr=bodyR*(1-x)+relR*x;
-        v.frame += ratio; v.releaseFrame += ratio;
-        const auto* endRef=v.rel[hi]?v.rel[hi]:v.rel[lo];
-        if(!endRef || v.releaseFrame>=endRef->frames) v.active=false;
-    }
-    float gain=(cc7_/127.f)*(cc11_/127.f);
-    l += sl*gain; r += sr*gain;
-    v.ageFrames++;
-}
-
 void AudioEngine::render(float* out,int32_t frames) {
-    Event e; while(pop(e)) handle(e);
-    std::lock_guard<std::mutex> g(bankMutex_);
-    for(int32_t i=0;i<frames;i++){
-        float l=0.f,r=0.f;
-        for(auto& v:voices_) renderVoice(v,l,r);
+    Event e;
+    while (pop(e)) handle(e);
+
+    for (int32_t i=0; i<frames; ++i) {
+        const float mono = violin_.process();
+        float l = mono;
+        float r = mono;
+
         dreamy_.process(l,r);
         tape_.process(l,r);
         space_.process(l,r);
 
-        // Fixed master lift remains at ~+10 dB. BOOST adds 0/+2/+4/+6 dB on top.
-        constexpr float MASTER_GAIN = 3.2f;
+        const float volume = cc7_ / 127.0f;
         const float boostGain = std::pow(10.0f, float(std::clamp(boostDb_,0,6)) / 20.0f);
-        const float outGain = MASTER_GAIN * boostGain;
-        out[i*2]=std::tanh(l*outGain);
-        out[i*2+1]=std::tanh(r*outGain);
+        const float outGain = 1.55f * volume * boostGain;
+
+        l = std::isfinite(l) ? std::tanh(l * outGain) : 0.0f;
+        r = std::isfinite(r) ? std::tanh(r * outGain) : 0.0f;
+        out[i*2] = l;
+        out[i*2+1] = r;
     }
 }
 
-aaudio_data_callback_result_t AudioEngine::dataCallback(AAudioStream*,void* user,void* audio,int32_t n){
-    auto* self=reinterpret_cast<AudioEngine*>(user);
-    self->render(reinterpret_cast<float*>(audio),n);
+aaudio_data_callback_result_t AudioEngine::dataCallback(
+        AAudioStream*, void* user, void* audio, int32_t n) {
+    auto* self = reinterpret_cast<AudioEngine*>(user);
+    self->render(reinterpret_cast<float*>(audio), n);
     return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
-void AudioEngine::errorCallback(AAudioStream*,void*,aaudio_result_t error){ LOGE("AAudio error %d",error); }
+
+void AudioEngine::errorCallback(AAudioStream*,void*,aaudio_result_t error) {
+    LOGE("AAudio error %d", error);
+}
