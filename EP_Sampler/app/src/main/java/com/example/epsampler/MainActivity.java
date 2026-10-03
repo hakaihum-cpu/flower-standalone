@@ -358,7 +358,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     @Override public void onControlChange(int cc, int value) {
         runOnUiThread(() -> {
             pianoView.controlChange(cc, value);
-            if (cc == 20) { boostDb = Math.round(value * 6f / 127f); pianoView.setBoostDb(boostDb); }
+            if (cc == 1) vibratoDepth = value;\n            else if (cc == 10) bowPressure = value;\n            else if (cc == 11) bowSpeed = value;\n            else if (cc == 74) bowPosition = value;\n            else if (cc == 20) { boostDb = Math.round(value * 6f / 127f); pianoView.setBoostDb(boostDb); }
             else if (cc == 21) { spaceMode = Math.round(value * 3f / 127f); pianoView.setSpaceMode(spaceMode); }
             else if (cc == 22) spaceMix = Math.round(value * 100f / 127f);
             else if (cc == 23) spaceDecay = Math.round(value * 100f / 127f);
