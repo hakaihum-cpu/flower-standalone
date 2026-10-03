@@ -608,8 +608,11 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
         const int baseColumn = baseFrame % 20;
         const int audioOffset = juce::jlimit (
             0, 4, juce::roundToInt (dreamyVisualEnvelope * 4.0f));
+        int reactiveColumn = baseColumn + audioOffset;
+        if (reactiveColumn > 19)
+            reactiveColumn = baseColumn - audioOffset;
         const int frame =
-            row * 20 + juce::jlimit (0, 19, baseColumn + audioOffset);
+            row * 20 + juce::jlimit (0, 19, reactiveColumn);
         visualFrame.store (frame, std::memory_order_relaxed);
         dreamyVisualSamplesUntilUpdate =
             juce::jmax (1, juce::roundToInt (currentSampleRate / 12.0));
