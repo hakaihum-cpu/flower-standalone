@@ -52,6 +52,8 @@ public:
     int getInternalBpm() const noexcept { return internalBpm.load(); }
 
     void requestPlaySlot (int slot) noexcept;
+    void requestRecordSlot (int slot) noexcept;
+    void requestClear() noexcept { clearRequested.store (true); }
     int getRecordingSlot() const noexcept { return uiRecordingSlot.load(); }
     bool isSlotPlaying (int slot) const noexcept;
     float getSlotPlaybackProgress (int slot) const noexcept;
@@ -61,7 +63,9 @@ public:
 
 private:
     void beginRecordingSegment();
+    void beginRecordingAtSlot (int slot);
     void finishRecordingSegment();
+    void clearAllSlots();
     void beginPlayback (int slot);
     void beginRandomPlayback (int slot);
     void stopRandomPlayback();
@@ -83,6 +87,8 @@ private:
 
     std::array<int, kSlots> playPositions {};
     std::atomic<uint32_t> requestedPlayMask { 0u };
+    std::atomic<int> requestedRecordSlot { -1 };
+    std::atomic<bool> clearRequested { false };
 
     int randomPlaySlot = -1;
     int randomPlayPosition = 0;
