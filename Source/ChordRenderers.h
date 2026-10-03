@@ -236,6 +236,7 @@ public:
         noteCount = 0;
         currentNoteIndex = -1;
         previousNoteIndex = -1;
+        currentMidiNote = -1;
         phase = 0.0;
         frequency = 440.0;
         envelope = 0.0f;
@@ -305,20 +306,6 @@ public:
     }
 
 private:
-    static float softProtect (float sample) noexcept
-    {
-        constexpr float threshold = 0.62f;
-        constexpr float ceiling = 0.88f;
-        const float magnitude = std::abs (sample);
-        if (magnitude <= threshold)
-            return sample;
-
-        const float knee = ceiling - threshold;
-        const float shaped =
-            threshold + knee * std::tanh ((magnitude - threshold) / knee);
-        return std::copysign (shaped, sample);
-    }
-
     uint32_t nextRandom() noexcept
     {
         rng ^= rng << 13;
@@ -332,13 +319,37 @@ private:
         if (noteCount <= 0)
             return;
 
-        int index = (int) (nextRandom() % (uint32_t) noteCount);
-        if (noteCount > 1 && index == previousNoteIndex)
-            index = (index + 1 + (int) (nextRandom() % (uint32_t) (noteCount - 1))) % noteCount;
+        std::array<int, maxNotes> candidates {};
+        int candidateCount = 0;
+
+        // Keep the random arpeggiator inside the exact ChordPlan, but prefer
+        // nearby chord tones. Pure sine exposes octave leaps very strongly,
+        // which can sound like the scale itself changed.
+        if (currentMidiNote >= 0)
+        {
+            for (int i = 0; i < noteCount; ++i)
+            {
+                if (i == previousNoteIndex)
+                    continue;
+                if (std::abs (notes[(size_t) i] - currentMidiNote) <= 7)
+                    candidates[(size_t) candidateCount++] = i;
+            }
+        }
+
+        if (candidateCount == 0)
+        {
+            for (int i = 0; i < noteCount; ++i)
+                if (i != previousNoteIndex || noteCount == 1)
+                    candidates[(size_t) candidateCount++] = i;
+        }
+
+        const int index = candidates[(size_t)
+            (nextRandom() % (uint32_t) std::max (1, candidateCount))];
 
         previousNoteIndex = index;
         currentNoteIndex = index;
         const int midi = notes[(size_t) index];
+        currentMidiNote = midi;
         frequency = 440.0 * std::pow (2.0, ((double) midi - 69.0) / 12.0);
         // Keep oscillator phase and envelope continuous across note changes.
         // Resetting both on every random step caused sharp discontinuities
@@ -352,6 +363,7 @@ private:
     int noteCount = 0;
     int currentNoteIndex = -1;
     int previousNoteIndex = -1;
+    int currentMidiNote = -1;
     double phase = 0.0;
     double frequency = 440.0;
     float envelope = 0.0f;
@@ -548,8 +560,8 @@ public:
 private:
     static float softProtect (float sample) noexcept
     {
-        constexpr float threshold = 0.62f;
-        constexpr float ceiling = 0.88f;
+        constexpr float threshold = 0.52f;
+        constexpr float ceiling = 0.74f;
         const float magnitude = std::abs (sample);
         if (magnitude <= threshold)
             return sample;
