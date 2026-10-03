@@ -9,6 +9,7 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.View;
+import android.util.SparseIntArray;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,6 +51,13 @@ public final class PianoView extends View {
     private String bankStatus = "MODEL READY";
     private int downButton = -1;
     private long downTimeMs = 0L;
+
+    // Temporary audition keyboard for the physical-model branch.
+    // Intentionally contained in this View so it can be removed cleanly later.
+    private boolean keyOverlayVisible = false;
+    private final SparseIntArray touchNotes = new SparseIntArray();
+    private static final int AUDITION_LOW_NOTE = 55;   // G3
+    private static final int AUDITION_HIGH_NOTE = 83;  // B5
 
     private final Finger[] left = new Finger[5];
     private final Finger[] right = new Finger[5];
@@ -131,6 +139,7 @@ public final class PianoView extends View {
 
         drawPressedKeys(c, scale, leftPad, topPad);
         drawIndicators(c);
+        if (keyOverlayVisible) drawAuditionKeyboard(c);
     }
 
     private void drawPressedKeys(Canvas c, float s, float ox, float oy) {
@@ -315,19 +324,20 @@ public final class PianoView extends View {
                 tape ? "TAPE ON" : "TAPE OFF",
                 dreamy ? "DREAMY ON" : "DREAMY OFF",
                 "MODEL",
-                "CONFIG"
+                "CONFIG",
+                keyOverlayVisible ? "KEY CLOSE" : "KEY"
         };
         float gap = 6f*u;
         float bx0 = pad;
         float by0 = 72f*u;
         float bh = 30f*u;
-        float bw = (getWidth() - pad*2f - gap*5f) / 6f;
+        float bw = (getWidth() - pad*2f - gap*6f) / 7f;
         text.setTextSize(13.5f*u);
-        for (int i=0;i<6;i++) {
+        for (int i=0;i<7;i++) {
             float l = bx0 + i*(bw+gap);
             float rr = l + bw;
             boolean active = (i==0 && boostDb>0) || (i==1 && spaceMode>0) ||
-                    (i==2 && tape) || (i==3 && dreamy);
+                    (i==2 && tape) || (i==3 && dreamy) || (i==6 && keyOverlayVisible);
             paint.setColor(active ? Color.argb(120, 238, 229, 207) : Color.argb(72, 238, 229, 207));
             c.drawRoundRect(new RectF(l, by0, rr, by0+bh), 6f*u, 6f*u, paint);
             text.setColor(active ? Color.rgb(24,24,22) : Color.argb(235,244,237,224));
@@ -352,6 +362,132 @@ public final class PianoView extends View {
         int m = 0; for (int v : polyPressure) m = Math.max(m, v); return m;
     }
 
+    private void drawAuditionKeyboard(Canvas c) {
+        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
+        float top = Math.max(150f*u, getHeight() - 255f*u);
+        float bottom = getHeight() - 8f*u;
+        float left = 8f*u;
+        float right = getWidth() - 8f*u;
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.argb(218, 18, 18, 18));
+        c.drawRoundRect(new RectF(left-4f*u, top-36f*u, right+4f*u, bottom+4f*u), 8f*u, 8f*u, paint);
+
+        text.setTextSize(14f*u);
+        text.setColor(Color.argb(240, 244, 237, 224));
+        c.drawText("TEMP KEY  G3–B5", left, top-12f*u, text);
+
+        int whiteCount = 0;
+        for (int n=AUDITION_LOW_NOTE; n<=AUDITION_HIGH_NOTE; n++) if (!isBlack(n)) whiteCount++;
+        float whiteW = (right-left) / Math.max(1, whiteCount);
+
+        int wi = 0;
+        for (int n=AUDITION_LOW_NOTE; n<=AUDITION_HIGH_NOTE; n++) {
+            if (isBlack(n)) continue;
+            float x0 = left + wi * whiteW;
+            float x1 = x0 + whiteW;
+            boolean active = held[n];
+            paint.setColor(active ? Color.rgb(214, 204, 181) : Color.rgb(238, 234, 224));
+            c.drawRect(x0, top, x1-1f*u, bottom, paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(1f, u));
+            paint.setColor(Color.rgb(48,48,45));
+            c.drawRect(x0, top, x1-1f*u, bottom, paint);
+            paint.setStyle(Paint.Style.FILL);
+            if (n % 12 == 0) {
+                text.setTextSize(11f*u);
+                text.setColor(Color.rgb(50,50,48));
+                c.drawText("C" + ((n / 12) - 1), x0 + 4f*u, bottom - 8f*u, text);
+            }
+            wi++;
+        }
+
+        wi = 0;
+        for (int n=AUDITION_LOW_NOTE; n<=AUDITION_HIGH_NOTE; n++) {
+            if (!isBlack(n)) {
+                wi++;
+                continue;
+            }
+            float center = left + wi * whiteW;
+            float bw = whiteW * 0.60f;
+            RectF r = new RectF(center-bw/2f, top, center+bw/2f, top+(bottom-top)*0.60f);
+            paint.setColor(held[n] ? Color.rgb(110,105,96) : Color.rgb(30,30,29));
+            c.drawRoundRect(r, 2f*u, 2f*u, paint);
+        }
+    }
+
+    private RectF auditionKeyboardRect() {
+        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
+        float top = Math.max(150f*u, getHeight() - 255f*u);
+        return new RectF(8f*u, top, getWidth()-8f*u, getHeight()-8f*u);
+    }
+
+    private int auditionNoteAt(float x, float y) {
+        if (!keyOverlayVisible) return -1;
+        RectF area = auditionKeyboardRect();
+        if (!area.contains(x,y)) return -1;
+
+        int whiteCount = 0;
+        for (int n=AUDITION_LOW_NOTE; n<=AUDITION_HIGH_NOTE; n++) if (!isBlack(n)) whiteCount++;
+        float whiteW = area.width() / Math.max(1, whiteCount);
+        float blackBottom = area.top + area.height()*0.60f;
+
+        if (y <= blackBottom) {
+            int wi = 0;
+            for (int n=AUDITION_LOW_NOTE; n<=AUDITION_HIGH_NOTE; n++) {
+                if (!isBlack(n)) {
+                    wi++;
+                    continue;
+                }
+                float center = area.left + wi * whiteW;
+                float bw = whiteW * 0.60f;
+                if (x >= center-bw/2f && x <= center+bw/2f) return n;
+            }
+        }
+
+        int whiteIndex = Math.max(0, Math.min(whiteCount-1, (int)((x-area.left)/whiteW)));
+        int wi = 0;
+        for (int n=AUDITION_LOW_NOTE; n<=AUDITION_HIGH_NOTE; n++) {
+            if (isBlack(n)) continue;
+            if (wi == whiteIndex) return n;
+            wi++;
+        }
+        return -1;
+    }
+
+    private void auditionNoteOn(int pointerId, int note) {
+        if (note < 0) return;
+        int old = touchNotes.get(pointerId, -1);
+        if (old == note) return;
+        if (old >= 0) auditionNoteOff(pointerId, old);
+        touchNotes.put(pointerId, note);
+        NativeEngine.noteOn(note, 104);
+        noteOn(note, 104);
+    }
+
+    private void auditionNoteOff(int pointerId, int note) {
+        if (note >= 0) {
+            NativeEngine.noteOff(note, 0);
+            noteOff(note);
+        }
+        touchNotes.delete(pointerId);
+    }
+
+    private void releaseAllAuditionNotes() {
+        for (int i=touchNotes.size()-1; i>=0; i--) {
+            int note = touchNotes.valueAt(i);
+            NativeEngine.noteOff(note, 0);
+            noteOff(note);
+        }
+        touchNotes.clear();
+    }
+
+    private void toggleAuditionKeyboard() {
+        if (keyOverlayVisible) releaseAllAuditionNotes();
+        keyOverlayVisible = !keyOverlayVisible;
+        invalidate();
+    }
+
     private int effectButtonAt(float x, float y) {
         float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
         float pad = 12f*u;
@@ -359,8 +495,8 @@ public final class PianoView extends View {
         float by0 = 72f*u;
         float bh = 30f*u;
         if (y < by0 || y > by0 + bh) return -1;
-        float bw = (getWidth() - pad*2f - gap*5f) / 6f;
-        for (int i=0;i<6;i++) {
+        float bw = (getWidth() - pad*2f - gap*6f) / 7f;
+        for (int i=0;i<7;i++) {
             float l = pad + i*(bw+gap);
             if (x >= l && x <= l+bw) return i;
         }
@@ -368,17 +504,55 @@ public final class PianoView extends View {
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
-        int index = effectButtonAt(e.getX(), e.getY());
-        if (e.getAction() == MotionEvent.ACTION_DOWN) {
+        final int action = e.getActionMasked();
+        final int actionIndex = e.getActionIndex();
+
+        if (keyOverlayVisible) {
+            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+                int pointerId = e.getPointerId(actionIndex);
+                int note = auditionNoteAt(e.getX(actionIndex), e.getY(actionIndex));
+                if (note >= 0) {
+                    auditionNoteOn(pointerId, note);
+                    return true;
+                }
+            } else if (action == MotionEvent.ACTION_MOVE) {
+                for (int i=0; i<e.getPointerCount(); i++) {
+                    int pointerId = e.getPointerId(i);
+                    int old = touchNotes.get(pointerId, -1);
+                    if (old < 0) continue;
+                    int note = auditionNoteAt(e.getX(i), e.getY(i));
+                    if (note != old) {
+                        auditionNoteOff(pointerId, old);
+                        if (note >= 0) auditionNoteOn(pointerId, note);
+                    }
+                }
+                return true;
+            } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
+                int pointerId = e.getPointerId(actionIndex);
+                int old = touchNotes.get(pointerId, -1);
+                if (old >= 0) {
+                    auditionNoteOff(pointerId, old);
+                    return true;
+                }
+            } else if (action == MotionEvent.ACTION_CANCEL) {
+                releaseAllAuditionNotes();
+                downButton = -1;
+                return true;
+            }
+        }
+
+        int index = effectButtonAt(e.getX(actionIndex), e.getY(actionIndex));
+        if (action == MotionEvent.ACTION_DOWN) {
             downButton = index;
             downTimeMs = android.os.SystemClock.uptimeMillis();
             return true;
         }
-        if (e.getAction() == MotionEvent.ACTION_CANCEL) {
+        if (action == MotionEvent.ACTION_CANCEL) {
+            releaseAllAuditionNotes();
             downButton = -1;
             return true;
         }
-        if (e.getAction() != MotionEvent.ACTION_UP) return true;
+        if (action != MotionEvent.ACTION_UP) return true;
         if (index < 0 || index != downButton || actionListener == null) {
             downButton = -1;
             return true;
@@ -394,7 +568,8 @@ public final class PianoView extends View {
         else if (index==2) actionListener.onToggleTape();
         else if (index==3) actionListener.onToggleDreamy();
         else if (index==4) actionListener.onChooseBank();
-        else actionListener.onOpenConfig();
+        else if (index==5) actionListener.onOpenConfig();
+        else if (index==6) toggleAuditionKeyboard();
         return true;
     }
 
