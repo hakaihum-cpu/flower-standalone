@@ -19,8 +19,17 @@ void SampleBank::unload() {
 }
 
 bool SampleBank::load(const std::string& path) {
+    int sourceFd = open(path.c_str(), O_RDONLY);
+    if (sourceFd < 0) return false;
+    bool ok = loadFd(sourceFd);
+    close(sourceFd);
+    return ok;
+}
+
+bool SampleBank::loadFd(int sourceFd) {
     unload();
-    fd_ = open(path.c_str(), O_RDONLY);
+    if (sourceFd < 0) return false;
+    fd_ = dup(sourceFd);
     if (fd_ < 0) return false;
     struct stat st{};
     if (fstat(fd_, &st) != 0 || st.st_size < (off_t)sizeof(Header)) { unload(); return false; }

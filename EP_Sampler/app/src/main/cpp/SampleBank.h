@@ -43,6 +43,7 @@ public:
     SampleBank();
     ~SampleBank();
     bool load(const std::string& path);
+    bool loadFd(int fd);
     void unload();
     bool loaded() const { return mapped_ != nullptr; }
     uint32_t sampleRate() const { return sampleRate_; }

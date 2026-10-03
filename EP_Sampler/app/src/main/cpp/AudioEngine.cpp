@@ -48,6 +48,12 @@ bool AudioEngine::loadBank(const std::string& path) {
     return bank_.load(path);
 }
 
+bool AudioEngine::loadBankFd(int fd) {
+    std::lock_guard<std::mutex> g(bankMutex_);
+    for (auto& v: voices_) v.active=false;
+    return bank_.loadFd(fd);
+}
+
 void AudioEngine::push(Event e) {
     uint32_t w=write_.load(std::memory_order_relaxed);
     uint32_t n=(w+1)%QUEUE;

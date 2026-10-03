@@ -14,6 +14,7 @@ public:
     bool start();
     void stop();
     bool loadBank(const std::string& path);
+    bool loadBankFd(int fd);
     bool bankLoaded() const { return bank_.loaded(); }
     std::string bankStatus() const { return bank_.status(); }
 

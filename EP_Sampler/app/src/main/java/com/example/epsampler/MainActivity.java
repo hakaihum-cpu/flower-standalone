@@ -4,17 +4,17 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.ParcelFileDescriptor;
 import android.provider.Settings;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
 
 public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener {
     private static final int PICK_BANK = 1001;
+    private static final String PREFS = "ep_sampler";
+    private static final String KEY_BANK_URI = "bank_uri";
     private PianoView pianoView;
     private MidiController midiController;
     private volatile boolean dreamy = true;
@@ -49,15 +49,26 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         }
     }
 
-    private File bankFile() { return new File(getFilesDir(), "epbank.bin"); }
-
     private void loadExistingBank() {
-        File f = bankFile();
-        if (f.isFile() && NativeEngine.loadBank(f.getAbsolutePath())) {
-            pianoView.setBankStatus("BANK READY");
-        } else {
+        String saved = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_BANK_URI, null);
+        if (saved == null || saved.isEmpty()) {
             pianoView.setBankStatus("BANK —");
+            return;
         }
+        loadBankUri(Uri.parse(saved));
+    }
+
+    private void loadBankUri(Uri uri) {
+        pianoView.setBankStatus("BANK LOADING…");
+        new Thread(() -> {
+            boolean ok = false;
+            try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "r")) {
+                if (pfd != null) ok = NativeEngine.loadBankFd(pfd.getFd());
+            } catch (Exception ignored) {
+            }
+            final boolean result = ok;
+            runOnUiThread(() -> pianoView.setBankStatus(result ? NativeEngine.bankStatus() : "BANK ERROR"));
+        }, "BankOpen").start();
     }
 
     @Override public void onToggleDreamy() {
@@ -71,6 +82,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("application/octet-stream");
         intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/octet-stream", "application/x-binary", "*/*"});
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(intent, PICK_BANK);
     }
 
@@ -79,26 +91,14 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         if (requestCode != PICK_BANK || resultCode != RESULT_OK || data == null) return;
         Uri uri = data.getData();
         if (uri == null) return;
-        pianoView.setBankStatus("BANK COPYING…");
-        new Thread(() -> {
-            boolean ok = false;
-            File tmp = new File(getFilesDir(), "epbank.tmp");
-            try (InputStream in = getContentResolver().openInputStream(uri);
-                 FileOutputStream out = new FileOutputStream(tmp)) {
-                if (in == null) throw new IllegalStateException("No input stream");
-                byte[] buffer = new byte[1024 * 1024];
-                int n;
-                while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
-                out.getFD().sync();
-                File dst = bankFile();
-                if (dst.exists()) dst.delete();
-                ok = tmp.renameTo(dst) && NativeEngine.loadBank(dst.getAbsolutePath());
-            } catch (Exception ignored) {
-                tmp.delete();
-            }
-            final boolean result = ok;
-            runOnUiThread(() -> pianoView.setBankStatus(result ? "BANK READY" : "BANK ERROR"));
-        }, "BankImport").start();
+        try {
+            final int flags = data.getFlags() &
+                    (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            getContentResolver().takePersistableUriPermission(uri, flags & Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException ignored) {
+        }
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_BANK_URI, uri.toString()).apply();
+        loadBankUri(uri);
     }
 
     @Override protected void onDestroy() {
