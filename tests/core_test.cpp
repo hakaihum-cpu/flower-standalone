@@ -46,6 +46,15 @@ int main()
         assert (containsPc (p, 4));
     }
 
+    // Fresh G must anchor to G, never a fixed +1-semitone G#/Ab plan.
+    chordfx::TheoryEngine theoryG;
+    theoryG.setRandomSeed (1);
+    theoryG.setComplexity (0.25f);
+    theoryG.setWidth (0.35f);
+    auto gPlan = theoryG.noteOn (67); // G
+    assert (containsPc (gPlan, 7));
+    assert (! containsPc (gPlan, 8));
+
     // Chromatic anchor must also remain present as a colour tone.
     p = theory.noteOn (61); // Db
     assert (containsPc (p, 1));
@@ -65,6 +74,19 @@ int main()
     }
     std::cout << "yin=" << est.hz << " conf=" << est.confidence << "\n";
     assert(est.valid && std::abs(est.hz-220.0f) < 3.0f);
+
+    yin.reset();
+    chordfx::PitchEstimate gEst;
+    constexpr double g4 = 391.99543598174927;
+    for (int i=0;i<48000/2;++i)
+    {
+        float s=0.25f*std::sin(2.0*M_PI*g4*i/48000.0);
+        auto e=yin.pushSample(s); if(e.valid) gEst=e;
+    }
+    assert(gEst.valid && std::abs(gEst.hz-(float)g4) < 4.0f);
+    const int gMidi = (int) std::lround (
+        69.0 + 12.0 * std::log2 ((double) gEst.hz / 440.0));
+    assert (gMidi == 67);
 
     chordfx::GranularPitchBank bank;
     bank.prepare(48000.0,256);
