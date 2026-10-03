@@ -59,6 +59,9 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordBRandomFx.prepare (currentSampleRate);
     pendingMidi = -1;
     stableCount = 0;
+    pitchMidiHistory.fill (0.0f);
+    pitchMidiHistoryCount = 0;
+    pitchMidiHistoryIndex = 0;
     haveChord = false;
     samplesUntilChange = 0.0;
     gateSamplesRemaining = 0.0;
@@ -79,6 +82,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
     pitchSamplesSinceValid = 1000000;
     outputSafetyGain = 0.0f;
+    outputLimiterGain = 1.0f;
     outputSafetyWasActive = false;
 
     const int dreamySamples =
@@ -152,25 +156,58 @@ juce::String RealtimeChordFxAudioProcessor::getChordLabel() const
 
 void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e)
 {
-    if (! e.valid) return;
-    const float midiFloat = 69.0f + 12.0f * std::log2 (e.hz / 440.0f);
-    const int midi = juce::jlimit (0, 127, juce::roundToInt (midiFloat));
-    lastInputMidiFloat = midiFloat;
+    if (! e.valid)
+        return;
 
-    if (midi == pendingMidi) ++stableCount;
-    else { pendingMidi = midi; stableCount = 1; }
+    const float midiFloat =
+        69.0f + 12.0f * std::log2 (e.hz / 440.0f);
 
-    if (stableCount < 2) return;
+    pitchMidiHistory[(size_t) pitchMidiHistoryIndex] = midiFloat;
+    pitchMidiHistoryIndex =
+        (pitchMidiHistoryIndex + 1) % (int) pitchMidiHistory.size();
+    pitchMidiHistoryCount =
+        juce::jmin ((int) pitchMidiHistory.size(), pitchMidiHistoryCount + 1);
 
-    const int previous = detectedMidi.load (std::memory_order_relaxed);
-    if (midi == previous) return;
+    // Do not let the first one or two transient YIN estimates establish the
+    // tonal centre. Five valid estimates are cheap (~27 ms at 48 kHz / 256 hop)
+    // and the median rejects attack-time semitone outliers.
+    if (pitchMidiHistoryCount < (int) pitchMidiHistory.size())
+        return;
+
+    auto sorted = pitchMidiHistory;
+    std::sort (sorted.begin(), sorted.end());
+    const float filteredMidi = sorted[sorted.size() / 2];
+    const int midi =
+        juce::jlimit (0, 127, juce::roundToInt (filteredMidi));
+    lastInputMidiFloat = filteredMidi;
+
+    if (midi == pendingMidi)
+        ++stableCount;
+    else
+    {
+        pendingMidi = midi;
+        stableCount = 1;
+    }
+
+    // One extra confirmed median prevents a boundary value from anchoring the
+    // TheoryEngine before the detector has settled.
+    if (stableCount < 2)
+        return;
+
+    const int previous =
+        detectedMidi.load (std::memory_order_relaxed);
+    if (midi == previous)
+        return;
 
     detectedMidi.store (midi, std::memory_order_relaxed);
 
-    if (! running.load (std::memory_order_acquire)) return;
+    if (! running.load (std::memory_order_acquire))
+        return;
 
-    theory.setComplexity (apvts.getRawParameterValue (ParamID::complex)->load());
-    theory.setWidth (apvts.getRawParameterValue (ParamID::width)->load());
+    theory.setComplexity (
+        apvts.getRawParameterValue (ParamID::complex)->load());
+    theory.setWidth (
+        apvts.getRawParameterValue (ParamID::width)->load());
     applyChord (theory.noteOn (midi), true);
     samplesUntilChange = barIntervalSamples();
 }
@@ -453,6 +490,9 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         haveChord = false;
         pendingMidi = -1;
         stableCount = 0;
+        pitchMidiHistory.fill (0.0f);
+        pitchMidiHistoryCount = 0;
+        pitchMidiHistoryIndex = 0;
         pitchSamplesSinceValid = 1000000;
         detectedMidi.store (-1, std::memory_order_relaxed);
 
@@ -511,8 +551,18 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         const auto estimate = pitchDetector.pushSample (mono);
         if (estimate.valid)
         {
-            pitchSamplesSinceValid = 0;
+            if (pitchSamplesSinceValid
+                > juce::roundToInt (currentSampleRate * 0.100))
+            {
+                pitchMidiHistory.fill (0.0f);
+                pitchMidiHistoryCount = 0;
+                pitchMidiHistoryIndex = 0;
+                pendingMidi = -1;
+                stableCount = 0;
+            }
+
             acceptPitch (estimate);
+            pitchSamplesSinceValid = 0;
         }
 
         // Preserve discrete stereo input. Mono devices are duplicated only as
