@@ -102,9 +102,12 @@ public final class PianoView extends View {
         invalidate();
     }
     void controlChange(int cc, int value) {
-        if (cc == 7) cc7 = clamp7(value);
+        if (cc == 1) cc1 = clamp7(value);
+        else if (cc == 7) cc7 = clamp7(value);
+        else if (cc == 10) cc10 = clamp7(value);
         else if (cc == 11) cc11 = clamp7(value);
         else if (cc == 64) cc64 = clamp7(value);
+        else if (cc == 74) cc74 = clamp7(value);
         else if (cc == 103) cc103 = clamp7(value);
         else if (cc == 104) cc104 = clamp7(value);
         invalidate();
@@ -284,8 +287,8 @@ public final class PianoView extends View {
         text.setTextSize(18f*u);
         float row1 = 30f*u;
         c.drawText(midiConnections > 0 ? "MIDI ●" : "MIDI ○", pad, row1, text);
-        String bankShort = bankStatus != null && bankStatus.startsWith("BANK READY") ? "BANK READY" : bankStatus;
-        c.drawText(bankShort, pad + 95f*u, row1, text);
+        String modelShort = bankStatus == null ? "MODEL READY" : bankStatus;
+        c.drawText(modelShort, pad + 95f*u, row1, text);
         float cents = (pitchBend - 8192) / 8192f * 200f;
         String pb = String.format(java.util.Locale.US, "PB %+3.0fc", cents);
         float pw = text.measureText(pb);
@@ -311,7 +314,7 @@ public final class PianoView extends View {
                 "SPACE " + new String[]{"NONE","ROOM","HALL","SPACE"}[spaceMode],
                 tape ? "TAPE ON" : "TAPE OFF",
                 dreamy ? "DREAMY ON" : "DREAMY OFF",
-                "BANK",
+                "MODEL",
                 "CONFIG"
         };
         float gap = 6f*u;
