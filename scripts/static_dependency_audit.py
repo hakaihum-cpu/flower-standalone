@@ -247,6 +247,9 @@ for need in [
     "std::abs (notes[(size_t) i] - currentMidiNote) <= 7",
     "tailReturn = 0.22f",
     "softProtect (float sample)",
+    "std::isfinite (sample)",
+    "softProtect (input + dl * feedback)",
+    "softProtect (input + (wetL * 0.38f + wetR * 0.14f))",
 ]:
     if need not in renderers:
         fail(f"CHORD A/B renderer contract missing: {need}")
@@ -276,6 +279,9 @@ for need in [
     "changePeak",
     "audioOffset",
     "currentSampleRate / 12.0",
+    "softProtectSample (",
+    "const float delayWrite",
+    "const float mixed",
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
