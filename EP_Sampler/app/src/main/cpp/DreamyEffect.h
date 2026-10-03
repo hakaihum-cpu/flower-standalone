@@ -13,6 +13,7 @@ public:
     void setEnabled(bool enabled) { enabled_ = enabled; }
     bool enabled() const { return enabled_; }
     void setXY(float x, float y);
+    void setParameters(float x, float y, float mix);
     void process(float& left, float& right);
 
 private:
@@ -32,8 +33,8 @@ private:
     uint64_t historyFrames_ = 0;
     std::array<Voice,2> voices_{};
 
-    float targetX_ = 0.28f, targetY_ = 0.28f;
-    float x_ = 0.28f, y_ = 0.28f;
+    float targetX_ = 0.28f, targetY_ = 0.28f, targetMix_ = 0.34f;
+    float x_ = 0.28f, y_ = 0.28f, mix_ = 0.34f;
     float wetLpL_ = 0.f, wetLpR_ = 0.f;
 
     double wrap(double p) const;

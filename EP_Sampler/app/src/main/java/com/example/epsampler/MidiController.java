@@ -31,11 +31,18 @@ final class MidiController {
     private final List<MidiDevice> devices = new ArrayList<>();
     private final List<MidiOutputPort> ports = new ArrayList<>();
     private int pendingOpens = 0;
+    private volatile int channelFilter = 0; // 0=OMNI, 1..16=fixed channel
 
     MidiController(Context context, Listener listener) {
         this.listener = listener;
         midiManager = (MidiManager) context.getSystemService(Context.MIDI_SERVICE);
     }
+
+    void setChannel(int channel) {
+        channelFilter = Math.max(0, Math.min(16, channel));
+    }
+
+    int getChannel() { return channelFilter; }
 
     void start() {
         if (midiManager == null) return;
@@ -129,6 +136,9 @@ final class MidiController {
         }
 
         void dispatch(int status, int d1, int d2) {
+            int channel = (status & 0x0F) + 1;
+            int filter = channelFilter;
+            if (filter != 0 && channel != filter) return;
             int type = status & 0xF0;
             switch (type) {
                 case 0x80:

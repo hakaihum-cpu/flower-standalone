@@ -19,6 +19,10 @@ public final class NativeEngine {
     public static native void pitchBend(int value14);
     public static native void setDreamy(boolean enabled);
     public static native void setBoosterStep(int step);
+    public static native void setBoostDb(int db);
     public static native void setSpaceMode(int mode);
+    public static native void setSpaceParameters(int mix, int decay);
     public static native void setTape(boolean enabled);
+    public static native void setTapeParameters(int wow, int flutter, int drive);
+    public static native void setDreamyParameters(int x, int y, int mix);
 }

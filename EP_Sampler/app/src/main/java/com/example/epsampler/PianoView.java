@@ -16,12 +16,19 @@ import java.util.Comparator;
 import java.util.List;
 
 public final class PianoView extends View {
+    static final int EFFECT_BOOST = 0;
+    static final int EFFECT_SPACE = 1;
+    static final int EFFECT_TAPE = 2;
+    static final int EFFECT_DREAMY = 3;
+
     interface ActionListener {
         void onCycleBooster();
         void onCycleSpace();
         void onToggleTape();
         void onToggleDreamy();
         void onChooseBank();
+        void onEditEffect(int effect);
+        void onOpenConfig();
     }
 
     private ActionListener actionListener;
@@ -38,8 +45,11 @@ public final class PianoView extends View {
     private boolean dreamy = true;
     private boolean tape = false;
     private int boosterStep = 0;
+    private int boostDb = 0;
     private int spaceMode = 0;
     private String bankStatus = "BANK —";
+    private int downButton = -1;
+    private long downTimeMs = 0L;
 
     private final Finger[] left = new Finger[5];
     private final Finger[] right = new Finger[5];
@@ -61,7 +71,16 @@ public final class PianoView extends View {
     void setActionListener(ActionListener l) { actionListener = l; }
     void setDreamy(boolean on) { dreamy = on; invalidate(); }
     void setTape(boolean on) { tape = on; invalidate(); }
-    void setBoosterStep(int step) { boosterStep = Math.max(0, Math.min(3, step)); invalidate(); }
+    void setBoosterStep(int step) {
+        boosterStep = Math.max(0, Math.min(3, step));
+        boostDb = boosterStep * 2;
+        invalidate();
+    }
+    void setBoostDb(int db) {
+        boostDb = Math.max(0, Math.min(6, db));
+        boosterStep = Math.min(3, Math.round(boostDb / 2f));
+        invalidate();
+    }
     void setSpaceMode(int mode) { spaceMode = Math.max(0, Math.min(3, mode)); invalidate(); }
     void setBankStatus(String s) { bankStatus = s; invalidate(); }
     void setMidiConnections(int count) { midiConnections = count; invalidate(); }
@@ -100,6 +119,11 @@ public final class PianoView extends View {
         float leftPad = (getWidth() - dw) * 0.5f;
         float topPad = (getHeight() - dh) * 0.5f;
         imageRect.set(leftPad, topPad, leftPad + dw, topPad + dh);
+        // Reset shared Paint before drawing the background. Its alpha/color are reused by
+        // overlays later in the frame; without this reset the next MIDI redraw darkens it.
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.WHITE);
+        paint.setAlpha(255);
         c.drawBitmap(background, null, imageRect, paint);
 
         drawPressedKeys(c, scale, leftPad, topPad);
@@ -283,22 +307,23 @@ public final class PianoView extends View {
 
         // Row 3: direct-touch effect controls.
         String[] labels = new String[] {
-                boosterStep == 0 ? "BOOST OFF" : "BOOST +" + (boosterStep*2) + "dB",
+                boostDb == 0 ? "BOOST OFF" : "BOOST +" + boostDb + "dB",
                 "SPACE " + new String[]{"NONE","ROOM","HALL","SPACE"}[spaceMode],
                 tape ? "TAPE ON" : "TAPE OFF",
                 dreamy ? "DREAMY ON" : "DREAMY OFF",
-                "BANK"
+                "BANK",
+                "CONFIG"
         };
         float gap = 6f*u;
         float bx0 = pad;
         float by0 = 72f*u;
         float bh = 30f*u;
-        float bw = (getWidth() - pad*2f - gap*4f) / 5f;
+        float bw = (getWidth() - pad*2f - gap*5f) / 6f;
         text.setTextSize(13.5f*u);
-        for (int i=0;i<5;i++) {
+        for (int i=0;i<6;i++) {
             float l = bx0 + i*(bw+gap);
             float rr = l + bw;
-            boolean active = (i==0 && boosterStep>0) || (i==1 && spaceMode>0) ||
+            boolean active = (i==0 && boostDb>0) || (i==1 && spaceMode>0) ||
                     (i==2 && tape) || (i==3 && dreamy);
             paint.setColor(active ? Color.argb(120, 238, 229, 207) : Color.argb(72, 238, 229, 207));
             c.drawRoundRect(new RectF(l, by0, rr, by0+bh), 6f*u, 6f*u, paint);
@@ -324,28 +349,49 @@ public final class PianoView extends View {
         int m = 0; for (int v : polyPressure) m = Math.max(m, v); return m;
     }
 
-    @Override public boolean onTouchEvent(MotionEvent e) {
-        if (e.getAction() != MotionEvent.ACTION_UP) return true;
+    private int effectButtonAt(float x, float y) {
         float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
         float pad = 12f*u;
         float gap = 6f*u;
         float by0 = 72f*u;
         float bh = 30f*u;
-        if (e.getY() >= by0 && e.getY() <= by0 + bh) {
-            float bw = (getWidth() - pad*2f - gap*4f) / 5f;
-            for (int i=0;i<5;i++) {
-                float l = pad + i*(bw+gap);
-                if (e.getX() >= l && e.getX() <= l+bw) {
-                    if (actionListener == null) return true;
-                    if (i==0) actionListener.onCycleBooster();
-                    else if (i==1) actionListener.onCycleSpace();
-                    else if (i==2) actionListener.onToggleTape();
-                    else if (i==3) actionListener.onToggleDreamy();
-                    else actionListener.onChooseBank();
-                    return true;
-                }
-            }
+        if (y < by0 || y > by0 + bh) return -1;
+        float bw = (getWidth() - pad*2f - gap*5f) / 6f;
+        for (int i=0;i<6;i++) {
+            float l = pad + i*(bw+gap);
+            if (x >= l && x <= l+bw) return i;
         }
+        return -1;
+    }
+
+    @Override public boolean onTouchEvent(MotionEvent e) {
+        int index = effectButtonAt(e.getX(), e.getY());
+        if (e.getAction() == MotionEvent.ACTION_DOWN) {
+            downButton = index;
+            downTimeMs = android.os.SystemClock.uptimeMillis();
+            return true;
+        }
+        if (e.getAction() == MotionEvent.ACTION_CANCEL) {
+            downButton = -1;
+            return true;
+        }
+        if (e.getAction() != MotionEvent.ACTION_UP) return true;
+        if (index < 0 || index != downButton || actionListener == null) {
+            downButton = -1;
+            return true;
+        }
+        long heldMs = android.os.SystemClock.uptimeMillis() - downTimeMs;
+        downButton = -1;
+        if (heldMs >= 550 && index <= EFFECT_DREAMY) {
+            actionListener.onEditEffect(index);
+            return true;
+        }
+        if (index==0) actionListener.onCycleBooster();
+        else if (index==1) actionListener.onCycleSpace();
+        else if (index==2) actionListener.onToggleTape();
+        else if (index==3) actionListener.onToggleDreamy();
+        else if (index==4) actionListener.onChooseBank();
+        else actionListener.onOpenConfig();
         return true;
     }
 

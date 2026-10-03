@@ -21,3 +21,8 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setDre
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setBoosterStep(JNIEnv*,jclass,jint step){AudioEngine::instance().setBoosterStep(step);}
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setSpaceMode(JNIEnv*,jclass,jint mode){AudioEngine::instance().setSpaceMode(mode);}
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setTape(JNIEnv*,jclass,jboolean on){AudioEngine::instance().setTape(on);}
+
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setBoostDb(JNIEnv*,jclass,jint db){AudioEngine::instance().setBoostDb(db);}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setSpaceParameters(JNIEnv*,jclass,jint mix,jint decay){AudioEngine::instance().setSpaceParameters(mix,decay);}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setTapeParameters(JNIEnv*,jclass,jint wow,jint flutter,jint drive){AudioEngine::instance().setTapeParameters(wow,flutter,drive);}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setDreamyParameters(JNIEnv*,jclass,jint x,jint y,jint mix){AudioEngine::instance().setDreamyParameters(x,y,mix);}

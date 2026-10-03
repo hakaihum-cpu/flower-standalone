@@ -33,6 +33,9 @@ bool AudioEngine::start() {
     dreamy_.setXY(cc103_/127.f, cc104_/127.f);
     space_.prepare(sampleRate_);
     tape_.prepare(sampleRate_);
+    space_.setParameters(spaceMix_, spaceDecay_);
+    tape_.setParameters(tapeWow_, tapeFlutter_, tapeDrive_);
+    dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_);
     if (AAudioStream_requestStart(stream_) != AAUDIO_OK) { stop(); return false; }
     return true;
 }
@@ -77,10 +80,14 @@ void AudioEngine::polyPressure(int n,int p){ push({Event::POLY_AT,n,p}); }
 void AudioEngine::channelPressure(int p){ push({Event::CH_AT,p,0}); }
 void AudioEngine::controlChange(int c,int v){ push({Event::CC,c,v}); }
 void AudioEngine::pitchBend(int v){ push({Event::PITCH,v,0}); }
-void AudioEngine::setDreamy(bool on){ push({Event::DREAMY,on?1:0,0}); }
-void AudioEngine::setBoosterStep(int step){ push({Event::BOOST,step,0}); }
-void AudioEngine::setSpaceMode(int mode){ push({Event::SPACE_MODE,mode,0}); }
-void AudioEngine::setTape(bool on){ push({Event::TAPE,on?1:0,0}); }
+void AudioEngine::setDreamy(bool on){ push({Event::DREAMY,on?1:0,0,0}); }
+void AudioEngine::setBoosterStep(int step){ push({Event::BOOST,step,0,0}); }
+void AudioEngine::setBoostDb(int db){ push({Event::BOOST_DB,db,0,0}); }
+void AudioEngine::setSpaceMode(int mode){ push({Event::SPACE_MODE,mode,0,0}); }
+void AudioEngine::setSpaceParameters(int mix,int decay){ push({Event::SPACE_PARAMS,mix,decay,0}); }
+void AudioEngine::setTape(bool on){ push({Event::TAPE,on?1:0,0,0}); }
+void AudioEngine::setTapeParameters(int wow,int flutter,int drive){ push({Event::TAPE_PARAMS,wow,flutter,drive}); }
+void AudioEngine::setDreamyParameters(int x,int y,int mix){ push({Event::DREAMY_PARAMS,x,y,mix}); }
 
 void AudioEngine::handle(const Event& e) {
     switch(e.type) {
@@ -98,16 +105,46 @@ void AudioEngine::handle(const Event& e) {
             else if(e.a==11) cc11_=std::clamp(e.b,0,127);
             else if(e.a==64){
                 bool was=cc64_>=64; cc64_=std::clamp(e.b,0,127); bool now=cc64_>=64;
-                if(was && !now) for(auto& v:voices_) if(v.active&&v.pendingRelease){v.pendingRelease=false;v.releasing=true;v.releaseFrame=0.0;}
+                if(was && !now) for(auto& v:voices_) if(v.active&&v.pendingRelease&&!v.keyDown){v.pendingRelease=false;v.releasing=true;v.releaseFrame=0.0;}
             }
+            else if(e.a==20){ boostDb_=std::clamp(int(std::lround(e.b*6.0/127.0)),0,6); }
+            else if(e.a==21){ space_.setMode(std::clamp(int(std::lround(e.b*3.0/127.0)),0,3)); }
+            else if(e.a==22){ spaceMix_=e.b/127.f; space_.setParameters(spaceMix_,spaceDecay_); }
+            else if(e.a==23){ spaceDecay_=e.b/127.f; space_.setParameters(spaceMix_,spaceDecay_); }
+            else if(e.a==24){ tape_.setEnabled(e.b>=64); }
+            else if(e.a==25){ tapeWow_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_); }
+            else if(e.a==26){ tapeFlutter_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_); }
+            else if(e.a==27){ tapeDrive_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_); }
+            else if(e.a==28){ dreamy_.setEnabled(e.b>=64); }
             else if(e.a==103){ cc103_=std::clamp(e.b,0,127); dreamy_.setXY(cc103_/127.f, cc104_/127.f); }
             else if(e.a==104){ cc104_=std::clamp(e.b,0,127); dreamy_.setXY(cc103_/127.f, cc104_/127.f); }
+            else if(e.a==105){ dreamyMix_=e.b/127.f; dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_); }
             break;
         case Event::PITCH: pitch_=std::clamp(e.a,0,16383); break;
         case Event::DREAMY: dreamy_.setEnabled(e.a!=0); break;
-        case Event::BOOST: boosterStep_=std::clamp(e.a,0,3); break;
+        case Event::BOOST:
+            boosterStep_=std::clamp(e.a,0,3); boostDb_=boosterStep_*2; break;
+        case Event::BOOST_DB:
+            boostDb_=std::clamp(e.a,0,6); break;
         case Event::SPACE_MODE: space_.setMode(e.a); break;
+        case Event::SPACE_PARAMS:
+            spaceMix_=std::clamp(e.a,0,100)/100.f;
+            spaceDecay_=std::clamp(e.b,0,100)/100.f;
+            space_.setParameters(spaceMix_, spaceDecay_);
+            break;
         case Event::TAPE: tape_.setEnabled(e.a!=0); break;
+        case Event::TAPE_PARAMS:
+            tapeWow_=std::clamp(e.a,0,100)/100.f;
+            tapeFlutter_=std::clamp(e.b,0,100)/100.f;
+            tapeDrive_=std::clamp(e.c,0,100)/100.f;
+            tape_.setParameters(tapeWow_, tapeFlutter_, tapeDrive_);
+            break;
+        case Event::DREAMY_PARAMS:
+            cc103_=std::clamp(int(std::lround(std::clamp(e.a,0,100)*1.27f)),0,127);
+            cc104_=std::clamp(int(std::lround(std::clamp(e.b,0,100)*1.27f)),0,127);
+            dreamyMix_=std::clamp(e.c,0,100)/100.f;
+            dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_);
+            break;
     }
 }
 
@@ -121,7 +158,7 @@ void AudioEngine::beginVoice(int note,int velocity) {
     }
     uint8_t rr = uint8_t((rrCounter_[note]++ % 3)+1);
     *pick = Voice{};
-    pick->active=true; pick->note=note; pick->velocity=std::clamp(velocity,1,127); pick->rr=rr;
+    pick->active=true; pick->keyDown=true; pick->note=note; pick->velocity=std::clamp(velocity,1,127); pick->rr=rr;
     pick->bodyVelocity=float(pick->velocity); pick->targetBodyVelocity=float(pick->velocity);
     int at = polyAT_[note] ? polyAT_[note] : channelAT_;
     pick->targetBodyVelocity=float(pick->velocity)+(127.f-pick->velocity)*(at/127.f);
@@ -132,9 +169,14 @@ void AudioEngine::beginVoice(int note,int velocity) {
 }
 
 void AudioEngine::releaseVoice(int note) {
-    for(auto& v:voices_) if(v.active&&v.note==note&&!v.releasing){
-        if(cc64_>=64) v.pendingRelease=true;
-        else {v.releasing=true;v.releaseFrame=0.0;}
+    for(auto& v:voices_) if(v.active&&v.note==note&&!v.releasing&&v.keyDown){
+        v.keyDown=false;
+        if(cc64_>=64) {
+            v.pendingRelease=true;
+        } else {
+            v.releasing=true;
+            v.releaseFrame=0.0;
+        }
     }
 }
 
@@ -164,7 +206,14 @@ void AudioEngine::renderVoice(Voice& v,float& l,float& r) {
         sr=layerSample(v,false,lo,v.frame,1)*(1-mix)+layerSample(v,false,hi,v.frame,1)*mix;
         v.frame += ratio;
         const auto* endRef=v.sus[hi]?v.sus[hi]:v.sus[lo];
-        if(!endRef || v.frame>=endRef->frames) v.active=false;
+        if(!endRef) {
+            v.active=false;
+        } else if(v.frame>=endRef->frames) {
+            // A held sustain pedal must not force a premature NoteOff transition.
+            // Clamp to the final source frame until the pedal is released.
+            if(v.pendingRelease && cc64_>=64) v.frame=std::max(0.0, double(endRef->frames)-1.001);
+            else v.active=false;
+        }
     } else {
         const int xf=std::max(1,int(0.020*sampleRate_));
         float x=std::clamp(float(v.releaseFrame)/float(xf),0.f,1.f);
@@ -194,8 +243,8 @@ void AudioEngine::render(float* out,int32_t frames) {
 
         // Fixed master lift remains at ~+10 dB. BOOST adds 0/+2/+4/+6 dB on top.
         constexpr float MASTER_GAIN = 3.2f;
-        constexpr float BOOST_GAINS[4] = {1.0f, 1.2589254f, 1.5848932f, 1.9952623f};
-        const float outGain = MASTER_GAIN * BOOST_GAINS[std::clamp(boosterStep_,0,3)];
+        const float boostGain = std::pow(10.0f, float(std::clamp(boostDb_,0,6)) / 20.0f);
+        const float outGain = MASTER_GAIN * boostGain;
         out[i*2]=std::tanh(l*outGain);
         out[i*2+1]=std::tanh(r*outGain);
     }

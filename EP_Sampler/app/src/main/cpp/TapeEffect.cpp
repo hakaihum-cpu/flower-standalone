@@ -11,6 +11,12 @@ void TapeEffect::prepare(int sampleRate) {
     lpL_ = lpR_ = 0.f;
 }
 
+void TapeEffect::setParameters(float wow, float flutter, float drive) {
+    wow_ = std::clamp(wow, 0.f, 1.f);
+    flutter_ = std::clamp(flutter, 0.f, 1.f);
+    drive_ = std::clamp(drive, 0.f, 1.f);
+}
+
 float TapeEffect::readInterp(const std::vector<float>& b, double p) const {
     if (b.empty()) return 0.f;
     const double n = double(b.size());
@@ -36,7 +42,9 @@ void TapeEffect::process(float& l, float& r) {
     const double twoPi = 6.283185307179586;
     const double wow = std::sin(wowPhase_);
     const double flutter = std::sin(flutterPhase_);
-    const double delay = 12.0 + 7.5*wow + 2.2*flutter;
+    const double wowDepth = 1.0 + 13.0 * double(wow_);
+    const double flutterDepth = 0.25 + 4.0 * double(flutter_);
+    const double delay = 12.0 + wowDepth*wow + flutterDepth*flutter;
 
     const double readL = double(write_) - delay;
     const double readR = double(write_) - delay - 0.7;
@@ -53,7 +61,7 @@ void TapeEffect::process(float& l, float& r) {
     lpL_ += a * (xL - lpL_);
     lpR_ += a * (xR - lpR_);
 
-    const float drive = 1.35f;
+    const float drive = 1.0f + 1.2f * drive_;
     const float norm = 1.f / std::tanh(drive);
     l = std::tanh(lpL_ * drive) * norm;
     r = std::tanh(lpR_ * drive) * norm;

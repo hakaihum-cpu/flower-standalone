@@ -15,6 +15,11 @@ void SpaceEffect::setMode(int mode) {
     mode_ = std::clamp(mode, int(NONE), int(SPACE));
 }
 
+void SpaceEffect::setParameters(float mix, float decay) {
+    mix_ = std::clamp(mix, 0.f, 1.f);
+    decay_ = std::clamp(decay, 0.f, 1.f);
+}
+
 float SpaceEffect::readDelay(const std::vector<float>& b, float seconds) const {
     if (b.empty()) return 0.f;
     const float d = std::max(1.f, seconds * float(sampleRate_));
@@ -40,17 +45,20 @@ void SpaceEffect::process(float& l, float& r) {
     }
 
     std::array<float,4> taps{};
-    float feedback=0.42f, wet=0.18f, cutoff=7000.f, cross=0.10f;
+    float feedback=0.42f, baseWet=0.18f, cutoff=7000.f, cross=0.10f;
     if (mode_ == ROOM) {
         taps = {0.023f,0.031f,0.041f,0.053f};
-        feedback=0.42f; wet=0.18f; cutoff=7000.f; cross=0.10f;
+        feedback=0.42f; baseWet=0.18f; cutoff=7000.f; cross=0.10f;
     } else if (mode_ == HALL) {
         taps = {0.047f,0.061f,0.079f,0.101f};
-        feedback=0.62f; wet=0.28f; cutoff=5600.f; cross=0.16f;
+        feedback=0.62f; baseWet=0.28f; cutoff=5600.f; cross=0.16f;
     } else {
         taps = {0.083f,0.127f,0.173f,0.239f};
-        feedback=0.76f; wet=0.38f; cutoff=4300.f; cross=0.24f;
+        feedback=0.76f; baseWet=0.38f; cutoff=4300.f; cross=0.24f;
     }
+
+    feedback = std::clamp(feedback + (decay_ - 0.5f) * 0.34f, 0.18f, 0.90f);
+    const float wet = std::clamp(baseWet * (0.35f + 1.30f * mix_), 0.f, 0.68f);
 
     float aL=0.f, aR=0.f;
     for (int i=0;i<4;i++) {

@@ -28,8 +28,12 @@ public:
     void pitchBend(int value14);
     void setDreamy(bool enabled);
     void setBoosterStep(int step);
+    void setBoostDb(int db);
     void setSpaceMode(int mode);
+    void setSpaceParameters(int mix, int decay);
     void setTape(bool enabled);
+    void setTapeParameters(int wow, int flutter, int drive);
+    void setDreamyParameters(int x, int y, int mix);
 
 private:
     AudioEngine();
@@ -38,8 +42,8 @@ private:
     AudioEngine& operator=(const AudioEngine&) = delete;
 
     struct Event {
-        enum Type : uint8_t { NOTE_ON, NOTE_OFF, POLY_AT, CH_AT, CC, PITCH, DREAMY, BOOST, SPACE_MODE, TAPE } type;
-        int a=0,b=0;
+        enum Type : uint8_t { NOTE_ON, NOTE_OFF, POLY_AT, CH_AT, CC, PITCH, DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS, TAPE, TAPE_PARAMS, DREAMY_PARAMS } type;
+        int a=0,b=0,c=0;
     };
     static constexpr uint32_t QUEUE = 1024;
     std::array<Event, QUEUE> queue_{};
@@ -51,6 +55,7 @@ private:
         bool active=false;
         bool releasing=false;
         bool pendingRelease=false;
+        bool keyDown=false;
         int note=0;
         int velocity=0;
         int rr=1;
@@ -75,6 +80,10 @@ private:
     SpaceEffect space_;
     TapeEffect tape_;
     int boosterStep_ = 0;
+    int boostDb_ = 0;
+    float spaceMix_ = 0.50f, spaceDecay_ = 0.50f;
+    float tapeWow_ = 0.50f, tapeFlutter_ = 0.50f, tapeDrive_ = 0.50f;
+    float dreamyMix_ = 0.34f;
     AAudioStream* stream_=nullptr;
     int sampleRate_=48000;
     std::mutex bankMutex_;

@@ -12,12 +12,19 @@ void DreamyEffect::prepare(int sampleRate) {
     voices_ = {};
     x_ = targetX_ = 0.28f;
     y_ = targetY_ = 0.28f;
+    mix_ = targetMix_ = 0.34f;
     wetLpL_ = wetLpR_ = 0.f;
 }
 
 void DreamyEffect::setXY(float x, float y) {
     targetX_ = std::clamp(x, 0.f, 1.f);
     targetY_ = std::clamp(y, 0.f, 1.f);
+}
+
+void DreamyEffect::setParameters(float x, float y, float mix) {
+    targetX_ = std::clamp(x, 0.f, 1.f);
+    targetY_ = std::clamp(y, 0.f, 1.f);
+    targetMix_ = std::clamp(mix, 0.f, 1.f);
 }
 
 double DreamyEffect::wrap(double p) const {
@@ -74,25 +81,26 @@ void DreamyEffect::process(float& l, float& r) {
     const float smooth = 1.f - std::exp(-1.f / (0.025f * float(sampleRate_))); // ~25 ms
     x_ += (targetX_ - x_) * smooth;
     y_ += (targetY_ - y_) * smooth;
+    mix_ += (targetMix_ - mix_) * smooth;
 
     const uint64_t minHistory = static_cast<uint64_t>(0.75 * sampleRate_);
     if (!enabled_ || historyFrames_ < minHistory) {
         l = dryL; r = dryR; return;
     }
 
-    // FLOWER reference: X drift 0.90..1.00, Y controls loop length + wet.
-    const double drift = 0.90 + 0.10 * double(x_);
+    // X changes history position/movement only. Playback speed stays exact so
+    // the generated voices remain +5 and +12 semitones.
     // Shorter fragments as Y rises. The exact range is kept conservative here;
     // the key reference behavior is the same: Y up => shorter/stronger texture.
     const double loopSec = 0.34 - 0.26 * double(y_); // 340 ms -> 80 ms
     const double loopFrames = std::max(64.0, loopSec * sampleRate_);
-    const double baseLag = (0.75 + 0.28 * (1.0 - double(x_))) * sampleRate_;
+    const double baseLag = (0.70 + 0.38 * (1.0 - double(x_))) * sampleRate_;
 
     constexpr double speed5 = 1.3348398; // +5 semitones
     constexpr double speed12 = 2.0;      // +12 semitones
 
     float wetL = 0.f, wetR = 0.f;
-    const double speeds[2] = { speed5 * drift, speed12 * drift };
+    const double speeds[2] = { speed5, speed12 };
     for (int vi=0; vi<2; ++vi) {
         float vl=0.f, vr=0.f;
         for (int gi=0; gi<2; ++gi) {
@@ -111,7 +119,7 @@ void DreamyEffect::process(float& l, float& r) {
     wetLpL_ += lpA * (wetL - wetLpL_);
     wetLpR_ += lpA * (wetR - wetLpR_);
 
-    const float wet = std::clamp(0.24f + y_ * 0.34f, 0.20f, 0.58f);
+    const float wet = std::clamp(mix_ * 0.72f, 0.f, 0.72f);
     l = dryL * (1.f - wet) + wetLpL_ * wet;
     r = dryR * (1.f - wet) + wetLpR_ * wet;
 }
