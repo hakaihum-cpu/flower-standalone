@@ -36,6 +36,7 @@ public:
     void setTape(bool enabled);
     void setTapeParameters(int wow, int flutter, int drive);
     void setDreamyParameters(int x, int y, int mix);
+    void setAdsr(int attackMs, int decayMs, int sustainPct, int releaseMs);
 
 private:
     AudioEngine() = default;
@@ -47,9 +48,9 @@ private:
         enum Type : uint8_t {
             NOTE_ON, NOTE_OFF, POLY_AT, CH_AT, CC, PITCH,
             DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS,
-            TAPE, TAPE_PARAMS, DREAMY_PARAMS
+            TAPE, TAPE_PARAMS, DREAMY_PARAMS, ADSR
         } type;
-        int a=0,b=0,c=0;
+        int a=0,b=0,c=0,d=0;
     };
 
     static constexpr uint32_t QUEUE = 1024;
