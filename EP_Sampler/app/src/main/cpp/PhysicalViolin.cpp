@@ -86,39 +86,49 @@ void PhysicalViolin::reset() {
 }
 
 int PhysicalViolin::chooseString(int note) const {
+    // This instrument uses four violin-like physical voices, but each voice may
+    // cover the full playable keyboard range. The earlier implementation tied
+    // each voice to a strict open-string +24 semitone range; in the upper
+    // register that left only one or two eligible voices and destroyed
+    // polyphony.
     int best = -1;
-    int bestScore = 100000;
+    int bestScore = 1000000;
 
+    // First choice: any completely free voice. Keep a loose preference for the
+    // open string nearest the requested pitch so the four voices retain their
+    // G/D/A/E character without becoming hard range restrictions.
     for (int i = 0; i < kStrings; ++i) {
-        const auto& s = strings_[i];
-        if (note < s.openNote || note > s.openNote + 24) continue;
-
-        int score = (note - s.openNote) * 10;
-        if (s.active) score += 500;
-        if (s.active && s.note == note) score -= 700;
-        if (!s.active) score -= 250;
-
-        if (score < bestScore) {
-            bestScore = score;
+        const auto& voice = strings_[i];
+        if (voice.active) continue;
+        const int distance = std::abs(note - voice.openNote);
+        if (distance < bestScore) {
+            bestScore = distance;
             best = i;
         }
     }
-
     if (best >= 0) return best;
 
-    for (int i = kStrings - 1; i >= 0; --i) {
-        if (note >= strings_[i].openNote) return i;
+    // If all four voices are occupied, retrigger the same note on its current
+    // voice when possible.
+    for (int i = 0; i < kStrings; ++i) {
+        if (strings_[i].active && strings_[i].note == note) return i;
     }
-    return -1;
+
+    // True four-voice stealing only when all voices are busy: steal the oldest.
+    best = 0;
+    for (int i = 1; i < kStrings; ++i) {
+        if (strings_[i].age > strings_[best].age) best = i;
+    }
+    return best;
 }
 
 void PhysicalViolin::noteOn(int note, int velocity) {
-    if (note < 55 || note > 100 || velocity <= 0) return;
+    if (note < 55 || note > 108 || velocity <= 0) return;
     const int idx = chooseString(note);
     if (idx < 0) return;
 
     auto& s = strings_[idx];
-    const bool legato = s.active;
+    const bool legato = s.active && s.note == note;
 
     s.active = true;
     s.keyDown = true;
