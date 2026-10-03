@@ -298,10 +298,7 @@ void RealtimeChordFxAudioProcessor::processChordAudio (juce::AudioBuffer<float>&
     }
 
     if (running.load (std::memory_order_relaxed) && haveChord)
-    {
         processChordReverb (buffer);
-        softProtectBuffer (buffer);
-    }
 }
 
 void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buffer)
@@ -390,7 +387,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         lastChordMode = chordMode;
         sineArpeggiator.reset();
         chordBRandomFx.reset();
-        // Preserve the common CHORD reverb tail across A/B switches.
+        chordReverb.reset();
         if (haveChord)
         {
             sampleChordRenderer.setPlan (currentPlan.midiNotes, lastInputMidiFloat, true);
