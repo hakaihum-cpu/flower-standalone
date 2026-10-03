@@ -43,7 +43,7 @@ public final class PianoView extends View {
     private int cc1 = 14, cc7 = 127, cc10 = 74, cc11 = 74, cc64 = 0, cc74 = 42, cc103 = 36, cc104 = 36;
     private int pitchBend = 8192;
     private int midiConnections = 0;
-    private boolean dreamy = true;
+    private boolean dreamy = false;
     private boolean tape = false;
     private int boosterStep = 0;
     private int boostDb = 0;
