@@ -129,6 +129,11 @@ private:
     int performanceXYPart_=0;
     float performanceXYX_=0.5f;
     float performanceXYY_=0.5f;
+    float performanceXYSmoothX_=0.5f;
+    float performanceXYSmoothY_=0.5f;
+    float performanceXYGate_=0.0f;
+    float performanceDelaySamples_=0.0f;
+    float stutterLoopSamples_=0.0f;
 
     std::vector<float> performanceDelayL_;
     std::vector<float> performanceDelayR_;
