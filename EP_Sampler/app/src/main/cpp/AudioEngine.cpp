@@ -338,13 +338,16 @@ void AudioEngine::render(float* out,int32_t frames) {
 
     for (int32_t i=0; i<frames; ++i) {
         float mono = 0.0f;
-        int sounding = 0;
+        int activeParts = 0;
         for (int part=0; part<8; ++part) {
+            const int voices = activeVoicesPart(part);
             mono += processPart(part);
-            sounding += activeVoicesPart(part);
+            if (voices > 0) activeParts++;
         }
 
-        if (sounding > 1) mono *= 1.0f / std::sqrt(float(sounding));
+        // Each instrument already normalizes its own polyphony. Only normalize
+        // the number of simultaneously sounding timbral parts here.
+        if (activeParts > 1) mono *= 1.0f / std::sqrt(float(activeParts));
 
         float l = mono;
         float r = mono;
