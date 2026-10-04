@@ -47,10 +47,19 @@ bool AudioEngine::start() {
     for (int i=0; i<7; ++i) {
         modelParts_[i].prepare(sampleRate_);
         modelParts_[i].setType(i + 1);
-        modelParts_[i].setControl(1, cc1_ / 127.0f);
-        modelParts_[i].setControl(10, cc10_ / 127.0f);
-        modelParts_[i].setControl(11, cc11_ / 127.0f);
-        modelParts_[i].setControl(74, cc74_ / 127.0f);
+        if (i == 6) {
+            // DRUMS: CC10 Kick Tune / CC11 Hi-hat Tune /
+            // CC74 Snare Tune / CC1 Decay. Centre the three tunings.
+            modelParts_[i].setControl(1, 64.0f / 127.0f);
+            modelParts_[i].setControl(10, 64.0f / 127.0f);
+            modelParts_[i].setControl(11, 64.0f / 127.0f);
+            modelParts_[i].setControl(74, 64.0f / 127.0f);
+        } else {
+            modelParts_[i].setControl(1, cc1_ / 127.0f);
+            modelParts_[i].setControl(10, cc10_ / 127.0f);
+            modelParts_[i].setControl(11, cc11_ / 127.0f);
+            modelParts_[i].setControl(74, cc74_ / 127.0f);
+        }
     }
 
     dreamy_.prepare(sampleRate_);
