@@ -56,6 +56,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_DRUM_PARAM_PREFIX = "drum_param_";
     private static final String KEY_DRUM_BOOST_DB = "drum_boost_db";
     private static final String KEY_DRUM_DISTORTION = "drum_distortion";
+    private static final String KEY_PART_BOOST_PREFIX = "part_boost_db_";
+    private static final String KEY_PART_DIST_PREFIX = "part_distortion_";
+    private static final String KEY_FELT_REVERB_MIX = "felt_reverb_mix";
+    private static final String KEY_FELT_REVERB_DECAY = "felt_reverb_decay";
     private static final String PRESET_PREFS = "violin_physical_presets";
     private static final int PRESET_SLOTS = 8;
 
@@ -97,6 +101,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     };
     private int drumBoostDb = 6;
     private int drumDistortion = 0;
+    private final int[] partBoostDb = new int[]{0,0,0,0,0,0,0,6};
+    private final int[] partDistortion = new int[]{0,0,0,0,0,0,0,0};
+    private int feltReverbMix = 28;
+    private int feltReverbDecay = 58;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -148,6 +156,20 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         android.content.SharedPreferences drumPrefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         drumBoostDb = Math.max(0, Math.min(18, drumPrefs.getInt(KEY_DRUM_BOOST_DB, 6)));
         drumDistortion = Math.max(0, Math.min(127, drumPrefs.getInt(KEY_DRUM_DISTORTION, 0)));
+        for (int i=0; i<partBoostDb.length; i++) {
+            int boostFallback = (i == 7) ? drumBoostDb : 0;
+            int distFallback = (i == 7) ? drumDistortion : 0;
+            partBoostDb[i] = Math.max(0, Math.min(18,
+                    drumPrefs.getInt(KEY_PART_BOOST_PREFIX + i, boostFallback)));
+            partDistortion[i] = Math.max(0, Math.min(127,
+                    drumPrefs.getInt(KEY_PART_DIST_PREFIX + i, distFallback)));
+        }
+        drumBoostDb = partBoostDb[7];
+        drumDistortion = partDistortion[7];
+        feltReverbMix = Math.max(0, Math.min(100,
+                drumPrefs.getInt(KEY_FELT_REVERB_MIX, 28)));
+        feltReverbDecay = Math.max(0, Math.min(100,
+                drumPrefs.getInt(KEY_FELT_REVERB_DECAY, 58)));
         for (int i=0; i<drumParameters.length; i++) {
             int fallback = drumParameters[i];
             if (i == 0) fallback = drumPrefs.getInt(KEY_DRUM_KICK_TUNE, fallback);
@@ -185,7 +207,11 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         for (int i=0; i<drumParameters.length; i++) {
             NativeEngine.setDrumParameter(i, drumParameters[i]);
         }
-        NativeEngine.setDrumFx(drumBoostDb, drumDistortion);
+        for (int part=0; part<8; part++) {
+            NativeEngine.setPartFx(part, partBoostDb[part], partDistortion[part]);
+        }
+        NativeEngine.setDrumFx(partBoostDb[7], partDistortion[7]);
+        NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
         NativeEngine.setInstrument(instrumentMode);
         if (instrumentMode != 7) {
             NativeEngine.controlChange(10, bowPressure);
@@ -599,22 +625,11 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         String[] names = modelControlNames();
 
         if (instrumentMode == 7) {
-            TextView info = new TextView(this);
-            info.setText("Edit directly on the performance screen.\n\n" +
-                    "C4 Kick / C#4 Hi-hat / D4 Snare = physical models\n" +
-                    "D#4 Close Hat / E4 Tom / F4 Crash\n" +
-                    "F#4 Kick / G4 Stick / G#4 Snare = one-shot samples\n\n" +
-                    "KICK: Tune / Decay / Bend / Click\n" +
-                    "HI-HAT: Tune / Decay / Color / Noise\n" +
-                    "SNARE: Tune / Decay / Snappy / Impact\n" +
-                    "DRUM BUS: Booster / Distortion");
-            info.setTextSize(15f);
-            root.addView(info);
-            new AlertDialog.Builder(this)
-                    .setTitle("DRUMS MODEL")
-                    .setView(scrollDialogView(root))
-                    .setPositiveButton("CLOSE", null)
-                    .show();
+            if (drumEditorView != null) {
+                drumEditorView.setValues(drumParameters);
+                drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
+                drumEditorView.setDrumsVisible(true);
+            }
             return;
         }
 
@@ -658,6 +673,35 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_RELEASE_MS, v).apply();
         });
+
+        addSlider(root, "BOOSTER dB", 18, partBoostDb[instrumentMode], v -> {
+            partBoostDb[instrumentMode] = v;
+            NativeEngine.setPartFx(instrumentMode, partBoostDb[instrumentMode],
+                    partDistortion[instrumentMode]);
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putInt(KEY_PART_BOOST_PREFIX + instrumentMode, v).apply();
+        });
+        addSlider(root, "DISTORTION", 127, partDistortion[instrumentMode], v -> {
+            partDistortion[instrumentMode] = v;
+            NativeEngine.setPartFx(instrumentMode, partBoostDb[instrumentMode],
+                    partDistortion[instrumentMode]);
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putInt(KEY_PART_DIST_PREFIX + instrumentMode, v).apply();
+        });
+        if (instrumentMode == 3) {
+            addSlider(root, "REVERB MIX", 100, feltReverbMix, v -> {
+                feltReverbMix = v;
+                NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(KEY_FELT_REVERB_MIX, v).apply();
+            });
+            addSlider(root, "REVERB DECAY", 100, feltReverbDecay, v -> {
+                feltReverbDecay = v;
+                NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(KEY_FELT_REVERB_DECAY, v).apply();
+            });
+        }
         new AlertDialog.Builder(this)
                 .setTitle(INSTRUMENT_NAMES[instrumentMode] + " MODEL")
                 .setMessage(modelDescription())
@@ -678,7 +722,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     @Override public void onDrumFxChanged(int boostDb, int distortion) {
         drumBoostDb = Math.max(0, Math.min(18, boostDb));
         drumDistortion = Math.max(0, Math.min(127, distortion));
+        partBoostDb[7] = drumBoostDb;
+        partDistortion[7] = drumDistortion;
         NativeEngine.setDrumFx(drumBoostDb, drumDistortion);
+        NativeEngine.setPartFx(7, drumBoostDb, drumDistortion);
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putInt(KEY_DRUM_BOOST_DB, drumBoostDb)
                 .putInt(KEY_DRUM_DISTORTION, drumDistortion)
