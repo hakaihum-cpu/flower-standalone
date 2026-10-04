@@ -99,6 +99,7 @@ int InstrumentModels::allocateVoice(int note) const {
 
 void InstrumentModels::noteOn(int note, int velocity) {
     if (note < 0 || note > 127 || velocity <= 0) return;
+    if (type_ == DRUMS && note != 60 && note != 61 && note != 62) return;
 
     const int index = allocateVoice(note);
     Voice& v = voices_[index];
@@ -359,28 +360,34 @@ void InstrumentModels::initialiseDrums(Voice& v) {
     };
 
     const int n = v.note;
-    const bool kick = (n == 35 || n == 36);
-    const bool snare = (n == 38 || n == 40);
-    const bool hat = (n == 42 || n == 44 || n == 46);
+    const bool kick = (n == 60);   // C4
+    const bool hat = (n == 61);    // C#4
+    const bool snare = (n == 62);  // D4
 
-    double base;
-    if (kick) base = 48.0 + 20.0 * control3_;
-    else if (snare) base = 175.0 + 65.0 * control3_;
-    else if (hat) base = 680.0 + 520.0 * control3_;
-    else base = std::max(72.0, std::min(330.0, v.frequency * 0.44));
+    auto tuneRatio = [](float value) {
+        // Centre = original acoustic tuning, full range = +/- 12 semitones.
+        const float semitones = (clampf(value, 0.0f, 1.0f) - 0.5f) * 24.0f;
+        return std::pow(2.0f, semitones / 12.0f);
+    };
 
+    double base = 180.0;
+    if (kick) base = 52.0 * tuneRatio(control1_);
+    else if (hat) base = 900.0 * tuneRatio(control2_);
+    else if (snare) base = 190.0 * tuneRatio(control3_);
+
+    // CC1 / fourth DRUMS parameter is decay, shared across the three
+    // physical resonators. Keep the historical default close to 1x.
+    const float decayScale = 0.80f + 1.70f * vibrato_;
     const float membraneScale = clampf(float(base / 3500.0), 0.012f, 0.12f);
 
     for (int i=0; i<kModes; ++i) {
         const float ratio = hat ? plate[i] : membrane[i];
         const double f = base * ratio;
         const float decay = kick
-                ? std::max(0.06f, 1.15f / (1.0f + i * 0.48f))
+                ? std::max(0.06f, (1.15f * decayScale) / (1.0f + i * 0.48f))
                 : snare
-                    ? std::max(0.035f, 0.62f / (1.0f + i * 0.34f))
-                    : hat
-                        ? std::max(0.025f, 0.44f / (1.0f + i * 0.16f))
-                        : std::max(0.045f, 0.88f / (1.0f + i * 0.40f));
+                    ? std::max(0.035f, (0.62f * decayScale) / (1.0f + i * 0.34f))
+                    : std::max(0.025f, (0.44f * decayScale) / (1.0f + i * 0.16f));
         const float gain = (hat ? 0.0040f : 0.0085f * membraneScale) /
                            (1.0f + i * (hat ? 0.09f : 0.18f));
         setupMode(v, i, f, decay, gain);
