@@ -29,6 +29,8 @@ public final class NativeEngine {
     public static native void setInstrument(int instrument);
     public static native void setDrumParameter(int parameter, int value);
     public static native void setDrumFx(int boostDb, int distortion);
+    public static native void setPartFx(int part, int boostDb, int distortion);
+    public static native void setFeltReverb(int mix, int decay);
     public static native boolean loadDrumSample(int slot, byte[] wavBytes);
     public static native void noteOnPart(int part, int note, int velocity);
     public static native void noteOffPart(int part, int note, int velocity);
