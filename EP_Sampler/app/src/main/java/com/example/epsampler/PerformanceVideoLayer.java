@@ -343,8 +343,10 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
             if (!reverseMode || pausedByLifecycle || player == null || !prepared) return;
             try {
                 int step = 90 + Math.round(70f * (lastVelocity / 127f));
+                int duration = player.getDuration();
+                if (duration <= 0) duration = VIDEO_DURATION_MS;
                 int pos = player.getCurrentPosition() - step;
-                if (pos < 0) pos = Math.max(0, VIDEO_DURATION_MS + pos);
+                while (pos < 0) pos += duration;
                 player.seekTo(pos, MediaPlayer.SEEK_CLOSEST);
             } catch (Exception ignored) { }
             handler.postDelayed(this, 70L);
