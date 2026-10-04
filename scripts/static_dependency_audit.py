@@ -89,7 +89,7 @@ for bad in ["SynthVoice", "juce::Synthesiser", "SineVoice", "FLOWER", "MIYAKO"]:
     if bad in src:
         fail(f"forbidden cross-project/synth token in product source: {bad}")
 for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● REC",
-             "MODE","CHORD","DREAMY","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
+             "MODE","CHORD","DREAMY","CHORDBOT","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
     if need not in src:
         fail(f"UI/requirement token missing: {need}")
 
@@ -107,16 +107,19 @@ for need in [
     '"WIDTH"',
     '"LENGTH"',
     '"DREAMY"',
+    '"CHORDBOT"',
+    "paintChordBot (g)",
     '"X " + juce::String',
     '"CONFIG"',
     'u8"● REC"',
 ]:
     if need not in main_screen:
         fail(f"CHORD/DREAMY mode-specific main UI missing: {need}")
-chord_return = main_screen.find("return;")
-if chord_return < 0:
+chord_start = main_screen.find("if (effectMode == 0)")
+chord_return = main_screen.find("return;", chord_start)
+if chord_start < 0 or chord_return < 0:
     fail("CHORD main-screen return boundary missing")
-chord_screen = main_screen[:chord_return]
+chord_screen = main_screen[chord_start:chord_return]
 for bad in [
     '"CHORD-A"',
     '"CHORD-B"',
@@ -136,6 +139,38 @@ for need in [
 ]:
     if need not in main_screen:
         fail(f"DREAMY reverb indicator missing: {need}")
+
+for need in [
+    "paintChordBot",
+    "chordBotPadBounds",
+    '"TOP-LEFT = THEORY ROOT"',
+    '"EDIT"',
+    '"SAVE"',
+    "processor.triggerChordBotPad",
+    "processor.setChordBotSlot",
+]:
+    if need not in editor:
+        fail(f"CHORDBOT UI contract missing: {need}")
+
+for need in [
+    "ChordBotChoice",
+    "chordBotSuggestions",
+    "transition[0][degree]",
+    "V7",
+    "borrowed iv",
+]:
+    if need not in src:
+        fail(f"CHORDBOT theory contract missing: {need}")
+
+core_test = (R / "tests/core_test.cpp").read_text()
+for need in [
+    "botMajor",
+    "foundG7",
+    "botMinor",
+    "foundE7",
+]:
+    if need not in core_test:
+        fail(f"CHORDBOT regression test missing: {need}")
 
 if "isKeyCurrentlyDown" in editor:
     fail("Android Motion REC must not rely on JUCE Android isKeyCurrentlyDown()")
@@ -299,12 +334,13 @@ if switch0 < 0 or switch1 < 0 or "chordReverb.reset();" not in dreamy[switch0:sw
 
 for need in [
     "ParamID::effectMode",
-    '"MODE", juce::StringArray { "CHORD", "DREAMY" }, 0',
+    '"MODE", juce::StringArray { "CHORD", "DREAMY", "CHORDBOT" }, 0',
     "ParamID::chordMode",
     '"CHORD ENGINE", juce::StringArray { "A", "B" }, 0',
     "processChordAudio (buffer)",
     "processChordB (buffer)",
     "processDreamy (buffer)",
+    "processChordBotMidi (midi)",
     "sampleChordRenderer.pushInput",
     "ParamID::hold",
     "ParamID::effect",
@@ -328,6 +364,12 @@ for need in [
     "applyOutputSafety (buffer, outputActive)",
     "currentSampleRate * 0.008f",
     "outputSafetyGain",
+    "chordBotSuggestions",
+    "regenerateChordBotSuggestions",
+    "setChordBotSlot",
+    "triggerChordBotPad",
+    "chordBotLayout",
+    "selectedEffectMode == 1",
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
@@ -345,6 +387,8 @@ for bad in [
 
 if 'if (effectMode == 0)' not in dreamy:
     fail("CHORD and DREAMY audible paths must remain mode-separated")
+if "selectedEffectMode == 1" not in dreamy:
+    fail("CHORDBOT must not activate DREAMY DSP")
 for need in [
     "dreamyDelayBuffer",
     "dreamyReverb",
