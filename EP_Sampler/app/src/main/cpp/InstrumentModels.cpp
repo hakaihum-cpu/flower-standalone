@@ -237,7 +237,15 @@ void InstrumentModels::setupMode(Voice& v,
                                  float decaySeconds,
                                  float gain) {
     if (index < 0 || index >= kModes) return;
-    frequency = std::max(10.0, std::min(sampleRate_ * 0.46, frequency));
+    if (frequency <= 0.0 || frequency >= sampleRate_ * 0.47 || gain == 0.0f) {
+        v.modeA1[index] = 0.0f;
+        v.modeA2[index] = 0.0f;
+        v.modeGain[index] = 0.0f;
+        v.modeY1[index] = 0.0f;
+        v.modeY2[index] = 0.0f;
+        return;
+    }
+    frequency = std::max(10.0, frequency);
     decaySeconds = std::max(0.015f, decaySeconds);
 
     const float r = std::exp(-1.0f / (decaySeconds * float(sampleRate_)));
@@ -263,6 +271,8 @@ void InstrumentModels::initialisePiano(Voice& v) {
     const float inharmonicity = 0.00012f + 0.00135f * noteNorm * noteNorm;
     const float softness = 1.0f - control1_;
     const float hammerPos = 0.11f + 0.16f * control3_;
+    const float modalScale = 0.0009f *
+            clampf(float(v.frequency / 261.625565), 0.15f, 8.0f);
 
     for (int i=0; i<kModes; ++i) {
         const int n = i + 1;
@@ -279,7 +289,7 @@ void InstrumentModels::initialisePiano(Voice& v) {
         const float positionCoupling = std::fabs(std::sin(float(kPi) * n * hammerPos));
         const float spectral = std::exp(-i * (0.18f + softness * 0.34f));
         const float decay = std::max(0.22f, 5.5f / (1.0f + i * (0.55f + 0.28f * noteNorm)));
-        setupMode(v, i, partial, decay, 0.0035f * positionCoupling * spectral);
+        setupMode(v, i, partial, decay, modalScale * positionCoupling * spectral);
     }
 }
 
@@ -293,6 +303,8 @@ void InstrumentModels::initialiseXylophone(Voice& v) {
 
     const float strikePos = 0.12f + 0.30f * control3_;
     const float hardness = control1_;
+    const float modalScale = 0.0026f *
+            clampf(float(v.frequency / 261.625565), 0.20f, 5.0f);
 
     for (int i=0; i<kModes; ++i) {
         const double f = v.frequency * ratios[i];
@@ -301,7 +313,7 @@ void InstrumentModels::initialiseXylophone(Voice& v) {
         const float hardBoost = std::pow(0.54f + 0.75f * hardness, float(i) * 0.34f);
         const float decay = std::max(0.035f, 1.75f / (1.0f + i * 0.52f));
         setupMode(v, i, f, decay,
-                  0.010f * nodeWeight * hardBoost / (1.0f + 0.18f * i));
+                  modalScale * nodeWeight * hardBoost / (1.0f + 0.18f * i));
     }
 }
 
@@ -330,10 +342,10 @@ void InstrumentModels::initialiseWoodBass(Voice& v) {
     for (int i=0; i<v.delayLengthA; ++i) v.delayA[i] -= mean;
 
     // Upright-bass body/air modes coupled weakly to the bridge signal.
-    setupMode(v, 0, 78.0, 0.55f, 0.018f);
-    setupMode(v, 1, 126.0, 0.42f, 0.014f);
-    setupMode(v, 2, 187.0, 0.34f, 0.011f);
-    setupMode(v, 3, 276.0, 0.25f, 0.008f);
+    setupMode(v, 0, 78.0, 0.55f, 0.000020f);
+    setupMode(v, 1, 126.0, 0.42f, 0.000015f);
+    setupMode(v, 2, 187.0, 0.34f, 0.000012f);
+    setupMode(v, 3, 276.0, 0.25f, 0.000008f);
 }
 
 void InstrumentModels::initialiseDrums(Voice& v) {
@@ -357,6 +369,8 @@ void InstrumentModels::initialiseDrums(Voice& v) {
     else if (hat) base = 680.0 + 520.0 * control3_;
     else base = std::max(72.0, std::min(330.0, v.frequency * 0.44));
 
+    const float membraneScale = clampf(float(base / 3500.0), 0.012f, 0.12f);
+
     for (int i=0; i<kModes; ++i) {
         const float ratio = hat ? plate[i] : membrane[i];
         const double f = base * ratio;
@@ -367,7 +381,7 @@ void InstrumentModels::initialiseDrums(Voice& v) {
                     : hat
                         ? std::max(0.025f, 0.44f / (1.0f + i * 0.16f))
                         : std::max(0.045f, 0.88f / (1.0f + i * 0.40f));
-        const float gain = (hat ? 0.0040f : 0.0085f) /
+        const float gain = (hat ? 0.0040f : 0.0085f * membraneScale) /
                            (1.0f + i * (hat ? 0.09f : 0.18f));
         setupMode(v, i, f, decay, gain);
     }
