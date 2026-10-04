@@ -221,6 +221,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.setDreamy(dreamy);
         pianoView.setInstrumentName(INSTRUMENT_NAMES[instrumentMode], INSTRUMENT_BUTTONS[instrumentMode]);
         pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
+        pianoView.setSampleMode(instrumentMode == 8);
         performanceXYView.setInstrumentMode(instrumentMode);
         drumEditorView.setValues(drumParameters);
         drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
@@ -741,6 +742,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                     INSTRUMENT_NAMES[instrumentMode],
                     INSTRUMENT_BUTTONS[instrumentMode]);
             pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
+            pianoView.setSampleMode(instrumentMode == 8);
             if (instrumentMode == 8) pianoView.setBankStatus(epBankStatus());
         }
         if (drumEditorView != null) {
