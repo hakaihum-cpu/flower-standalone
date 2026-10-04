@@ -50,14 +50,15 @@ if not exist "%~dp0FAST_CAPTURE.layout.json" (
 )
 
 if not defined FL_EXE (
-  for /d %%D in ("C:\Program Files\Image-Line\FL Studio*") do (
-    if exist "%%~fD\FL64.exe" set "FL_EXE=%%~fD\FL64.exe"
-    if not defined FL_EXE if exist "%%~fD\FL.exe" set "FL_EXE=%%~fD\FL.exe"
+  if exist "C:\Program Files\Image-Line\FL Studio 2025\FL64.exe" (
+    set "FL_EXE=C:\Program Files\Image-Line\FL Studio 2025\FL64.exe"
   )
 )
 if not defined FL_EXE (
-  echo [ERROR] FL Studio executable was not found.
-  echo Set FL_EXE to the full FL64.exe/FL.exe path and run again.
+  echo [ERROR] Expected FL Studio executable was not found:
+  echo C:\Program Files\Image-Line\FL Studio 2025\FL64.exe
+  echo.
+  echo If FL Studio moves later, set FL_EXE manually in this BAT.
   pause
   exit /b 2
 )
