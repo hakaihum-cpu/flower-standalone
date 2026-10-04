@@ -24,6 +24,7 @@ public:
     void noteOff(int note, bool sustainDown);
     void sustainChanged(bool down);
     void allNotesOff();
+
     void polyPressure(int note, int value);
     void channelPressure(int value);
     void pitchBend(int value14);
@@ -36,8 +37,8 @@ public:
 
 private:
     static constexpr int kVoices = 8;
-    static constexpr int kModes = 8;
-    static constexpr int kDelay = 2048;
+    static constexpr int kModes = 12;
+    static constexpr int kDelay = 4096;
 
     struct Voice {
         bool active = false;
@@ -49,25 +50,37 @@ private:
         uint64_t age = 0;
 
         float env = 0.0f;
-        uint8_t envStage = 0; // 0 off, 1 attack, 2 decay, 3 sustain, 4 release
+        uint8_t envStage = 0;
 
+        double frequency = 440.0;
         double phase = 0.0;
         double phase2 = 0.0;
-        double phase3 = 0.0;
-        double frequency = 440.0;
-        double targetFrequency = 440.0;
+        double vibratoPhase = 0.0;
 
-        std::array<double, kModes> modePhase{};
-        std::array<float, kModes> modeAmp{};
+        std::array<float, kDelay> delayA{};
+        std::array<float, kDelay> delayB{};
+        int writeA = 0;
+        int writeB = 0;
+        float filter1 = 0.0f;
+        float filter2 = 0.0f;
+        float dcX = 0.0f;
+        float dcY = 0.0f;
 
-        std::array<float, kDelay> delay{};
-        int delayWrite = 0;
-        int delayLength = 128;
-        float delayFilter = 0.0f;
+        // Free-reed states (two reeds allow musette/accordion behavior).
+        float reedX1 = 0.0f;
+        float reedV1 = 0.0f;
+        float reedX2 = 0.0f;
+        float reedV2 = 0.0f;
+
+        // Stable second-order modal resonators.
+        std::array<float, kModes> modeY1{};
+        std::array<float, kModes> modeY2{};
+        std::array<float, kModes> modeA1{};
+        std::array<float, kModes> modeA2{};
+        std::array<float, kModes> modeGain{};
 
         float noiseState = 0.0f;
-        float aux1 = 0.0f;
-        float aux2 = 0.0f;
+        float bodyState = 0.0f;
         uint32_t rng = 0x12345678u;
     };
 
@@ -77,10 +90,10 @@ private:
     int channelPressure_ = 0;
     bool sustainDown_ = false;
 
-    float control1_ = 0.58f; // CC10: pressure / hardness
-    float control2_ = 0.58f; // CC11: breath / force
-    float control3_ = 0.33f; // CC74: color / position
-    float vibrato_ = 0.10f;  // CC1
+    float control1_ = 0.58f;
+    float control2_ = 0.58f;
+    float control3_ = 0.33f;
+    float vibrato_ = 0.10f;
 
     float attackMs_ = 12.0f;
     float decayMs_ = 110.0f;
@@ -95,14 +108,21 @@ private:
     float noise(Voice& v);
     float processVoice(Voice& v);
 
-    float processFlute(Voice& v, double freq);
-    float processSax(Voice& v, double freq);
+    static float readDelay(const std::array<float,kDelay>& buffer, int writeIndex, float delaySamples);
+    static void writeDelay(std::array<float,kDelay>& buffer, int& writeIndex, float value);
+    void setupMode(Voice& v, int index, double frequency, float decaySeconds, float gain);
+    float tickMode(Voice& v, int index, float excitation);
+
+    float processFlute(Voice& v, double freq, float env);
+    float processSax(Voice& v, double freq, float env);
     float processFeltPiano(Voice& v, double freq);
-    float processAccordion(Voice& v, double freq);
+    float processAccordion(Voice& v, double freq, float env);
     float processXylophone(Voice& v, double freq);
-    float processWoodBass(Voice& v, double freq);
+    float processWoodBass(Voice& v, double freq, float env);
     float processDrums(Voice& v, double freq);
 
-    void initialiseModes(Voice& v);
-    void initialiseBassDelay(Voice& v);
+    void initialisePiano(Voice& v);
+    void initialiseXylophone(Voice& v);
+    void initialiseWoodBass(Voice& v);
+    void initialiseDrums(Voice& v);
 };
