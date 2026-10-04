@@ -36,8 +36,8 @@ def probe(path: Path) -> tuple[int, int, int]:
     sr = int(s['sample_rate'])
     ch = int(s['channels'])
     bits = int(s.get('bits_per_raw_sample') or 0)
-    if (sr, ch, bits) != (SR, CH, BITS):
-        raise ValueError(f'{path.name}: expected 48kHz/24-bit/stereo, got {sr}Hz/{bits}bit/{ch}ch')
+    if sr != SR or ch != CH or bits not in (16, 24):
+        raise ValueError(f'{path.name}: expected 48kHz/stereo FLAC at 16-bit or 24-bit, got {sr}Hz/{bits}bit/{ch}ch')
     return sr, ch, bits
 
 def load_layout(path: Path) -> dict:
@@ -99,12 +99,15 @@ def pitch_shift_region(raw_path: Path, start_sec: float, duration_sec: float, se
 
 def main() -> int:
     ap = argparse.ArgumentParser(description='Build a short-source EPBANK1 bank for the existing EP-SAMPLE app.')
-    ap.add_argument('master_audio', type=Path, help='FL Studio FAST_CAPTURE render (48kHz/24-bit/stereo FLAC)')
+    ap.add_argument('master_audio', type=Path, help='FL Studio FAST_CAPTURE render (48kHz/stereo FLAC, 16-bit or 24-bit)')
     ap.add_argument('-l', '--layout', type=Path, default=Path(__file__).with_name('FAST_CAPTURE.layout.json'))
     ap.add_argument('-o', '--output', type=Path, default=Path('fast_epbank.bin'))
     args = ap.parse_args()
 
-    probe(args.master_audio)
+    in_sr, in_ch, in_bits = probe(args.master_audio)
+    print(f'Input render: {in_sr} Hz / {in_ch} ch / {in_bits}-bit FLAC')
+    if in_bits == 16:
+        print('Input is 16-bit; converting to 24-bit PCM internally for EPBANK1 generation.')
     layout = load_layout(args.layout)
     start_note = int(layout['start_note'])
     end_note = int(layout['end_note'])
