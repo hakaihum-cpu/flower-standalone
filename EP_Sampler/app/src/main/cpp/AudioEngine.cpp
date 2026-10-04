@@ -2,11 +2,172 @@
 #include <android/log.h>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,"EPViolin",__VA_ARGS__)
 
 AudioEngine& AudioEngine::instance() { static AudioEngine e; return e; }
 AudioEngine::~AudioEngine() { stop(); }
+
+
+namespace {
+uint16_t readLe16(const uint8_t* p) {
+    return uint16_t(p[0]) | (uint16_t(p[1]) << 8);
+}
+uint32_t readLe32(const uint8_t* p) {
+    return uint32_t(p[0]) | (uint32_t(p[1]) << 8) |
+           (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
+}
+bool fourcc(const uint8_t* p, const char* s) {
+    return p[0] == uint8_t(s[0]) && p[1] == uint8_t(s[1]) &&
+           p[2] == uint8_t(s[2]) && p[3] == uint8_t(s[3]);
+}
+}
+
+bool AudioEngine::loadDrumSample(int slot, const uint8_t* data, size_t size) {
+    if (slot < 0 || slot >= DRUM_SAMPLE_COUNT || data == nullptr || size < 44) return false;
+    if (!fourcc(data, "RIFF") || !fourcc(data + 8, "WAVE")) return false;
+
+    uint16_t format = 0;
+    uint16_t channels = 0;
+    uint32_t sampleRate = 0;
+    uint16_t blockAlign = 0;
+    uint16_t bits = 0;
+    const uint8_t* pcm = nullptr;
+    size_t pcmBytes = 0;
+
+    size_t pos = 12;
+    while (pos + 8 <= size) {
+        const uint8_t* chunk = data + pos;
+        const uint32_t chunkSize = readLe32(chunk + 4);
+        const size_t payload = pos + 8;
+        if (payload + chunkSize > size) break;
+
+        if (fourcc(chunk, "fmt ") && chunkSize >= 16) {
+            const uint8_t* p = data + payload;
+            format = readLe16(p + 0);
+            channels = readLe16(p + 2);
+            sampleRate = readLe32(p + 4);
+            blockAlign = readLe16(p + 12);
+            bits = readLe16(p + 14);
+        } else if (fourcc(chunk, "data")) {
+            pcm = data + payload;
+            pcmBytes = chunkSize;
+        }
+
+        pos = payload + chunkSize + (chunkSize & 1u);
+    }
+
+    if (!pcm || channels < 1 || channels > 2 || sampleRate == 0 || blockAlign == 0) return false;
+    if (!((format == 1 && (bits == 16 || bits == 24 || bits == 32)) ||
+          (format == 3 && bits == 32))) return false;
+
+    const size_t frames = pcmBytes / blockAlign;
+    if (frames == 0) return false;
+
+    DrumSample decoded;
+    decoded.sampleRate = int(sampleRate);
+    decoded.left.resize(frames);
+    decoded.right.resize(frames);
+
+    const int bytesPerSample = bits / 8;
+    for (size_t i = 0; i < frames; ++i) {
+        const uint8_t* frame = pcm + i * blockAlign;
+
+        auto decode = [&](int ch) -> float {
+            const uint8_t* p = frame + ch * bytesPerSample;
+            if (format == 3 && bits == 32) {
+                float v = 0.0f;
+                std::memcpy(&v, p, sizeof(float));
+                return std::isfinite(v) ? std::clamp(v, -1.0f, 1.0f) : 0.0f;
+            }
+            if (bits == 16) {
+                int16_t v = int16_t(uint16_t(p[0]) | (uint16_t(p[1]) << 8));
+                return float(v) / 32768.0f;
+            }
+            if (bits == 24) {
+                int32_t v = int32_t(p[0]) | (int32_t(p[1]) << 8) | (int32_t(p[2]) << 16);
+                if (v & 0x00800000) v |= ~0x00FFFFFF;
+                return float(v) / 8388608.0f;
+            }
+            int32_t v = int32_t(readLe32(p));
+            return float(double(v) / 2147483648.0);
+        };
+
+        const float l = decode(0);
+        const float r = channels == 2 ? decode(1) : l;
+        decoded.left[i] = l;
+        decoded.right[i] = r;
+    }
+
+    decoded.loaded = true;
+    drumSamples_[slot] = std::move(decoded);
+    return true;
+}
+
+void AudioEngine::triggerDrumSample(int slot, int velocity) {
+    if (slot < 0 || slot >= DRUM_SAMPLE_COUNT) return;
+    if (!drumSamples_[slot].loaded) return;
+
+    int voice = -1;
+    for (int i = 0; i < DRUM_SAMPLE_VOICES; ++i) {
+        if (!drumSampleVoices_[i].active) {
+            voice = i;
+            break;
+        }
+    }
+    if (voice < 0) {
+        voice = drumSampleSteal_;
+        drumSampleSteal_ = (drumSampleSteal_ + 1) % DRUM_SAMPLE_VOICES;
+    }
+
+    auto& v = drumSampleVoices_[voice];
+    v.active = true;
+    v.slot = slot;
+    v.position = 0.0;
+    v.gain = 0.25f + 0.75f * (std::clamp(velocity, 1, 127) / 127.0f);
+}
+
+void AudioEngine::stopDrumSamples() {
+    for (auto& v : drumSampleVoices_) v = DrumSampleVoice{};
+}
+
+int AudioEngine::activeDrumSampleVoices() const {
+    int n = 0;
+    for (const auto& v : drumSampleVoices_) if (v.active) ++n;
+    return n;
+}
+
+void AudioEngine::processDrumSamples(float& left, float& right) {
+    const double outputRate = std::max(1, sampleRate_);
+
+    for (auto& v : drumSampleVoices_) {
+        if (!v.active || v.slot < 0 || v.slot >= DRUM_SAMPLE_COUNT) continue;
+        const auto& sample = drumSamples_[v.slot];
+        if (!sample.loaded || sample.left.empty()) {
+            v.active = false;
+            continue;
+        }
+
+        const size_t i0 = size_t(v.position);
+        if (i0 >= sample.left.size()) {
+            v.active = false;
+            continue;
+        }
+
+        const size_t i1 = std::min(i0 + 1, sample.left.size() - 1);
+        const float frac = float(v.position - double(i0));
+        const float l = sample.left[i0] + (sample.left[i1] - sample.left[i0]) * frac;
+        const float r = sample.right[i0] + (sample.right[i1] - sample.right[i0]) * frac;
+
+        const float partGain = partVolume_[7] / 127.0f;
+        left += l * v.gain * partGain;
+        right += r * v.gain * partGain;
+
+        v.position += double(sample.sampleRate) / outputRate;
+        if (v.position >= double(sample.left.size())) v.active = false;
+    }
+}
 
 bool AudioEngine::start() {
     if (stream_) return true;
@@ -138,12 +299,21 @@ void AudioEngine::handlePartNoteOn(int part, int note, int velocity) {
     part = std::clamp(part, 0, 7);
     if (velocity <= 0) { handlePartNoteOff(part, note); return; }
 
+    if (part == 7 && note >= 63 && note <= 68) {
+        triggerDrumSample(note - 63, velocity);
+        return;
+    }
+
     if (part == 0) violin_.noteOn(note, velocity);
     else modelParts_[part - 1].noteOn(note, velocity);
 }
 
 void AudioEngine::handlePartNoteOff(int part, int note) {
     part = std::clamp(part, 0, 7);
+    if (part == 7 && note >= 63 && note <= 68) {
+        // Sample notes are one-shot; NoteOff does not truncate them.
+        return;
+    }
     const bool sustain = partSustain_[part] >= 64;
     if (part == 0) violin_.noteOff(note, sustain);
     else modelParts_[part - 1].noteOff(note, sustain);
@@ -165,6 +335,7 @@ void AudioEngine::allNotesOffPart(int part) {
     part = std::clamp(part, 0, 7);
     if (part == 0) violin_.allNotesOff();
     else modelParts_[part - 1].allNotesOff();
+    if (part == 7) stopDrumSamples();
 }
 
 void AudioEngine::handlePartPitchBend(int part, int value14) {
@@ -250,7 +421,10 @@ float AudioEngine::processPart(int part) {
 
 int AudioEngine::activeVoicesPart(int part) const {
     part = std::clamp(part, 0, 7);
-    return part == 0 ? violin_.activeVoices() : modelParts_[part - 1].activeVoices();
+    if (part == 0) return violin_.activeVoices();
+    int n = modelParts_[part - 1].activeVoices();
+    if (part == 7) n += activeDrumSampleVoices();
+    return n;
 }
 
 void AudioEngine::handle(const Event& e) {
@@ -368,6 +542,7 @@ void AudioEngine::render(float* out,int32_t frames) {
 
         float l = mono;
         float r = mono;
+        processDrumSamples(l, r);
 
         dreamy_.process(l,r);
         tape_.process(l,r);
