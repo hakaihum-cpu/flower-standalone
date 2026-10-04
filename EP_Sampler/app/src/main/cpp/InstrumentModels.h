@@ -30,6 +30,7 @@ public:
     void pitchBend(int value14);
 
     void setControl(int cc, float normalized);
+    void setDrumParameter(int parameter, float normalized);
     void setAdsr(float attackMs, float decayMs, float sustain, float releaseMs);
 
     float process();
@@ -96,6 +97,16 @@ private:
     float control2_ = 0.58f;
     float control3_ = 0.33f;
     float vibrato_ = 0.10f;
+
+    // DRUMS performance editor:
+    // 0 K tune, 1 K decay, 2 K bend, 3 K click,
+    // 4 H tune, 5 H decay, 6 H color, 7 H noise,
+    // 8 S tune, 9 S decay, 10 S snappy, 11 S impact.
+    std::array<float,12> drumParams_{{
+        64.0f/127.0f, 0.46f, 0.36f, 0.30f,
+        64.0f/127.0f, 0.34f, 0.58f, 0.44f,
+        64.0f/127.0f, 0.42f, 0.58f, 0.46f
+    }};
 
     float attackMs_ = 12.0f;
     float decayMs_ = 110.0f;
