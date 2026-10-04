@@ -28,6 +28,12 @@ public final class PianoView extends View {
         void onChooseBank();
         void onEditEffect(int effect);
         void onOpenConfig();
+        void onRecorderRecord();
+        void onRecorderClear();
+        void onRecorderRandom();
+        void onRecorderClock();
+        void onRecorderBpm(int bpm);
+        void onRecorderTile(int slot);
     }
 
     private ActionListener actionListener;
@@ -51,6 +57,18 @@ public final class PianoView extends View {
     private int instrumentMidiChannel = 1;
     private int downButton = -1;
     private long downTimeMs = 0L;
+
+    private boolean recorderOpen = false;
+    private float recorderSlide = 0f;
+    private boolean recorderBpmDragging = false;
+    private long recorderLastPollMs = 0L;
+    private boolean recRecording = false, recRandom = false, recMidiClock = false;
+    private int recRecordingSlot = -1, recBpm = 120;
+    private float recInputLevel = 0f;
+    private final int[] recValid = new int[4];
+    private final boolean[] recPlaying = new boolean[4];
+    private final float[] recProgress = new float[4];
+    private final float[][] recPeaks = new float[4][64];
 
     // Temporary audition keyboard for the physical-model branch.
     // Intentionally contained in this View so it can be removed cleanly later.
@@ -95,6 +113,13 @@ public final class PianoView extends View {
     }
     void setSpaceMode(int mode) { spaceMode = Math.max(0, Math.min(3, mode)); invalidate(); }
     void setBankStatus(String s) { bankStatus = s; invalidate(); }
+    void toggleRecorderDrawer() { setRecorderOpen(!recorderOpen); }
+    void setRecorderOpen(boolean open) {
+        recorderOpen = open;
+        recorderBpmDragging = false;
+        postInvalidateOnAnimation();
+    }
+    boolean isRecorderOpen() { return recorderOpen; }
     void setInstrumentName(String fullName, String buttonLabel) {
         instrumentButtonLabel = buttonLabel == null ? "MODEL" : buttonLabel;
         String channel = instrumentMidiChannel <= 0 ? "OFF" : "CH" + instrumentMidiChannel;
@@ -155,6 +180,7 @@ public final class PianoView extends View {
         // sit above the full-quality video.
         drawIndicators(c);
         if (keyOverlayVisible) drawAuditionKeyboard(c);
+        drawRecorderDrawer(c);
     }
 
     private void drawPressedKeys(Canvas c, float s, float ox, float oy) {
@@ -338,21 +364,23 @@ public final class PianoView extends View {
                 "SPACE " + new String[]{"NONE","ROOM","HALL","SPACE"}[spaceMode],
                 tape ? "TAPE ON" : "TAPE OFF",
                 dreamy ? "DREAMY ON" : "DREAMY OFF",
+                "RECORDER",
                 instrumentButtonLabel,
                 "CONFIG",
                 keyOverlayVisible ? "KEY CLOSE" : "KEY"
         };
-        float gap = 6f*u;
+        float gap = 5f*u;
         float bx0 = pad;
         float by0 = 72f*u;
         float bh = 30f*u;
-        float bw = (getWidth() - pad*2f - gap*6f) / 7f;
-        text.setTextSize(13.5f*u);
-        for (int i=0;i<7;i++) {
+        float bw = (getWidth() - pad*2f - gap*7f) / 8f;
+        text.setTextSize(12.3f*u);
+        for (int i=0;i<8;i++) {
             float l = bx0 + i*(bw+gap);
             float rr = l + bw;
             boolean active = (i==0 && boostDb>0) || (i==1 && spaceMode>0) ||
-                    (i==2 && tape) || (i==3 && dreamy) || (i==6 && keyOverlayVisible);
+                    (i==2 && tape) || (i==3 && dreamy) || (i==4 && recorderOpen) ||
+                    (i==7 && keyOverlayVisible);
             paint.setColor(active ? Color.argb(120, 238, 229, 207) : Color.argb(72, 238, 229, 207));
             c.drawRoundRect(new RectF(l, by0, rr, by0+bh), 6f*u, 6f*u, paint);
             text.setColor(active ? Color.rgb(24,24,22) : Color.argb(235,244,237,224));
@@ -360,6 +388,164 @@ public final class PianoView extends View {
             c.drawText(labels[i], l + (bw-tw)*0.5f, by0 + 20f*u, text);
         }
         text.setColor(Color.argb(235, 244, 237, 224));
+    }
+
+    private void refreshRecorderState() {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - recorderLastPollMs < 50L) return;
+        recorderLastPollMs = now;
+        recRecording = NativeEngine.recorderIsRecording();
+        recRandom = NativeEngine.recorderIsRandom();
+        recMidiClock = NativeEngine.recorderIsMidiClock();
+        recBpm = NativeEngine.recorderBpm();
+        recRecordingSlot = NativeEngine.recorderRecordingSlot();
+        recInputLevel = NativeEngine.recorderInputLevel();
+        for (int i=0;i<4;i++) {
+            recValid[i] = NativeEngine.recorderValidSamples(i);
+            recPlaying[i] = NativeEngine.recorderSlotPlaying(i);
+            recProgress[i] = NativeEngine.recorderSlotProgress(i);
+            float[] p = NativeEngine.recorderPeaks(i);
+            if (p != null) System.arraycopy(p, 0, recPeaks[i], 0, Math.min(64, p.length));
+        }
+    }
+
+    private float recorderDrawerHeight(float u) { return 270f*u; }
+    private float recorderDrawerTop(float u) { return getHeight() - recorderDrawerHeight(u)*recorderSlide; }
+
+    private RectF recorderTileRect(int slot, float u, float top) {
+        float pad = 14f*u, gap = 8f*u;
+        float w = (getWidth() - pad*2f - gap*3f) / 4f;
+        float y = top + 48f*u;
+        return new RectF(pad + slot*(w+gap), y, pad + slot*(w+gap) + w, y + 124f*u);
+    }
+
+    private RectF recorderControlRect(int index, float u, float top) {
+        float pad = 14f*u, gap = 7f*u;
+        float w = (getWidth() - pad*2f - gap*4f) / 5f;
+        float y = top + 190f*u;
+        return new RectF(pad + index*(w+gap), y, pad + index*(w+gap) + w, y + 34f*u);
+    }
+
+    private RectF recorderCloseRect(float u, float top) {
+        return new RectF(getWidth()-94f*u, top+10f*u, getWidth()-14f*u, top+40f*u);
+    }
+
+    private void drawRecorderDrawer(Canvas c) {
+        float target = recorderOpen ? 1f : 0f;
+        if (Math.abs(target - recorderSlide) > 0.006f) {
+            recorderSlide += (target - recorderSlide) * 0.22f;
+            postInvalidateOnAnimation();
+        } else {
+            recorderSlide = target;
+        }
+        if (recorderSlide <= 0.001f) return;
+
+        refreshRecorderState();
+        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
+        float top = recorderDrawerTop(u);
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.argb(232, 8, 8, 8));
+        c.drawRoundRect(new RectF(0, top, getWidth(), getHeight()+12f*u), 16f*u, 16f*u, paint);
+
+        text.setColor(Color.argb(242, 244, 237, 224));
+        text.setTextSize(18f*u);
+        c.drawText("RECORDER", 14f*u, top+30f*u, text);
+
+        RectF close = recorderCloseRect(u, top);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(Math.max(1f, 1.5f*u));
+        paint.setColor(Color.argb(150, 244, 237, 224));
+        c.drawRoundRect(close, 5f*u, 5f*u, paint);
+        text.setTextSize(12.5f*u);
+        float ctw = text.measureText("CLOSE");
+        c.drawText("CLOSE", close.centerX()-ctw/2f, close.centerY()+4.5f*u, text);
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.argb(58, 244, 237, 224));
+        c.drawRect(130f*u, top+22f*u, getWidth()-110f*u, top+25f*u, paint);
+        paint.setColor(Color.argb(190, 244, 237, 224));
+        c.drawRect(130f*u, top+21f*u,
+                130f*u + (getWidth()-240f*u)*Math.max(0f, Math.min(1f, recInputLevel*1.8f)),
+                top+26f*u, paint);
+
+        for (int slot=0; slot<4; slot++) {
+            RectF tr = recorderTileRect(slot, u, top);
+            boolean recording = recRecordingSlot == slot;
+            boolean playing = recPlaying[slot];
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.argb(32, 244, 237, 224));
+            c.drawRoundRect(tr, 6f*u, 6f*u, paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth((recording || playing) ? 2.2f*u : 1f*u);
+            paint.setColor(recording ? Color.rgb(225,72,64)
+                    : Color.argb(playing ? 225 : 95, 244, 237, 224));
+            c.drawRoundRect(tr, 6f*u, 6f*u, paint);
+
+            text.setTextSize(12f*u);
+            text.setColor(Color.argb(185, 244, 237, 224));
+            c.drawText(String.valueOf(slot+1), tr.left+8f*u, tr.top+17f*u, text);
+
+            if (recValid[slot] > 0) {
+                float waveL=tr.left+7f*u, waveR=tr.right-7f*u;
+                float cy=tr.centerY()+7f*u, half=tr.height()*0.31f;
+                paint.setStrokeWidth(Math.max(1f, 1.15f*u));
+                paint.setColor(Color.argb(205, 244, 237, 224));
+                for (int i=0;i<64;i++) {
+                    float x=waveL+(waveR-waveL)*i/63f;
+                    float a=Math.max(0f,Math.min(1f,recPeaks[slot][i]*1.7f));
+                    c.drawLine(x,cy-a*half,x,cy+a*half,paint);
+                }
+                if (playing) {
+                    float px=waveL+(waveR-waveL)*Math.max(0f,Math.min(1f,recProgress[slot]));
+                    paint.setColor(Color.WHITE);
+                    paint.setStrokeWidth(2f*u);
+                    c.drawLine(px,tr.top+27f*u,px,tr.bottom-8f*u,paint);
+                }
+            }
+        }
+
+        String[] controls = new String[] {
+                recRecording ? "● REC" : "REC",
+                "CLEAR",
+                recRandom ? "RANDOM ●" : "RANDOM",
+                recMidiClock ? "MIDI" : "INTERNAL",
+                recMidiClock ? "BPM MIDI" : "BPM " + recBpm
+        };
+        for (int i=0;i<5;i++) {
+            RectF br=recorderControlRect(i,u,top);
+            boolean active=(i==0&&recRecording)||(i==2&&recRandom)||(i==3&&recMidiClock);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(active ? 2f*u : 1f*u);
+            paint.setColor(active ? Color.argb(235,244,237,224) : Color.argb(100,244,237,224));
+            c.drawRoundRect(br,5f*u,5f*u,paint);
+            text.setTextSize(11.5f*u);
+            text.setColor(Color.argb(active?245:205,244,237,224));
+            float tw=text.measureText(controls[i]);
+            c.drawText(controls[i],br.centerX()-tw/2f,br.centerY()+4f*u,text);
+        }
+        paint.setStyle(Paint.Style.FILL);
+
+        if (recorderOpen || recRecording || recRandom) postInvalidateDelayed(50L);
+    }
+
+    private int recorderTargetAt(float x, float y) {
+        if (recorderSlide < 0.55f) return -1;
+        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
+        float top = recorderDrawerTop(u);
+        if (y < top) return -1;
+        if (recorderCloseRect(u,top).contains(x,y)) return 100;
+        for (int i=0;i<4;i++) if (recorderTileRect(i,u,top).contains(x,y)) return 110+i;
+        for (int i=0;i<5;i++) if (recorderControlRect(i,u,top).contains(x,y)) return 120+i;
+        return 109;
+    }
+
+    private void updateRecorderBpmFromX(float x) {
+        if (actionListener == null || recMidiClock) return;
+        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
+        RectF r = recorderControlRect(4,u,recorderDrawerTop(u));
+        float norm = Math.max(0f, Math.min(1f, (x-r.left)/Math.max(1f,r.width())));
+        actionListener.onRecorderBpm(30 + Math.round(norm*270f));
     }
 
     private void drawMicroBar(Canvas c, float x, float y, float value, float w, float h) {
@@ -526,6 +712,7 @@ public final class PianoView extends View {
     boolean blocksPerformanceXY(float x, float y) {
         float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
         if (y <= 112f*u) return true;
+        if (recorderSlide > 0.05f && y >= recorderDrawerTop(u)) return true;
         if (keyOverlayVisible) {
             float keyTop = Math.max(150f*u, getHeight() - 255f*u) - 36f*u;
             if (y >= keyTop) return true;
@@ -536,12 +723,12 @@ public final class PianoView extends View {
     private int effectButtonAt(float x, float y) {
         float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
         float pad = 12f*u;
-        float gap = 6f*u;
+        float gap = 5f*u;
         float by0 = 72f*u;
         float bh = 30f*u;
         if (y < by0 || y > by0 + bh) return -1;
-        float bw = (getWidth() - pad*2f - gap*6f) / 7f;
-        for (int i=0;i<7;i++) {
+        float bw = (getWidth() - pad*2f - gap*7f) / 8f;
+        for (int i=0;i<8;i++) {
             float l = pad + i*(bw+gap);
             if (x >= l && x <= l+bw) return i;
         }
@@ -551,6 +738,34 @@ public final class PianoView extends View {
     @Override public boolean onTouchEvent(MotionEvent e) {
         final int action = e.getActionMasked();
         final int actionIndex = e.getActionIndex();
+
+        int recorderTarget = recorderTargetAt(e.getX(actionIndex), e.getY(actionIndex));
+        if (action == MotionEvent.ACTION_DOWN && recorderTarget >= 0) {
+            downButton = recorderTarget;
+            downTimeMs = android.os.SystemClock.uptimeMillis();
+            recorderBpmDragging = (recorderTarget == 124 && !recMidiClock);
+            if (recorderBpmDragging) updateRecorderBpmFromX(e.getX(actionIndex));
+            return true;
+        }
+        if (action == MotionEvent.ACTION_MOVE && recorderBpmDragging) {
+            updateRecorderBpmFromX(e.getX(actionIndex));
+            return true;
+        }
+        if (action == MotionEvent.ACTION_UP && downButton >= 100) {
+            int down = downButton;
+            downButton = -1;
+            recorderBpmDragging = false;
+            if (actionListener == null) return true;
+            if (down == 100) setRecorderOpen(false);
+            else if (down >= 110 && down <= 113) actionListener.onRecorderTile(down-110);
+            else if (down == 120) actionListener.onRecorderRecord();
+            else if (down == 121) actionListener.onRecorderClear();
+            else if (down == 122) actionListener.onRecorderRandom();
+            else if (down == 123) actionListener.onRecorderClock();
+            else if (down == 124) updateRecorderBpmFromX(e.getX(actionIndex));
+            postInvalidateOnAnimation();
+            return true;
+        }
 
         if (keyOverlayVisible) {
             if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
@@ -582,6 +797,7 @@ public final class PianoView extends View {
             } else if (action == MotionEvent.ACTION_CANCEL) {
                 releaseAllAuditionNotes();
                 downButton = -1;
+                recorderBpmDragging = false;
                 return true;
             }
         }
@@ -595,6 +811,7 @@ public final class PianoView extends View {
         if (action == MotionEvent.ACTION_CANCEL) {
             releaseAllAuditionNotes();
             downButton = -1;
+            recorderBpmDragging = false;
             return true;
         }
         if (action != MotionEvent.ACTION_UP) return true;
@@ -612,9 +829,10 @@ public final class PianoView extends View {
         else if (index==1) actionListener.onCycleSpace();
         else if (index==2) actionListener.onToggleTape();
         else if (index==3) actionListener.onToggleDreamy();
-        else if (index==4) actionListener.onChooseBank();
-        else if (index==5) actionListener.onOpenConfig();
-        else if (index==6) toggleAuditionKeyboard();
+        else if (index==4) toggleRecorderDrawer();
+        else if (index==5) actionListener.onChooseBank();
+        else if (index==6) actionListener.onOpenConfig();
+        else if (index==7) toggleAuditionKeyboard();
         return true;
     }
 
