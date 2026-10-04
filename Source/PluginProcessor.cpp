@@ -442,7 +442,6 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     midi.clear();
     processMidiController (midi, n);
-    processChordBotMidi (midi);
 
     if (clearRequested.exchange (false, std::memory_order_acq_rel))
     {
@@ -570,7 +569,18 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         }
     }
 
-    processChordMidi (midi);
+    // Stop the previous MIDI mode before starting the new one. This avoids
+    // a same-note Note Off from the old mode cancelling a new Note On.
+    if (effectMode == 2)
+    {
+        processChordMidi (midi);
+        processChordBotMidi (midi);
+    }
+    else
+    {
+        processChordBotMidi (midi);
+        processChordMidi (midi);
+    }
 
     // Dreamy always receives the raw live input so its history behaves like
     // the accepted standalone effect. It is wet only when DREAMY is selected.
