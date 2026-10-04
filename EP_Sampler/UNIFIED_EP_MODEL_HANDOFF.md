@@ -40,11 +40,19 @@ Date: 2026-10-04
   - label `EP + MODEL`
   so it can coexist with the standalone EP and physical-model builds.
 
-## Deliberately not ported in the first integration pass
-- The standalone EP-SAMPLE RECORDER drawer from commit
+## RECORDER drawer added
+- Ported from standalone EP-SAMPLE MASTER commit
   `5eec5d2f2455399f9990a602c6a3c398e8c8c047`.
-  Reason: first validate the engine boundary, MIDI routing, bank loading, output level,
-  and existing physical-model regressions before adding another realtime audio/UI path.
+- Four 5-second slots.
+- Auto-advances recording through slots and stops after the last slot.
+- During recording, tapping another empty slot ends the current segment immediately
+  and continues recording in the selected slot.
+- Manual tile playback and RANDOM playback are supported.
+- RANDOM switches source every 1..5 seconds.
+- INTERNAL / MIDI clock mode and BPM control are retained.
+- The recorder captures the finished unified mix after shared FX/master.
+- Recorder playback is not fed back into recorder input.
+- Drawer is available regardless of the currently selected instrument.
 
 ## Static checks completed
 - Existing main unchanged.
@@ -72,5 +80,8 @@ First device test priorities:
 3. Select EP-SAMPLE, load the existing EPBANK1 .bin, verify note-on/off, velocity,
    3RR, sustain, pitch bend, aftertouch, and output level.
 4. Confirm CH9 default routing and same-channel layering only when intentionally configured.
-5. Touch XY on EP-SAMPLE and confirm momentary Delay is clean/no zipper noise.
-6. Check XRuns with AUTO and the existing BURST settings.
+5. Open RECORDER and verify 4 x 5-second capture, manual playback, empty-slot jump,
+   auto-stop after slot 4, CLEAR, RANDOM 1..5 second switching, INTERNAL/MIDI clock.
+6. Confirm RECORDER works with both physical-model instruments and EP-SAMPLE.
+7. Touch XY on EP-SAMPLE and confirm momentary Delay is clean/no zipper noise.
+8. Check XRuns with AUTO and the existing BURST settings.
