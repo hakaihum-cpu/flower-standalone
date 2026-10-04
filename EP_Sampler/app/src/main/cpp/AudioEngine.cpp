@@ -34,18 +34,24 @@ bool AudioEngine::start() {
     }
 
     sampleRate_ = AAudioStream_getSampleRate(stream_);
+
+    // Part 0: existing bowed-string violin. Keep its validated core untouched.
     violin_.prepare(sampleRate_);
     violin_.setBowPressure(0.58f);
     violin_.setBowSpeed(0.58f);
     violin_.setBowPosition(0.12f);
     violin_.setVibratoDepth(0.10f);
 
-    instrumentModels_.prepare(sampleRate_);
-    instrumentModels_.setType(InstrumentModels::FLUTE);
-    instrumentModels_.setControl(1, cc1_ / 127.0f);
-    instrumentModels_.setControl(10, cc10_ / 127.0f);
-    instrumentModels_.setControl(11, cc11_ / 127.0f);
-    instrumentModels_.setControl(74, cc74_ / 127.0f);
+    // Parts 1..7 are permanently instantiated. Instrument selection now only
+    // selects the foreground/UI part; it no longer destroys another part.
+    for (int i=0; i<7; ++i) {
+        modelParts_[i].prepare(sampleRate_);
+        modelParts_[i].setType(i + 1);
+        modelParts_[i].setControl(1, cc1_ / 127.0f);
+        modelParts_[i].setControl(10, cc10_ / 127.0f);
+        modelParts_[i].setControl(11, cc11_ / 127.0f);
+        modelParts_[i].setControl(74, cc74_ / 127.0f);
+    }
 
     dreamy_.prepare(sampleRate_);
     dreamy_.setXY(cc103_/127.f, cc104_/127.f);
@@ -85,12 +91,22 @@ bool AudioEngine::pop(Event& e) {
     return true;
 }
 
+// Foreground/UI events use the currently selected instrument.
 void AudioEngine::noteOn(int n,int v){ push({Event::NOTE_ON,n,v}); }
 void AudioEngine::noteOff(int n,int v){ push({Event::NOTE_OFF,n,v}); }
 void AudioEngine::polyPressure(int n,int p){ push({Event::POLY_AT,n,p}); }
 void AudioEngine::channelPressure(int p){ push({Event::CH_AT,p,0}); }
 void AudioEngine::controlChange(int c,int v){ push({Event::CC,c,v}); }
 void AudioEngine::pitchBend(int v){ push({Event::PITCH,v,0}); }
+
+// External MIDI events are already mapped to a part by MidiController.
+void AudioEngine::noteOnPart(int part,int n,int v){ push({Event::PART_NOTE_ON,part,n,v,0}); }
+void AudioEngine::noteOffPart(int part,int n,int v){ push({Event::PART_NOTE_OFF,part,n,v,0}); }
+void AudioEngine::polyPressurePart(int part,int n,int p){ push({Event::PART_POLY_AT,part,n,p,0}); }
+void AudioEngine::channelPressurePart(int part,int p){ push({Event::PART_CH_AT,part,p,0,0}); }
+void AudioEngine::controlChangePart(int part,int c,int v){ push({Event::PART_CC,part,c,v,0}); }
+void AudioEngine::pitchBendPart(int part,int v){ push({Event::PART_PITCH,part,v,0,0}); }
+
 void AudioEngine::setDreamy(bool on){ push({Event::DREAMY,on?1:0,0,0}); }
 void AudioEngine::setBoosterStep(int step){ push({Event::BOOST,step,0,0}); }
 void AudioEngine::setBoostDb(int db){ push({Event::BOOST_DB,db,0,0}); }
@@ -106,89 +122,165 @@ void AudioEngine::setInstrument(int instrument){
     push({Event::INSTRUMENT,instrument,0,0,0});
 }
 
+void AudioEngine::handlePartNoteOn(int part, int note, int velocity) {
+    part = std::clamp(part, 0, 7);
+    if (velocity <= 0) { handlePartNoteOff(part, note); return; }
+
+    if (part == 0) violin_.noteOn(note, velocity);
+    else modelParts_[part - 1].noteOn(note, velocity);
+}
+
+void AudioEngine::handlePartNoteOff(int part, int note) {
+    part = std::clamp(part, 0, 7);
+    const bool sustain = partSustain_[part] >= 64;
+    if (part == 0) violin_.noteOff(note, sustain);
+    else modelParts_[part - 1].noteOff(note, sustain);
+}
+
+void AudioEngine::handlePartPolyPressure(int part, int note, int pressure) {
+    part = std::clamp(part, 0, 7);
+    if (part == 0) violin_.polyPressure(note, pressure);
+    else modelParts_[part - 1].polyPressure(note, pressure);
+}
+
+void AudioEngine::handlePartChannelPressure(int part, int pressure) {
+    part = std::clamp(part, 0, 7);
+    if (part == 0) violin_.channelPressure(pressure);
+    else modelParts_[part - 1].channelPressure(pressure);
+}
+
+void AudioEngine::allNotesOffPart(int part) {
+    part = std::clamp(part, 0, 7);
+    if (part == 0) violin_.allNotesOff();
+    else modelParts_[part - 1].allNotesOff();
+}
+
+void AudioEngine::handlePartPitchBend(int part, int value14) {
+    part = std::clamp(part, 0, 7);
+    value14 = std::clamp(value14, 0, 16383);
+    partPitch_[part] = value14;
+
+    if (part == 0) violin_.pitchBend(value14);
+    else modelParts_[part - 1].pitchBend(value14);
+
+    if (part == selectedInstrument_) pitch_ = value14;
+}
+
+void AudioEngine::handlePartControlChange(int part, int cc, int value) {
+    part = std::clamp(part, 0, 7);
+    value = std::clamp(value, 0, 127);
+
+    // Per-part performance controls.
+    if (cc == 7) {
+        partVolume_[part] = value;
+        if (part == selectedInstrument_) cc7_ = value;
+    } else if (cc == 1) {
+        if (part == 0) violin_.setVibratoDepth(value / 127.0f);
+        else modelParts_[part - 1].setControl(1, value / 127.0f);
+        if (part == selectedInstrument_) cc1_ = value;
+    } else if (cc == 10) {
+        if (part == 0) violin_.setBowPressure(value / 127.0f);
+        else modelParts_[part - 1].setControl(10, value / 127.0f);
+        if (part == selectedInstrument_) cc10_ = value;
+    } else if (cc == 11) {
+        if (part == 0) violin_.setBowSpeed(value / 127.0f);
+        else modelParts_[part - 1].setControl(11, value / 127.0f);
+        if (part == selectedInstrument_) cc11_ = value;
+    } else if (cc == 64) {
+        partSustain_[part] = value;
+        const bool down = value >= 64;
+        if (part == 0) violin_.sustainChanged(down);
+        else modelParts_[part - 1].sustainChanged(down);
+        if (part == selectedInstrument_) cc64_ = value;
+    } else if (cc == 74) {
+        if (part == 0) violin_.setBowPosition(value / 127.0f);
+        else modelParts_[part - 1].setControl(74, value / 127.0f);
+        if (part == selectedInstrument_) cc74_ = value;
+    } else if (cc == 120 || cc == 123) {
+        allNotesOffPart(part);
+    }
+
+    // Effects remain a shared mix bus, so these CCs are intentionally global
+    // regardless of which assigned MIDI part sends them.
+    if (cc == 20) {
+        boostDb_=std::clamp(int(std::lround(value*6.0/127.0)),0,6);
+    } else if (cc == 21) {
+        space_.setMode(std::clamp(int(std::lround(value*3.0/127.0)),0,3));
+    } else if (cc == 22) {
+        spaceMix_=value/127.f; space_.setParameters(spaceMix_,spaceDecay_);
+    } else if (cc == 23) {
+        spaceDecay_=value/127.f; space_.setParameters(spaceMix_,spaceDecay_);
+    } else if (cc == 24) {
+        tape_.setEnabled(value>=64);
+    } else if (cc == 25) {
+        tapeWow_=value/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_);
+    } else if (cc == 26) {
+        tapeFlutter_=value/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_);
+    } else if (cc == 27) {
+        tapeDrive_=value/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_);
+    } else if (cc == 28) {
+        dreamy_.setEnabled(value>=64);
+    } else if (cc == 103) {
+        cc103_=value; dreamy_.setXY(cc103_/127.f, cc104_/127.f);
+    } else if (cc == 104) {
+        cc104_=value; dreamy_.setXY(cc103_/127.f, cc104_/127.f);
+    } else if (cc == 105) {
+        dreamyMix_=value/127.f;
+        dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_);
+    }
+}
+
+float AudioEngine::processPart(int part) {
+    part = std::clamp(part, 0, 7);
+    const float raw = (part == 0) ? violin_.process() : modelParts_[part - 1].process();
+    return raw * (partVolume_[part] / 127.0f);
+}
+
+int AudioEngine::activeVoicesPart(int part) const {
+    part = std::clamp(part, 0, 7);
+    return part == 0 ? violin_.activeVoices() : modelParts_[part - 1].activeVoices();
+}
+
 void AudioEngine::handle(const Event& e) {
     switch(e.type) {
         case Event::NOTE_ON:
-            if (instrumentType_ == 0) {
-                if (e.b <= 0) violin_.noteOff(e.a, cc64_ >= 64);
-                else violin_.noteOn(e.a, e.b);
-            } else {
-                if (e.b <= 0) instrumentModels_.noteOff(e.a, cc64_ >= 64);
-                else instrumentModels_.noteOn(e.a, e.b);
-            }
+            handlePartNoteOn(selectedInstrument_, e.a, e.b);
             break;
         case Event::NOTE_OFF:
-            if (instrumentType_ == 0) violin_.noteOff(e.a, cc64_ >= 64);
-            else instrumentModels_.noteOff(e.a, cc64_ >= 64);
+            handlePartNoteOff(selectedInstrument_, e.a);
             break;
         case Event::POLY_AT:
-            if (instrumentType_ == 0) violin_.polyPressure(e.a, e.b);
-            else instrumentModels_.polyPressure(e.a, e.b);
+            handlePartPolyPressure(selectedInstrument_, e.a, e.b);
             break;
         case Event::CH_AT:
-            if (instrumentType_ == 0) violin_.channelPressure(e.a);
-            else instrumentModels_.channelPressure(e.a);
+            handlePartChannelPressure(selectedInstrument_, e.a);
             break;
         case Event::CC:
-            if (e.a == 7) {
-                cc7_ = std::clamp(e.b, 0, 127);
-            } else if (e.a == 1) {
-                cc1_ = std::clamp(e.b,0,127);
-                violin_.setVibratoDepth(cc1_ / 127.0f);
-                instrumentModels_.setControl(1, cc1_ / 127.0f);
-            } else if (e.a == 10) {
-                cc10_ = std::clamp(e.b,0,127);
-                violin_.setBowPressure(cc10_ / 127.0f);
-                instrumentModels_.setControl(10, cc10_ / 127.0f);
-            } else if (e.a == 11) {
-                cc11_ = std::clamp(e.b,0,127);
-                violin_.setBowSpeed(cc11_ / 127.0f);
-                instrumentModels_.setControl(11, cc11_ / 127.0f);
-            } else if (e.a == 64) {
-                cc64_ = std::clamp(e.b,0,127);
-                violin_.sustainChanged(cc64_ >= 64);
-                instrumentModels_.sustainChanged(cc64_ >= 64);
-            } else if (e.a == 74) {
-                cc74_ = std::clamp(e.b,0,127);
-                violin_.setBowPosition(cc74_ / 127.0f);
-                instrumentModels_.setControl(74, cc74_ / 127.0f);
-            } else if (e.a == 120 || e.a == 123) {
-                violin_.allNotesOff();
-                instrumentModels_.allNotesOff();
-            } else if (e.a==20) {
-                boostDb_=std::clamp(int(std::lround(e.b*6.0/127.0)),0,6);
-            } else if (e.a==21) {
-                space_.setMode(std::clamp(int(std::lround(e.b*3.0/127.0)),0,3));
-            } else if (e.a==22) {
-                spaceMix_=e.b/127.f; space_.setParameters(spaceMix_,spaceDecay_);
-            } else if (e.a==23) {
-                spaceDecay_=e.b/127.f; space_.setParameters(spaceMix_,spaceDecay_);
-            } else if (e.a==24) {
-                tape_.setEnabled(e.b>=64);
-            } else if (e.a==25) {
-                tapeWow_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_);
-            } else if (e.a==26) {
-                tapeFlutter_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_);
-            } else if (e.a==27) {
-                tapeDrive_=e.b/127.f; tape_.setParameters(tapeWow_,tapeFlutter_,tapeDrive_);
-            } else if (e.a==28) {
-                dreamy_.setEnabled(e.b>=64);
-            } else if (e.a==103) {
-                cc103_=std::clamp(e.b,0,127);
-                dreamy_.setXY(cc103_/127.f, cc104_/127.f);
-            } else if (e.a==104) {
-                cc104_=std::clamp(e.b,0,127);
-                dreamy_.setXY(cc103_/127.f, cc104_/127.f);
-            } else if (e.a==105) {
-                dreamyMix_=e.b/127.f;
-                dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_);
-            }
+            handlePartControlChange(selectedInstrument_, e.a, e.b);
             break;
         case Event::PITCH:
-            pitch_=std::clamp(e.a,0,16383);
-            violin_.pitchBend(pitch_);
-            instrumentModels_.pitchBend(pitch_);
+            handlePartPitchBend(selectedInstrument_, e.a);
             break;
+
+        case Event::PART_NOTE_ON:
+            handlePartNoteOn(e.a, e.b, e.c);
+            break;
+        case Event::PART_NOTE_OFF:
+            handlePartNoteOff(e.a, e.b);
+            break;
+        case Event::PART_POLY_AT:
+            handlePartPolyPressure(e.a, e.b, e.c);
+            break;
+        case Event::PART_CH_AT:
+            handlePartChannelPressure(e.a, e.b);
+            break;
+        case Event::PART_CC:
+            handlePartControlChange(e.a, e.b, e.c);
+            break;
+        case Event::PART_PITCH:
+            handlePartPitchBend(e.a, e.b);
+            break;
+
         case Event::DREAMY:
             dreamy_.setEnabled(e.a!=0);
             break;
@@ -227,23 +319,15 @@ void AudioEngine::handle(const Event& e) {
             const float d = static_cast<float>(std::clamp(e.b,0,5000));
             const float sus = std::clamp(e.c,0,100)/100.0f;
             const float r = static_cast<float>(std::clamp(e.d,0,5000));
-            violin_.setAdsr(a,d,sus,r);
-            if (instrumentType_ != 0) instrumentModels_.setAdsr(a,d,sus,r);
+            if (selectedInstrument_ == 0) violin_.setAdsr(a,d,sus,r);
+            else modelParts_[selectedInstrument_ - 1].setAdsr(a,d,sus,r);
             break;
         }
         case Event::INSTRUMENT:
-            instrumentType_ = std::clamp(e.a, 0, 7);
-            violin_.allNotesOff();
-            instrumentModels_.allNotesOff();
-            if (instrumentType_ != 0) {
-                instrumentModels_.setType(instrumentType_);
-                instrumentModels_.setControl(1, cc1_ / 127.0f);
-                instrumentModels_.setControl(10, cc10_ / 127.0f);
-                instrumentModels_.setControl(11, cc11_ / 127.0f);
-                instrumentModels_.setControl(74, cc74_ / 127.0f);
-                instrumentModels_.pitchBend(pitch_);
-                instrumentModels_.sustainChanged(cc64_ >= 64);
-            }
+            selectedInstrument_ = std::clamp(e.a, 0, 7);
+            cc7_ = partVolume_[selectedInstrument_];
+            cc64_ = partSustain_[selectedInstrument_];
+            pitch_ = partPitch_[selectedInstrument_];
             break;
     }
 }
@@ -253,7 +337,15 @@ void AudioEngine::render(float* out,int32_t frames) {
     while (pop(e)) handle(e);
 
     for (int32_t i=0; i<frames; ++i) {
-        const float mono = instrumentType_ == 0 ? violin_.process() : instrumentModels_.process();
+        float mono = 0.0f;
+        int sounding = 0;
+        for (int part=0; part<8; ++part) {
+            mono += processPart(part);
+            sounding += activeVoicesPart(part);
+        }
+
+        if (sounding > 1) mono *= 1.0f / std::sqrt(float(sounding));
+
         float l = mono;
         float r = mono;
 
@@ -261,9 +353,8 @@ void AudioEngine::render(float* out,int32_t frames) {
         tape_.process(l,r);
         space_.process(l,r);
 
-        const float volume = cc7_ / 127.0f;
         const float boostGain = std::pow(10.0f, float(std::clamp(boostDb_,0,6)) / 20.0f);
-        const float outGain = 1.55f * volume * boostGain;
+        const float outGain = 1.55f * boostGain;
 
         l = std::isfinite(l) ? std::tanh(l * outGain) : 0.0f;
         r = std::isfinite(r) ? std::tanh(r * outGain) : 0.0f;
