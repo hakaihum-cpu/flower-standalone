@@ -18,6 +18,9 @@ import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+
 
 public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener {
     private static final int PICK_BANK = 1001;
@@ -155,6 +158,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         drumEditorView.setDrumsVisible(instrumentMode == 7);
         videoLayer.setInstrument(instrumentMode);
 
+        loadDrumSampleAssets();
         NativeEngine.start();
         NativeEngine.setBoosterStep(boosterStep);
         NativeEngine.setBoostDb(boostDb);
@@ -189,6 +193,31 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         midiController = new MidiController(this, this);
         midiController.setPartChannels(partMidiChannels);
         midiController.start();
+    }
+
+    private void loadDrumSampleAssets() {
+        final String[] files = new String[]{
+                "drum_closehat.wav",
+                "drum_tom.wav",
+                "drum_crash.wav",
+                "drum_kick.wav",
+                "drum_stick.wav",
+                "drum_snaire.wav"
+        };
+
+        for (int slot=0; slot<files.length; slot++) {
+            try (InputStream in = getAssets().open(files[slot]);
+                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[64 * 1024];
+                int count;
+                while ((count = in.read(buffer)) >= 0) {
+                    if (count > 0) out.write(buffer, 0, count);
+                }
+                NativeEngine.loadDrumSample(slot, out.toByteArray());
+            } catch (Exception ignored) {
+                // Missing sample does not affect C4/C#4/D4 physical drums.
+            }
+        }
     }
 
     private void hideSystemUI() {
