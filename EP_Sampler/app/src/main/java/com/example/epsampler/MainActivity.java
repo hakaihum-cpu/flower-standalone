@@ -43,6 +43,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_SUSTAIN_PCT = "sustain_pct";
     private static final String KEY_RELEASE_MS = "release_ms";
     private static final String KEY_INSTRUMENT = "instrument_mode";
+    private static final String KEY_DRUM_KICK_TUNE = "drum_kick_tune";
+    private static final String KEY_DRUM_HAT_TUNE = "drum_hat_tune";
+    private static final String KEY_DRUM_SNARE_TUNE = "drum_snare_tune";
+    private static final String KEY_DRUM_DECAY = "drum_decay";
 
     private static final String[] INSTRUMENT_NAMES = new String[] {
             "VIOLIN", "FLUTE", "SAXOPHONE", "FELT PIANO",
@@ -74,6 +78,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int sustainPct = 90;
     private int releaseMs = 300;
     private int instrumentMode = 0;
+    private int drumKickTune = 64;
+    private int drumHatTune = 64;
+    private int drumSnareTune = 64;
+    private int drumDecay = 64;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -117,6 +125,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         releaseMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_RELEASE_MS, 300);
         instrumentMode = Math.max(0, Math.min(7,
                 getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_INSTRUMENT, 0)));
+        drumKickTune = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DRUM_KICK_TUNE, 64);
+        drumHatTune = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DRUM_HAT_TUNE, 64);
+        drumSnareTune = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DRUM_SNARE_TUNE, 64);
+        drumDecay = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DRUM_DECAY, 64);
 
         pianoView.setBoosterStep(boosterStep);
         pianoView.setBoostDb(boostDb);
@@ -139,15 +151,26 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.controlChange(103, Math.max(0, Math.min(127, Math.round(dreamX * 1.27f))));
         pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(dreamY * 1.27f))));
         NativeEngine.setInstrument(instrumentMode);
-        NativeEngine.controlChange(10, bowPressure);
-        NativeEngine.controlChange(11, bowSpeed);
-        NativeEngine.controlChange(74, bowPosition);
-        NativeEngine.controlChange(1, vibratoDepth);
-        NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
-        pianoView.controlChange(10, bowPressure);
-        pianoView.controlChange(11, bowSpeed);
-        pianoView.controlChange(74, bowPosition);
-        pianoView.controlChange(1, vibratoDepth);
+        if (instrumentMode == 7) {
+            NativeEngine.controlChange(10, drumKickTune);
+            NativeEngine.controlChange(11, drumHatTune);
+            NativeEngine.controlChange(74, drumSnareTune);
+            NativeEngine.controlChange(1, drumDecay);
+            pianoView.controlChange(10, drumKickTune);
+            pianoView.controlChange(11, drumHatTune);
+            pianoView.controlChange(74, drumSnareTune);
+            pianoView.controlChange(1, drumDecay);
+        } else {
+            NativeEngine.controlChange(10, bowPressure);
+            NativeEngine.controlChange(11, bowSpeed);
+            NativeEngine.controlChange(74, bowPosition);
+            NativeEngine.controlChange(1, vibratoDepth);
+            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
+            pianoView.controlChange(10, bowPressure);
+            pianoView.controlChange(11, bowSpeed);
+            pianoView.controlChange(74, bowPosition);
+            pianoView.controlChange(1, vibratoDepth);
+        }
         if (manualSustain) {
             NativeEngine.controlChange(64, 127);
             pianoView.controlChange(64, 127);
@@ -427,7 +450,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             case 4: return new String[]{"REED PRESSURE", "BELLOWS", "MUSETTE", "TREMOLO"};
             case 5: return new String[]{"MALLET HARDNESS", "STRIKE", "TONE", "MODULATION"};
             case 6: return new String[]{"STRING DAMP", "PLUCK FORCE", "PLUCK POSITION", "VIBRATO"};
-            case 7: return new String[]{"TENSION", "STRIKE", "TONE", "NOISE/MOD"};
+            case 7: return new String[]{"KICK TUNE", "HIHAT TUNE", "SNARE TUNE", "DECAY"};
             default: return new String[]{"BOW PRESSURE", "BOW SPEED", "BOW POSITION", "VIBRATO"};
         }
     }
@@ -440,7 +463,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             case 4: return "Self-excited free reeds + pressure/airflow coupling";
             case 5: return "Mallet contact + inharmonic bar modal resonators";
             case 6: return "Plucked lossy string + upright-bass body modes";
-            case 7: return "Circular membrane / plate modal resonators";
+            case 7: return "C4 Kick / C#4 Hi-hat / D4 Snare\nIndependent modal tuning: +/-12 semitones";
             default: return "4 independent bowed-string voices / shared violin body";
         }
     }
@@ -451,6 +474,12 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         instrumentMode = mode;
         NativeEngine.setInstrument(instrumentMode);
+        if (instrumentMode == 7) {
+            NativeEngine.controlChange(10, drumKickTune);
+            NativeEngine.controlChange(11, drumHatTune);
+            NativeEngine.controlChange(74, drumSnareTune);
+            NativeEngine.controlChange(1, drumDecay);
+        }
 
         if (videoLayer != null) videoLayer.setInstrument(instrumentMode);
         if (pianoView != null) {
@@ -467,6 +496,44 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     @Override public void onChooseBank() {
         LinearLayout root = dialogRoot();
         String[] names = modelControlNames();
+
+        if (instrumentMode == 7) {
+            addSlider(root, names[0], 127, drumKickTune, v -> {
+                drumKickTune = v;
+                NativeEngine.controlChange(10, v);
+                pianoView.controlChange(10, v);
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(KEY_DRUM_KICK_TUNE, v).apply();
+            });
+            addSlider(root, names[1], 127, drumHatTune, v -> {
+                drumHatTune = v;
+                NativeEngine.controlChange(11, v);
+                pianoView.controlChange(11, v);
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(KEY_DRUM_HAT_TUNE, v).apply();
+            });
+            addSlider(root, names[2], 127, drumSnareTune, v -> {
+                drumSnareTune = v;
+                NativeEngine.controlChange(74, v);
+                pianoView.controlChange(74, v);
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(KEY_DRUM_SNARE_TUNE, v).apply();
+            });
+            addSlider(root, names[3], 127, drumDecay, v -> {
+                drumDecay = v;
+                NativeEngine.controlChange(1, v);
+                pianoView.controlChange(1, v);
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(KEY_DRUM_DECAY, v).apply();
+            });
+            new AlertDialog.Builder(this)
+                    .setTitle("DRUMS MODEL")
+                    .setMessage(modelDescription())
+                    .setView(root)
+                    .setPositiveButton("CLOSE", null)
+                    .show();
+            return;
+        }
 
         addSlider(root, names[0], 127, bowPressure, v -> {
             bowPressure = v;
