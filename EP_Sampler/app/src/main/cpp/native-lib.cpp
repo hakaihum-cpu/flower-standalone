@@ -39,3 +39,18 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_contro
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_pitchBendPart(JNIEnv*,jclass,jint part,jint v){AudioEngine::instance().pitchBendPart(part,v);}
 
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setDrumParameter(JNIEnv*,jclass,jint parameter,jint value){AudioEngine::instance().setDrumParameter(parameter,value);}
+
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_loadDrumSample(
+        JNIEnv* env, jclass, jint slot, jbyteArray bytes) {
+    if (!bytes) return JNI_FALSE;
+    const jsize size = env->GetArrayLength(bytes);
+    if (size <= 0) return JNI_FALSE;
+    jbyte* data = env->GetByteArrayElements(bytes, nullptr);
+    if (!data) return JNI_FALSE;
+    const bool ok = AudioEngine::instance().loadDrumSample(
+            slot,
+            reinterpret_cast<const uint8_t*>(data),
+            static_cast<size_t>(size));
+    env->ReleaseByteArrayElements(bytes, data, JNI_ABORT);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
