@@ -717,7 +717,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             case 3: return "Nonlinear felt contact + stiff-string modal resonators";
             case 4: return "Self-excited free reeds + pressure/airflow coupling";
             case 5: return "Mallet contact + inharmonic bar modal resonators";
-            case 6: return "Plucked lossy string + upright-bass body modes";
+            case 6: return "Fractional-delay pizzicato string + double-bass body / bridge modes";
             case 7: return "C4 Kick / C#4 Hi-hat / D4 Snare\nIndependent modal tuning: +/-12 semitones";
             case 8: return "EPBANK1 sample engine / 8 velocity layers / 3 RR / sustain + release";
             default: return "4 independent bowed-string voices / shared violin body";
