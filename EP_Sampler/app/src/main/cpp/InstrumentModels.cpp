@@ -289,7 +289,8 @@ float InstrumentModels::processFeltPiano(Voice& v, double freq) {
     v.noiseState += (n - v.noiseState) * 0.18f;
     const float hammer = std::exp(-float(v.age) / float(sampleRate_) * 42.0f) *
                          v.noiseState * (0.035f + 0.10f * tone);
-    return sum * 0.24f + hammer;
+    const float strike = 0.72f + 0.48f * control2_;
+    return sum * (0.20f + 0.08f * control2_) * strike + hammer * strike;
 }
 
 float InstrumentModels::processAccordion(Voice& v, double freq) {
@@ -323,7 +324,8 @@ float InstrumentModels::processXylophone(Voice& v, double freq) {
         const float hardBoost = 1.0f + hardness * i * 0.12f;
         sum += std::sin(v.modePhase[i]) * v.modeAmp[i] * decay * hardBoost;
     }
-    return sum * 0.34f;
+    const float strike = 0.65f + 0.70f * control2_;
+    return sum * 0.30f * strike;
 }
 
 float InstrumentModels::processWoodBass(Voice& v, double) {
@@ -371,7 +373,7 @@ float InstrumentModels::processDrums(Voice& v, double freq) {
         out = (std::sin(v.phase) + 0.35f * std::sin(v.phase2)) *
               std::exp(-ageSec * (6.0f + 5.0f * control1_)) * 0.68f;
     }
-    return out;
+    return out * (0.65f + 0.55f * control2_);
 }
 
 float InstrumentModels::processVoice(Voice& v) {
