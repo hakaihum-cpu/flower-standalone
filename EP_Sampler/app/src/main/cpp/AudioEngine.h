@@ -45,6 +45,11 @@ public:
     void setPartFx(int part, int boostDb, int distortion);
     void setFeltReverb(int mix, int decay);
     void setPerformanceXY(bool active, int part, int x, int y);
+    int setAudioBufferBursts(float bursts);
+    int audioFramesPerBurst() const;
+    int audioBufferSizeFrames() const;
+    int audioBufferCapacityFrames() const;
+    int audioXRunCount() const;
     bool loadDrumSample(int slot, const uint8_t* data, size_t size);
     void noteOnPart(int part, int note, int velocity);
     void noteOffPart(int part, int note, int velocity);
@@ -147,6 +152,8 @@ private:
 
     AAudioStream* stream_=nullptr;
     int sampleRate_=48000;
+    int defaultBufferSizeFrames_=0;
+    float requestedBufferBursts_=0.0f;
 
     void handle(const Event& e);
     void handlePartNoteOn(int part, int note, int velocity);
