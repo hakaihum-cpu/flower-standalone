@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <vector>
 #include "PhysicalViolin.h"
 #include "InstrumentModels.h"
 #include "DreamyEffect.h"
@@ -40,6 +41,7 @@ public:
     void setAdsr(int attackMs, int decayMs, int sustainPct, int releaseMs);
     void setInstrument(int instrument);
     void setDrumParameter(int parameter, int value);
+    bool loadDrumSample(int slot, const uint8_t* data, size_t size);
     void noteOnPart(int part, int note, int velocity);
     void noteOffPart(int part, int note, int velocity);
     void polyPressurePart(int part, int note, int pressure);
@@ -80,6 +82,23 @@ private:
     SpaceEffect space_;
     TapeEffect tape_;
 
+    struct DrumSample {
+        std::vector<float> left;
+        std::vector<float> right;
+        int sampleRate = 48000;
+        bool loaded = false;
+    };
+    struct DrumSampleVoice {
+        bool active = false;
+        int slot = -1;
+        double position = 0.0;
+        float gain = 1.0f;
+    };
+    static constexpr int DRUM_SAMPLE_COUNT = 6;
+    static constexpr int DRUM_SAMPLE_VOICES = 12;
+    std::array<DrumSample, DRUM_SAMPLE_COUNT> drumSamples_{};
+    std::array<DrumSampleVoice, DRUM_SAMPLE_VOICES> drumSampleVoices_{};
+
     int cc1_=14;
     int cc7_=112;
     int cc10_=74;
@@ -106,6 +125,10 @@ private:
     void handlePartControlChange(int part, int cc, int value);
     void handlePartPitchBend(int part, int value14);
     void allNotesOffPart(int part);
+    void triggerDrumSample(int slot, int velocity);
+    void stopDrumSamples();
+    void processDrumSamples(float& left, float& right);
+    int activeDrumSampleVoices() const;
     float processPart(int part);
     int activeVoicesPart(int part) const;
     void render(float* out, int32_t frames);
