@@ -59,3 +59,12 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setDru
         JNIEnv*, jclass, jint boostDb, jint distortion) {
     AudioEngine::instance().setDrumFx(boostDb, distortion);
 }
+
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setPartFx(
+        JNIEnv*, jclass, jint part, jint boostDb, jint distortion) {
+    AudioEngine::instance().setPartFx(part, boostDb, distortion);
+}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setFeltReverb(
+        JNIEnv*, jclass, jint mix, jint decay) {
+    AudioEngine::instance().setFeltReverb(mix, decay);
+}
