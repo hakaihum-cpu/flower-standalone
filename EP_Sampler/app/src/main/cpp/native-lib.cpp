@@ -68,3 +68,8 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setFel
         JNIEnv*, jclass, jint mix, jint decay) {
     AudioEngine::instance().setFeltReverb(mix, decay);
 }
+
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setPerformanceXY(
+        JNIEnv*, jclass, jboolean active, jint part, jint x, jint y) {
+    AudioEngine::instance().setPerformanceXY(active == JNI_TRUE, part, x, y);
+}
