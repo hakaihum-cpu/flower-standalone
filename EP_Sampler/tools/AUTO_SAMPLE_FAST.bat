@@ -102,7 +102,24 @@ if not exist "%MASTER%" (
   exit /b 1
 )
 
+for /f %%D in ('ffprobe -v error -show_entries format^=duration -of default^=noprint_wrappers^=1:nokey^=1 "%MASTER%"') do set "DURATION=%%D"
+%PY% -c "import sys; d=float(sys.argv[1]); sys.exit(0 if d >= 423.0 else 1)" "%DURATION%"
+if errorlevel 1 (
+  echo [ERROR] FL Studio render is too short: %DURATION% sec
+  echo Expected about 425 sec.
+  echo.
+  echo Open the FLP in FL Studio and confirm:
+  echo   1. SONG mode is selected, not PATTERN.
+  echo   2. FAST_CAPTURE pattern is placed in the Playlist at bar 1.
+  echo   3. The Playlist extends to about 7 min 05 sec.
+  echo   4. Pressing Play in SONG mode actually plays the VST sequence.
+  echo Save the FLP, close FL Studio, then run this BAT again.
+  pause
+  exit /b 1
+)
+
 echo.
+echo Render duration: %DURATION% sec
 echo [2/2] Building C2-C8 EPBANK1...
 %PY% "%~dp0build_fast_bank.py" "%MASTER%" -l "%~dp0FAST_CAPTURE.layout.json" -o "%BANK%"
 if errorlevel 1 (
