@@ -188,7 +188,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.setInstrumentName(INSTRUMENT_NAMES[instrumentMode], INSTRUMENT_BUTTONS[instrumentMode]);
         pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
         drumEditorView.setValues(drumParameters);
-        drumEditorView.setDrumFx(drumBoostDb, drumDistortion);
+        drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
         drumEditorView.setDrumsVisible(instrumentMode == 7);
         videoLayer.setInstrument(instrumentMode);
 
@@ -612,7 +612,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         }
         if (drumEditorView != null) {
             drumEditorView.setValues(drumParameters);
-            drumEditorView.setDrumFx(drumBoostDb, drumDistortion);
+            drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
             drumEditorView.setDrumsVisible(instrumentMode == 7);
         }
 
@@ -762,10 +762,14 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 .putInt(p + "decay", decayMs)
                 .putInt(p + "sustain", sustainPct)
                 .putInt(p + "release", releaseMs)
-                .putInt(p + "drum_boost", drumBoostDb)
-                .putInt(p + "drum_dist", drumDistortion);
+                .putInt(p + "drum_boost", partBoostDb[7])
+                .putInt(p + "drum_dist", partDistortion[7])
+                .putInt(p + "felt_reverb_mix", feltReverbMix)
+                .putInt(p + "felt_reverb_decay", feltReverbDecay);
         for (int i=0; i<partMidiChannels.length; i++) {
             e.putInt(p + "midi_" + i, partMidiChannels[i]);
+            e.putInt(p + "part_boost_" + i, partBoostDb[i]);
+            e.putInt(p + "part_dist_" + i, partDistortion[i]);
         }
         for (int i=0; i<drumParameters.length; i++) {
             e.putInt(p + "drum_" + i, drumParameters[i]);
@@ -804,10 +808,23 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         releaseMs = Math.max(0, Math.min(5000, sp.getInt(p + "release", releaseMs)));
         drumBoostDb = Math.max(0, Math.min(18, sp.getInt(p + "drum_boost", drumBoostDb)));
         drumDistortion = Math.max(0, Math.min(127, sp.getInt(p + "drum_dist", drumDistortion)));
+        feltReverbMix = Math.max(0, Math.min(100,
+                sp.getInt(p + "felt_reverb_mix", feltReverbMix)));
+        feltReverbDecay = Math.max(0, Math.min(100,
+                sp.getInt(p + "felt_reverb_decay", feltReverbDecay)));
 
         for (int i=0; i<partMidiChannels.length; i++) {
-            partMidiChannels[i] = Math.max(0, Math.min(16, sp.getInt(p + "midi_" + i, partMidiChannels[i])));
+            partMidiChannels[i] = Math.max(0, Math.min(16,
+                    sp.getInt(p + "midi_" + i, partMidiChannels[i])));
+            int boostFallback = (i == 7) ? drumBoostDb : partBoostDb[i];
+            int distFallback = (i == 7) ? drumDistortion : partDistortion[i];
+            partBoostDb[i] = Math.max(0, Math.min(18,
+                    sp.getInt(p + "part_boost_" + i, boostFallback)));
+            partDistortion[i] = Math.max(0, Math.min(127,
+                    sp.getInt(p + "part_dist_" + i, distFallback)));
         }
+        drumBoostDb = partBoostDb[7];
+        drumDistortion = partDistortion[7];
         for (int i=0; i<drumParameters.length; i++) {
             drumParameters[i] = Math.max(0, Math.min(127, sp.getInt(p + "drum_" + i, drumParameters[i])));
         }
@@ -823,7 +840,11 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.setDreamy(dreamy);
         NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
         for (int i=0; i<drumParameters.length; i++) NativeEngine.setDrumParameter(i, drumParameters[i]);
-        NativeEngine.setDrumFx(drumBoostDb, drumDistortion);
+        for (int part=0; part<8; part++) {
+            NativeEngine.setPartFx(part, partBoostDb[part], partDistortion[part]);
+        }
+        NativeEngine.setDrumFx(partBoostDb[7], partDistortion[7]);
+        NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
 
         if (instrumentMode != 7) {
             NativeEngine.controlChange(10, bowPressure);
@@ -847,7 +868,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(dreamY * 1.27f))));
         if (drumEditorView != null) {
             drumEditorView.setValues(drumParameters);
-            drumEditorView.setDrumFx(drumBoostDb, drumDistortion);
+            drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
         }
 
         persistLoadedPresetAsCurrent();
@@ -875,9 +896,15 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 .putInt(KEY_DECAY_MS, decayMs)
                 .putInt(KEY_SUSTAIN_PCT, sustainPct)
                 .putInt(KEY_RELEASE_MS, releaseMs)
-                .putInt(KEY_DRUM_BOOST_DB, drumBoostDb)
-                .putInt(KEY_DRUM_DISTORTION, drumDistortion);
-        for (int i=0; i<partMidiChannels.length; i++) e.putInt(KEY_PART_MIDI_PREFIX + i, partMidiChannels[i]);
+                .putInt(KEY_DRUM_BOOST_DB, partBoostDb[7])
+                .putInt(KEY_DRUM_DISTORTION, partDistortion[7])
+                .putInt(KEY_FELT_REVERB_MIX, feltReverbMix)
+                .putInt(KEY_FELT_REVERB_DECAY, feltReverbDecay);
+        for (int i=0; i<partMidiChannels.length; i++) {
+            e.putInt(KEY_PART_MIDI_PREFIX + i, partMidiChannels[i]);
+            e.putInt(KEY_PART_BOOST_PREFIX + i, partBoostDb[i]);
+            e.putInt(KEY_PART_DIST_PREFIX + i, partDistortion[i]);
+        }
         for (int i=0; i<drumParameters.length; i++) e.putInt(KEY_DRUM_PARAM_PREFIX + i, drumParameters[i]);
         e.apply();
     }
