@@ -12,16 +12,17 @@ import android.os.Looper;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 final class MidiController {
     interface Listener {
-        void onNoteOn(int note, int velocity);
-        void onNoteOff(int note, int velocity);
-        void onPolyPressure(int note, int value);
-        void onChannelPressure(int value);
-        void onControlChange(int cc, int value);
-        void onPitchBend(int value14);
+        void onNoteOn(int part, int note, int velocity);
+        void onNoteOff(int part, int note, int velocity);
+        void onPolyPressure(int part, int note, int value);
+        void onChannelPressure(int part, int value);
+        void onControlChange(int part, int cc, int value);
+        void onPitchBend(int part, int value14);
         void onConnectionCountChanged(int count);
     }
 
@@ -31,18 +32,28 @@ final class MidiController {
     private final List<MidiDevice> devices = new ArrayList<>();
     private final List<MidiOutputPort> ports = new ArrayList<>();
     private int pendingOpens = 0;
-    private volatile int channelFilter = 0; // 0=OMNI, 1..16=fixed channel
+
+    // 0 = OFF, 1..16 = MIDI channel. Default parts use CH1..CH8.
+    private final int[] partChannels = new int[]{1,2,3,4,5,6,7,8};
 
     MidiController(Context context, Listener listener) {
         this.listener = listener;
         midiManager = (MidiManager) context.getSystemService(Context.MIDI_SERVICE);
     }
 
-    void setChannel(int channel) {
-        channelFilter = Math.max(0, Math.min(16, channel));
+    void setPartChannels(int[] channels) {
+        if (channels == null) return;
+        for (int i=0; i<partChannels.length; i++) {
+            int value = i < channels.length ? channels[i] : 0;
+            partChannels[i] = Math.max(0, Math.min(16, value));
+        }
     }
 
-    int getChannel() { return channelFilter; }
+    int[] getPartChannels() { return Arrays.copyOf(partChannels, partChannels.length); }
+
+    // Legacy compatibility only. Multi-timbral routing is always channel-aware.
+    void setChannel(int ignored) { }
+    int getChannel() { return 0; }
 
     void start() {
         if (midiManager == null) return;
@@ -87,14 +98,12 @@ final class MidiController {
             pendingOpens--;
             if (device == null) return;
             devices.add(device);
-            int opened = 0;
             for (MidiDeviceInfo.PortInfo pi : info.getPorts()) {
                 if (pi.getType() != MidiDeviceInfo.PortInfo.TYPE_OUTPUT) continue;
                 MidiOutputPort port = device.openOutputPort(pi.getPortNumber());
                 if (port != null) {
                     port.connect(receiver);
                     ports.add(port);
-                    opened++;
                 }
             }
             listener.onConnectionCountChanged(ports.size());
@@ -117,9 +126,14 @@ final class MidiController {
         void feed(byte[] bytes, int off, int count) {
             for (int i = off; i < off + count; i++) {
                 int b = bytes[i] & 0xFF;
-                if (b >= 0xF8) continue; // MIDI realtime messages may appear anywhere.
+                if (b >= 0xF8) continue;
                 if ((b & 0x80) != 0) {
-                    if (b >= 0xF0) { runningStatus = 0; dataCount = 0; needed = 0; continue; }
+                    if (b >= 0xF0) {
+                        runningStatus = 0;
+                        dataCount = 0;
+                        needed = 0;
+                        continue;
+                    }
                     runningStatus = b;
                     dataCount = 0;
                     int type = b & 0xF0;
@@ -136,43 +150,46 @@ final class MidiController {
         }
 
         void dispatch(int status, int d1, int d2) {
-            int channel = (status & 0x0F) + 1;
-            int filter = channelFilter;
-            if (filter != 0 && channel != filter) return;
-            int type = status & 0xF0;
-            switch (type) {
-                case 0x80:
-                    NativeEngine.noteOff(d1, d2);
-                    listener.onNoteOff(d1, d2);
-                    break;
-                case 0x90:
-                    if (d2 == 0) {
-                        NativeEngine.noteOff(d1, 0);
-                        listener.onNoteOff(d1, 0);
-                    } else {
-                        NativeEngine.noteOn(d1, d2);
-                        listener.onNoteOn(d1, d2);
-                    }
-                    break;
-                case 0xA0:
-                    NativeEngine.polyPressure(d1, d2);
-                    listener.onPolyPressure(d1, d2);
-                    break;
-                case 0xB0:
-                    NativeEngine.controlChange(d1, d2);
-                    listener.onControlChange(d1, d2);
-                    break;
-                case 0xD0:
-                    NativeEngine.channelPressure(d1);
-                    listener.onChannelPressure(d1);
-                    break;
-                case 0xE0:
-                    int pb = (d2 << 7) | d1;
-                    NativeEngine.pitchBend(pb);
-                    listener.onPitchBend(pb);
-                    break;
-                default:
-                    break;
+            final int channel = (status & 0x0F) + 1;
+            final int type = status & 0xF0;
+
+            for (int part=0; part<partChannels.length; part++) {
+                if (partChannels[part] != channel) continue;
+
+                switch (type) {
+                    case 0x80:
+                        NativeEngine.noteOffPart(part, d1, d2);
+                        listener.onNoteOff(part, d1, d2);
+                        break;
+                    case 0x90:
+                        if (d2 == 0) {
+                            NativeEngine.noteOffPart(part, d1, 0);
+                            listener.onNoteOff(part, d1, 0);
+                        } else {
+                            NativeEngine.noteOnPart(part, d1, d2);
+                            listener.onNoteOn(part, d1, d2);
+                        }
+                        break;
+                    case 0xA0:
+                        NativeEngine.polyPressurePart(part, d1, d2);
+                        listener.onPolyPressure(part, d1, d2);
+                        break;
+                    case 0xB0:
+                        NativeEngine.controlChangePart(part, d1, d2);
+                        listener.onControlChange(part, d1, d2);
+                        break;
+                    case 0xD0:
+                        NativeEngine.channelPressurePart(part, d1);
+                        listener.onChannelPressure(part, d1);
+                        break;
+                    case 0xE0:
+                        int pb = (d2 << 7) | d1;
+                        NativeEngine.pitchBendPart(part, pb);
+                        listener.onPitchBend(part, pb);
+                        break;
+                    default:
+                        break;
+                }
             }
         }
     }
