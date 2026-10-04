@@ -530,7 +530,11 @@ void AudioEngine::epRenderVoice(EpVoice& v, float& l, float& r) {
         if (!endRef || v.releaseFrame >= endRef->frames) v.active = false;
     }
 
-    const float gain = (partVolume_[8] / 127.0f) * (epExpression_ / 127.0f);
+    // The standalone EP master used 3.2x while the physical-model master uses 1.55x.
+    // Compensate only the EP part so its established level is retained after the shared master.
+    constexpr float EP_LEVEL_COMPENSATION = 3.2f / 1.55f;
+    const float gain = (partVolume_[8] / 127.0f) * (epExpression_ / 127.0f)
+            * EP_LEVEL_COMPENSATION;
     l += sl * gain;
     r += sr * gain;
     ++v.ageFrames;
