@@ -344,37 +344,60 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
     @Override public void onSurfaceTextureUpdated(SurfaceTexture surface) { }
 
     private static final class DreamyOverlay extends View {
+        private static final int HISTORY = 6;
+        private static final int CAPTURE_SIZE = 480;
+
         private final TextureView source;
         private final Paint red = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private final Paint green = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private final Paint blue = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        private final Paint echo = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        private final Paint slice = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private final Paint block = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        private final Paint scanline = new Paint();
         private final Rect srcRect = new Rect();
         private final RectF dstRect = new RectF();
 
-        private Bitmap capture;
+        private final Bitmap[] history = new Bitmap[HISTORY];
+        private int historyWrite = 0;
+        private int historyCount = 0;
+
         private boolean dreamy = false;
         private int x = 36;
         private int y = 36;
         private long lastCaptureMs = 0L;
+        private long holdUntilMs = 0L;
+        private int holdBack = 2;
         private int frameCounter = 0;
+        private int eventCounter = 0;
+        private float notePulse = 0.0f;
 
         DreamyOverlay(Context context, TextureView source) {
             super(context);
             this.source = source;
             setWillNotDraw(false);
+
             red.setColorFilter(channelFilter(0));
             green.setColorFilter(channelFilter(1));
             blue.setColorFilter(channelFilter(2));
-            red.setAlpha(100);
-            green.setAlpha(78);
-            blue.setAlpha(100);
-            block.setAlpha(190);
+
+            red.setAlpha(84);
+            green.setAlpha(42);
+            blue.setAlpha(84);
+            echo.setAlpha(58);
+            slice.setAlpha(148);
+            block.setAlpha(178);
+            scanline.setColor(0x28FFFFFF);
+            scanline.setStrokeWidth(1.0f);
         }
 
         void setDreamy(boolean on) {
             dreamy = on;
             setVisibility(on ? VISIBLE : INVISIBLE);
+            if (!on) {
+                holdUntilMs = 0L;
+                notePulse = 0.0f;
+            }
             if (on) postInvalidateOnAnimation();
         }
 
@@ -384,59 +407,191 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
             if (dreamy) postInvalidateOnAnimation();
         }
 
+        void noteOn(int note, int velocity, int voices) {
+            if (!dreamy) return;
+
+            eventCounter++;
+            notePulse = Math.max(notePulse, Math.max(1, Math.min(127, velocity)) / 127.0f);
+
+            // MIYAKO-style temporal fragment: not every note causes a glitch.
+            // Higher Y makes the short held fragment happen more often and last
+            // a little longer, while X selects a deeper point in recent history.
+            int densityDivisor = Math.max(2, 7 - Math.round((y / 127.0f) * 4.0f));
+            if ((eventCounter % densityDivisor) == 0 || voices >= 3) {
+                long now = SystemClock.uptimeMillis();
+                holdUntilMs = now + 55L + Math.round((y / 127.0f) * 155.0f);
+                holdBack = 1 + Math.round((x / 127.0f) * 3.0f);
+            }
+            postInvalidateOnAnimation();
+        }
+
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             if (!dreamy || !source.isAvailable() || getWidth() <= 0 || getHeight() <= 0) return;
 
-            long now = SystemClock.uptimeMillis();
-            if (capture == null) {
-                capture = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888);
-            }
-            if (now - lastCaptureMs >= 120L) {
-                try {
-                    source.getBitmap(capture);
-                    lastCaptureMs = now;
-                    frameCounter++;
-                } catch (Exception ignored) { }
+            final long now = SystemClock.uptimeMillis();
+            final float amountX = x / 127.0f;
+            final float amountY = y / 127.0f;
+
+            // Y follows the audio Dreamy idea: higher values mean shorter,
+            // denser fragments. Capture faster as Y rises.
+            final long captureInterval = 135L - Math.round(amountY * 75.0f);
+            if (now - lastCaptureMs >= captureInterval) {
+                captureHistory();
+                lastCaptureMs = now;
             }
 
-            if (capture == null || capture.isRecycled()) return;
+            Bitmap current = historyBack(0);
+            if (current == null) {
+                postInvalidateDelayed(50L);
+                return;
+            }
 
-            float amountX = x / 127f;
-            float amountY = y / 127f;
-            float shift = getWidth() * (0.004f + 0.025f * amountX);
+            Bitmap recent = historyBack(1 + Math.round(amountX * 1.0f));
+            Bitmap older = historyBack(3 + Math.round(amountX * 2.0f));
+            if (recent == null) recent = current;
+            if (older == null) older = recent;
+
             RectF full = new RectF(0f, 0f, getWidth(), getHeight());
 
-            dstRect.set(full);
-            dstRect.offset(-shift, 0f);
-            canvas.drawBitmap(capture, null, dstRect, red);
-            dstRect.set(full);
-            canvas.drawBitmap(capture, null, dstRect, green);
-            dstRect.set(full);
-            dstRect.offset(shift, 0f);
-            canvas.drawBitmap(capture, null, dstRect, blue);
+            // Two time-offset ghosts correspond to the two-fragment character
+            // of MIYAKO Dreamy. They are intentionally subtle rather than a
+            // permanent full-screen RGB split.
+            float drift = getWidth() * (0.003f + 0.024f * amountX);
+            float pulse = 0.45f + 0.55f * notePulse;
+            int channelAlpha = Math.min(130, Math.round((38f + 58f * amountY) * pulse));
+            red.setAlpha(channelAlpha);
+            blue.setAlpha(channelAlpha);
 
-            int blocks = 2 + Math.round(amountY * 10f);
-            int bw = capture.getWidth();
-            int bh = capture.getHeight();
-            long state = 0x9E3779B97F4A7C15L ^ ((long) frameCounter * 1103515245L);
+            dstRect.set(full);
+            dstRect.offset(-drift, -getHeight() * 0.003f * amountX);
+            canvas.drawBitmap(recent, null, dstRect, red);
+
+            dstRect.set(full);
+            dstRect.offset(drift, getHeight() * 0.002f * amountX);
+            canvas.drawBitmap(older, null, dstRect, blue);
+
+            // A very faint green temporal echo gives a smeared, not neon-RGB,
+            // centre to the image.
+            green.setAlpha(Math.min(72, Math.round(20f + 34f * amountY)));
+            dstRect.set(full);
+            dstRect.inset(-getWidth() * 0.004f * amountX, -getHeight() * 0.004f * amountX);
+            canvas.drawBitmap(recent, null, dstRect, green);
+
+            // Short held fragment: the live full-quality MP4 remains below;
+            // only the Dreamy layer momentarily freezes an older image.
+            if (now < holdUntilMs) {
+                Bitmap held = historyBack(holdBack);
+                if (held != null) {
+                    echo.setAlpha(Math.min(118, Math.round(44f + 58f * amountY)));
+                    float jx = getWidth() * 0.006f * (float)Math.sin(frameCounter * 0.71);
+                    float jy = getHeight() * 0.004f * (float)Math.cos(frameCounter * 0.53);
+                    dstRect.set(full);
+                    dstRect.offset(jx, jy);
+                    canvas.drawBitmap(held, null, dstRect, echo);
+                }
+            }
+
+            drawSliceDrift(canvas, recent, older, amountX, amountY);
+            drawSparseBlocks(canvas, older, amountX, amountY);
+            drawScanlines(canvas, amountY);
+
+            // Brief brightness instability rather than constant flicker.
+            if (((frameCounter + eventCounter * 3) % 17) == 0 && amountY > 0.18f) {
+                echo.setAlpha(Math.round(10f + 30f * amountY));
+                canvas.drawBitmap(current, null, full, echo);
+            }
+
+            notePulse *= 0.90f;
+            frameCounter++;
+            postInvalidateDelayed(50L);
+        }
+
+        private void captureHistory() {
+            Bitmap target = history[historyWrite];
+            if (target == null || target.isRecycled()) {
+                target = Bitmap.createBitmap(CAPTURE_SIZE, CAPTURE_SIZE, Bitmap.Config.ARGB_8888);
+                history[historyWrite] = target;
+            }
+            try {
+                source.getBitmap(target);
+                historyWrite = (historyWrite + 1) % HISTORY;
+                historyCount = Math.min(HISTORY, historyCount + 1);
+            } catch (Exception ignored) { }
+        }
+
+        private Bitmap historyBack(int back) {
+            if (historyCount <= 0) return null;
+            back = Math.max(0, Math.min(historyCount - 1, back));
+            int index = historyWrite - 1 - back;
+            while (index < 0) index += HISTORY;
+            return history[index % HISTORY];
+        }
+
+        private void drawSliceDrift(Canvas canvas, Bitmap a, Bitmap b, float amountX, float amountY) {
+            if (historyCount < 2 || amountY < 0.06f) return;
+
+            int slices = 1 + Math.round(amountY * 7.0f);
+            int bw = a.getWidth();
+            int bh = a.getHeight();
+            long state = 0xD1B54A32D192ED03L ^ ((long)frameCounter * 1103515245L)
+                    ^ ((long)eventCounter * 2654435761L);
+
+            slice.setAlpha(Math.min(185, Math.round(72f + 88f * amountY)));
+
+            for (int i = 0; i < slices; i++) {
+                state = nextRandom(state);
+                int sh = Math.max(3, Math.round(bh * (0.010f + (((state >>> 12) & 255) / 255f) * 0.055f)));
+                int sy = (int)Math.floorMod(state >>> 20, Math.max(1, bh - sh));
+                Bitmap src = ((i & 1) == 0) ? a : b;
+
+                float scaleY = getHeight() / (float)bh;
+                float dy0 = sy * scaleY;
+                float dy1 = (sy + sh) * scaleY;
+
+                state = nextRandom(state);
+                float direction = ((state & 1L) == 0L) ? -1f : 1f;
+                float dx = direction * getWidth()
+                        * (0.004f + amountX * 0.055f)
+                        * (0.4f + (((state >>> 8) & 255) / 255f) * 0.6f);
+
+                srcRect.set(0, sy, bw, sy + sh);
+                dstRect.set(dx, dy0, getWidth() + dx, dy1);
+                canvas.drawBitmap(src, srcRect, dstRect, slice);
+            }
+        }
+
+        private void drawSparseBlocks(Canvas canvas, Bitmap sourceBitmap, float amountX, float amountY) {
+            if (amountY < 0.18f) return;
+
+            // Sparse anomaly events, closer to MIYAKO/Twilight than a constant
+            // block-noise overlay.
+            int gatePeriod = Math.max(4, 12 - Math.round(amountY * 7.0f));
+            if (((frameCounter + eventCounter) % gatePeriod) != 0) return;
+
+            int blocks = 1 + Math.round(amountY * 5.0f);
+            int bw = sourceBitmap.getWidth();
+            int bh = sourceBitmap.getHeight();
+            long state = 0x9E3779B97F4A7C15L ^ ((long)frameCounter * 6364136223846793005L);
+
+            block.setAlpha(Math.min(205, Math.round(105f + 82f * amountY)));
 
             for (int i = 0; i < blocks; i++) {
                 state = nextRandom(state);
-                int sw = Math.max(10, (int) (bw * (0.08f + ((state >>> 8) & 255) / 255f * 0.23f)));
+                int sw = Math.max(12, Math.round(bw * (0.05f + (((state >>> 8) & 255) / 255f) * 0.18f)));
                 state = nextRandom(state);
-                int sh = Math.max(6, (int) (bh * (0.025f + ((state >>> 12) & 255) / 255f * 0.10f)));
+                int sh = Math.max(8, Math.round(bh * (0.025f + (((state >>> 12) & 255) / 255f) * 0.09f)));
                 state = nextRandom(state);
-                int sx = (int) Math.floorMod(state, Math.max(1, bw - sw));
+                int sx = (int)Math.floorMod(state, Math.max(1, bw - sw));
                 state = nextRandom(state);
-                int sy = (int) Math.floorMod(state, Math.max(1, bh - sh));
+                int sy = (int)Math.floorMod(state, Math.max(1, bh - sh));
 
-                float scaleX = getWidth() / (float) bw;
-                float scaleY = getHeight() / (float) bh;
-                float dx = (((state >>> 18) & 255) / 255f - 0.5f) *
-                        getWidth() * (0.03f + amountX * 0.14f);
-                float dy = (((state >>> 28) & 127) / 127f - 0.5f) *
-                        getHeight() * amountY * 0.04f;
+                float scaleX = getWidth() / (float)bw;
+                float scaleY = getHeight() / (float)bh;
+                float dx = ((((state >>> 18) & 255) / 255f) - 0.5f)
+                        * getWidth() * (0.02f + amountX * 0.13f);
+                float dy = ((((state >>> 28) & 127) / 127f) - 0.5f)
+                        * getHeight() * amountY * 0.035f;
 
                 srcRect.set(sx, sy, sx + sw, sy + sh);
                 dstRect.set(
@@ -444,15 +599,30 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
                         sy * scaleY + dy,
                         (sx + sw) * scaleX + dx,
                         (sy + sh) * scaleY + dy);
-                canvas.drawBitmap(capture, srcRect, dstRect, block);
+                canvas.drawBitmap(sourceBitmap, srcRect, dstRect, block);
             }
+        }
 
-            postInvalidateDelayed(60L);
+        private void drawScanlines(Canvas canvas, float amountY) {
+            if (amountY < 0.25f) return;
+            int count = 2 + Math.round(amountY * 4.0f);
+            scanline.setAlpha(Math.min(62, Math.round(16f + 32f * amountY)));
+
+            long state = 0x94D049BB133111EBL ^ ((long)frameCounter * 0x9E3779B97F4A7C15L);
+            for (int i = 0; i < count; i++) {
+                state = nextRandom(state);
+                float yy = (Math.floorMod(state, 10000L) / 10000f) * getHeight();
+                canvas.drawLine(0f, yy, getWidth(), yy, scanline);
+            }
         }
 
         void release() {
-            if (capture != null && !capture.isRecycled()) capture.recycle();
-            capture = null;
+            for (int i = 0; i < HISTORY; i++) {
+                Bitmap bitmap = history[i];
+                if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+                history[i] = null;
+            }
+            historyCount = 0;
         }
 
         private static ColorMatrixColorFilter channelFilter(int channel) {
