@@ -9,7 +9,8 @@ add_library(epaudio SHARED
         InstrumentModels.cpp
         DreamyEffect.cpp
         SpaceEffect.cpp
-        TapeEffect.cpp)
+        TapeEffect.cpp
+        IntegratedRecorder.cpp)
 
 find_library(log-lib log)
 find_library(android-lib android)
