@@ -36,7 +36,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_DREAM_X = "dream_x";
     private static final String KEY_DREAM_Y = "dream_y";
     private static final String KEY_DREAM_MIX = "dream_mix";
-    private static final String KEY_MIDI_CHANNEL = "midi_channel";
+    private static final String KEY_PART_MIDI_PREFIX = "part_midi_ch_";
     private static final String KEY_MANUAL_SUSTAIN = "manual_sustain";
     private static final String KEY_ATTACK_MS = "attack_ms";
     private static final String KEY_DECAY_MS = "decay_ms";
@@ -63,7 +63,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int spaceMix = 50, spaceDecay = 50;
     private int tapeWow = 50, tapeFlutter = 50, tapeDrive = 50;
     private int dreamX = 28, dreamY = 28, dreamMix = 34;
-    private int midiChannel = 0;
+    private final int[] partMidiChannels = new int[]{1,2,3,4,5,6,7,8};
     private boolean manualSustain = false;
     private int bowPressure = 74;
     private int bowSpeed = 74;
@@ -105,7 +105,11 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         dreamX = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_X, 28);
         dreamY = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_Y, 28);
         dreamMix = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_MIX, 34);
-        midiChannel = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_MIDI_CHANNEL, 0);
+        for (int i=0; i<partMidiChannels.length; i++) {
+            partMidiChannels[i] = Math.max(0, Math.min(16,
+                    getSharedPreferences(PREFS, MODE_PRIVATE)
+                            .getInt(KEY_PART_MIDI_PREFIX + i, i + 1)));
+        }
         manualSustain = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_MANUAL_SUSTAIN, false);
         attackMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_ATTACK_MS, 20);
         decayMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DECAY_MS, 120);
@@ -149,7 +153,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         }
 
         midiController = new MidiController(this, this);
-        midiController.setChannel(midiChannel);
+        midiController.setPartChannels(partMidiChannels);
         midiController.start();
     }
 
@@ -347,17 +351,31 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         root.addView(instrumentSpinner);
 
         TextView midiLabel = new TextView(this);
-        midiLabel.setText("MIDI CHANNEL");
+        midiLabel.setText("MIDI CHANNEL FOR SELECTED INSTRUMENT");
         midiLabel.setTextSize(16f);
         root.addView(midiLabel);
 
-        Spinner spinner = new Spinner(this);
+        Spinner channelSpinner = new Spinner(this);
         String[] channels = new String[17];
-        channels[0] = "OMNI";
+        channels[0] = "OFF";
         for (int i=1;i<=16;i++) channels[i] = "CH " + i;
-        spinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, channels));
-        spinner.setSelection(Math.max(0, Math.min(16, midiChannel)));
-        root.addView(spinner);
+        channelSpinner.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, channels));
+        channelSpinner.setSelection(partMidiChannels[instrumentMode]);
+        root.addView(channelSpinner);
+
+        instrumentSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                int part = Math.max(0, Math.min(7, position));
+                channelSpinner.setSelection(partMidiChannels[part]);
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+        });
+
+        TextView routingHelp = new TextView(this);
+        routingHelp.setText("Same CH on multiple instruments = layer. OFF = no external MIDI.");
+        routingHelp.setTextSize(13f);
+        root.addView(routingHelp);
 
         CheckBox sustain = new CheckBox(this);
         sustain.setText("Manual SUSTAIN");
@@ -376,15 +394,19 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         new AlertDialog.Builder(this).setTitle("CONFIG").setView(root)
                 .setPositiveButton("APPLY", (dialog, which) -> {
-                    applyInstrument(instrumentSpinner.getSelectedItemPosition());
-                    midiChannel = spinner.getSelectedItemPosition();
-                    if (midiController != null) midiController.setChannel(midiChannel);
+                    int selectedPart = Math.max(0, Math.min(7,
+                            instrumentSpinner.getSelectedItemPosition()));
+                    partMidiChannels[selectedPart] = channelSpinner.getSelectedItemPosition();
+                    if (midiController != null) midiController.setPartChannels(partMidiChannels);
+
+                    applyInstrument(selectedPart);
                     manualSustain = sustain.isChecked();
                     int sus = manualSustain ? 127 : 0;
                     NativeEngine.controlChange(64, sus);
                     pianoView.controlChange(64, sus);
+
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                            .putInt(KEY_MIDI_CHANNEL, midiChannel)
+                            .putInt(KEY_PART_MIDI_PREFIX + selectedPart, partMidiChannels[selectedPart])
                             .putBoolean(KEY_MANUAL_SUSTAIN, manualSustain).apply();
                 })
                 .setNegativeButton("CANCEL", null).show();
@@ -506,33 +528,61 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         if (videoLayer != null) videoLayer.resumeFromLifecycle();
     }
 
+    private void panicAllParts() {
+        for (int part=0; part<8; part++) NativeEngine.controlChangePart(part, 123, 0);
+    }
+
     @Override protected void onPause() {
         if (pianoView != null) pianoView.panicAuditionKeyboard();
         if (videoLayer != null) videoLayer.pauseForLifecycle();
-        NativeEngine.controlChange(123, 0);
+        panicAllParts();
         super.onPause();
     }
 
     @Override protected void onDestroy() {
         if (midiController != null) midiController.stop();
         if (videoLayer != null) videoLayer.release();
-        NativeEngine.controlChange(123, 0);
+        panicAllParts();
         NativeEngine.stop();
         super.onDestroy();
     }
 
-    @Override public void onNoteOn(int note, int velocity) { runOnUiThread(() -> pianoView.noteOn(note, velocity)); }
-    @Override public void onNoteOff(int note, int velocity) { runOnUiThread(() -> pianoView.noteOff(note)); }
-    @Override public void onPolyPressure(int note, int value) { runOnUiThread(() -> pianoView.polyPressure(note, value)); }
-    @Override public void onChannelPressure(int value) { runOnUiThread(() -> pianoView.setChannelPressure(value)); }
-    @Override public void onControlChange(int cc, int value) {
+    @Override public void onNoteOn(int part, int note, int velocity) {
+        if (part != instrumentMode) return;
+        runOnUiThread(() -> pianoView.noteOn(note, velocity));
+    }
+
+    @Override public void onNoteOff(int part, int note, int velocity) {
+        if (part != instrumentMode) return;
+        runOnUiThread(() -> pianoView.noteOff(note));
+    }
+
+    @Override public void onPolyPressure(int part, int note, int value) {
+        if (part != instrumentMode) return;
+        runOnUiThread(() -> pianoView.polyPressure(note, value));
+    }
+
+    @Override public void onChannelPressure(int part, int value) {
+        if (part != instrumentMode) return;
+        runOnUiThread(() -> pianoView.setChannelPressure(value));
+    }
+
+    @Override public void onControlChange(int part, int cc, int value) {
         runOnUiThread(() -> {
-            pianoView.controlChange(cc, value);
-            if (cc == 1) vibratoDepth = value;
-            else if (cc == 10) bowPressure = value;
-            else if (cc == 11) bowSpeed = value;
-            else if (cc == 74) bowPosition = value;
-            else if (cc == 20) { boostDb = Math.round(value * 6f / 127f); pianoView.setBoostDb(boostDb); }
+            final boolean selectedPart = part == instrumentMode;
+
+            if (selectedPart) {
+                pianoView.controlChange(cc, value);
+                if (cc == 1) vibratoDepth = value;
+                else if (cc == 10) bowPressure = value;
+                else if (cc == 11) bowSpeed = value;
+                else if (cc == 74) bowPosition = value;
+                else if (cc == 64) manualSustain = value >= 64;
+            }
+
+            // Shared FX bus controls are reflected in the UI regardless of
+            // which assigned part generated them.
+            if (cc == 20) { boostDb = Math.round(value * 6f / 127f); pianoView.setBoostDb(boostDb); }
             else if (cc == 21) { spaceMode = Math.round(value * 3f / 127f); pianoView.setSpaceMode(spaceMode); }
             else if (cc == 22) spaceMix = Math.round(value * 100f / 127f);
             else if (cc == 23) spaceDecay = Math.round(value * 100f / 127f);
@@ -541,12 +591,19 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             else if (cc == 26) tapeFlutter = Math.round(value * 100f / 127f);
             else if (cc == 27) tapeDrive = Math.round(value * 100f / 127f);
             else if (cc == 28) { dreamy = value >= 64; pianoView.setDreamy(dreamy); }
-            else if (cc == 64) manualSustain = value >= 64;
             else if (cc == 103) dreamX = Math.round(value * 100f / 127f);
             else if (cc == 104) dreamY = Math.round(value * 100f / 127f);
             else if (cc == 105) dreamMix = Math.round(value * 100f / 127f);
         });
     }
-    @Override public void onPitchBend(int value14) { runOnUiThread(() -> pianoView.setPitchBend(value14)); }
-    @Override public void onConnectionCountChanged(int count) { runOnUiThread(() -> pianoView.setMidiConnections(count)); }
+
+    @Override public void onPitchBend(int part, int value14) {
+        if (part != instrumentMode) return;
+        runOnUiThread(() -> pianoView.setPitchBend(value14));
+    }
+
+    @Override public void onConnectionCountChanged(int count) {
+        runOnUiThread(() -> pianoView.setMidiConnections(count));
+    }
+
 }
