@@ -107,7 +107,7 @@ echo [2/2] Building C2-C8 EPBANK1...
 %PY% "%~dp0build_fast_bank.py" "%MASTER%" -l "%~dp0FAST_CAPTURE.layout.json" -o "%BANK%"
 if errorlevel 1 (
   echo [ERROR] Bank build failed.
-  echo Confirm the render is stereo / 48000 Hz / FLAC 24-bit.
+  echo Confirm the render is stereo / 48000 Hz / FLAC 16-bit or 24-bit.
   pause
   exit /b 1
 )
