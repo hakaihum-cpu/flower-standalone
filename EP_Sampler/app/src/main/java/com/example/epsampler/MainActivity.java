@@ -12,6 +12,7 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.widget.ArrayAdapter;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
@@ -73,13 +74,15 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
     private static final String[] INSTRUMENT_NAMES = new String[] {
             "VIOLIN", "FLUTE", "SAXOPHONE", "FELT PIANO",
-            "PIANICA / ACCORDION", "XYLOPHONE", "WOOD BASS", "DRUMS"
+            "PIANICA / ACCORDION", "XYLOPHONE", "WOOD BASS", "DRUMS",
+            "EP-SAMPLE"
     };
     private static final String[] INSTRUMENT_BUTTONS = new String[] {
             "VIOLIN", "FLUTE", "SAX", "FELT",
-            "ACCORD", "XYLO", "BASS", "DRUMS"
+            "ACCORD", "XYLO", "BASS", "DRUMS", "EP"
     };
     private PianoView pianoView;
+    private ImageView epBackground;
     private PerformanceVideoLayer videoLayer;
     private PerformanceXYView performanceXYView;
     private DrumEditorView drumEditorView;
@@ -92,7 +95,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int spaceMix = 50, spaceDecay = 50;
     private int tapeWow = 50, tapeFlutter = 50, tapeDrive = 50;
     private int dreamX = 28, dreamY = 28, dreamMix = 34;
-    private final int[] partMidiChannels = new int[]{1,2,3,4,5,6,7,8};
+    private final int[] partMidiChannels = new int[]{1,2,3,4,5,6,7,8,9};
     private boolean manualSustain = false;
     private int bowPressure = 74;
     private int bowSpeed = 74;
@@ -110,8 +113,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     };
     private int drumBoostDb = 6;
     private int drumDistortion = 0;
-    private final int[] partBoostDb = new int[]{0,0,0,0,0,0,0,6};
-    private final int[] partDistortion = new int[]{0,0,0,0,0,0,0,0};
+    private final int[] partBoostDb = new int[]{0,0,0,0,0,0,0,6,0};
+    private final int[] partDistortion = new int[]{0,0,0,0,0,0,0,0,0};
     private int feltReverbMix = 28;
     private int feltReverbDecay = 58;
     private float audioBufferBursts = 0f;
@@ -119,6 +122,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         hideSystemUI();
+        epBackground = new ImageView(this);
+        epBackground.setImageResource(com.example.epsampler.R.drawable.piano_reference);
+        epBackground.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        epBackground.setBackgroundColor(android.graphics.Color.BLACK);
         videoLayer = new PerformanceVideoLayer(this);
         pianoView = new PianoView(this);
         pianoView.setPerformanceVideoLayer(videoLayer);
@@ -129,6 +136,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         drumEditorView.setListener(this);
 
         FrameLayout root = new FrameLayout(this);
+        root.addView(epBackground, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(videoLayer, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -166,7 +176,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         decayMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DECAY_MS, 120);
         sustainPct = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SUSTAIN_PCT, 90);
         releaseMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_RELEASE_MS, 300);
-        instrumentMode = Math.max(0, Math.min(7,
+        instrumentMode = Math.max(0, Math.min(8,
                 getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_INSTRUMENT, 0)));
         android.content.SharedPreferences drumPrefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         drumBoostDb = Math.max(0, Math.min(18, drumPrefs.getInt(KEY_DRUM_BOOST_DB, 6)));
@@ -207,10 +217,13 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         drumEditorView.setValues(drumParameters);
         drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
         drumEditorView.setDrumsVisible(instrumentMode == 7);
-        videoLayer.setInstrument(instrumentMode);
+        epBackground.setVisibility(instrumentMode == 8 ? View.VISIBLE : View.GONE);
+        videoLayer.setVisibility(instrumentMode == 8 ? View.GONE : View.VISIBLE);
+        if (instrumentMode < 8) videoLayer.setInstrument(instrumentMode);
 
         loadDrumSampleAssets();
         NativeEngine.start();
+        loadExistingBank();
         NativeEngine.setAudioBufferBursts(audioBufferBursts);
         NativeEngine.setBoosterStep(boosterStep);
         NativeEngine.setBoostDb(boostDb);
@@ -225,13 +238,13 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         for (int i=0; i<drumParameters.length; i++) {
             NativeEngine.setDrumParameter(i, drumParameters[i]);
         }
-        for (int part=0; part<8; part++) {
+        for (int part=0; part<partBoostDb.length; part++) {
             NativeEngine.setPartFx(part, partBoostDb[part], partDistortion[part]);
         }
         NativeEngine.setDrumFx(partBoostDb[7], partDistortion[7]);
         NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
         NativeEngine.setInstrument(instrumentMode);
-        if (instrumentMode != 7) {
+        if (instrumentMode < 7) {
             NativeEngine.controlChange(10, bowPressure);
             NativeEngine.controlChange(11, bowSpeed);
             NativeEngine.controlChange(74, bowPosition);
@@ -292,17 +305,24 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         }
     }
 
+    private String epBankStatus() {
+        String ch = partMidiChannels[8] <= 0 ? "OFF" : "CH" + partMidiChannels[8];
+        return NativeEngine.isBankLoaded()
+                ? "EP-SAMPLE " + NativeEngine.bankStatus() + " " + ch
+                : "EP-SAMPLE BANK — " + ch;
+    }
+
     private void loadExistingBank() {
         String saved = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_BANK_URI, null);
         if (saved == null || saved.isEmpty()) {
-            pianoView.setBankStatus("BANK —");
+            if (instrumentMode == 8) pianoView.setBankStatus(epBankStatus());
             return;
         }
         loadBankUri(Uri.parse(saved));
     }
 
     private void loadBankUri(Uri uri) {
-        pianoView.setBankStatus("BANK LOADING…");
+        if (instrumentMode == 8) pianoView.setBankStatus("EP-SAMPLE BANK LOADING…");
         new Thread(() -> {
             boolean ok = false;
             try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "r")) {
@@ -310,7 +330,11 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             } catch (Exception ignored) {
             }
             final boolean result = ok;
-            runOnUiThread(() -> pianoView.setBankStatus(result ? NativeEngine.bankStatus() : "BANK ERROR"));
+            runOnUiThread(() -> {
+                if (instrumentMode == 8) {
+                    pianoView.setBankStatus(result ? epBankStatus() : "EP-SAMPLE BANK ERROR");
+                }
+            });
         }, "BankOpen").start();
     }
 
@@ -551,7 +575,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         instrumentSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-                int part = Math.max(0, Math.min(7, position));
+                int part = Math.max(0, Math.min(8, position));
                 channelSpinner.setSelection(partMidiChannels[part]);
             }
             @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
@@ -626,7 +650,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                     audioBufferBursts = AUDIO_BUFFER_VALUES[ai];
                     NativeEngine.setAudioBufferBursts(audioBufferBursts);
 
-                    int selectedPart = Math.max(0, Math.min(7,
+                    int selectedPart = Math.max(0, Math.min(8,
                             instrumentSpinner.getSelectedItemPosition()));
                     int newChannel = channelSpinner.getSelectedItemPosition();
                     if (newChannel != partMidiChannels[selectedPart]) {
@@ -686,24 +710,30 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             case 5: return "Mallet contact + inharmonic bar modal resonators";
             case 6: return "Plucked lossy string + upright-bass body modes";
             case 7: return "C4 Kick / C#4 Hi-hat / D4 Snare\nIndependent modal tuning: +/-12 semitones";
+            case 8: return "EPBANK1 sample engine / 8 velocity layers / 3 RR / sustain + release";
             default: return "4 independent bowed-string voices / shared violin body";
         }
     }
 
     private void applyInstrument(int mode) {
-        mode = Math.max(0, Math.min(7, mode));
+        mode = Math.max(0, Math.min(8, mode));
         if (pianoView != null) pianoView.clearForegroundForInstrumentSwitch();
 
         instrumentMode = mode;
         NativeEngine.setInstrument(instrumentMode);
 
-        if (videoLayer != null) videoLayer.setInstrument(instrumentMode);
+        if (epBackground != null) epBackground.setVisibility(instrumentMode == 8 ? View.VISIBLE : View.GONE);
+        if (videoLayer != null) {
+            videoLayer.setVisibility(instrumentMode == 8 ? View.GONE : View.VISIBLE);
+            if (instrumentMode < 8) videoLayer.setInstrument(instrumentMode);
+        }
         if (performanceXYView != null) performanceXYView.setInstrumentMode(instrumentMode);
         if (pianoView != null) {
             pianoView.setInstrumentName(
                     INSTRUMENT_NAMES[instrumentMode],
                     INSTRUMENT_BUTTONS[instrumentMode]);
             pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
+            if (instrumentMode == 8) pianoView.setBankStatus(epBankStatus());
         }
         if (drumEditorView != null) {
             drumEditorView.setValues(drumParameters);
@@ -716,6 +746,18 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     @Override public void onChooseBank() {
+        if (instrumentMode == 8) {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("application/octet-stream");
+            intent.putExtra(Intent.EXTRA_MIME_TYPES,
+                    new String[]{"application/octet-stream", "application/x-binary", "*/*"});
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+            startActivityForResult(intent, PICK_BANK);
+            return;
+        }
+
         LinearLayout root = dialogRoot();
         String[] names = modelControlNames();
 
@@ -884,7 +926,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         android.content.SharedPreferences sp = getSharedPreferences(PRESET_PREFS, MODE_PRIVATE);
         if (!sp.getBoolean(p + "valid", false)) return false;
 
-        instrumentMode = Math.max(0, Math.min(7, sp.getInt(p + "instrument", instrumentMode)));
+        instrumentMode = Math.max(0, Math.min(8, sp.getInt(p + "instrument", instrumentMode)));
         manualSustain = sp.getBoolean(p + "manual_sustain", manualSustain);
         boostDb = Math.max(0, Math.min(6, sp.getInt(p + "boost_db", boostDb)));
         boosterStep = Math.min(3, Math.round(boostDb / 2f));
@@ -941,13 +983,13 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.setDreamy(dreamy);
         NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
         for (int i=0; i<drumParameters.length; i++) NativeEngine.setDrumParameter(i, drumParameters[i]);
-        for (int part=0; part<8; part++) {
+        for (int part=0; part<partBoostDb.length; part++) {
             NativeEngine.setPartFx(part, partBoostDb[part], partDistortion[part]);
         }
         NativeEngine.setDrumFx(partBoostDb[7], partDistortion[7]);
         NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
 
-        if (instrumentMode != 7) {
+        if (instrumentMode < 7) {
             NativeEngine.controlChange(10, bowPressure);
             NativeEngine.controlChange(11, bowSpeed);
             NativeEngine.controlChange(74, bowPosition);
@@ -1031,7 +1073,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     private void panicAllParts() {
-        for (int part=0; part<8; part++) NativeEngine.controlChangePart(part, 123, 0);
+        for (int part=0; part<partMidiChannels.length; part++) NativeEngine.controlChangePart(part, 123, 0);
     }
 
     @Override protected void onPause() {
@@ -1086,12 +1128,14 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                         drumParameters[9] = value;
                     } else if (cc == 64) manualSustain = value >= 64;
                     if (drumEditorView != null) drumEditorView.setValues(drumParameters);
-                } else {
+                } else if (instrumentMode < 7) {
                     if (cc == 1) vibratoDepth = value;
                     else if (cc == 10) bowPressure = value;
                     else if (cc == 11) bowSpeed = value;
                     else if (cc == 74) bowPosition = value;
                     else if (cc == 64) manualSustain = value >= 64;
+                } else if (instrumentMode == 8 && cc == 64) {
+                    manualSustain = value >= 64;
                 }
             }
 
