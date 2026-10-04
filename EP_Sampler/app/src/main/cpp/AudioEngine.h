@@ -41,6 +41,7 @@ public:
     void setAdsr(int attackMs, int decayMs, int sustainPct, int releaseMs);
     void setInstrument(int instrument);
     void setDrumParameter(int parameter, int value);
+    void setDrumFx(int boostDb, int distortion);
     bool loadDrumSample(int slot, const uint8_t* data, size_t size);
     void noteOnPart(int part, int note, int velocity);
     void noteOffPart(int part, int note, int velocity);
@@ -61,7 +62,7 @@ private:
             DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS,
             TAPE, TAPE_PARAMS, DREAMY_PARAMS, ADSR, INSTRUMENT,
             PART_NOTE_ON, PART_NOTE_OFF, PART_POLY_AT, PART_CH_AT, PART_CC, PART_PITCH,
-            DRUM_PARAM
+            DRUM_PARAM, DRUM_FX
         } type;
         int a=0,b=0,c=0,d=0;
     };
@@ -114,6 +115,8 @@ private:
     float spaceMix_=0.50f, spaceDecay_=0.50f;
     float tapeWow_=0.50f, tapeFlutter_=0.50f, tapeDrive_=0.50f;
     float dreamyMix_=0.34f;
+    int drumBoostDb_=6;
+    int drumDistortion_=0;
 
     AAudioStream* stream_=nullptr;
     int sampleRate_=48000;
