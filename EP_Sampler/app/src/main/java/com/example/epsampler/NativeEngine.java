@@ -28,6 +28,7 @@ public final class NativeEngine {
     public static native void setAdsr(int attackMs, int decayMs, int sustainPct, int releaseMs);
     public static native void setInstrument(int instrument);
     public static native void setDrumParameter(int parameter, int value);
+    public static native boolean loadDrumSample(int slot, byte[] wavBytes);
     public static native void noteOnPart(int part, int note, int velocity);
     public static native void noteOffPart(int part, int note, int velocity);
     public static native void polyPressurePart(int part, int note, int pressure);
