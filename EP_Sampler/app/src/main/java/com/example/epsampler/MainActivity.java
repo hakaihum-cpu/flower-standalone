@@ -124,6 +124,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.setTape(tape);
         pianoView.setDreamy(dreamy);
         pianoView.setInstrumentName(INSTRUMENT_NAMES[instrumentMode], INSTRUMENT_BUTTONS[instrumentMode]);
+        pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
         videoLayer.setInstrument(instrumentMode);
 
         NativeEngine.start();
@@ -450,6 +451,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             pianoView.setInstrumentName(
                     INSTRUMENT_NAMES[instrumentMode],
                     INSTRUMENT_BUTTONS[instrumentMode]);
+            pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
         }
 
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
