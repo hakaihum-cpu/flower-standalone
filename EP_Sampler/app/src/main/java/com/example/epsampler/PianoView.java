@@ -34,7 +34,7 @@ public final class PianoView extends View {
 
     private ActionListener actionListener;
     private final Bitmap background;
-    private final PerformanceVideoBackground videoBackground;
+    private PerformanceVideoLayer performanceVideoLayer;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final boolean[] held = new boolean[128];
@@ -71,17 +71,17 @@ public final class PianoView extends View {
     PianoView(Context context) {
         super(context);
         setKeepScreenOn(true);
-        setBackgroundColor(Color.BLACK);
+        setBackgroundColor(Color.TRANSPARENT);
         background = BitmapFactory.decodeResource(getResources(), R.drawable.piano_reference);
-        videoBackground = new PerformanceVideoBackground(context, this);
         text.setTypeface(android.graphics.Typeface.create("sans", android.graphics.Typeface.NORMAL));
         for (int i = 0; i < 5; i++) { left[i] = new Finger(); right[i] = new Finger(); }
     }
 
     void setActionListener(ActionListener l) { actionListener = l; }
+    void setPerformanceVideoLayer(PerformanceVideoLayer layer) { performanceVideoLayer = layer; }
     void setDreamy(boolean on) {
         dreamy = on;
-        videoBackground.setDreamy(on);
+        if (performanceVideoLayer != null) performanceVideoLayer.setDreamy(on);
         invalidate();
     }
     void setTape(boolean on) { tape = on; invalidate(); }
@@ -104,13 +104,13 @@ public final class PianoView extends View {
     void noteOn(int note, int velocity) {
         if (note < 0 || note > 127) return;
         held[note] = true; velocities[note] = clamp7(velocity);
-        videoBackground.noteOn(note, velocity);
+        if (performanceVideoLayer != null) performanceVideoLayer.noteOn(note, velocity);
         invalidate();
     }
     void noteOff(int note) {
         if (note < 0 || note > 127) return;
         held[note] = false; polyPressure[note] = 0;
-        videoBackground.noteOff(note);
+        if (performanceVideoLayer != null) performanceVideoLayer.noteOff(note);
         invalidate();
     }
     void polyPressure(int note, int value) {
@@ -126,7 +126,9 @@ public final class PianoView extends View {
         else if (cc == 74) cc74 = clamp7(value);
         else if (cc == 103) cc103 = clamp7(value);
         else if (cc == 104) cc104 = clamp7(value);
-        if (cc == 103 || cc == 104) videoBackground.setDreamyXY(cc103, cc104);
+        if ((cc == 103 || cc == 104) && performanceVideoLayer != null) {
+            performanceVideoLayer.setDreamyXY(cc103, cc104);
+        }
         invalidate();
     }
 
@@ -135,17 +137,13 @@ public final class PianoView extends View {
     @Override protected void onDraw(Canvas c) {
         super.onDraw(c);
 
-        boolean videoDrawn = videoBackground.draw(
-                c, new RectF(0f, 0f, getWidth(), getHeight()));
-
-        if (!videoDrawn) {
+        boolean videoReady = performanceVideoLayer != null && performanceVideoLayer.isVideoReady();
+        if (!videoReady) {
             float scale = Math.min(getWidth() / SRC_W, getHeight() / SRC_H);
             float dw = SRC_W * scale, dh = SRC_H * scale;
             float leftPad = (getWidth() - dw) * 0.5f;
             float topPad = (getHeight() - dh) * 0.5f;
             imageRect.set(leftPad, topPad, leftPad + dw, topPad + dh);
-            // Keep the legacy image only as a startup/failure fallback while
-            // the performance video asset is being decoded.
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(Color.WHITE);
             paint.setAlpha(255);
@@ -507,14 +505,13 @@ public final class PianoView extends View {
         releaseAllAuditionNotes();
         java.util.Arrays.fill(held, false);
         java.util.Arrays.fill(polyPressure, 0);
-        videoBackground.allNotesOff();
+        if (performanceVideoLayer != null) performanceVideoLayer.allNotesOff();
         invalidate();
     }
 
     @Override protected void onDetachedFromWindow() {
         panicAuditionKeyboard();
         NativeEngine.controlChange(123, 0);
-        videoBackground.release();
         super.onDetachedFromWindow();
     }
 
