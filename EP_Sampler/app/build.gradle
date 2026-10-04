@@ -10,8 +10,8 @@ android {
         applicationId 'com.example.epmodel'
         minSdk 26
         targetSdk 35
-        versionCode 21
-        versionName '1.11-ui-front-fix'
+        versionCode 22
+        versionName '1.12-sample-key-animation'
 
         externalNativeBuild {
             cmake {
