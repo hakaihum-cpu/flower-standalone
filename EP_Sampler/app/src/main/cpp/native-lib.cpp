@@ -28,3 +28,5 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setTap
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setDreamyParameters(JNIEnv*,jclass,jint x,jint y,jint mix){AudioEngine::instance().setDreamyParameters(x,y,mix);}
 
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setAdsr(JNIEnv*,jclass,jint a,jint d,jint s,jint r){AudioEngine::instance().setAdsr(a,d,s,r);}
+
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setInstrument(JNIEnv*,jclass,jint instrument){AudioEngine::instance().setInstrument(instrument);}
