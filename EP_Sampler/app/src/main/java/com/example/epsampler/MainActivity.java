@@ -42,6 +42,16 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_DECAY_MS = "decay_ms";
     private static final String KEY_SUSTAIN_PCT = "sustain_pct";
     private static final String KEY_RELEASE_MS = "release_ms";
+    private static final String KEY_INSTRUMENT = "instrument_mode";
+
+    private static final String[] INSTRUMENT_NAMES = new String[] {
+            "VIOLIN", "FLUTE", "SAX", "FELT PIANO",
+            "ACCORDION", "XYLOPHONE", "WOOD BASS", "DRUMS"
+    };
+    private static final String[] INSTRUMENT_BUTTONS = new String[] {
+            "VIOLIN", "FLUTE", "SAX", "FELT",
+            "ACCORD", "XYLO", "BASS", "DRUMS"
+    };
     private PianoView pianoView;
     private PerformanceVideoLayer videoLayer;
     private MidiController midiController;
@@ -63,6 +73,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int decayMs = 120;
     private int sustainPct = 90;
     private int releaseMs = 300;
+    private int instrumentMode = 0;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -100,12 +111,16 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         decayMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DECAY_MS, 120);
         sustainPct = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SUSTAIN_PCT, 90);
         releaseMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_RELEASE_MS, 300);
+        instrumentMode = Math.max(0, Math.min(7,
+                getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_INSTRUMENT, 0)));
 
         pianoView.setBoosterStep(boosterStep);
         pianoView.setBoostDb(boostDb);
         pianoView.setSpaceMode(spaceMode);
         pianoView.setTape(tape);
         pianoView.setDreamy(dreamy);
+        pianoView.setInstrumentName(INSTRUMENT_NAMES[instrumentMode], INSTRUMENT_BUTTONS[instrumentMode]);
+        videoLayer.setInstrument(instrumentMode);
 
         NativeEngine.start();
         NativeEngine.setBoosterStep(boosterStep);
@@ -123,11 +138,12 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.controlChange(74, bowPosition);
         NativeEngine.controlChange(1, vibratoDepth);
         NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
+        NativeEngine.setInstrument(instrumentMode);
+        NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
         pianoView.controlChange(10, bowPressure);
         pianoView.controlChange(11, bowSpeed);
         pianoView.controlChange(74, bowPosition);
         pianoView.controlChange(1, vibratoDepth);
-        pianoView.setBankStatus("MODEL READY");
         if (manualSustain) {
             NativeEngine.controlChange(64, 127);
             pianoView.controlChange(64, 127);
@@ -325,6 +341,22 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         chLabel.setTextSize(16f);
         root.addView(chLabel);
 
+        TextView instrumentLabel = new TextView(this);
+        instrumentLabel.setText("INSTRUMENT");
+        instrumentLabel.setTextSize(16f);
+        root.addView(instrumentLabel);
+
+        Spinner instrumentSpinner = new Spinner(this);
+        instrumentSpinner.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, INSTRUMENT_NAMES));
+        instrumentSpinner.setSelection(instrumentMode);
+        root.addView(instrumentSpinner);
+
+        TextView midiLabel = new TextView(this);
+        midiLabel.setText("MIDI CHANNEL");
+        midiLabel.setTextSize(16f);
+        root.addView(midiLabel);
+
         Spinner spinner = new Spinner(this);
         String[] channels = new String[17];
         channels[0] = "OMNI";
@@ -350,6 +382,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         new AlertDialog.Builder(this).setTitle("CONFIG").setView(root)
                 .setPositiveButton("APPLY", (dialog, which) -> {
+                    applyInstrument(instrumentSpinner.getSelectedItemPosition());
                     midiChannel = spinner.getSelectedItemPosition();
                     if (midiController != null) midiController.setChannel(midiChannel);
                     manualSustain = sustain.isChecked();
@@ -363,24 +396,71 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 .setNegativeButton("CANCEL", null).show();
     }
 
+    private String[] modelControlNames() {
+        switch (instrumentMode) {
+            case 1: return new String[]{"EMBOUCHURE", "BREATH", "JET COLOR", "VIBRATO"};
+            case 2: return new String[]{"REED PRESSURE", "BREATH", "BRIGHTNESS", "VIBRATO"};
+            case 3: return new String[]{"HAMMER SOFTNESS", "STRIKE", "TONE", "MODULATION"};
+            case 4: return new String[]{"REED PRESSURE", "BELLOWS", "MUSETTE", "TREMOLO"};
+            case 5: return new String[]{"MALLET HARDNESS", "STRIKE", "TONE", "MODULATION"};
+            case 6: return new String[]{"STRING DAMP", "PLUCK FORCE", "PLUCK POSITION", "VIBRATO"};
+            case 7: return new String[]{"TENSION", "STRIKE", "TONE", "NOISE/MOD"};
+            default: return new String[]{"BOW PRESSURE", "BOW SPEED", "BOW POSITION", "VIBRATO"};
+        }
+    }
+
+    private String modelDescription() {
+        switch (instrumentMode) {
+            case 1: return "Air-jet / breath model MVP";
+            case 2: return "Nonlinear reed / bore model MVP";
+            case 3: return "Felt hammer + modal string model MVP";
+            case 4: return "Free-reed / bellows model MVP";
+            case 5: return "Mallet + inharmonic modal bar model MVP";
+            case 6: return "Plucked upright-bass string model MVP";
+            case 7: return "Kick / snare / hi-hat / tom model MVP";
+            default: return "4 independent bowed-string voices / shared violin body";
+        }
+    }
+
+    private void applyInstrument(int mode) {
+        mode = Math.max(0, Math.min(7, mode));
+        if (pianoView != null) pianoView.panicAuditionKeyboard();
+
+        instrumentMode = mode;
+        NativeEngine.setInstrument(instrumentMode);
+        NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
+
+        if (videoLayer != null) videoLayer.setInstrument(instrumentMode);
+        if (pianoView != null) {
+            pianoView.setInstrumentName(
+                    INSTRUMENT_NAMES[instrumentMode],
+                    INSTRUMENT_BUTTONS[instrumentMode]);
+        }
+
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putInt(KEY_INSTRUMENT, instrumentMode).apply();
+    }
+
     @Override public void onChooseBank() {
         LinearLayout root = dialogRoot();
-        addSlider(root, "BOW PRESSURE", 127, bowPressure, v -> {
+        String[] names = modelControlNames();
+
+        addSlider(root, names[0], 127, bowPressure, v -> {
             bowPressure = v;
             NativeEngine.controlChange(10, v);
             pianoView.controlChange(10, v);
         });
-        addSlider(root, "BOW SPEED", 127, bowSpeed, v -> {
+        addSlider(root, names[1], 127, bowSpeed, v -> {
             bowSpeed = v;
             NativeEngine.controlChange(11, v);
             pianoView.controlChange(11, v);
         });
-        addSlider(root, "BOW POSITION", 127, bowPosition, v -> {
+        addSlider(root, names[2], 127, bowPosition, v -> {
             bowPosition = v;
             NativeEngine.controlChange(74, v);
             pianoView.controlChange(74, v);
         });
-        addSlider(root, "VIBRATO", 127, vibratoDepth, v -> {
+        addSlider(root, names[3], 127, vibratoDepth, v -> {
             vibratoDepth = v;
             NativeEngine.controlChange(1, v);
             pianoView.controlChange(1, v);
@@ -406,8 +486,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_RELEASE_MS, v).apply();
         });
         new AlertDialog.Builder(this)
-                .setTitle("VIOLIN MODEL")
-                .setMessage("4 independent physical-model voices / G3-C8\nShared violin body; no sample bank.")
+                .setTitle(INSTRUMENT_NAMES[instrumentMode] + " MODEL")
+                .setMessage(modelDescription())
                 .setView(root)
                 .setPositiveButton("CLOSE", null)
                 .show();
