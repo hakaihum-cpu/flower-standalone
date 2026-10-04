@@ -39,44 +39,45 @@ void InstrumentModels::setType(int type) {
 
     switch (type_) {
         case FLUTE:
-            attackMs_ = 28.0f; decayMs_ = 120.0f; sustain_ = 0.92f; releaseMs_ = 180.0f;
+            attackMs_ = 22.0f; decayMs_ = 90.0f; sustain_ = 0.96f; releaseMs_ = 160.0f;
             break;
         case SAX:
-            attackMs_ = 18.0f; decayMs_ = 95.0f; sustain_ = 0.94f; releaseMs_ = 220.0f;
+            attackMs_ = 16.0f; decayMs_ = 80.0f; sustain_ = 0.97f; releaseMs_ = 210.0f;
             break;
         case FELT_PIANO:
-            attackMs_ = 3.0f; decayMs_ = 820.0f; sustain_ = 0.18f; releaseMs_ = 950.0f;
+            attackMs_ = 1.0f; decayMs_ = 5000.0f; sustain_ = 1.0f; releaseMs_ = 900.0f;
             break;
         case ACCORDION:
-            attackMs_ = 24.0f; decayMs_ = 90.0f; sustain_ = 0.96f; releaseMs_ = 240.0f;
+            attackMs_ = 20.0f; decayMs_ = 80.0f; sustain_ = 0.98f; releaseMs_ = 220.0f;
             break;
         case XYLOPHONE:
-            attackMs_ = 1.0f; decayMs_ = 420.0f; sustain_ = 0.0f; releaseMs_ = 180.0f;
+            attackMs_ = 1.0f; decayMs_ = 5000.0f; sustain_ = 1.0f; releaseMs_ = 220.0f;
             break;
         case WOOD_BASS:
-            attackMs_ = 2.0f; decayMs_ = 520.0f; sustain_ = 0.38f; releaseMs_ = 520.0f;
+            attackMs_ = 1.0f; decayMs_ = 2200.0f; sustain_ = 0.92f; releaseMs_ = 520.0f;
             break;
         case DRUMS:
-            attackMs_ = 1.0f; decayMs_ = 260.0f; sustain_ = 0.0f; releaseMs_ = 120.0f;
+            attackMs_ = 1.0f; decayMs_ = 5000.0f; sustain_ = 1.0f; releaseMs_ = 120.0f;
             break;
     }
 }
 
 int InstrumentModels::allocateVoice(int note) const {
-    for (int i = 0; i < kVoices; ++i) {
+    for (int i=0; i<kVoices; ++i) {
         if (voices_[i].active && voices_[i].note == note) return i;
     }
-    for (int i = 0; i < kVoices; ++i) {
+    for (int i=0; i<kVoices; ++i) {
         if (!voices_[i].active) return i;
     }
 
     int candidate = -1;
     float quietest = 10.0f;
     uint64_t oldest = 0;
-    for (int i = 0; i < kVoices; ++i) {
+    for (int i=0; i<kVoices; ++i) {
         const auto& v = voices_[i];
         if (!v.keyDown && !v.pendingRelease) {
-            if (v.env < quietest || (std::fabs(v.env - quietest) < 0.0001f && v.age > oldest)) {
+            if (v.env < quietest ||
+                (std::fabs(v.env - quietest) < 0.0001f && v.age > oldest)) {
                 quietest = v.env;
                 oldest = v.age;
                 candidate = i;
@@ -87,7 +88,7 @@ int InstrumentModels::allocateVoice(int note) const {
 
     candidate = 0;
     oldest = voices_[0].age;
-    for (int i = 1; i < kVoices; ++i) {
+    for (int i=1; i<kVoices; ++i) {
         if (voices_[i].age > oldest) {
             oldest = voices_[i].age;
             candidate = i;
@@ -107,12 +108,13 @@ void InstrumentModels::noteOn(int note, int velocity) {
     v.note = note;
     v.velocity = std::max(1, std::min(127, velocity));
     v.frequency = midiToHz(note);
-    v.targetFrequency = v.frequency;
     v.envStage = 1;
     v.rng = 0x9E3779B9u ^ uint32_t(note * 2654435761u) ^ uint32_t(velocity * 2246822519u);
 
-    initialiseModes(v);
-    if (type_ == WOOD_BASS) initialiseBassDelay(v);
+    if (type_ == FELT_PIANO) initialisePiano(v);
+    else if (type_ == XYLOPHONE) initialiseXylophone(v);
+    else if (type_ == WOOD_BASS) initialiseWoodBass(v);
+    else if (type_ == DRUMS) initialiseDrums(v);
 }
 
 void InstrumentModels::noteOff(int note, bool sustainDown) {
@@ -190,7 +192,11 @@ float InstrumentModels::envelope(Voice& v) {
             break;
         case 4:
             v.env -= rateForMs(releaseMs_);
-            if (v.env <= 0.0f) { v.env = 0.0f; v.envStage = 0; v.active = false; }
+            if (v.env <= 0.0f) {
+                v.env = 0.0f;
+                v.envStage = 0;
+                v.active = false;
+            }
             break;
         default:
             v.env = 0.0f;
@@ -201,179 +207,398 @@ float InstrumentModels::envelope(Voice& v) {
 
 float InstrumentModels::noise(Voice& v) {
     v.rng = v.rng * 1664525u + 1013904223u;
-    return (float(int32_t(v.rng >> 8)) / 8388608.0f) - 1.0f;
+    return (float(v.rng >> 8) / 8388608.0f) - 1.0f;
 }
 
-void InstrumentModels::initialiseModes(Voice& v) {
-    static constexpr float pianoRatios[kModes] = {1.0f, 2.002f, 3.008f, 4.018f, 5.032f, 6.052f, 7.075f, 8.105f};
-    static constexpr float xyloRatios[kModes] = {1.0f, 3.99f, 9.02f, 16.1f, 25.2f, 36.4f, 49.0f, 64.0f};
+float InstrumentModels::readDelay(const std::array<float,kDelay>& buffer,
+                                  int writeIndex,
+                                  float delaySamples) {
+    delaySamples = clampf(delaySamples, 1.0f, float(kDelay - 3));
+    float read = float(writeIndex) - delaySamples;
+    while (read < 0.0f) read += kDelay;
 
-    for (int i = 0; i < kModes; ++i) {
-        v.modePhase[i] = 0.0;
-        if (type_ == XYLOPHONE) {
-            v.modeAmp[i] = (i == 0 ? 1.0f : (0.42f / (1.0f + i * 0.48f))) *
-                           (1.0f + control1_ * 0.22f);
-            v.aux1 += xyloRatios[i] * 0.0f;
-        } else {
-            v.modeAmp[i] = (i == 0 ? 1.0f : 0.46f / (1.0f + i * 0.60f));
-            v.aux1 += pianoRatios[i] * 0.0f;
-        }
-    }
+    const int i0 = int(read) % kDelay;
+    const int i1 = (i0 + 1) % kDelay;
+    const float frac = read - std::floor(read);
+    return buffer[i0] + (buffer[i1] - buffer[i0]) * frac;
 }
 
-void InstrumentModels::initialiseBassDelay(Voice& v) {
-    const double freq = std::max(28.0, v.frequency);
-    v.delayLength = std::max(8, std::min(kDelay - 2, int(sampleRate_ / freq)));
-    for (int i = 0; i < v.delayLength; ++i) {
-        float n = noise(v);
-        float shaped = n * (0.55f + 0.45f * control2_);
-        v.delay[i] = shaped * (0.20f + 0.30f * (v.velocity / 127.0f));
-    }
-    v.delayWrite = 0;
-    v.delayFilter = 0.0f;
+void InstrumentModels::writeDelay(std::array<float,kDelay>& buffer,
+                                  int& writeIndex,
+                                  float value) {
+    buffer[writeIndex] = value;
+    writeIndex++;
+    if (writeIndex >= kDelay) writeIndex = 0;
 }
 
-float InstrumentModels::processFlute(Voice& v, double freq) {
-    const float pressure = (v.pressure > 0 ? v.pressure : channelPressure_) / 127.0f;
-    const float breath = clampf(0.18f + 0.72f * control2_ + 0.22f * pressure, 0.0f, 1.2f);
-    const float edge = 0.25f + 0.70f * control1_;
-    const float brightness = 0.12f + 0.62f * control3_;
+void InstrumentModels::setupMode(Voice& v,
+                                 int index,
+                                 double frequency,
+                                 float decaySeconds,
+                                 float gain) {
+    if (index < 0 || index >= kModes) return;
+    frequency = std::max(10.0, std::min(sampleRate_ * 0.46, frequency));
+    decaySeconds = std::max(0.015f, decaySeconds);
 
-    v.phase = wrapPhase(v.phase + 2.0 * kPi * freq / sampleRate_);
-    v.phase2 = wrapPhase(v.phase2 + 2.0 * kPi * freq * 2.0 / sampleRate_);
-    v.phase3 = wrapPhase(v.phase3 + 2.0 * kPi * freq * 3.0 / sampleRate_);
-
-    float n = noise(v);
-    v.noiseState += (n - v.noiseState) * (0.025f + brightness * 0.08f);
-    float jet = std::sin(v.phase) + brightness * 0.22f * std::sin(v.phase2)
-              + brightness * 0.07f * std::sin(v.phase3);
-    jet = std::tanh(jet * (0.85f + edge * 0.75f));
-    return 0.48f * breath * jet + 0.055f * breath * v.noiseState;
+    const float r = std::exp(-1.0f / (decaySeconds * float(sampleRate_)));
+    const float w = float(2.0 * kPi * frequency / sampleRate_);
+    v.modeA1[index] = 2.0f * r * std::cos(w);
+    v.modeA2[index] = -(r * r);
+    v.modeGain[index] = gain;
+    v.modeY1[index] = 0.0f;
+    v.modeY2[index] = 0.0f;
 }
 
-float InstrumentModels::processSax(Voice& v, double freq) {
-    const float pressure = (v.pressure > 0 ? v.pressure : channelPressure_) / 127.0f;
-    const float breath = clampf(0.18f + 0.78f * control2_ + 0.20f * pressure, 0.0f, 1.25f);
-    const float reed = 0.60f + 2.8f * control1_;
-    const float brightness = 0.20f + 0.80f * control3_;
-
-    v.phase = wrapPhase(v.phase + 2.0 * kPi * freq / sampleRate_);
-    v.phase2 = wrapPhase(v.phase2 + 2.0 * kPi * freq * 2.0 / sampleRate_);
-    v.phase3 = wrapPhase(v.phase3 + 2.0 * kPi * freq * 3.0 / sampleRate_);
-
-    float bore = std::sin(v.phase)
-               + brightness * 0.42f * std::sin(v.phase2)
-               + brightness * 0.20f * std::sin(v.phase3);
-    float reedWave = std::tanh(bore * reed);
-    float n = noise(v);
-    v.noiseState += (n - v.noiseState) * 0.09f;
-    return 0.42f * breath * reedWave + 0.035f * breath * v.noiseState;
+float InstrumentModels::tickMode(Voice& v, int index, float excitation) {
+    const float y = v.modeA1[index] * v.modeY1[index]
+                  + v.modeA2[index] * v.modeY2[index]
+                  + v.modeGain[index] * excitation;
+    v.modeY2[index] = v.modeY1[index];
+    v.modeY1[index] = y;
+    return y;
 }
 
-float InstrumentModels::processFeltPiano(Voice& v, double freq) {
-    static constexpr double ratios[kModes] = {1.0, 2.002, 3.008, 4.018, 5.032, 6.052, 7.075, 8.105};
+void InstrumentModels::initialisePiano(Voice& v) {
+    const float noteNorm = clampf((v.note - 21) / 87.0f, 0.0f, 1.0f);
+    const float inharmonicity = 0.00012f + 0.00135f * noteNorm * noteNorm;
     const float softness = 1.0f - control1_;
-    const float tone = 0.20f + 0.80f * control3_;
-    float sum = 0.0f;
+    const float hammerPos = 0.11f + 0.16f * control3_;
 
-    for (int i = 0; i < kModes; ++i) {
-        double f = freq * ratios[i];
-        v.modePhase[i] = wrapPhase(v.modePhase[i] + 2.0 * kPi * f / sampleRate_);
-        const float highDamp = std::exp(-float(i) * (0.22f + softness * 0.55f));
-        const float ageSec = float(v.age) / float(sampleRate_);
-        const float decay = std::exp(-ageSec * (0.24f + i * (0.18f + softness * 0.16f)));
-        sum += std::sin(v.modePhase[i]) * v.modeAmp[i] * highDamp * decay;
+    for (int i=0; i<kModes; ++i) {
+        const int n = i + 1;
+        double partial = v.frequency * n *
+                std::sqrt(1.0 + inharmonicity * n * n);
+
+        // Three-string beating is approximated by tiny alternating detunes in
+        // the upper scale while preserving the stiff-string modal law.
+        if (v.note >= 48) {
+            const float detune = ((i % 3) - 1) * (0.00025f + 0.00045f * noteNorm);
+            partial *= (1.0 + detune);
+        }
+
+        const float positionCoupling = std::fabs(std::sin(float(kPi) * n * hammerPos));
+        const float spectral = std::exp(-i * (0.18f + softness * 0.34f));
+        const float decay = std::max(0.22f, 5.5f / (1.0f + i * (0.55f + 0.28f * noteNorm)));
+        setupMode(v, i, partial, decay, 0.0035f * positionCoupling * spectral);
     }
-
-    float n = noise(v);
-    v.noiseState += (n - v.noiseState) * 0.18f;
-    const float hammer = std::exp(-float(v.age) / float(sampleRate_) * 42.0f) *
-                         v.noiseState * (0.035f + 0.10f * tone);
-    const float strike = 0.72f + 0.48f * control2_;
-    return sum * (0.20f + 0.08f * control2_) * strike + hammer * strike;
 }
 
-float InstrumentModels::processAccordion(Voice& v, double freq) {
-    const float pressure = (v.pressure > 0 ? v.pressure : channelPressure_) / 127.0f;
-    const float bellows = clampf(0.20f + 0.76f * control2_ + 0.18f * pressure, 0.0f, 1.2f);
-    const float musette = 0.0015f + 0.009f * control3_;
-
-    v.phase = wrapPhase(v.phase + 2.0 * kPi * freq * (1.0 - musette) / sampleRate_);
-    v.phase2 = wrapPhase(v.phase2 + 2.0 * kPi * freq * (1.0 + musette) / sampleRate_);
-    v.phase3 = wrapPhase(v.phase3 + 2.0 * kPi * freq / sampleRate_);
-
-    auto reed = [](double p) {
-        return float(std::sin(p) + 0.33 * std::sin(2.0 * p) + 0.15 * std::sin(3.0 * p));
+void InstrumentModels::initialiseXylophone(Voice& v) {
+    // Free-free bar modes, nudged toward the deliberately tuned first modes
+    // of a xylophone bar. Higher modes remain strongly inharmonic.
+    static constexpr float ratios[kModes] = {
+        1.000f, 3.000f, 5.88f, 8.93f, 13.34f, 18.65f,
+        24.84f, 31.91f, 39.87f, 48.73f, 58.48f, 69.13f
     };
-    float body = reed(v.phase) + reed(v.phase2) + 0.55f * reed(v.phase3);
-    return body * bellows * 0.18f;
-}
 
-float InstrumentModels::processXylophone(Voice& v, double freq) {
-    static constexpr double ratios[kModes] = {1.0, 3.99, 9.02, 16.1, 25.2, 36.4, 49.0, 64.0};
-    float sum = 0.0f;
+    const float strikePos = 0.12f + 0.30f * control3_;
     const float hardness = control1_;
-    const float ageSec = float(v.age) / float(sampleRate_);
 
-    for (int i = 0; i < kModes; ++i) {
-        const double f = freq * ratios[i];
-        if (f > sampleRate_ * 0.45) continue;
-        v.modePhase[i] = wrapPhase(v.modePhase[i] + 2.0 * kPi * f / sampleRate_);
-        const float decayRate = 2.4f + i * (0.72f + 0.85f * (1.0f - control3_));
-        const float decay = std::exp(-ageSec * decayRate);
-        const float hardBoost = 1.0f + hardness * i * 0.12f;
-        sum += std::sin(v.modePhase[i]) * v.modeAmp[i] * decay * hardBoost;
+    for (int i=0; i<kModes; ++i) {
+        const double f = v.frequency * ratios[i];
+        const float nodeWeight =
+                std::fabs(std::sin(float(kPi) * (i + 1) * strikePos));
+        const float hardBoost = std::pow(0.54f + 0.75f * hardness, float(i) * 0.34f);
+        const float decay = std::max(0.035f, 1.75f / (1.0f + i * 0.52f));
+        setupMode(v, i, f, decay,
+                  0.010f * nodeWeight * hardBoost / (1.0f + 0.18f * i));
     }
-    const float strike = 0.65f + 0.70f * control2_;
-    return sum * 0.30f * strike;
 }
 
-float InstrumentModels::processWoodBass(Voice& v, double) {
-    if (v.delayLength < 2) return 0.0f;
-    const int next = (v.delayWrite + 1) % v.delayLength;
-    const float a = v.delay[v.delayWrite];
-    const float b = v.delay[next];
+void InstrumentModels::initialiseWoodBass(Voice& v) {
+    const double freq = std::max(28.0, v.frequency);
+    v.delayLengthA = std::max(8, std::min(kDelay - 2, int(sampleRate_ / freq)));
+    v.writeA = 0;
 
-    const float damping = 0.985f - 0.035f * control1_;
-    const float filtered = (a + b) * 0.5f * damping;
-    v.delayFilter += (filtered - v.delayFilter) * (0.35f + control3_ * 0.45f);
-    v.delay[v.delayWrite] = v.delayFilter;
-    v.delayWrite = next;
+    // A plucked ideal string starts from a triangular displacement whose apex
+    // is the pluck position, rather than from white noise.
+    const float pluckPos = 0.08f + 0.42f * control3_;
+    const float force = (0.22f + 0.55f * control2_) *
+                        (0.35f + 0.65f * (v.velocity / 127.0f));
 
-    const float body = a + 0.18f * std::sin(v.phase);
-    v.phase = wrapPhase(v.phase + 2.0 * kPi * v.frequency / sampleRate_);
-    return body * 0.72f;
+    float mean = 0.0f;
+    for (int i=0; i<v.delayLengthA; ++i) {
+        const float x = i / float(std::max(1, v.delayLengthA - 1));
+        float displacement;
+        if (x <= pluckPos) displacement = x / std::max(0.01f, pluckPos);
+        else displacement = (1.0f - x) / std::max(0.01f, 1.0f - pluckPos);
+        displacement = displacement * 2.0f - 1.0f;
+        v.delayA[i] = displacement * force;
+        mean += v.delayA[i];
+    }
+    mean /= float(v.delayLengthA);
+    for (int i=0; i<v.delayLengthA; ++i) v.delayA[i] -= mean;
+
+    // Upright-bass body/air modes coupled weakly to the bridge signal.
+    setupMode(v, 0, 78.0, 0.55f, 0.018f);
+    setupMode(v, 1, 126.0, 0.42f, 0.014f);
+    setupMode(v, 2, 187.0, 0.34f, 0.011f);
+    setupMode(v, 3, 276.0, 0.25f, 0.008f);
 }
 
-float InstrumentModels::processDrums(Voice& v, double freq) {
+void InstrumentModels::initialiseDrums(Voice& v) {
+    static constexpr float membrane[kModes] = {
+        1.000f, 1.593f, 2.136f, 2.296f, 2.653f, 2.918f,
+        3.156f, 3.500f, 3.600f, 3.652f, 4.060f, 4.153f
+    };
+    static constexpr float plate[kModes] = {
+        1.000f, 1.480f, 2.090f, 2.660f, 3.420f, 4.170f,
+        5.010f, 5.940f, 6.920f, 8.030f, 9.180f, 10.400f
+    };
+
     const int n = v.note;
-    const float ageSec = float(v.age) / float(sampleRate_);
-    const int cls = ((n % 12) + 12) % 12;
-    float out = 0.0f;
+    const bool kick = (n == 35 || n == 36);
+    const bool snare = (n == 38 || n == 40);
+    const bool hat = (n == 42 || n == 44 || n == 46);
 
-    if (n == 35 || n == 36 || cls == 0) {
-        const double f = 46.0 + 92.0 * std::exp(-ageSec * 24.0);
-        v.phase = wrapPhase(v.phase + 2.0 * kPi * f / sampleRate_);
-        out = std::sin(v.phase) * std::exp(-ageSec * (5.0f + 4.0f * control1_)) * 0.95f;
-    } else if (n == 38 || n == 40 || cls == 2 || cls == 7) {
-        float nse = noise(v);
-        v.noiseState += (nse - v.noiseState) * 0.42f;
-        v.phase = wrapPhase(v.phase + 2.0 * kPi * (170.0 + 70.0 * control3_) / sampleRate_);
-        out = (0.72f * v.noiseState + 0.28f * std::sin(v.phase)) *
-              std::exp(-ageSec * (8.0f + 6.0f * control1_));
-    } else if (n == 42 || n == 44 || n == 46 || cls == 6 || cls == 10) {
-        float nse = noise(v);
-        const float hp = nse - v.noiseState;
-        v.noiseState += (nse - v.noiseState) * 0.08f;
-        out = hp * std::exp(-ageSec * (18.0f + 18.0f * control1_)) * 0.62f;
-    } else {
-        const double base = std::max(70.0, std::min(320.0, freq * 0.38));
-        v.phase = wrapPhase(v.phase + 2.0 * kPi * base / sampleRate_);
-        v.phase2 = wrapPhase(v.phase2 + 2.0 * kPi * base * 1.47 / sampleRate_);
-        out = (std::sin(v.phase) + 0.35f * std::sin(v.phase2)) *
-              std::exp(-ageSec * (6.0f + 5.0f * control1_)) * 0.68f;
+    double base;
+    if (kick) base = 48.0 + 20.0 * control3_;
+    else if (snare) base = 175.0 + 65.0 * control3_;
+    else if (hat) base = 680.0 + 520.0 * control3_;
+    else base = std::max(72.0, std::min(330.0, v.frequency * 0.44));
+
+    for (int i=0; i<kModes; ++i) {
+        const float ratio = hat ? plate[i] : membrane[i];
+        const double f = base * ratio;
+        const float decay = kick
+                ? std::max(0.06f, 1.15f / (1.0f + i * 0.48f))
+                : snare
+                    ? std::max(0.035f, 0.62f / (1.0f + i * 0.34f))
+                    : hat
+                        ? std::max(0.025f, 0.44f / (1.0f + i * 0.16f))
+                        : std::max(0.045f, 0.88f / (1.0f + i * 0.40f));
+        const float gain = (hat ? 0.0040f : 0.0085f) /
+                           (1.0f + i * (hat ? 0.09f : 0.18f));
+        setupMode(v, i, f, decay, gain);
     }
-    return out * (0.65f + 0.55f * control2_);
+}
+
+float InstrumentModels::processFlute(Voice& v, double freq, float env) {
+    // Real-time jet-drive / digital-waveguide structure: jet delay,
+    // nonlinear edge function and a lossy bore reflection.
+    const float vel = v.velocity / 127.0f;
+    const float pressure = (v.pressure > 0 ? v.pressure : channelPressure_) / 127.0f;
+    const float breathGain = (0.72f + 0.38f * vel) *
+                             (0.42f + 0.86f * control2_ + 0.16f * pressure);
+    float breath = env * breathGain;
+
+    const float noiseGain = 0.025f + 0.16f * control1_;
+    const float vibGain = 0.02f + 0.20f * vibrato_;
+    const float n = noise(v);
+    breath += breath * (noiseGain * n + vibGain * std::sin(v.vibratoPhase));
+
+    const float boreDelay = clampf(float(sampleRate_ / std::max(35.0, freq * 0.66666) - 2.0),
+                                   2.0f, float(kDelay - 4));
+    const float jetRatio = 0.08f + 0.48f * control3_;
+    const float jetDelay = clampf(boreDelay * jetRatio, 1.0f, float(kDelay - 4));
+
+    const float boreOut = readDelay(v.delayA, v.writeA, boreDelay);
+    const float pole = clampf(0.7f - float(0.1 * 22050.0 / sampleRate_), 0.35f, 0.85f);
+    v.filter1 = (1.0f - pole) * boreOut + pole * v.filter1;
+    const float reflected = -v.filter1;
+
+    const float pressureDiff = breath - 0.50f * reflected;
+    const float jetOld = readDelay(v.delayB, v.writeB, jetDelay);
+    writeDelay(v.delayB, v.writeB, pressureDiff);
+
+    float jet = jetOld * (jetOld * jetOld - 1.0f);
+    jet = clampf(jet, -1.0f, 1.0f);
+
+    const float dc = jet - v.dcX + 0.995f * v.dcY;
+    v.dcX = jet;
+    v.dcY = dc;
+
+    const float boreIn = dc + 0.50f * reflected;
+    writeDelay(v.delayA, v.writeA, clampf(boreIn, -1.4f, 1.4f));
+
+    return 0.34f * boreOut;
+}
+
+float InstrumentModels::processSax(Voice& v, double freq, float env) {
+    // Two-section bore + memoryless nonlinear single-reed reflection.
+    const float vel = v.velocity / 127.0f;
+    const float pressure = (v.pressure > 0 ? v.pressure : channelPressure_) / 127.0f;
+    float breath = env * (0.50f + 0.34f * vel) *
+                   (0.55f + 0.72f * control2_ + 0.18f * pressure);
+    breath += breath * (0.035f + 0.11f * control3_) * noise(v);
+    breath += breath * (0.02f + 0.18f * vibrato_) * std::sin(v.vibratoPhase);
+
+    const float totalDelay = clampf(float(sampleRate_ / std::max(35.0, freq) - 1.0),
+                                    3.0f, float(kDelay - 4));
+    const float position = 0.08f + 0.30f * control3_;
+    const float delay0 = clampf((1.0f - position) * totalDelay, 1.0f, float(kDelay - 4));
+    const float delay1 = clampf(position * totalDelay, 1.0f, float(kDelay - 4));
+
+    const float out0 = readDelay(v.delayA, v.writeA, delay0);
+    const float out1 = readDelay(v.delayB, v.writeB, delay1);
+
+    const float oneZero = 0.5f * (out0 + v.filter1);
+    v.filter1 = out0;
+    const float temp = -0.95f * oneZero;
+    const float borePressure = temp - out1;
+    const float pressureDiff = breath - borePressure;
+
+    const float reedSlope = 0.10f + 0.42f * control1_;
+    const float reedOffset = 0.56f + 0.28f * (1.0f - control1_);
+    const float reedReflection = clampf(reedOffset + reedSlope * pressureDiff, -1.0f, 1.0f);
+
+    writeDelay(v.delayB, v.writeB, temp);
+    const float boreIn = breath - pressureDiff * reedReflection - temp;
+    writeDelay(v.delayA, v.writeA, clampf(boreIn, -1.5f, 1.5f));
+
+    return borePressure * 0.52f;
+}
+
+float InstrumentModels::processAccordion(Voice& v, double freq, float env) {
+    // Reduced-order free-reed model: damped clamped-reed oscillators driven
+    // by quasi-steady pressure flow. Aerodynamic negative damping sustains
+    // oscillation above the blowing threshold.
+    const float pressure = (v.pressure > 0 ? v.pressure : channelPressure_) / 127.0f;
+    const float vel = v.velocity / 127.0f;
+    const float bellows = env * (0.30f + 0.72f * control2_ + 0.18f * pressure) *
+                          (0.72f + 0.28f * vel);
+
+    const float dt = 1.0f / float(sampleRate_);
+    const float musette = 0.0010f + 0.010f * control3_;
+    const float reedDamping = 0.010f + 0.030f * control1_;
+    const float drive = clampf(bellows - 0.22f * v.bodyState, 0.0f, 1.4f);
+
+    auto stepReed = [&](float& x, float& vv, double reedFreq) {
+        const float omega = float(2.0 * kPi * reedFreq);
+        const float mu = std::max(0.0f, drive - 0.16f) * (0.045f + 0.045f * (1.0f - control1_));
+        const float nonlinear = mu * (1.0f - 2.6f * x * x);
+        const float acceleration =
+                -omega * omega * x
+                + 2.0f * omega * (nonlinear - reedDamping) * vv
+                + drive * omega * omega * 0.018f;
+        vv += acceleration * dt;
+        x += vv * dt;
+        x = clampf(x, -0.55f, 0.55f);
+        vv = clampf(vv, -1200.0f, 1200.0f);
+    };
+
+    stepReed(v.reedX1, v.reedV1, freq * (1.0 - musette));
+    stepReed(v.reedX2, v.reedV2, freq * (1.0 + musette));
+
+    const float aperture1 = clampf(0.11f + 0.17f * (1.0f - control1_) + 0.30f * v.reedX1,
+                                   0.01f, 0.42f);
+    const float aperture2 = clampf(0.11f + 0.17f * (1.0f - control1_) + 0.30f * v.reedX2,
+                                   0.01f, 0.42f);
+    const float flow = (aperture1 + aperture2) * std::sqrt(std::max(0.0f, drive));
+
+    // Small cavity pressure provides the acoustic load seen by the reeds.
+    const float bodyRate = clampf(float(2.0 * kPi * std::min(freq * 0.35, 420.0) / sampleRate_),
+                                  0.002f, 0.12f);
+    v.bodyState += (flow - v.bodyState) * bodyRate;
+
+    const float reedVelocity = (v.reedV1 + v.reedV2) / std::max(1.0f, float(2.0 * kPi * freq));
+    return clampf(reedVelocity * 0.25f + (flow - v.bodyState) * 0.45f, -1.0f, 1.0f);
+}
+
+float InstrumentModels::processFeltPiano(Voice& v, double) {
+    const float t = float(v.age) / float(sampleRate_);
+    const float softness = 1.0f - control1_;
+    const float contactDuration = 0.0016f + 0.0062f * softness;
+    float hammerForce = 0.0f;
+
+    if (t < contactDuration) {
+        const float q = clampf(t / contactDuration, 0.0f, 1.0f);
+        const float compression = std::sin(float(kPi) * q);
+        const float feltExponent = 1.9f + 2.1f * control1_;
+        const float velocity = 0.35f + 0.65f * (v.velocity / 127.0f);
+        hammerForce = std::pow(std::max(0.0f, compression), feltExponent)
+                    * velocity * (0.68f + 0.62f * control2_);
+    }
+
+    float sum = 0.0f;
+    for (int i=0; i<kModes; ++i) sum += tickMode(v, i, hammerForce);
+
+    // Felt absorbs high-frequency contact noise; harder settings expose more.
+    const float n = noise(v);
+    const float contactNoise = t < contactDuration
+            ? n * hammerForce * (0.006f + 0.024f * control1_)
+            : 0.0f;
+
+    return sum + contactNoise;
+}
+
+float InstrumentModels::processXylophone(Voice& v, double) {
+    const float strikeSamples = 2.0f + 16.0f * (1.0f - control1_);
+    float excitation = 0.0f;
+    if (float(v.age) < strikeSamples) {
+        const float q = (float(v.age) + 1.0f) / (strikeSamples + 1.0f);
+        excitation = std::sin(float(kPi) * q)
+                   * (0.45f + 0.75f * control2_)
+                   * (0.35f + 0.65f * (v.velocity / 127.0f));
+    }
+
+    float sum = 0.0f;
+    for (int i=0; i<kModes; ++i) sum += tickMode(v, i, excitation);
+    return sum;
+}
+
+float InstrumentModels::processWoodBass(Voice& v, double, float env) {
+    const int length = std::max(8, std::min(kDelay - 2, v.delayLengthA));
+    const int i0 = v.writeA % length;
+    const int i1 = (i0 + 1) % length;
+
+    const float y0 = v.delayA[i0];
+    const float y1 = v.delayA[i1];
+
+    // Frequency-dependent bridge/string loss: a one-pole average with
+    // damping controlled by STRING DAMP.
+    const float damping = 0.9985f - 0.0105f * control1_;
+    const float averaged = 0.5f * (y0 + y1);
+    v.filter1 += (averaged - v.filter1) * (0.30f + 0.42f * control3_);
+    v.delayA[i0] = v.filter1 * damping;
+    v.writeA = i1;
+
+    float body = 0.0f;
+    for (int i=0; i<4; ++i) body += tickMode(v, i, y0);
+
+    return (0.72f * y0 + body) * env;
+}
+
+float InstrumentModels::processDrums(Voice& v, double) {
+    const int n = v.note;
+    const bool kick = (n == 35 || n == 36);
+    const bool snare = (n == 38 || n == 40);
+    const bool hat = (n == 42 || n == 44 || n == 46);
+
+    const float strikeSamples = kick ? 22.0f : (hat ? 5.0f : 11.0f);
+    float excitation = 0.0f;
+    if (float(v.age) < strikeSamples) {
+        const float q = (float(v.age) + 1.0f) / (strikeSamples + 1.0f);
+        excitation = std::sin(float(kPi) * q)
+                   * (0.45f + 0.75f * control2_)
+                   * (0.35f + 0.65f * (v.velocity / 127.0f));
+    }
+
+    float membrane = 0.0f;
+    for (int i=0; i<kModes; ++i) membrane += tickMode(v, i, excitation);
+
+    const float t = float(v.age) / float(sampleRate_);
+
+    if (snare) {
+        // Snare wires are a noisy secondary resonator driven by membrane
+        // velocity/energy rather than an unrelated noise oscillator.
+        const float nse = noise(v);
+        const float drive = std::min(1.0f, std::fabs(membrane) * 22.0f);
+        const float decay = std::exp(-t * (7.0f + 8.0f * control1_));
+        v.noiseState += (nse * drive - v.noiseState) * 0.34f;
+        return membrane * 0.72f + v.noiseState * decay * 0.34f;
+    }
+
+    if (hat) {
+        // Plate modes plus turbulent/high-frequency contact component.
+        const float nse = noise(v);
+        const float hp = nse - v.noiseState;
+        v.noiseState += (nse - v.noiseState) * 0.045f;
+        const float decay = std::exp(-t * (8.0f + 16.0f * control1_));
+        return membrane * 0.55f + hp * decay * 0.24f;
+    }
+
+    return membrane;
 }
 
 float InstrumentModels::processVoice(Voice& v) {
@@ -384,30 +609,42 @@ float InstrumentModels::processVoice(Voice& v) {
 
     const double bendSemis = (double(pitchBend_) - 8192.0) / 8192.0 * 2.0;
     const float pressure = (v.pressure > 0 ? v.pressure : channelPressure_) / 127.0f;
-    const double vibratoCents = std::sin(v.aux2) * (18.0 * vibrato_) * (0.35 + 0.65 * pressure);
-    v.aux2 = float(wrapPhase(v.aux2 + 2.0 * kPi * 5.2 / sampleRate_));
-    const double freq = v.frequency * std::pow(2.0, bendSemis / 12.0 + vibratoCents / 1200.0);
+    const double vibratoCents = std::sin(v.vibratoPhase) *
+                                (18.0 * vibrato_) * (0.35 + 0.65 * pressure);
+    v.vibratoPhase = wrapPhase(v.vibratoPhase + 2.0 * kPi * 5.2 / sampleRate_);
+    const double freq = v.frequency *
+            std::pow(2.0, bendSemis / 12.0 + vibratoCents / 1200.0);
 
     float raw = 0.0f;
     switch (type_) {
-        case FLUTE: raw = processFlute(v, freq); break;
-        case SAX: raw = processSax(v, freq); break;
-        case FELT_PIANO: raw = processFeltPiano(v, freq); break;
-        case ACCORDION: raw = processAccordion(v, freq); break;
-        case XYLOPHONE: raw = processXylophone(v, freq); break;
-        case WOOD_BASS: raw = processWoodBass(v, freq); break;
-        case DRUMS: raw = processDrums(v, freq); break;
+        case FLUTE: raw = processFlute(v, freq, env); break;
+        case SAX: raw = processSax(v, freq, env); break;
+        case FELT_PIANO: raw = processFeltPiano(v, freq) * env; break;
+        case ACCORDION: raw = processAccordion(v, freq, env); break;
+        case XYLOPHONE: raw = processXylophone(v, freq) * env; break;
+        case WOOD_BASS: raw = processWoodBass(v, freq, env); break;
+        case DRUMS: raw = processDrums(v, freq) * env; break;
         default: break;
     }
 
     v.age++;
+
+    // Natural one-shot retirement keeps silent percussive voices from
+    // occupying the allocator even if a controller omits NoteOff.
+    if ((type_ == DRUMS && v.age > uint64_t(sampleRate_ * 4.0)) ||
+        (type_ == XYLOPHONE && v.age > uint64_t(sampleRate_ * 5.0)) ||
+        (type_ == FELT_PIANO && v.age > uint64_t(sampleRate_ * 10.0))) {
+        v.active = false;
+    }
+
     const float velocityGain = 0.30f + 0.70f * (v.velocity / 127.0f);
-    return std::isfinite(raw) ? raw * env * velocityGain : 0.0f;
+    return std::isfinite(raw) ? raw * velocityGain : 0.0f;
 }
 
 float InstrumentModels::process() {
     float sum = 0.0f;
     int active = 0;
+
     for (auto& v : voices_) {
         if (!v.active) continue;
         sum += processVoice(v);
@@ -415,7 +652,7 @@ float InstrumentModels::process() {
     }
 
     if (active > 1) sum *= 1.0f / std::sqrt(float(active));
-    return std::tanh(sum * 0.92f);
+    return std::tanh(sum * 0.95f);
 }
 
 int InstrumentModels::activeVoices() const {
