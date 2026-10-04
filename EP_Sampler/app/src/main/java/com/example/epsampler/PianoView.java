@@ -1,8 +1,6 @@
 package com.example.epsampler;
 
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -33,7 +31,6 @@ public final class PianoView extends View {
     }
 
     private ActionListener actionListener;
-    private final Bitmap background;
     private PerformanceVideoLayer performanceVideoLayer;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -72,7 +69,6 @@ public final class PianoView extends View {
         super(context);
         setKeepScreenOn(true);
         setBackgroundColor(Color.TRANSPARENT);
-        background = BitmapFactory.decodeResource(getResources(), R.drawable.piano_reference);
         text.setTypeface(android.graphics.Typeface.create("sans", android.graphics.Typeface.NORMAL));
         for (int i = 0; i < 5; i++) { left[i] = new Finger(); right[i] = new Finger(); }
     }
