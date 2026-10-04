@@ -25,7 +25,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 
 
-public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener {
+public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener, PerformanceXYView.Listener {
     private static final int PICK_BANK = 1001;
     private static final String PREFS = "violin_physical";
     private static final String KEY_BANK_URI = "bank_uri";
@@ -73,6 +73,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     };
     private PianoView pianoView;
     private PerformanceVideoLayer videoLayer;
+    private PerformanceXYView performanceXYView;
     private DrumEditorView drumEditorView;
     private MidiController midiController;
     private volatile boolean dreamy = false;
@@ -113,6 +114,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView = new PianoView(this);
         pianoView.setPerformanceVideoLayer(videoLayer);
         pianoView.setActionListener(this);
+        performanceXYView = new PerformanceXYView(this, pianoView);
+        performanceXYView.setListener(this);
         drumEditorView = new DrumEditorView(this);
         drumEditorView.setListener(this);
 
@@ -121,6 +124,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(pianoView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        root.addView(performanceXYView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(drumEditorView, new FrameLayout.LayoutParams(
@@ -187,6 +193,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.setDreamy(dreamy);
         pianoView.setInstrumentName(INSTRUMENT_NAMES[instrumentMode], INSTRUMENT_BUTTONS[instrumentMode]);
         pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
+        performanceXYView.setInstrumentMode(instrumentMode);
         drumEditorView.setValues(drumParameters);
         drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
         drumEditorView.setDrumsVisible(instrumentMode == 7);
@@ -604,6 +611,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.setInstrument(instrumentMode);
 
         if (videoLayer != null) videoLayer.setInstrument(instrumentMode);
+        if (performanceXYView != null) performanceXYView.setInstrumentMode(instrumentMode);
         if (pianoView != null) {
             pianoView.setInstrumentName(
                     INSTRUMENT_NAMES[instrumentMode],
@@ -717,6 +725,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.setDrumParameter(parameter, value);
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putInt(KEY_DRUM_PARAM_PREFIX + parameter, value).apply();
+    }
+
+    @Override public void onPerformanceXY(boolean active, int part, int x, int y) {
+        NativeEngine.setPerformanceXY(active, part, x, y);
     }
 
     @Override public void onDrumFxChanged(int boostDb, int distortion) {
@@ -936,6 +948,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     @Override protected void onPause() {
+        if (performanceXYView != null) performanceXYView.cancelEffect();
         if (pianoView != null) pianoView.panicAuditionKeyboard();
         if (videoLayer != null) videoLayer.pauseForLifecycle();
         panicAllParts();
