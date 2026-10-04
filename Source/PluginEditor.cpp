@@ -736,7 +736,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     }
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colours::white.withAlpha (0.42f));
-    g.drawText ("MODE default: CHORD-A. A/B both use C4-B5 and reverb.", 54, 681, 590, 18, juce::Justification::centredLeft);
+    g.drawText ("MODE: CHORD-A / CHORD-B / DREAMY / CHORDBOT.", 54, 681, 590, 18, juce::Justification::centredLeft);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
@@ -806,7 +806,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics
                 180, 538, 360, 24, juce::Justification::centred);
     g.setFont (juce::FontOptions (11.5f));
     g.setColour (juce::Colours::white.withAlpha (0.52f));
-    g.drawText ("CHORD OUT sends the generated ChordPlan notes to the selected MIDI OUT.", 54, 570, 620, 20, juce::Justification::centredLeft);
+    g.drawText ("CHORD OUT controls A/B. CHORDBOT pads always use selected MIDI OUT / CHORD CH.", 54, 570, 620, 20, juce::Justification::centredLeft);
     g.drawText ("L1: REC -> PLAY    R1: CLEAR    96 motion ticks / bar", 54, 592, 610, 20, juce::Justification::centredLeft);
     g.drawText ("X 0..127 / Y 0..127. CLOCK uses 24 PPQN.", 54, 614, 610, 20, juce::Justification::centredLeft);
     if (midiPresetMessage.isNotEmpty())
