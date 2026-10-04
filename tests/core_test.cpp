@@ -46,6 +46,40 @@ int main()
         assert (containsPc (p, 4));
     }
 
+    // CHORDBOT: C MAJ seed produces eight distinct theory-ranked
+    // candidates and includes the strong dominant V7 option.
+    const auto botMajor =
+        chordfx::TheoryEngine::chordBotSuggestions (0, 0);
+    bool foundG7 = false;
+    for (size_t i = 0; i < botMajor.size(); ++i)
+    {
+        assert (botMajor[i].rootPitchClass >= 0);
+        assert (botMajor[i].rootPitchClass < 12);
+        assert (botMajor[i].quality >= 0);
+        assert (botMajor[i].quality < 8);
+        assert (! (botMajor[i].rootPitchClass == 0
+                   && botMajor[i].quality == 0));
+        if (botMajor[i].rootPitchClass == 7
+            && botMajor[i].quality == 2)
+            foundG7 = true;
+
+        for (size_t j = 0; j < i; ++j)
+            assert (botMajor[i].rootPitchClass
+                        != botMajor[j].rootPitchClass
+                    || botMajor[i].quality
+                        != botMajor[j].quality);
+    }
+    assert (foundG7);
+
+    // A MIN seed exposes the harmonic-minor E7 dominant.
+    const auto botMinor =
+        chordfx::TheoryEngine::chordBotSuggestions (9, 1);
+    bool foundE7 = false;
+    for (const auto& choice : botMinor)
+        if (choice.rootPitchClass == 4 && choice.quality == 2)
+            foundE7 = true;
+    assert (foundE7);
+
     // Chromatic anchor must also remain present as a colour tone.
     p = theory.noteOn (61); // Db
     assert (containsPc (p, 1));
