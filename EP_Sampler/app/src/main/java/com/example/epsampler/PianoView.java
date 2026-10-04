@@ -55,6 +55,7 @@ public final class PianoView extends View {
     private String bankStatus = "VIOLIN READY CH1";
     private String instrumentButtonLabel = "VIOLIN";
     private int instrumentMidiChannel = 1;
+    private boolean sampleMode = false;
     private int downButton = -1;
     private long downTimeMs = 0L;
 
@@ -127,6 +128,11 @@ public final class PianoView extends View {
         invalidate();
     }
 
+    void setSampleMode(boolean sample) {
+        sampleMode = sample;
+        invalidate();
+    }
+
     void setInstrumentMidiChannel(int channel) {
         instrumentMidiChannel = Math.max(0, Math.min(16, channel));
         String prefix = bankStatus;
@@ -175,9 +181,21 @@ public final class PianoView extends View {
 
     @Override protected void onDraw(Canvas c) {
         super.onDraw(c);
-        // The original MP4 is rendered by PerformanceVideoLayer underneath.
-        // Keep this view transparent so only the controls / audition keyboard
-        // sit above the full-quality video.
+
+        // Physical-model modes use the MP4 layer underneath. EP-SAMPLE instead
+        // uses piano_reference.jpg in the ImageView below this transparent View.
+        // Recreate the standalone EP-SAMPLE key-overlay mapping only in SAMPLE
+        // mode so Note On/Off visibly presses the corresponding photographed key.
+        if (sampleMode) {
+            float scale = Math.min(getWidth() / SRC_W, getHeight() / SRC_H);
+            float dw = SRC_W * scale;
+            float dh = SRC_H * scale;
+            float leftPad = (getWidth() - dw) * 0.5f;
+            float topPad = (getHeight() - dh) * 0.5f;
+            imageRect.set(leftPad, topPad, leftPad + dw, topPad + dh);
+            drawPressedKeys(c, scale, leftPad, topPad);
+        }
+
         drawIndicators(c);
         if (keyOverlayVisible) drawAuditionKeyboard(c);
         drawRecorderDrawer(c);
