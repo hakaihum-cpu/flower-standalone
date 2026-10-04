@@ -450,24 +450,38 @@ void AudioEngine::resetPerformanceDelay() {
 void AudioEngine::processPerformanceDelay(float& left, float& right) {
     if (performanceDelayL_.empty() || performanceDelayR_.empty()) return;
 
-    const float x = std::clamp(performanceXYX_, 0.0f, 1.0f);
-    const float y = std::clamp(performanceXYY_, 0.0f, 1.0f);
+    const float smoothCoeff = 1.0f - std::exp(-1.0f / std::max(1.0f, 0.018f * sampleRate_));
+    const float gateCoeff = 1.0f - std::exp(-1.0f / std::max(1.0f, 0.004f * sampleRate_));
 
-    // X = delay time 25..650 ms. Y = wet/feedback intensity.
-    const float delayMs = 25.0f + x * 625.0f;
-    const int delaySamples = std::clamp(
-            int(std::lround(delayMs * 0.001f * sampleRate_)),
-            1,
-            int(performanceDelayL_.size()) - 2);
+    performanceXYSmoothX_ += (performanceXYX_ - performanceXYSmoothX_) * smoothCoeff;
+    performanceXYSmoothY_ += (performanceXYY_ - performanceXYSmoothY_) * smoothCoeff;
+    const float gateTarget = performanceXYActive_ ? 1.0f : 0.0f;
+    performanceXYGate_ += (gateTarget - performanceXYGate_) * gateCoeff;
 
-    int read = performanceDelayWrite_ - delaySamples;
-    while (read < 0) read += int(performanceDelayL_.size());
+    const float delayMs = 25.0f + performanceXYSmoothX_ * 625.0f;
+    const float targetSamples = std::clamp(
+            delayMs * 0.001f * float(sampleRate_),
+            1.0f,
+            float(performanceDelayL_.size() - 3));
 
-    const float dl = performanceDelayL_[read];
-    const float dr = performanceDelayR_[read];
+    if (performanceDelaySamples_ <= 0.0f) performanceDelaySamples_ = targetSamples;
+    performanceDelaySamples_ += (targetSamples - performanceDelaySamples_) * smoothCoeff;
 
-    const float wet = y * 0.88f;
-    const float feedback = y * 0.78f;
+    float readPos = float(performanceDelayWrite_) - performanceDelaySamples_;
+    while (readPos < 0.0f) readPos += float(performanceDelayL_.size());
+    while (readPos >= float(performanceDelayL_.size())) readPos -= float(performanceDelayL_.size());
+
+    const int i0 = int(std::floor(readPos));
+    const int i1 = (i0 + 1) % int(performanceDelayL_.size());
+    const float frac = readPos - std::floor(readPos);
+
+    const float dl = performanceDelayL_[i0]
+                   + (performanceDelayL_[i1] - performanceDelayL_[i0]) * frac;
+    const float dr = performanceDelayR_[i0]
+                   + (performanceDelayR_[i1] - performanceDelayR_[i0]) * frac;
+
+    const float wet = performanceXYSmoothY_ * 0.88f * performanceXYGate_;
+    const float feedback = performanceXYSmoothY_ * 0.74f * performanceXYGate_;
 
     const float dryL = left;
     const float dryR = right;
@@ -495,26 +509,65 @@ void AudioEngine::recordStutterHistory(float left, float right) {
 void AudioEngine::processPerformanceStutter(float& left, float& right) {
     if (stutterHistoryL_.empty() || stutterHistoryR_.empty()) return;
 
-    const float x = std::clamp(performanceXYX_, 0.0f, 1.0f);
-    const float y = std::clamp(performanceXYY_, 0.0f, 1.0f);
+    const float smoothCoeff = 1.0f - std::exp(-1.0f / std::max(1.0f, 0.018f * sampleRate_));
+    const float gateCoeff = 1.0f - std::exp(-1.0f / std::max(1.0f, 0.004f * sampleRate_));
 
-    // X = loop length 18..280 ms. Shorter on the left, longer on the right.
-    const float lengthMs = 18.0f + x * 262.0f;
+    performanceXYSmoothX_ += (performanceXYX_ - performanceXYSmoothX_) * smoothCoeff;
+    performanceXYSmoothY_ += (performanceXYY_ - performanceXYSmoothY_) * smoothCoeff;
+    const float gateTarget = performanceXYActive_ ? 1.0f : 0.0f;
+    performanceXYGate_ += (gateTarget - performanceXYGate_) * gateCoeff;
+
+    const float lengthMs = 18.0f + performanceXYSmoothX_ * 262.0f;
+    const float targetLength = std::clamp(
+            lengthMs * 0.001f * float(sampleRate_),
+            16.0f,
+            float(stutterHistoryL_.size() - 4));
+
+    if (stutterLoopSamples_ <= 0.0f) stutterLoopSamples_ = targetLength;
+    stutterLoopSamples_ += (targetLength - stutterLoopSamples_) * smoothCoeff;
+
     const int length = std::clamp(
-            int(std::lround(lengthMs * 0.001f * sampleRate_)),
-            8,
-            int(stutterHistoryL_.size()) - 2);
+            int(std::lround(stutterLoopSamples_)),
+            16,
+            int(stutterHistoryL_.size()) - 4);
 
     int start = stutterCaptureEnd_ - length;
     while (start < 0) start += int(stutterHistoryL_.size());
 
-    const int offset = std::clamp(int(stutterPhase_ * length), 0, length - 1);
-    const int index = (start + offset) % int(stutterHistoryL_.size());
+    const float offsetF = float(stutterPhase_) * float(length);
+    const int offset0 = std::clamp(int(std::floor(offsetF)), 0, length - 1);
+    const int offset1 = (offset0 + 1) % length;
+    const float frac = offsetF - std::floor(offsetF);
 
-    const float loopL = stutterHistoryL_[index];
-    const float loopR = stutterHistoryR_[index];
-    const float wet = y;
+    auto histL = [&](int off) {
+        return stutterHistoryL_[(start + off) % int(stutterHistoryL_.size())];
+    };
+    auto histR = [&](int off) {
+        return stutterHistoryR_[(start + off) % int(stutterHistoryR_.size())];
+    };
 
+    float loopL = histL(offset0) + (histL(offset1) - histL(offset0)) * frac;
+    float loopR = histR(offset0) + (histR(offset1) - histR(offset0)) * frac;
+
+    // Crossfade the wrap boundary over ~4 ms (or 1/4 of very short loops)
+    // so unrelated waveform endpoints never meet as a hard discontinuity.
+    const int xfade = std::max(4, std::min(length / 4, int(0.004f * sampleRate_)));
+    if (xfade > 1 && offsetF >= float(length - xfade)) {
+        const float t = std::clamp(
+                (offsetF - float(length - xfade)) / float(xfade),
+                0.0f, 1.0f);
+        const float headOffsetF = offsetF - float(length - xfade);
+        const int h0 = std::clamp(int(std::floor(headOffsetF)), 0, xfade - 1);
+        const int h1 = std::min(h0 + 1, xfade - 1);
+        const float hf = headOffsetF - std::floor(headOffsetF);
+        const float headL = histL(h0) + (histL(h1) - histL(h0)) * hf;
+        const float headR = histR(h0) + (histR(h1) - histR(h0)) * hf;
+        const float shaped = t * t * (3.0f - 2.0f * t);
+        loopL = loopL * (1.0f - shaped) + headL * shaped;
+        loopR = loopR * (1.0f - shaped) + headR * shaped;
+    }
+
+    const float wet = performanceXYSmoothY_ * performanceXYGate_;
     left = left * (1.0f - wet) + loopL * wet;
     right = right * (1.0f - wet) + loopR * wet;
 
@@ -654,11 +707,16 @@ void AudioEngine::handle(const Event& e) {
             performanceXYY_ = std::clamp(e.d, 0, 127) / 127.0f;
 
             if (performanceXYActive_ && (!wasActive || oldPart != performanceXYPart_)) {
+                performanceXYSmoothX_ = performanceXYX_;
+                performanceXYSmoothY_ = performanceXYY_;
+                performanceXYGate_ = 0.0f;
                 if (performanceXYPart_ == 7) {
                     stutterCaptureEnd_ = stutterWrite_;
                     stutterPhase_ = 0.0;
+                    stutterLoopSamples_ = 0.0f;
                 } else {
                     resetPerformanceDelay();
+                    performanceDelaySamples_ = 0.0f;
                 }
             }
             break;
@@ -701,14 +759,16 @@ void AudioEngine::render(float* out,int32_t frames) {
             if (part == 3) feltPianoReverb_.process(partL, partR);
 
             if (part == 7) {
-                if (performanceXYActive_ && performanceXYPart_ == 7) {
+                if (performanceXYPart_ == 7 &&
+                        (performanceXYActive_ || performanceXYGate_ > 0.0005f)) {
                     processPerformanceStutter(partL, partR);
                 } else {
                     // Keep one second of recent DRUMS audio ready so Stutter
                     // responds immediately when the user touches the XY area.
                     recordStutterHistory(partL, partR);
                 }
-            } else if (performanceXYActive_ && performanceXYPart_ == part) {
+            } else if (performanceXYPart_ == part &&
+                    (performanceXYActive_ || performanceXYGate_ > 0.0005f)) {
                 processPerformanceDelay(partL, partR);
             }
 
