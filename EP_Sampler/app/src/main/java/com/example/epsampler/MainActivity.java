@@ -139,7 +139,6 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.controlChange(1, vibratoDepth);
         NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
         NativeEngine.setInstrument(instrumentMode);
-        NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
         pianoView.controlChange(10, bowPressure);
         pianoView.controlChange(11, bowSpeed);
         pianoView.controlChange(74, bowPosition);
@@ -423,7 +422,6 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         instrumentMode = mode;
         NativeEngine.setInstrument(instrumentMode);
-        NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
 
         if (videoLayer != null) videoLayer.setInstrument(instrumentMode);
         if (pianoView != null) {
