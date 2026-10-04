@@ -10,8 +10,8 @@ android {
         applicationId 'com.example.violinphysical'
         minSdk 26
         targetSdk 35
-        versionCode 12
-        versionName '1.2-drum-editor'
+        versionCode 13
+        versionName '1.3-drum-editor-ui-restore'
 
         externalNativeBuild {
             cmake {
