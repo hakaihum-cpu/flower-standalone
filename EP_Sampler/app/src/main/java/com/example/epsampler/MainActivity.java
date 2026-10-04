@@ -19,7 +19,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 
-public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener {
+public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener {
     private static final int PICK_BANK = 1001;
     private static final String PREFS = "violin_physical";
     private static final String KEY_BANK_URI = "bank_uri";
@@ -59,6 +59,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     };
     private PianoView pianoView;
     private PerformanceVideoLayer videoLayer;
+    private DrumEditorView drumEditorView;
     private MidiController midiController;
     private volatile boolean dreamy = false;
     private int boosterStep = 0;
@@ -92,12 +93,17 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView = new PianoView(this);
         pianoView.setPerformanceVideoLayer(videoLayer);
         pianoView.setActionListener(this);
+        drumEditorView = new DrumEditorView(this);
+        drumEditorView.setListener(this);
 
         FrameLayout root = new FrameLayout(this);
         root.addView(videoLayer, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(pianoView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        root.addView(drumEditorView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
@@ -145,8 +151,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.setDreamy(dreamy);
         pianoView.setInstrumentName(INSTRUMENT_NAMES[instrumentMode], INSTRUMENT_BUTTONS[instrumentMode]);
         pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
-        pianoView.setInstrumentMode(instrumentMode);
-        pianoView.setDrumParameters(drumParameters);
+        drumEditorView.setValues(drumParameters);
+        drumEditorView.setDrumsVisible(instrumentMode == 7);
         videoLayer.setInstrument(instrumentMode);
 
         NativeEngine.start();
@@ -485,8 +491,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                     INSTRUMENT_NAMES[instrumentMode],
                     INSTRUMENT_BUTTONS[instrumentMode]);
             pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
-            pianoView.setInstrumentMode(instrumentMode);
-            pianoView.setDrumParameters(drumParameters);
+        }
+        if (drumEditorView != null) {
+            drumEditorView.setValues(drumParameters);
+            drumEditorView.setDrumsVisible(instrumentMode == 7);
         }
 
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
@@ -640,7 +648,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                         drumParameters[5] = value;
                         drumParameters[9] = value;
                     } else if (cc == 64) manualSustain = value >= 64;
-                    pianoView.setDrumParameters(drumParameters);
+                    if (drumEditorView != null) drumEditorView.setValues(drumParameters);
                 } else {
                     if (cc == 1) vibratoDepth = value;
                     else if (cc == 10) bowPressure = value;
