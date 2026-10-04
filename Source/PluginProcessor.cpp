@@ -39,6 +39,7 @@ RealtimeChordFxAudioProcessor::RealtimeChordFxAudioProcessor()
         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "CHORDFX_STATE", createParameterLayout())
 {
+    initialiseChordBotDefaults();
 }
 
 bool RealtimeChordFxAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -73,7 +74,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordMidiRefreshRequested = false;
     chordMidiStopRequested = false;
     chordMidiGateOpen = false;
-    lastEffectMode = juce::jlimit (0, 1, juce::roundToInt (
+    lastEffectMode = juce::jlimit (0, 2, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     lastChordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -412,7 +413,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         juce::jmax (1, juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels()));
     const bool midiClockMode =
         apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
-    const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 2, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -604,9 +605,12 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
     // XY values are latched on touch release. Dreamy continues using the
     // last X/Y position until the next touch; touch state itself is only for
     // interaction/MIDI note-off handling.
+    const int selectedEffectMode =
+        juce::jlimit (0, 2, juce::roundToInt (
+            apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const bool enabled =
         running.load (std::memory_order_acquire)
-        && apvts.getRawParameterValue (ParamID::effectMode)->load() >= 0.5f;
+        && selectedEffectMode == 1;
     const float x = juce::jlimit (0.0f, 1.0f,
         (float) controllerX.load (std::memory_order_relaxed) / 127.0f);
     const float y = juce::jlimit (0.0f, 1.0f,
@@ -1273,7 +1277,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
 {
     juce::AudioProcessorValueTreeState::ParameterLayout p;
     p.add (std::make_unique<juce::AudioParameterChoice> (
-        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY" }, 0));
+        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "CHORDBOT" }, 0));
     p.add (std::make_unique<juce::AudioParameterChoice> (
         ParamID::chordMode, "CHORD ENGINE", juce::StringArray { "A", "B" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::complex, "COMPLEX", 0.0f, 1.0f, 0.25f));
