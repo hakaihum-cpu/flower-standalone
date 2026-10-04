@@ -27,4 +27,10 @@ public final class NativeEngine {
     public static native void setDreamyParameters(int x, int y, int mix);
     public static native void setAdsr(int attackMs, int decayMs, int sustainPct, int releaseMs);
     public static native void setInstrument(int instrument);
+    public static native void noteOnPart(int part, int note, int velocity);
+    public static native void noteOffPart(int part, int note, int velocity);
+    public static native void polyPressurePart(int part, int note, int pressure);
+    public static native void channelPressurePart(int part, int pressure);
+    public static native void controlChangePart(int part, int cc, int value);
+    public static native void pitchBendPart(int part, int value14);
 }
