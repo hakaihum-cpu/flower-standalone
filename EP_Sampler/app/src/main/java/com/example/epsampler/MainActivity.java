@@ -45,8 +45,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_INSTRUMENT = "instrument_mode";
 
     private static final String[] INSTRUMENT_NAMES = new String[] {
-            "VIOLIN", "FLUTE", "SAX", "FELT PIANO",
-            "ACCORDION", "XYLOPHONE", "WOOD BASS", "DRUMS"
+            "VIOLIN", "FLUTE", "SAXOPHONE", "FELT PIANO",
+            "PIANICA / ACCORDION", "XYLOPHONE", "WOOD BASS", "DRUMS"
     };
     private static final String[] INSTRUMENT_BUTTONS = new String[] {
             "VIOLIN", "FLUTE", "SAX", "FELT",
