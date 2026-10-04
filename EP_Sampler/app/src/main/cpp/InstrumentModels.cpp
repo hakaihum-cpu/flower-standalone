@@ -54,7 +54,9 @@ void InstrumentModels::setType(int type) {
             attackMs_ = 1.0f; decayMs_ = 5000.0f; sustain_ = 1.0f; releaseMs_ = 220.0f;
             break;
         case WOOD_BASS:
-            attackMs_ = 1.0f; decayMs_ = 2200.0f; sustain_ = 0.92f; releaseMs_ = 520.0f;
+            // The string loop supplies the natural decay.  The amplitude envelope
+            // only handles note articulation/damping when the player releases.
+            attackMs_ = 1.0f; decayMs_ = 5000.0f; sustain_ = 1.0f; releaseMs_ = 180.0f;
             break;
         case DRUMS:
             attackMs_ = 1.0f; decayMs_ = 5000.0f; sustain_ = 1.0f; releaseMs_ = 120.0f;
@@ -340,34 +342,55 @@ void InstrumentModels::initialiseXylophone(Voice& v) {
 }
 
 void InstrumentModels::initialiseWoodBass(Voice& v) {
-    const double freq = std::max(28.0, v.frequency);
-    v.delayLengthA = std::max(8, std::min(kDelay - 2, int(sampleRate_ / freq)));
+    const double freq = std::max(24.0, v.frequency);
+
+    // Seed one period of the displacement wave immediately behind the write
+    // head.  processWoodBass() reads this ring with a fractional delay, so
+    // pitch bend and vibrato can continuously alter the effective string length.
+    const float nominalDelay = clampf(float(sampleRate_ / freq - 0.75),
+                                      8.0f, float(kDelay - 4));
+    const int seedLength = std::max(8, std::min(kDelay - 4,
+            int(std::ceil(nominalDelay)) + 2));
+    v.delayLengthA = seedLength;
     v.writeA = 0;
 
-    // A plucked ideal string starts from a triangular displacement whose apex
-    // is the pluck position, rather than from white noise.
-    const float pluckPos = 0.08f + 0.42f * control3_;
-    const float force = (0.22f + 0.55f * control2_) *
-                        (0.35f + 0.65f * (v.velocity / 127.0f));
+    // Finger plucks are closer to a triangular displacement than a noise burst.
+    // PLUCK POSITION controls the spectral nulls, while PLUCK FORCE and
+    // velocity determine displacement amplitude.
+    const float pluckPos = 0.08f + 0.34f * control3_;
+    const float velocity = v.velocity / 127.0f;
+    const float force = (0.18f + 0.58f * control2_) *
+                        (0.32f + 0.68f * velocity);
 
     float mean = 0.0f;
-    for (int i=0; i<v.delayLengthA; ++i) {
-        const float x = i / float(std::max(1, v.delayLengthA - 1));
+    const int start = kDelay - seedLength;
+    for (int i=0; i<seedLength; ++i) {
+        const float x = i / float(std::max(1, seedLength - 1));
         float displacement;
         if (x <= pluckPos) displacement = x / std::max(0.01f, pluckPos);
         else displacement = (1.0f - x) / std::max(0.01f, 1.0f - pluckPos);
         displacement = displacement * 2.0f - 1.0f;
-        v.delayA[i] = displacement * force;
-        mean += v.delayA[i];
-    }
-    mean /= float(v.delayLengthA);
-    for (int i=0; i<v.delayLengthA; ++i) v.delayA[i] -= mean;
 
-    // Upright-bass body/air modes coupled weakly to the bridge signal.
-    setupMode(v, 0, 78.0, 0.55f, 0.000020f);
-    setupMode(v, 1, 126.0, 0.42f, 0.000015f);
-    setupMode(v, 2, 187.0, 0.34f, 0.000012f);
-    setupMode(v, 3, 276.0, 0.25f, 0.000008f);
+        // A tiny deterministic roughness prevents every note from having the
+        // same mathematically perfect attack without turning the string noisy.
+        const float roughness = noise(v) * (0.006f + 0.012f * velocity);
+        v.delayA[start + i] = (displacement + roughness) * force;
+        mean += v.delayA[start + i];
+    }
+    mean /= float(seedLength);
+    for (int i=0; i<seedLength; ++i) v.delayA[start + i] -= mean;
+
+    // Double-bass body/air and bridge-admittance landmarks.  The first pair
+    // approximates A0/T1 around 60/100 Hz; the upper modes broaden the wooden
+    // corpus response and the characteristic bridge/body regions toward 1 kHz.
+    setupMode(v, 0,   62.0, 0.62f, 0.000018f);
+    setupMode(v, 1,  100.0, 0.52f, 0.000020f);
+    setupMode(v, 2,  145.0, 0.38f, 0.000013f);
+    setupMode(v, 3,  190.0, 0.31f, 0.000010f);
+    setupMode(v, 4,  275.0, 0.24f, 0.000007f);
+    setupMode(v, 5,  400.0, 0.18f, 0.000005f);
+    setupMode(v, 6,  700.0, 0.11f, 0.0000028f);
+    setupMode(v, 7, 1000.0, 0.085f, 0.0000018f);
 }
 
 void InstrumentModels::initialiseDrums(Voice& v) {
@@ -608,26 +631,69 @@ float InstrumentModels::processXylophone(Voice& v, double) {
     return sum;
 }
 
-float InstrumentModels::processWoodBass(Voice& v, double, float env) {
-    const int length = std::max(8, std::min(kDelay - 2, v.delayLengthA));
-    const int i0 = v.writeA % length;
-    const int i1 = (i0 + 1) % length;
+float InstrumentModels::processWoodBass(Voice& v, double freq, float env) {
+    // Fractional-delay string length: unlike the previous fixed integer loop,
+    // this follows pitch bend and vibrato in real time.
+    const float delaySamples = clampf(
+            float(sampleRate_ / std::max(24.0, freq) - 0.75),
+            8.0f, float(kDelay - 4));
+    const float stringOut = readDelay(v.delayA, v.writeA, delaySamples);
 
-    const float y0 = v.delayA[i0];
-    const float y1 = v.delayA[i1];
+    // Approximate which physical string is being used (E1/A1/D2/G2) from the
+    // played pitch.  Higher stopped positions lose energy slightly faster.
+    int openNote = 28; // E1
+    if (v.note >= 43) openNote = 43;      // G2
+    else if (v.note >= 38) openNote = 38; // D2
+    else if (v.note >= 33) openNote = 33; // A1
+    const float stopped = clampf((v.note - openNote) / 12.0f, 0.0f, 2.0f);
 
-    // Frequency-dependent bridge/string loss: a one-pole average with
-    // damping controlled by STRING DAMP.
-    const float damping = 0.9985f - 0.0105f * control1_;
-    const float averaged = 0.5f * (y0 + y1);
-    v.filter1 += (averaged - v.filter1) * (0.30f + 0.42f * control3_);
-    v.delayA[i0] = v.filter1 * damping;
-    v.writeA = i1;
+    // A one-pole loop loss gives frequency-dependent damping: high partials
+    // disappear faster than the fundamental. STRING DAMP closes this filter.
+    const float tracking = 0.16f + 0.68f * (1.0f - control1_);
+    v.filter1 += (stringOut - v.filter1) * tracking;
+
+    // Per-round-trip energy loss dominates natural pizzicato decay.  The
+    // player's damping control and stopped-string length both shorten sustain.
+    const float loopGain = clampf(
+            0.952f - 0.030f * control1_ - 0.0030f * stopped,
+            0.900f, 0.957f);
+    const float loop = v.filter1 * loopGain;
+    writeDelay(v.delayA, v.writeA, loop);
+
+    // Bridge velocity contains both string displacement and its brighter
+    // difference component.  Driving the fixed body modes from this signal
+    // makes the box participate instead of acting like a post-EQ.
+    const float bridgeHigh = stringOut - v.filter1;
+    const float bridgeDrive = 0.34f * stringOut + 0.66f * bridgeHigh;
 
     float body = 0.0f;
-    for (int i=0; i<4; ++i) body += tickMode(v, i, y0);
+    for (int i=0; i<8; ++i) body += tickMode(v, i, bridgeDrive);
 
-    return (0.72f * y0 + body) * env;
+    // Large wooden bodies radiate the lowest string components more smoothly
+    // than a direct pickup.  This low-pass state is mixed with some direct
+    // bridge signal so the result keeps articulation without becoming boomy.
+    v.bodyState += (stringOut - v.bodyState) * 0.032f;
+
+    // Finger/fingerboard contact is short, velocity-sensitive and mostly
+    // mid/high frequency.  It is deliberately subtle.
+    const float t = float(v.age) / float(sampleRate_);
+    const float n = noise(v);
+    v.noiseState += (n - v.noiseState) * 0.055f;
+    const float fingerHigh = n - v.noiseState;
+    const float velocity = v.velocity / 127.0f;
+    const float fingerEnv = std::exp(-t * (90.0f + 95.0f * control2_));
+    float finger = fingerHigh * fingerEnv *
+                   (0.004f + 0.020f * velocity * velocity);
+
+    // A hard pluck can lightly touch the fingerboard, but only at the top of
+    // the velocity range; this avoids a permanent synthetic click.
+    if (velocity > 0.78f) {
+        const float slapEnv = std::exp(-t * 58.0f);
+        finger += bridgeHigh * slapEnv * (velocity - 0.78f) * 0.22f;
+    }
+
+    const float direct = 0.38f * stringOut + 0.32f * v.bodyState;
+    return (direct + body + finger) * env;
 }
 
 float InstrumentModels::processDrums(Voice& v, double) {
