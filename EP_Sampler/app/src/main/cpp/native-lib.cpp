@@ -54,3 +54,8 @@ extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_lo
     env->ReleaseByteArrayElements(bytes, data, JNI_ABORT);
     return ok ? JNI_TRUE : JNI_FALSE;
 }
+
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setDrumFx(
+        JNIEnv*, jclass, jint boostDb, jint distortion) {
+    AudioEngine::instance().setDrumFx(boostDb, distortion);
+}
