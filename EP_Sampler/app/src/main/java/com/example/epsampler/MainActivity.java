@@ -538,6 +538,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             new AlertDialog.Builder(this)
                     .setTitle("DRUMS MODEL")
                     .setMessage("Edit directly on the performance screen.\n\n" +
+                            "C4 Kick / C#4 Hi-hat / D4 Snare = physical models\n" +
+                            "D#4 Close Hat / E4 Tom / F4 Crash\n" +
+                            "F#4 Kick / G4 Stick / G#4 Snare = one-shot samples\n\n" +
                             "KICK: Tune / Decay / Bend / Click\n" +
                             "HI-HAT: Tune / Decay / Color / Noise\n" +
                             "SNARE: Tune / Decay / Snappy / Impact")
