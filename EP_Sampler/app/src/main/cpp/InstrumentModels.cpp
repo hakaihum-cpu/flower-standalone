@@ -417,3 +417,9 @@ float InstrumentModels::process() {
     if (active > 1) sum *= 1.0f / std::sqrt(float(active));
     return std::tanh(sum * 0.92f);
 }
+
+int InstrumentModels::activeVoices() const {
+    int n = 0;
+    for (const auto& v : voices_) if (v.active) ++n;
+    return n;
+}
