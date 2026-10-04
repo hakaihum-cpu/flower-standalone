@@ -729,6 +729,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putInt(KEY_DRUM_BOOST_DB, drumBoostDb)
                 .putInt(KEY_DRUM_DISTORTION, drumDistortion)
+                .putInt(KEY_PART_BOOST_PREFIX + 7, drumBoostDb)
+                .putInt(KEY_PART_DIST_PREFIX + 7, drumDistortion)
                 .apply();
     }
 
