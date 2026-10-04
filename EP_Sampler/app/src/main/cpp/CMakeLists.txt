@@ -5,6 +5,7 @@ add_library(epaudio SHARED
         native-lib.cpp
         AudioEngine.cpp
         PhysicalViolin.cpp
+        InstrumentModels.cpp
         DreamyEffect.cpp
         SpaceEffect.cpp
         TapeEffect.cpp)
