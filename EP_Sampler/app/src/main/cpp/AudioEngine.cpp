@@ -197,6 +197,18 @@ bool AudioEngine::start() {
 
     sampleRate_ = AAudioStream_getSampleRate(stream_);
 
+    const int delayBufferSize = std::max(4096, sampleRate_ * 2);
+    performanceDelayL_.assign(delayBufferSize, 0.0f);
+    performanceDelayR_.assign(delayBufferSize, 0.0f);
+    performanceDelayWrite_ = 0;
+
+    const int stutterBufferSize = std::max(4096, sampleRate_);
+    stutterHistoryL_.assign(stutterBufferSize, 0.0f);
+    stutterHistoryR_.assign(stutterBufferSize, 0.0f);
+    stutterWrite_ = 0;
+    stutterCaptureEnd_ = 0;
+    stutterPhase_ = 0.0;
+
     // Part 0: existing bowed-string violin. Keep its validated core untouched.
     violin_.prepare(sampleRate_);
     violin_.setBowPressure(0.58f);
@@ -306,6 +318,9 @@ void AudioEngine::setPartFx(int part,int boostDb,int distortion){
 }
 void AudioEngine::setFeltReverb(int mix,int decay){
     push({Event::FELT_REVERB,mix,decay,0,0});
+}
+void AudioEngine::setPerformanceXY(bool active,int part,int x,int y){
+    push({Event::PERFORMANCE_XY,active?1:0,part,x,y});
 }
 
 void AudioEngine::handlePartNoteOn(int part, int note, int velocity) {
@@ -424,6 +439,87 @@ void AudioEngine::handlePartControlChange(int part, int cc, int value) {
         dreamyMix_=value/127.f;
         dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_);
     }
+}
+
+void AudioEngine::resetPerformanceDelay() {
+    std::fill(performanceDelayL_.begin(), performanceDelayL_.end(), 0.0f);
+    std::fill(performanceDelayR_.begin(), performanceDelayR_.end(), 0.0f);
+    performanceDelayWrite_ = 0;
+}
+
+void AudioEngine::processPerformanceDelay(float& left, float& right) {
+    if (performanceDelayL_.empty() || performanceDelayR_.empty()) return;
+
+    const float x = std::clamp(performanceXYX_, 0.0f, 1.0f);
+    const float y = std::clamp(performanceXYY_, 0.0f, 1.0f);
+
+    // X = delay time 25..650 ms. Y = wet/feedback intensity.
+    const float delayMs = 25.0f + x * 625.0f;
+    const int delaySamples = std::clamp(
+            int(std::lround(delayMs * 0.001f * sampleRate_)),
+            1,
+            int(performanceDelayL_.size()) - 2);
+
+    int read = performanceDelayWrite_ - delaySamples;
+    while (read < 0) read += int(performanceDelayL_.size());
+
+    const float dl = performanceDelayL_[read];
+    const float dr = performanceDelayR_[read];
+
+    const float wet = y * 0.88f;
+    const float feedback = y * 0.78f;
+
+    const float dryL = left;
+    const float dryR = right;
+
+    performanceDelayL_[performanceDelayWrite_] =
+            std::clamp(dryL + dl * feedback, -2.0f, 2.0f);
+    performanceDelayR_[performanceDelayWrite_] =
+            std::clamp(dryR + dr * feedback, -2.0f, 2.0f);
+
+    performanceDelayWrite_++;
+    if (performanceDelayWrite_ >= int(performanceDelayL_.size())) performanceDelayWrite_ = 0;
+
+    left = dryL * (1.0f - wet) + dl * wet;
+    right = dryR * (1.0f - wet) + dr * wet;
+}
+
+void AudioEngine::recordStutterHistory(float left, float right) {
+    if (stutterHistoryL_.empty() || stutterHistoryR_.empty()) return;
+    stutterHistoryL_[stutterWrite_] = left;
+    stutterHistoryR_[stutterWrite_] = right;
+    stutterWrite_++;
+    if (stutterWrite_ >= int(stutterHistoryL_.size())) stutterWrite_ = 0;
+}
+
+void AudioEngine::processPerformanceStutter(float& left, float& right) {
+    if (stutterHistoryL_.empty() || stutterHistoryR_.empty()) return;
+
+    const float x = std::clamp(performanceXYX_, 0.0f, 1.0f);
+    const float y = std::clamp(performanceXYY_, 0.0f, 1.0f);
+
+    // X = loop length 18..280 ms. Shorter on the left, longer on the right.
+    const float lengthMs = 18.0f + x * 262.0f;
+    const int length = std::clamp(
+            int(std::lround(lengthMs * 0.001f * sampleRate_)),
+            8,
+            int(stutterHistoryL_.size()) - 2);
+
+    int start = stutterCaptureEnd_ - length;
+    while (start < 0) start += int(stutterHistoryL_.size());
+
+    const int offset = std::clamp(int(stutterPhase_ * length), 0, length - 1);
+    const int index = (start + offset) % int(stutterHistoryL_.size());
+
+    const float loopL = stutterHistoryL_[index];
+    const float loopR = stutterHistoryR_[index];
+    const float wet = y;
+
+    left = left * (1.0f - wet) + loopL * wet;
+    right = right * (1.0f - wet) + loopR * wet;
+
+    stutterPhase_ += 1.0 / double(length);
+    if (stutterPhase_ >= 1.0) stutterPhase_ -= std::floor(stutterPhase_);
 }
 
 float AudioEngine::processPart(int part) {
@@ -549,6 +645,24 @@ void AudioEngine::handle(const Event& e) {
             feltPianoReverb_.setMode(feltReverbMix_ > 0 ? SpaceEffect::HALL : SpaceEffect::NONE);
             feltPianoReverb_.setParameters(feltReverbMix_ / 100.0f, feltReverbDecay_ / 100.0f);
             break;
+        case Event::PERFORMANCE_XY: {
+            const bool wasActive = performanceXYActive_;
+            const int oldPart = performanceXYPart_;
+            performanceXYActive_ = e.a != 0;
+            performanceXYPart_ = std::clamp(e.b, 0, 7);
+            performanceXYX_ = std::clamp(e.c, 0, 127) / 127.0f;
+            performanceXYY_ = std::clamp(e.d, 0, 127) / 127.0f;
+
+            if (performanceXYActive_ && (!wasActive || oldPart != performanceXYPart_)) {
+                if (performanceXYPart_ == 7) {
+                    stutterCaptureEnd_ = stutterWrite_;
+                    stutterPhase_ = 0.0;
+                } else {
+                    resetPerformanceDelay();
+                }
+            }
+            break;
+        }
     }
 }
 
@@ -583,8 +697,20 @@ void AudioEngine::render(float* out,int32_t frames) {
             partL = partFx(partL);
             partR = partFx(partR);
 
-            // FELT PIANO only: dedicated local reverb before the common bus.
+            // FELT PIANO only: dedicated local reverb before the momentary XY delay.
             if (part == 3) feltPianoReverb_.process(partL, partR);
+
+            if (part == 7) {
+                if (performanceXYActive_ && performanceXYPart_ == 7) {
+                    processPerformanceStutter(partL, partR);
+                } else {
+                    // Keep one second of recent DRUMS audio ready so Stutter
+                    // responds immediately when the user touches the XY area.
+                    recordStutterHistory(partL, partR);
+                }
+            } else if (performanceXYActive_ && performanceXYPart_ == part) {
+                processPerformanceDelay(partL, partR);
+            }
 
             mixL += partL;
             mixR += partR;
