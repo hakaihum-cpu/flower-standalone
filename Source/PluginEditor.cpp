@@ -256,10 +256,16 @@ void RealtimeChordFxAudioProcessorEditor::paint (juce::Graphics& g)
 
 void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
 {
-    const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 2, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::chordMode)->load()));
+
+    if (effectMode == 2)
+    {
+        paintChordBot (g);
+        return;
+    }
 
     if (effectMode == 0)
     {
@@ -551,7 +557,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
         }
     }
 
-    const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 2, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::chordMode)->load()));
@@ -847,7 +853,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (p.x >= 575 && p.y <= 70) { configVisible = true; refreshAudioInputs(); repaint(); return; }
 
-    const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 2, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
     if (effectMode == 0)
