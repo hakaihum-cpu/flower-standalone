@@ -46,7 +46,8 @@ public final class PianoView extends View {
     private int boosterStep = 0;
     private int boostDb = 0;
     private int spaceMode = 0;
-    private String bankStatus = "MODEL READY";
+    private String bankStatus = "VIOLIN READY";
+    private String instrumentButtonLabel = "VIOLIN";
     private int downButton = -1;
     private long downTimeMs = 0L;
 
@@ -93,6 +94,11 @@ public final class PianoView extends View {
     }
     void setSpaceMode(int mode) { spaceMode = Math.max(0, Math.min(3, mode)); invalidate(); }
     void setBankStatus(String s) { bankStatus = s; invalidate(); }
+    void setInstrumentName(String fullName, String buttonLabel) {
+        instrumentButtonLabel = buttonLabel == null ? "MODEL" : buttonLabel;
+        bankStatus = (fullName == null ? "MODEL" : fullName) + " READY";
+        invalidate();
+    }
     void setMidiConnections(int count) { midiConnections = count; invalidate(); }
     void setChannelPressure(int v) { channelPressure = clamp7(v); invalidate(); }
     void setPitchBend(int v) { pitchBend = Math.max(0, Math.min(16383, v)); invalidate(); }
@@ -320,7 +326,7 @@ public final class PianoView extends View {
                 "SPACE " + new String[]{"NONE","ROOM","HALL","SPACE"}[spaceMode],
                 tape ? "TAPE ON" : "TAPE OFF",
                 dreamy ? "DREAMY ON" : "DREAMY OFF",
-                "MODEL",
+                instrumentButtonLabel,
                 "CONFIG",
                 keyOverlayVisible ? "KEY CLOSE" : "KEY"
         };
