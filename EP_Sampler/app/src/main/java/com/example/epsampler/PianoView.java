@@ -28,7 +28,6 @@ public final class PianoView extends View {
         void onChooseBank();
         void onEditEffect(int effect);
         void onOpenConfig();
-        void onDrumParameterChanged(int parameter, int value);
     }
 
     private ActionListener actionListener;
@@ -52,19 +51,6 @@ public final class PianoView extends View {
     private int instrumentMidiChannel = 1;
     private int downButton = -1;
     private long downTimeMs = 0L;
-    private int instrumentMode = 0;
-    private int activeDrumParameter = -1;
-    private final int[] drumParameters = new int[]{
-            64, 58, 46, 38,
-            64, 43, 74, 56,
-            64, 53, 74, 58
-    };
-    private static final String[][] DRUM_PARAMETER_LABELS = new String[][]{
-            {"TUNE","DECAY","BEND","CLICK"},
-            {"TUNE","DECAY","COLOR","NOISE"},
-            {"TUNE","DECAY","SNAPPY","IMPACT"}
-    };
-    private static final String[] DRUM_NAMES = new String[]{"KICK  C4","HI-HAT  C#4","SNARE  D4"};
 
     // Temporary audition keyboard for the physical-model branch.
     // Intentionally contained in this View so it can be removed cleanly later.
@@ -90,14 +76,6 @@ public final class PianoView extends View {
     }
 
     void setActionListener(ActionListener l) { actionListener = l; }
-    void setInstrumentMode(int mode) { instrumentMode = Math.max(0, Math.min(7, mode)); invalidate(); }
-    void setDrumParameters(int[] values) {
-        if (values == null) return;
-        for (int i=0; i<drumParameters.length && i<values.length; i++) {
-            drumParameters[i] = clamp7(values[i]);
-        }
-        invalidate();
-    }
     void setPerformanceVideoLayer(PerformanceVideoLayer layer) { performanceVideoLayer = layer; }
     void setDreamy(boolean on) {
         dreamy = on;
@@ -176,7 +154,6 @@ public final class PianoView extends View {
         // Keep this view transparent so only the controls / audition keyboard
         // sit above the full-quality video.
         drawIndicators(c);
-        if (instrumentMode == 7) drawDrumEditor(c);
         if (keyOverlayVisible) drawAuditionKeyboard(c);
     }
 
@@ -393,108 +370,6 @@ public final class PianoView extends View {
         c.drawRect(x, y, x+w*value, y+h, paint);
     }
 
-
-    private RectF drumEditorRect() {
-        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
-        return new RectF(8f*u, 126f*u, getWidth()-8f*u, 352f*u);
-    }
-
-    private void drawDrumEditor(Canvas c) {
-        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
-        RectF panel = drumEditorRect();
-
-        paint.setColor(Color.argb(176, 8, 8, 8));
-        c.drawRoundRect(panel, 10f*u, 10f*u, paint);
-
-        final float nameW = 88f*u;
-        final float left = panel.left + 10f*u;
-        final float controlsLeft = left + nameW;
-        final float usableW = panel.right - controlsLeft - 8f*u;
-        final float colW = usableW / 4f;
-        final float rowH = (panel.height() - 18f*u) / 3f;
-
-        for (int row=0; row<3; row++) {
-            float y0 = panel.top + 8f*u + row*rowH;
-
-            text.setColor(Color.argb(245, 245, 237, 220));
-            text.setTextSize(13f*u);
-            c.drawText(DRUM_NAMES[row], left, y0 + 28f*u, text);
-
-            for (int col=0; col<4; col++) {
-                int parameter = row*4 + col;
-                float x0 = controlsLeft + col*colW + 4f*u;
-                float x1 = controlsLeft + (col+1)*colW - 5f*u;
-                float barY = y0 + 34f*u;
-                float barH = 11f*u;
-
-                text.setTextSize(11.5f*u);
-                text.setColor(Color.argb(225, 240, 232, 216));
-                c.drawText(DRUM_PARAMETER_LABELS[row][col], x0, y0 + 15f*u, text);
-
-                paint.setColor(Color.argb(76, 238, 229, 207));
-                c.drawRoundRect(new RectF(x0, barY, x1, barY+barH), 4f*u, 4f*u, paint);
-
-                float norm = drumParameters[parameter] / 127f;
-                paint.setColor(Color.argb(205, 242, 232, 207));
-                c.drawRoundRect(new RectF(x0, barY, x0 + (x1-x0)*norm, barY+barH),
-                        4f*u, 4f*u, paint);
-
-                String value;
-                if (col == 0) {
-                    float st = (drumParameters[parameter] / 127f - 0.5f) * 24f;
-                    value = String.format(java.util.Locale.US, "%+.1f", st);
-                } else {
-                    value = Integer.toString(drumParameters[parameter]);
-                }
-                text.setTextSize(11f*u);
-                text.setColor(Color.argb(220, 244, 237, 224));
-                float vw = text.measureText(value);
-                c.drawText(value, x1-vw, y0 + 15f*u, text);
-            }
-        }
-    }
-
-    private int drumParameterAt(float x, float y) {
-        if (instrumentMode != 7) return -1;
-        RectF panel = drumEditorRect();
-        if (!panel.contains(x,y)) return -1;
-
-        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
-        float nameW = 88f*u;
-        float left = panel.left + 10f*u;
-        float controlsLeft = left + nameW;
-        if (x < controlsLeft) return -1;
-
-        float usableW = panel.right - controlsLeft - 8f*u;
-        float colW = usableW / 4f;
-        float rowH = (panel.height() - 18f*u) / 3f;
-        int row = Math.max(0, Math.min(2, (int)((y - (panel.top + 8f*u)) / rowH)));
-        int col = Math.max(0, Math.min(3, (int)((x - controlsLeft) / colW)));
-        return row*4 + col;
-    }
-
-    private int drumValueAtX(int parameter, float x) {
-        RectF panel = drumEditorRect();
-        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
-        float controlsLeft = panel.left + 10f*u + 88f*u;
-        float usableW = panel.right - controlsLeft - 8f*u;
-        float colW = usableW / 4f;
-        int col = parameter % 4;
-        float x0 = controlsLeft + col*colW + 4f*u;
-        float x1 = controlsLeft + (col+1)*colW - 5f*u;
-        float norm = (x - x0) / Math.max(1f, x1-x0);
-        return clamp7(Math.round(Math.max(0f, Math.min(1f, norm)) * 127f));
-    }
-
-    private void editDrumParameter(int parameter, float x) {
-        if (parameter < 0 || parameter >= drumParameters.length) return;
-        int value = drumValueAtX(parameter, x);
-        if (drumParameters[parameter] == value) return;
-        drumParameters[parameter] = value;
-        if (actionListener != null) actionListener.onDrumParameterChanged(parameter, value);
-        invalidate();
-    }
-
     private int maxHeldVelocity() {
         int m = 0; for (int i=0;i<128;i++) if (held[i]) m = Math.max(m, velocities[i]); return m;
     }
@@ -666,28 +541,6 @@ public final class PianoView extends View {
     @Override public boolean onTouchEvent(MotionEvent e) {
         final int action = e.getActionMasked();
         final int actionIndex = e.getActionIndex();
-
-        if (instrumentMode == 7) {
-            if (action == MotionEvent.ACTION_DOWN) {
-                int parameter = drumParameterAt(e.getX(actionIndex), e.getY(actionIndex));
-                if (parameter >= 0) {
-                    activeDrumParameter = parameter;
-                    editDrumParameter(parameter, e.getX(actionIndex));
-                    return true;
-                }
-            } else if (action == MotionEvent.ACTION_MOVE && activeDrumParameter >= 0) {
-                int pointer = 0;
-                editDrumParameter(activeDrumParameter, e.getX(pointer));
-                return true;
-            } else if ((action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
-                    && activeDrumParameter >= 0) {
-                if (action == MotionEvent.ACTION_UP) {
-                    editDrumParameter(activeDrumParameter, e.getX(actionIndex));
-                }
-                activeDrumParameter = -1;
-                return true;
-            }
-        }
 
         if (keyOverlayVisible) {
             if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
