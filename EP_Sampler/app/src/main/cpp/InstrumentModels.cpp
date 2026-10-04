@@ -549,8 +549,7 @@ float InstrumentModels::processXylophone(Voice& v, double) {
     if (float(v.age) < strikeSamples) {
         const float q = (float(v.age) + 1.0f) / (strikeSamples + 1.0f);
         excitation = std::sin(float(kPi) * q)
-                   * (0.45f + 0.75f * control2_)
-                   * (0.35f + 0.65f * (v.velocity / 127.0f));
+                   * (0.45f + 0.75f * (v.velocity / 127.0f));
     }
 
     float sum = 0.0f;
@@ -582,9 +581,9 @@ float InstrumentModels::processWoodBass(Voice& v, double, float env) {
 
 float InstrumentModels::processDrums(Voice& v, double) {
     const int n = v.note;
-    const bool kick = (n == 35 || n == 36);
-    const bool snare = (n == 38 || n == 40);
-    const bool hat = (n == 42 || n == 44 || n == 46);
+    const bool kick = (n == 60);   // C4
+    const bool hat = (n == 61);    // C#4
+    const bool snare = (n == 62);  // D4
 
     const float strikeSamples = kick ? 22.0f : (hat ? 5.0f : 11.0f);
     float excitation = 0.0f;
@@ -605,7 +604,7 @@ float InstrumentModels::processDrums(Voice& v, double) {
         // velocity/energy rather than an unrelated noise oscillator.
         const float nse = noise(v);
         const float drive = std::min(1.0f, std::fabs(membrane) * 22.0f);
-        const float decay = std::exp(-t * (7.0f + 8.0f * control1_));
+        const float decay = std::exp(-t * (5.0f + 11.0f * (1.0f - vibrato_)));
         v.noiseState += (nse * drive - v.noiseState) * 0.34f;
         return membrane * 0.72f + v.noiseState * decay * 0.34f;
     }
@@ -615,7 +614,7 @@ float InstrumentModels::processDrums(Voice& v, double) {
         const float nse = noise(v);
         const float hp = nse - v.noiseState;
         v.noiseState += (nse - v.noiseState) * 0.045f;
-        const float decay = std::exp(-t * (8.0f + 16.0f * control1_));
+        const float decay = std::exp(-t * (7.0f + 18.0f * (1.0f - vibrato_)));
         return membrane * 0.55f + hp * decay * 0.24f;
     }
 
