@@ -39,6 +39,7 @@ public:
     void setDreamyParameters(int x, int y, int mix);
     void setAdsr(int attackMs, int decayMs, int sustainPct, int releaseMs);
     void setInstrument(int instrument);
+    void setDrumParameter(int parameter, int value);
     void noteOnPart(int part, int note, int velocity);
     void noteOffPart(int part, int note, int velocity);
     void polyPressurePart(int part, int note, int pressure);
@@ -57,7 +58,8 @@ private:
             NOTE_ON, NOTE_OFF, POLY_AT, CH_AT, CC, PITCH,
             DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS,
             TAPE, TAPE_PARAMS, DREAMY_PARAMS, ADSR, INSTRUMENT,
-            PART_NOTE_ON, PART_NOTE_OFF, PART_POLY_AT, PART_CH_AT, PART_CC, PART_PITCH
+            PART_NOTE_ON, PART_NOTE_OFF, PART_POLY_AT, PART_CH_AT, PART_CC, PART_PITCH,
+            DRUM_PARAM
         } type;
         int a=0,b=0,c=0,d=0;
     };
