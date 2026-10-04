@@ -41,8 +41,12 @@ if not errorlevel 1 (
 )
 
 if not exist "%~dp0MASTER_CAPTURE.layout.json" (
-  call "%~dp0PREPARE_SAMPLING_TEMPLATE.bat"
-  if errorlevel 1 exit /b 1
+  %PY% "%~dp0generate_master_capture_midi.py" -m "%~dp0capture_manifest.csv" -o "%~dp0MASTER_CAPTURE.mid" --layout "%~dp0MASTER_CAPTURE.layout.json"
+  if errorlevel 1 (
+    echo [ERROR] MASTER_CAPTURE layout generation failed.
+    pause
+    exit /b 1
+  )
 )
 
 if not defined FL_EXE (
