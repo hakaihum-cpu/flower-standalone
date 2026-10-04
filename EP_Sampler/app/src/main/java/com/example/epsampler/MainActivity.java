@@ -142,15 +142,23 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         root.addView(videoLayer, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(pianoView, new FrameLayout.LayoutParams(
+        // Performance XY sits below the control UI. PianoView returns false for
+        // blank-area ACTION_DOWN events so those gestures still reach XY.
+        root.addView(performanceXYView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(performanceXYView, new FrameLayout.LayoutParams(
+        root.addView(pianoView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(drumEditorView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+
+        epBackground.setZ(0f);
+        videoLayer.setZ(1f);
+        performanceXYView.setZ(10f);
+        pianoView.setZ(20f);
+        drumEditorView.setZ(30f);
         setContentView(root);
 
         boosterStep = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_BOOST, 0);
