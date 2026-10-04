@@ -25,7 +25,16 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 
 final class PerformanceVideoLayer extends FrameLayout implements TextureView.SurfaceTextureListener {
-    private static final String ASSET_NAME = "violin_bg.mp4";
+    private static final String[] ASSET_NAMES = new String[] {
+            "violin_bg.mp4",
+            "flute_bg.mp4",
+            "sax_bg.mp4",
+            "felt_piano_bg.mp4",
+            "accordion_bg.mp4",
+            "xylophone_bg.mp4",
+            "wood_bass_bg.mp4",
+            "drums_bg.mp4"
+    };
     private static final int VIDEO_DURATION_MS = 8000;
 
     private final TextureView textureView;
@@ -38,6 +47,8 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
     private boolean fileReady = false;
     private boolean prepared = false;
     private boolean pausedByLifecycle = false;
+    private int instrumentMode = 0;
+    private int assetGeneration = 0;
 
     private final boolean[] held = new boolean[128];
     private int heldCount = 0;
@@ -63,11 +74,21 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
         dreamyOverlay = new DreamyOverlay(context, textureView);
         addView(dreamyOverlay, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
-        prepareAssetAsync(context.getApplicationContext());
+        prepareAssetAsync(context.getApplicationContext(), 0);
     }
 
     boolean isVideoReady() {
         return prepared && textureView.isAvailable();
+    }
+
+    void setInstrument(int mode) {
+        mode = Math.max(0, Math.min(ASSET_NAMES.length - 1, mode));
+        if (mode == instrumentMode && (fileReady || prepared)) return;
+
+        instrumentMode = mode;
+        allNotesOff();
+        resetPlayerForSourceChange();
+        prepareAssetAsync(getContext().getApplicationContext(), mode);
     }
 
     void noteOn(int note, int velocity) {
@@ -150,26 +171,55 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
         dreamyOverlay.release();
     }
 
-    private void prepareAssetAsync(Context context) {
+    private void prepareAssetAsync(Context context, int requestedMode) {
+        final int generation = ++assetGeneration;
+        final int mode = Math.max(0, Math.min(ASSET_NAMES.length - 1, requestedMode));
+
         new Thread(() -> {
+            File readyFile = null;
             try {
-                File out = new File(context.getCacheDir(), "violin_bg_original.mp4");
-                if (!out.exists() || out.length() < 1_600_000L) {
-                    try (InputStream in = context.getAssets().open(ASSET_NAME);
-                         FileOutputStream fos = new FileOutputStream(out, false)) {
-                        byte[] buffer = new byte[64 * 1024];
-                        int n;
-                        while ((n = in.read(buffer)) >= 0) fos.write(buffer, 0, n);
-                        fos.flush();
-                    }
+                String requested = ASSET_NAMES[mode];
+                String chosen = requested;
+                InputStream probe;
+                try {
+                    probe = context.getAssets().open(requested);
+                } catch (Exception missing) {
+                    chosen = ASSET_NAMES[0];
+                    probe = context.getAssets().open(chosen);
                 }
-                cachedVideo = out;
-                fileReady = out.exists() && out.length() > 1_600_000L;
-            } catch (Exception ignored) {
-                fileReady = false;
-            }
-            post(this::maybeStartPlayer);
-        }, "ViolinVideoAsset").start();
+
+                File out = new File(context.getCacheDir(),
+                        "instrument_bg_" + mode + "_" + chosen.replace('.', '_'));
+                try (InputStream in = probe;
+                     FileOutputStream fos = new FileOutputStream(out, false)) {
+                    byte[] buffer = new byte[64 * 1024];
+                    int n;
+                    while ((n = in.read(buffer)) >= 0) fos.write(buffer, 0, n);
+                    fos.flush();
+                }
+
+                if (out.exists() && out.length() > 1024L) readyFile = out;
+            } catch (Exception ignored) { }
+
+            final File result = readyFile;
+            post(() -> {
+                if (generation != assetGeneration) return;
+                cachedVideo = result;
+                fileReady = result != null;
+                if (fileReady) maybeStartPlayer();
+            });
+        }, "InstrumentVideoAsset").start();
+    }
+
+    private void resetPlayerForSourceChange() {
+        prepared = false;
+        fileReady = false;
+        reverseMode = false;
+        handler.removeCallbacks(reverseTick);
+        if (player != null) {
+            try { player.release(); } catch (Exception ignored) { }
+            player = null;
+        }
     }
 
     private void maybeStartPlayer() {
