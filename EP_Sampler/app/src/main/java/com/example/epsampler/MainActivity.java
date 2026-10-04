@@ -11,6 +11,7 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.widget.ArrayAdapter;
+import android.widget.FrameLayout;
 import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
@@ -42,6 +43,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_SUSTAIN_PCT = "sustain_pct";
     private static final String KEY_RELEASE_MS = "release_ms";
     private PianoView pianoView;
+    private PerformanceVideoLayer videoLayer;
     private MidiController midiController;
     private volatile boolean dreamy = false;
     private int boosterStep = 0;
@@ -65,9 +67,19 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         hideSystemUI();
+        videoLayer = new PerformanceVideoLayer(this);
         pianoView = new PianoView(this);
+        pianoView.setPerformanceVideoLayer(videoLayer);
         pianoView.setActionListener(this);
-        setContentView(pianoView);
+
+        FrameLayout root = new FrameLayout(this);
+        root.addView(videoLayer, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        root.addView(pianoView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(root);
 
         boosterStep = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_BOOST, 0);
         spaceMode = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SPACE, 0);
@@ -416,14 +428,21 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         loadBankUri(uri);
     }
 
+    @Override protected void onResume() {
+        super.onResume();
+        if (videoLayer != null) videoLayer.resumeFromLifecycle();
+    }
+
     @Override protected void onPause() {
         if (pianoView != null) pianoView.panicAuditionKeyboard();
+        if (videoLayer != null) videoLayer.pauseForLifecycle();
         NativeEngine.controlChange(123, 0);
         super.onPause();
     }
 
     @Override protected void onDestroy() {
         if (midiController != null) midiController.stop();
+        if (videoLayer != null) videoLayer.release();
         NativeEngine.controlChange(123, 0);
         NativeEngine.stop();
         super.onDestroy();
