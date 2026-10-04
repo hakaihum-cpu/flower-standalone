@@ -427,13 +427,13 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
     private String modelDescription() {
         switch (instrumentMode) {
-            case 1: return "Air-jet / breath model MVP";
-            case 2: return "Nonlinear reed / bore model MVP";
-            case 3: return "Felt hammer + modal string model MVP";
-            case 4: return "Free-reed / bellows model MVP";
-            case 5: return "Mallet + inharmonic modal bar model MVP";
-            case 6: return "Plucked upright-bass string model MVP";
-            case 7: return "Kick / snare / hi-hat / tom model MVP";
+            case 1: return "Jet-drive + lossy bore digital waveguide";
+            case 2: return "Nonlinear single reed + two-section bore waveguide";
+            case 3: return "Nonlinear felt contact + stiff-string modal resonators";
+            case 4: return "Self-excited free reeds + pressure/airflow coupling";
+            case 5: return "Mallet contact + inharmonic bar modal resonators";
+            case 6: return "Plucked lossy string + upright-bass body modes";
+            case 7: return "Circular membrane / plate modal resonators";
             default: return "4 independent bowed-string voices / shared violin body";
         }
     }
