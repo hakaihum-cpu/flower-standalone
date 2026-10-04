@@ -62,6 +62,16 @@ public:
     void clearMotion() noexcept { motionCommand.store (2, std::memory_order_release); }
     int getMotionState() const noexcept { return motionState.load (std::memory_order_relaxed); }
 
+    int getChordBotSlotRoot (int index) const noexcept;
+    int getChordBotSlotQuality (int index) const noexcept;
+    juce::String getChordBotSlotLabel (int index) const;
+    void setChordBotSlot (int index, int rootPitchClass, int quality);
+    void triggerChordBotPad (int index, bool down) noexcept;
+    int getChordBotActivePad() const noexcept
+    {
+        return chordBotActivePad.load (std::memory_order_relaxed);
+    }
+
 private:
     void acceptPitch (const chordfx::PitchEstimate& estimate);
     void applyChord (const chordfx::ChordPlan& plan, bool recaptureSample);
@@ -78,6 +88,11 @@ private:
     void applyMotionPoint (int x, int y);
     void processChordMidi (juce::MidiBuffer&);
     void stopActiveChordMidi (juce::MidiBuffer&);
+    void processChordBotMidi (juce::MidiBuffer&);
+    void initialiseChordBotDefaults();
+    void regenerateChordBotSuggestions();
+    void saveChordBotLayout();
+    void loadChordBotLayout();
     void processChordAudio (juce::AudioBuffer<float>&); // CHORD-A: captured-input chord
     void processChordB (juce::AudioBuffer<float>&);     // CHORD-B: random sine arpeggiator
     void processChordReverb (juce::AudioBuffer<float>&);
@@ -148,6 +163,13 @@ private:
     bool chordMidiRefreshRequested = false;
     bool chordMidiStopRequested = false;
     bool chordMidiGateOpen = false;
+
+    std::array<std::atomic<int>, 9> chordBotCodes {};
+    std::atomic<int> chordBotRequestedPad { -1 };
+    std::atomic<int> chordBotActivePad { -1 };
+    std::array<int, 4> activeChordBotNotes {};
+    int activeChordBotNoteCount = 0;
+    int activeChordBotMidiChannel = 1;
 
     // Dreamy DSP state copied from the accepted effect implementation.
     static constexpr int dreamyVoiceCount = 2;
