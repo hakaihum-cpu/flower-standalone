@@ -67,6 +67,10 @@ final class PerformanceXYView extends View {
         invalidate();
     }
 
+    void cancelEffect() {
+        releaseEffect();
+    }
+
     private void releaseEffect() {
         if (!active) return;
         active = false;
