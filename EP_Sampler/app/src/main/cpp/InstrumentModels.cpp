@@ -693,7 +693,11 @@ float InstrumentModels::processWoodBass(Voice& v, double freq, float env) {
     }
 
     const float direct = 0.38f * stringOut + 0.32f * v.bodyState;
-    return (direct + body + finger) * env;
+
+    // Body modes colour the bridge signal but must not become an independent
+    // pitched oscillator.  Keep them well below the direct string so A0/T1
+    // reinforce timbre without replacing the played fundamental.
+    return (direct + 0.025f * body + finger) * env;
 }
 
 float InstrumentModels::processDrums(Voice& v, double) {
