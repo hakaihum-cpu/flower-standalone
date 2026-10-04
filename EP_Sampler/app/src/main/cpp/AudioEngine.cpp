@@ -227,6 +227,9 @@ bool AudioEngine::start() {
     dreamy_.prepare(sampleRate_);
     dreamy_.setXY(cc103_/127.f, cc104_/127.f);
     space_.prepare(sampleRate_);
+    feltPianoReverb_.prepare(sampleRate_);
+    feltPianoReverb_.setMode(SpaceEffect::HALL);
+    feltPianoReverb_.setParameters(feltReverbMix_ / 100.0f, feltReverbDecay_ / 100.0f);
     tape_.prepare(sampleRate_);
     space_.setParameters(spaceMix_, spaceDecay_);
     tape_.setParameters(tapeWow_, tapeFlutter_, tapeDrive_);
@@ -297,6 +300,12 @@ void AudioEngine::setDrumParameter(int parameter,int value){
 }
 void AudioEngine::setDrumFx(int boostDb,int distortion){
     push({Event::DRUM_FX,boostDb,distortion,0,0});
+}
+void AudioEngine::setPartFx(int part,int boostDb,int distortion){
+    push({Event::PART_FX,part,boostDb,distortion,0});
+}
+void AudioEngine::setFeltReverb(int mix,int decay){
+    push({Event::FELT_REVERB,mix,decay,0,0});
 }
 
 void AudioEngine::handlePartNoteOn(int part, int note, int velocity) {
@@ -525,8 +534,20 @@ void AudioEngine::handle(const Event& e) {
                     std::clamp(e.b, 0, 127) / 127.0f);
             break;
         case Event::DRUM_FX:
-            drumBoostDb_ = std::clamp(e.a, 0, 18);
-            drumDistortion_ = std::clamp(e.b, 0, 127);
+            partBoostDb_[7] = std::clamp(e.a, 0, 18);
+            partDistortion_[7] = std::clamp(e.b, 0, 127);
+            break;
+        case Event::PART_FX: {
+            const int part = std::clamp(e.a, 0, 7);
+            partBoostDb_[part] = std::clamp(e.b, 0, 18);
+            partDistortion_[part] = std::clamp(e.c, 0, 127);
+            break;
+        }
+        case Event::FELT_REVERB:
+            feltReverbMix_ = std::clamp(e.a, 0, 100);
+            feltReverbDecay_ = std::clamp(e.b, 0, 100);
+            feltPianoReverb_.setMode(feltReverbMix_ > 0 ? SpaceEffect::HALL : SpaceEffect::NONE);
+            feltPianoReverb_.setParameters(feltReverbMix_ / 100.0f, feltReverbDecay_ / 100.0f);
             break;
     }
 }
@@ -536,38 +557,43 @@ void AudioEngine::render(float* out,int32_t frames) {
     while (pop(e)) handle(e);
 
     for (int32_t i=0; i<frames; ++i) {
-        float otherMono = 0.0f;
+        float mixL = 0.0f;
+        float mixR = 0.0f;
         int activeParts = 0;
 
-        // Parts 0..6 remain untouched.
-        for (int part=0; part<7; ++part) {
+        for (int part=0; part<8; ++part) {
             const int voices = activeVoicesPart(part);
-            otherMono += processPart(part);
+            float partL = processPart(part);
+            float partR = partL;
+
+            if (part == 7) {
+                // One-shot drum samples join the physical drum model before
+                // the DRUMS Part FX.
+                processDrumSamples(partL, partR);
+            }
+
+            const float boost = std::pow(10.0f,
+                    float(std::clamp(partBoostDb_[part], 0, 18)) / 20.0f);
+            const float distAmount = std::clamp(partDistortion_[part], 0, 127) / 127.0f;
+            const float drive = 1.0f + 14.0f * distAmount;
+            auto partFx = [&](float x) {
+                const float saturated = std::tanh(x * drive);
+                return ((1.0f - distAmount) * x + distAmount * saturated) * boost;
+            };
+            partL = partFx(partL);
+            partR = partFx(partR);
+
+            // FELT PIANO only: dedicated local reverb before the common bus.
+            if (part == 3) feltPianoReverb_.process(partL, partR);
+
+            mixL += partL;
+            mixR += partR;
             if (voices > 0) activeParts++;
         }
 
-        // DRUMS gets its own bus so physical drums and one-shot samples share
-        // the same dedicated Booster/Distortion before the global FX chain.
-        const int drumVoices = activeVoicesPart(7);
-        float drumL = processPart(7);
-        float drumR = drumL;
-        processDrumSamples(drumL, drumR);
-        if (drumVoices > 0) activeParts++;
-
-        const float drumBoost = std::pow(10.0f,
-                float(std::clamp(drumBoostDb_, 0, 18)) / 20.0f);
-        const float distAmount = std::clamp(drumDistortion_, 0, 127) / 127.0f;
-        const float drive = 1.0f + 14.0f * distAmount;
-        auto drumFx = [&](float x) {
-            const float saturated = std::tanh(x * drive);
-            return ((1.0f - distAmount) * x + distAmount * saturated) * drumBoost;
-        };
-        drumL = drumFx(drumL);
-        drumR = drumFx(drumR);
-
-        float norm = activeParts > 1 ? 1.0f / std::sqrt(float(activeParts)) : 1.0f;
-        float l = (otherMono + drumL) * norm;
-        float r = (otherMono + drumR) * norm;
+        const float norm = activeParts > 1 ? 1.0f / std::sqrt(float(activeParts)) : 1.0f;
+        float l = mixL * norm;
+        float r = mixR * norm;
 
         dreamy_.process(l,r);
         tape_.process(l,r);
