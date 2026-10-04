@@ -36,7 +36,7 @@ final class PerformanceXYView extends View {
     }
 
     void setInstrumentMode(int mode) {
-        int next = Math.max(0, Math.min(7, mode));
+        int next = Math.max(0, Math.min(8, mode));
         if (active && next != instrumentMode) releaseEffect();
         instrumentMode = next;
         invalidate();
