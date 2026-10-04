@@ -295,6 +295,9 @@ void AudioEngine::setInstrument(int instrument){
 void AudioEngine::setDrumParameter(int parameter,int value){
     push({Event::DRUM_PARAM,parameter,value,0,0});
 }
+void AudioEngine::setDrumFx(int boostDb,int distortion){
+    push({Event::DRUM_FX,boostDb,distortion,0,0});
+}
 
 void AudioEngine::handlePartNoteOn(int part, int note, int velocity) {
     part = std::clamp(part, 0, 7);
@@ -521,6 +524,10 @@ void AudioEngine::handle(const Event& e) {
                     std::clamp(e.a, 0, 11),
                     std::clamp(e.b, 0, 127) / 127.0f);
             break;
+        case Event::DRUM_FX:
+            drumBoostDb_ = std::clamp(e.a, 0, 18);
+            drumDistortion_ = std::clamp(e.b, 0, 127);
+            break;
     }
 }
 
@@ -529,21 +536,38 @@ void AudioEngine::render(float* out,int32_t frames) {
     while (pop(e)) handle(e);
 
     for (int32_t i=0; i<frames; ++i) {
-        float mono = 0.0f;
+        float otherMono = 0.0f;
         int activeParts = 0;
-        for (int part=0; part<8; ++part) {
+
+        // Parts 0..6 remain untouched.
+        for (int part=0; part<7; ++part) {
             const int voices = activeVoicesPart(part);
-            mono += processPart(part);
+            otherMono += processPart(part);
             if (voices > 0) activeParts++;
         }
 
-        // Each instrument already normalizes its own polyphony. Only normalize
-        // the number of simultaneously sounding timbral parts here.
-        if (activeParts > 1) mono *= 1.0f / std::sqrt(float(activeParts));
+        // DRUMS gets its own bus so physical drums and one-shot samples share
+        // the same dedicated Booster/Distortion before the global FX chain.
+        const int drumVoices = activeVoicesPart(7);
+        float drumL = processPart(7);
+        float drumR = drumL;
+        processDrumSamples(drumL, drumR);
+        if (drumVoices > 0) activeParts++;
 
-        float l = mono;
-        float r = mono;
-        processDrumSamples(l, r);
+        const float drumBoost = std::pow(10.0f,
+                float(std::clamp(drumBoostDb_, 0, 18)) / 20.0f);
+        const float distAmount = std::clamp(drumDistortion_, 0, 127) / 127.0f;
+        const float drive = 1.0f + 14.0f * distAmount;
+        auto drumFx = [&](float x) {
+            const float saturated = std::tanh(x * drive);
+            return ((1.0f - distAmount) * x + distAmount * saturated) * drumBoost;
+        };
+        drumL = drumFx(drumL);
+        drumR = drumFx(drumR);
+
+        float norm = activeParts > 1 ? 1.0f / std::sqrt(float(activeParts)) : 1.0f;
+        float l = (otherMono + drumL) * norm;
+        float r = (otherMono + drumR) * norm;
 
         dreamy_.process(l,r);
         tape_.process(l,r);
