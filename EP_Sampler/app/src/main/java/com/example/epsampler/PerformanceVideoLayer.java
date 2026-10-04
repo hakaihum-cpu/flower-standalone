@@ -28,9 +28,9 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
     private static final String[] ASSET_NAMES = new String[] {
             "violin_bg.mp4",
             "flute_bg.mp4",
-            "sax_bg.mp4",
+            "saxophone_bg.mp4",
             "felt_piano_bg.mp4",
-            "accordion_bg.mp4",
+            "pianica_accordion_bg.mp4",
             "xylophone_bg.mp4",
             "wood_bass_bg.mp4",
             "drums_bg.mp4"
