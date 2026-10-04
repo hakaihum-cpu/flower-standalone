@@ -648,11 +648,19 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
             if (selectedPart) {
                 pianoView.controlChange(cc, value);
-                if (cc == 1) vibratoDepth = value;
-                else if (cc == 10) bowPressure = value;
-                else if (cc == 11) bowSpeed = value;
-                else if (cc == 74) bowPosition = value;
-                else if (cc == 64) manualSustain = value >= 64;
+                if (instrumentMode == 7) {
+                    if (cc == 1) drumDecay = value;
+                    else if (cc == 10) drumKickTune = value;
+                    else if (cc == 11) drumHatTune = value;
+                    else if (cc == 74) drumSnareTune = value;
+                    else if (cc == 64) manualSustain = value >= 64;
+                } else {
+                    if (cc == 1) vibratoDepth = value;
+                    else if (cc == 10) bowPressure = value;
+                    else if (cc == 11) bowSpeed = value;
+                    else if (cc == 74) bowPosition = value;
+                    else if (cc == 64) manualSustain = value >= 64;
+                }
             }
 
             // Shared FX bus controls are reflected in the UI regardless of
