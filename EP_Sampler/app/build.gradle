@@ -10,8 +10,8 @@ android {
         applicationId 'com.example.violinphysical'
         minSdk 26
         targetSdk 35
-        versionCode 10
-        versionName '1.0-physical-multitimbral'
+        versionCode 11
+        versionName '1.1-drum-tuning'
 
         externalNativeBuild {
             cmake {
