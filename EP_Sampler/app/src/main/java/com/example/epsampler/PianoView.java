@@ -503,7 +503,9 @@ public final class PianoView extends View {
         invalidate();
     }
 
-    void panicAuditionKeyboard() {
+    void clearForegroundForInstrumentSwitch() {
+        // Release only touchscreen audition notes. External MIDI parts must
+        // continue sounding when the foreground instrument is changed.
         releaseAllAuditionNotes();
         java.util.Arrays.fill(held, false);
         java.util.Arrays.fill(polyPressure, 0);
@@ -511,9 +513,13 @@ public final class PianoView extends View {
         invalidate();
     }
 
+    void panicAuditionKeyboard() {
+        clearForegroundForInstrumentSwitch();
+        NativeEngine.controlChange(123, 0);
+    }
+
     @Override protected void onDetachedFromWindow() {
         panicAuditionKeyboard();
-        NativeEngine.controlChange(123, 0);
         super.onDetachedFromWindow();
     }
 
