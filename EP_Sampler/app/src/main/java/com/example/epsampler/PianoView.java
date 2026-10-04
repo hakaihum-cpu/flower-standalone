@@ -46,8 +46,9 @@ public final class PianoView extends View {
     private int boosterStep = 0;
     private int boostDb = 0;
     private int spaceMode = 0;
-    private String bankStatus = "VIOLIN READY";
+    private String bankStatus = "VIOLIN READY CH1";
     private String instrumentButtonLabel = "VIOLIN";
+    private int instrumentMidiChannel = 1;
     private int downButton = -1;
     private long downTimeMs = 0L;
 
@@ -96,7 +97,18 @@ public final class PianoView extends View {
     void setBankStatus(String s) { bankStatus = s; invalidate(); }
     void setInstrumentName(String fullName, String buttonLabel) {
         instrumentButtonLabel = buttonLabel == null ? "MODEL" : buttonLabel;
-        bankStatus = (fullName == null ? "MODEL" : fullName) + " READY";
+        String channel = instrumentMidiChannel <= 0 ? "OFF" : "CH" + instrumentMidiChannel;
+        bankStatus = (fullName == null ? "MODEL" : fullName) + " READY " + channel;
+        invalidate();
+    }
+
+    void setInstrumentMidiChannel(int channel) {
+        instrumentMidiChannel = Math.max(0, Math.min(16, channel));
+        String prefix = bankStatus;
+        int ready = prefix.indexOf(" READY");
+        if (ready >= 0) prefix = prefix.substring(0, ready);
+        String ch = instrumentMidiChannel <= 0 ? "OFF" : "CH" + instrumentMidiChannel;
+        bankStatus = prefix + " READY " + ch;
         invalidate();
     }
     void setMidiConnections(int count) { midiConnections = count; invalidate(); }
