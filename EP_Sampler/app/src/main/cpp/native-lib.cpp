@@ -30,3 +30,10 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setDre
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setAdsr(JNIEnv*,jclass,jint a,jint d,jint s,jint r){AudioEngine::instance().setAdsr(a,d,s,r);}
 
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setInstrument(JNIEnv*,jclass,jint instrument){AudioEngine::instance().setInstrument(instrument);}
+
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_noteOnPart(JNIEnv*,jclass,jint part,jint n,jint v){AudioEngine::instance().noteOnPart(part,n,v);}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_noteOffPart(JNIEnv*,jclass,jint part,jint n,jint v){AudioEngine::instance().noteOffPart(part,n,v);}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_polyPressurePart(JNIEnv*,jclass,jint part,jint n,jint p){AudioEngine::instance().polyPressurePart(part,n,p);}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_channelPressurePart(JNIEnv*,jclass,jint part,jint p){AudioEngine::instance().channelPressurePart(part,p);}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_controlChangePart(JNIEnv*,jclass,jint part,jint c,jint v){AudioEngine::instance().controlChangePart(part,c,v);}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_pitchBendPart(JNIEnv*,jclass,jint part,jint v){AudioEngine::instance().pitchBendPart(part,v);}
