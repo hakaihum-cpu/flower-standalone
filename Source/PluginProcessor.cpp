@@ -442,6 +442,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     midi.clear();
     processMidiController (midi, n);
+    processChordBotMidi (midi);
 
     if (clearRequested.exchange (false, std::memory_order_acq_rel))
     {
@@ -1197,7 +1198,12 @@ void RealtimeChordFxAudioProcessor::stopActiveChordMidi (juce::MidiBuffer& out)
 
 void RealtimeChordFxAudioProcessor::processChordMidi (juce::MidiBuffer& out)
 {
-    const bool enabled = apvts.getRawParameterValue (ParamID::chordMidiOut)->load() >= 0.5f;
+    const int selectedEffectMode =
+        juce::jlimit (0, 2, juce::roundToInt (
+            apvts.getRawParameterValue (ParamID::effectMode)->load()));
+    const bool enabled =
+        selectedEffectMode == 0
+        && apvts.getRawParameterValue (ParamID::chordMidiOut)->load() >= 0.5f;
     const int channel = juce::jlimit (1, 16,
         juce::roundToInt (apvts.getRawParameterValue (ParamID::chordMidiChannel)->load()));
     const bool shouldSound = enabled
@@ -1234,6 +1240,195 @@ void RealtimeChordFxAudioProcessor::processChordMidi (juce::MidiBuffer& out)
 
         chordMidiRefreshRequested = false;
     }
+}
+
+int RealtimeChordFxAudioProcessor::getChordBotSlotRoot (int index) const noexcept
+{
+    index = juce::jlimit (0, 8, index);
+    return chordBotCodes[(size_t) index].load (std::memory_order_relaxed) & 0x0f;
+}
+
+int RealtimeChordFxAudioProcessor::getChordBotSlotQuality (int index) const noexcept
+{
+    index = juce::jlimit (0, 8, index);
+    return (chordBotCodes[(size_t) index].load (std::memory_order_relaxed) >> 4) & 0x0f;
+}
+
+juce::String RealtimeChordFxAudioProcessor::getChordBotSlotLabel (int index) const
+{
+    static constexpr const char* roots[] =
+        { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+    static constexpr const char* qualities[] =
+        { "MAJ","MIN","7","MAJ7","MIN7","DIM","SUS2","SUS4" };
+
+    const int root = juce::jlimit (0, 11, getChordBotSlotRoot (index));
+    const int quality = juce::jlimit (0, 7, getChordBotSlotQuality (index));
+    return juce::String (roots[root]) + " " + qualities[quality];
+}
+
+void RealtimeChordFxAudioProcessor::initialiseChordBotDefaults()
+{
+    for (auto& code : chordBotCodes)
+        code.store (0, std::memory_order_relaxed);
+
+    chordBotCodes[0].store (0, std::memory_order_relaxed); // C MAJ
+    regenerateChordBotSuggestions();
+}
+
+void RealtimeChordFxAudioProcessor::regenerateChordBotSuggestions()
+{
+    const int seedRoot = getChordBotSlotRoot (0);
+    const int seedQuality = getChordBotSlotQuality (0);
+    const auto suggestions =
+        chordfx::TheoryEngine::chordBotSuggestions (
+            seedRoot, seedQuality);
+
+    for (int i = 0; i < 8; ++i)
+    {
+        const int root =
+            juce::jlimit (0, 11, suggestions[(size_t) i].rootPitchClass);
+        const int quality =
+            juce::jlimit (0, 7, suggestions[(size_t) i].quality);
+        chordBotCodes[(size_t) (i + 1)].store (
+            root | (quality << 4), std::memory_order_relaxed);
+    }
+}
+
+void RealtimeChordFxAudioProcessor::saveChordBotLayout()
+{
+    juce::StringArray values;
+    for (int i = 0; i < 9; ++i)
+    {
+        values.add (juce::String (getChordBotSlotRoot (i)));
+        values.add (juce::String (getChordBotSlotQuality (i)));
+    }
+
+    apvts.state.setProperty (
+        "chordBotLayout", values.joinIntoString (","), nullptr);
+}
+
+void RealtimeChordFxAudioProcessor::loadChordBotLayout()
+{
+    const auto value =
+        apvts.state.getProperty ("chordBotLayout").toString();
+    const auto values =
+        juce::StringArray::fromTokens (value, ",", "");
+
+    if (values.size() != 18)
+    {
+        initialiseChordBotDefaults();
+        return;
+    }
+
+    for (int i = 0; i < 9; ++i)
+    {
+        const int root =
+            juce::jlimit (0, 11, values[i * 2].getIntValue());
+        const int quality =
+            juce::jlimit (0, 7, values[i * 2 + 1].getIntValue());
+        chordBotCodes[(size_t) i].store (
+            root | (quality << 4), std::memory_order_relaxed);
+    }
+}
+
+void RealtimeChordFxAudioProcessor::setChordBotSlot (
+    int index, int rootPitchClass, int quality)
+{
+    index = juce::jlimit (0, 8, index);
+    const int root = juce::jlimit (0, 11, rootPitchClass);
+    const int q = juce::jlimit (0, 7, quality);
+
+    chordBotCodes[(size_t) index].store (
+        root | (q << 4), std::memory_order_relaxed);
+
+    // The top-left tile is the theory seed. Editing it re-generates the
+    // remaining eight candidates; editing any other tile is a local override.
+    if (index == 0)
+        regenerateChordBotSuggestions();
+
+    saveChordBotLayout();
+}
+
+void RealtimeChordFxAudioProcessor::triggerChordBotPad (
+    int index, bool down) noexcept
+{
+    if (down)
+        chordBotRequestedPad.store (
+            juce::jlimit (0, 8, index), std::memory_order_release);
+    else
+        chordBotRequestedPad.store (-1, std::memory_order_release);
+}
+
+void RealtimeChordFxAudioProcessor::processChordBotMidi (
+    juce::MidiBuffer& out)
+{
+    const int selectedEffectMode =
+        juce::jlimit (0, 2, juce::roundToInt (
+            apvts.getRawParameterValue (ParamID::effectMode)->load()));
+    const int requested =
+        selectedEffectMode == 2
+            ? chordBotRequestedPad.load (std::memory_order_acquire)
+            : -1;
+    const int channel =
+        juce::jlimit (1, 16, juce::roundToInt (
+            apvts.getRawParameterValue (
+                ParamID::chordMidiChannel)->load()));
+
+    const int activePad =
+        chordBotActivePad.load (std::memory_order_relaxed);
+    const bool channelChanged =
+        activeChordBotNoteCount > 0
+        && channel != activeChordBotMidiChannel;
+
+    if (requested == activePad && ! channelChanged)
+        return;
+
+    for (int i = 0; i < activeChordBotNoteCount; ++i)
+        out.addEvent (
+            juce::MidiMessage::noteOff (
+                activeChordBotMidiChannel,
+                activeChordBotNotes[(size_t) i]), 0);
+
+    activeChordBotNoteCount = 0;
+    chordBotActivePad.store (-1, std::memory_order_relaxed);
+
+    if (requested < 0)
+        return;
+
+    const int rootPc = getChordBotSlotRoot (requested);
+    const int quality = getChordBotSlotQuality (requested);
+    static constexpr int intervals[8][4] = {
+        { 0, 4, 7, -1 },  // MAJ
+        { 0, 3, 7, -1 },  // MIN
+        { 0, 4, 7, 10 },  // 7
+        { 0, 4, 7, 11 },  // MAJ7
+        { 0, 3, 7, 10 },  // MIN7
+        { 0, 3, 6, -1 },  // DIM
+        { 0, 2, 7, -1 },  // SUS2
+        { 0, 5, 7, -1 }   // SUS4
+    };
+
+    const int rootMidi = 48 + juce::jlimit (0, 11, rootPc);
+    activeChordBotMidiChannel = channel;
+
+    for (int i = 0; i < 4; ++i)
+    {
+        const int interval =
+            intervals[juce::jlimit (0, 7, quality)][i];
+        if (interval < 0)
+            continue;
+
+        const int note =
+            juce::jlimit (0, 127, rootMidi + interval);
+        activeChordBotNotes[(size_t) activeChordBotNoteCount++] = note;
+        out.addEvent (
+            juce::MidiMessage::noteOn (
+                activeChordBotMidiChannel, note,
+                (juce::uint8) 127), 0);
+    }
+
+    chordBotActivePad.store (
+        requested, std::memory_order_relaxed);
 }
 
 void RealtimeChordFxAudioProcessor::setParameterActual (const char* id, float actual)
@@ -1310,7 +1505,13 @@ void RealtimeChordFxAudioProcessor::getStateInformation (juce::MemoryBlock& dest
 void RealtimeChordFxAudioProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName (apvts.state.getType())) apvts.replaceState (juce::ValueTree::fromXml (*xml));
+    {
+        if (xml->hasTagName (apvts.state.getType()))
+        {
+            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            loadChordBotLayout();
+        }
+    }
 }
 
 juce::AudioProcessorEditor* RealtimeChordFxAudioProcessor::createEditor()
