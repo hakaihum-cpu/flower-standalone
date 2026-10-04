@@ -804,6 +804,17 @@ public final class PianoView extends View {
 
         int index = effectButtonAt(e.getX(actionIndex), e.getY(actionIndex));
         if (action == MotionEvent.ACTION_DOWN) {
+            // This view is intentionally above the full-screen XY layer so the
+            // controls can never disappear behind it. Only consume touches that
+            // actually belong to this UI; blank performance area falls through.
+            if (index < 0) {
+                if (keyOverlayVisible) {
+                    float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
+                    float keyTop = Math.max(150f*u, getHeight() - 255f*u) - 36f*u;
+                    if (e.getY(actionIndex) >= keyTop) return true;
+                }
+                return false;
+            }
             downButton = index;
             downTimeMs = android.os.SystemClock.uptimeMillis();
             return true;
