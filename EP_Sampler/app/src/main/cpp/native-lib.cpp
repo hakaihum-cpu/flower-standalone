@@ -73,3 +73,24 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setPer
         JNIEnv*, jclass, jboolean active, jint part, jint x, jint y) {
     AudioEngine::instance().setPerformanceXY(active == JNI_TRUE, part, x, y);
 }
+
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_setAudioBufferBursts(
+        JNIEnv*, jclass, jfloat bursts) {
+    return AudioEngine::instance().setAudioBufferBursts(bursts);
+}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_audioFramesPerBurst(
+        JNIEnv*, jclass) {
+    return AudioEngine::instance().audioFramesPerBurst();
+}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_audioBufferSizeFrames(
+        JNIEnv*, jclass) {
+    return AudioEngine::instance().audioBufferSizeFrames();
+}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_audioBufferCapacityFrames(
+        JNIEnv*, jclass) {
+    return AudioEngine::instance().audioBufferCapacityFrames();
+}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_audioXRunCount(
+        JNIEnv*, jclass) {
+    return AudioEngine::instance().audioXRunCount();
+}
