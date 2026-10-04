@@ -34,7 +34,7 @@ final class MidiController {
     private int pendingOpens = 0;
 
     // 0 = OFF, 1..16 = MIDI channel. Default parts use CH1..CH8.
-    private final int[] partChannels = new int[]{1,2,3,4,5,6,7,8};
+    private final int[] partChannels = new int[]{1,2,3,4,5,6,7,8,9};
 
     MidiController(Context context, Listener listener) {
         this.listener = listener;
