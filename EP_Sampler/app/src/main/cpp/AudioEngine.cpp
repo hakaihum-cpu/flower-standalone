@@ -196,6 +196,8 @@ bool AudioEngine::start() {
     }
 
     sampleRate_ = AAudioStream_getSampleRate(stream_);
+    defaultBufferSizeFrames_ = AAudioStream_getBufferSizeInFrames(stream_);
+    requestedBufferBursts_ = 0.0f;
 
     const int delayBufferSize = std::max(4096, sampleRate_ * 2);
     performanceDelayL_.assign(delayBufferSize, 0.0f);
@@ -321,6 +323,33 @@ void AudioEngine::setFeltReverb(int mix,int decay){
 }
 void AudioEngine::setPerformanceXY(bool active,int part,int x,int y){
     push({Event::PERFORMANCE_XY,active?1:0,part,x,y});
+}
+
+int AudioEngine::setAudioBufferBursts(float bursts) {
+    if (!stream_) return AAUDIO_ERROR_INVALID_STATE;
+    requestedBufferBursts_ = std::max(0.0f, bursts);
+
+    int target = defaultBufferSizeFrames_;
+    if (requestedBufferBursts_ > 0.0f) {
+        const int fpb = AAudioStream_getFramesPerBurst(stream_);
+        if (fpb <= 0) return AAUDIO_ERROR_INVALID_STATE;
+        target = std::max(1, int(std::lround(float(fpb) * requestedBufferBursts_)));
+    }
+    if (target <= 0) return AAUDIO_ERROR_INVALID_STATE;
+    return AAudioStream_setBufferSizeInFrames(stream_, target);
+}
+
+int AudioEngine::audioFramesPerBurst() const {
+    return stream_ ? AAudioStream_getFramesPerBurst(stream_) : 0;
+}
+int AudioEngine::audioBufferSizeFrames() const {
+    return stream_ ? AAudioStream_getBufferSizeInFrames(stream_) : 0;
+}
+int AudioEngine::audioBufferCapacityFrames() const {
+    return stream_ ? AAudioStream_getBufferCapacityInFrames(stream_) : 0;
+}
+int AudioEngine::audioXRunCount() const {
+    return stream_ ? AAudioStream_getXRunCount(stream_) : 0;
 }
 
 void AudioEngine::handlePartNoteOn(int part, int note, int velocity) {
