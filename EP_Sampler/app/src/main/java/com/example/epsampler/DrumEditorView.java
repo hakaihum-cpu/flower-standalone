@@ -11,18 +11,21 @@ import android.view.View;
 final class DrumEditorView extends View {
     interface Listener {
         void onDrumParameterChanged(int parameter, int value);
+        void onDrumFxChanged(int boostDb, int distortion);
     }
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Listener listener;
-    private int activeParameter = -1;
+    private int activeControl = -1;
 
     private final int[] values = new int[]{
             64, 58, 46, 38,
             64, 43, 74, 56,
             64, 53, 74, 58
     };
+    private int boostDb = 6;
+    private int distortion = 0;
 
     private static final String[] NAMES = {"KICK  C4", "HI-HAT  C#4", "SNARE  D4"};
     private static final String[][] LABELS = {
@@ -48,15 +51,21 @@ final class DrumEditorView extends View {
         invalidate();
     }
 
+    void setDrumFx(int boostDb, int distortion) {
+        this.boostDb = Math.max(0, Math.min(18, boostDb));
+        this.distortion = clamp7(distortion);
+        invalidate();
+    }
+
     void setDrumsVisible(boolean visible) {
-        activeParameter = -1;
+        activeControl = -1;
         setVisibility(visible ? VISIBLE : GONE);
         if (visible) invalidate();
     }
 
     private RectF panelRect() {
         float u = unit();
-        return new RectF(8f*u, 126f*u, getWidth()-8f*u, 352f*u);
+        return new RectF(8f*u, 126f*u, getWidth()-8f*u, 432f*u);
     }
 
     private float unit() {
@@ -78,7 +87,7 @@ final class DrumEditorView extends View {
         float controlsLeft = left + nameW;
         float usableW = panel.right - controlsLeft - 8f*u;
         float colW = usableW / 4f;
-        float rowH = (panel.height() - 18f*u) / 3f;
+        float rowH = 72f*u;
 
         for (int row=0; row<3; row++) {
             float y0 = panel.top + 8f*u + row*rowH;
@@ -117,47 +126,106 @@ final class DrumEditorView extends View {
                 canvas.drawText(value, x1-tw, y0 + 15f*u, text);
             }
         }
+
+        float fxTop = panel.top + 230f*u;
+        text.setTextSize(12.5f*u);
+        text.setColor(Color.argb(245, 244, 237, 224));
+        canvas.drawText("DRUM BUS", left, fxTop + 23f*u, text);
+
+        float fxLeft = controlsLeft;
+        float gap = 12f*u;
+        float fxW = (panel.right - fxLeft - 8f*u - gap) / 2f;
+        drawFxControl(canvas, fxLeft, fxTop, fxW, "BOOSTER", boostDb / 18f,
+                boostDb + "dB", u);
+        drawFxControl(canvas, fxLeft + fxW + gap, fxTop, fxW, "DISTORTION",
+                distortion / 127f, Integer.toString(distortion), u);
     }
 
-    private int parameterAt(float x, float y) {
+    private void drawFxControl(Canvas canvas, float x, float y, float w,
+                               String label, float norm, String value, float u) {
+        text.setTextSize(11.5f*u);
+        text.setColor(Color.argb(230, 244, 237, 224));
+        canvas.drawText(label, x, y + 15f*u, text);
+        float tw = text.measureText(value);
+        canvas.drawText(value, x+w-tw, y + 15f*u, text);
+
+        float barY = y + 34f*u;
+        paint.setColor(Color.argb(60, 238, 229, 207));
+        canvas.drawRoundRect(new RectF(x, barY, x+w, barY+12f*u), 4f*u, 4f*u, paint);
+        paint.setColor(Color.argb(205, 242, 232, 207));
+        canvas.drawRoundRect(new RectF(x, barY, x+w*Math.max(0f, Math.min(1f, norm)),
+                barY+12f*u), 4f*u, 4f*u, paint);
+    }
+
+    private int controlAt(float x, float y) {
         RectF panel = panelRect();
         if (!panel.contains(x,y)) return -1;
 
         float u = unit();
-        float controlsLeft = panel.left + 10f*u + 92f*u;
-        if (x < controlsLeft) return -1;
+        float left = panel.left + 10f*u;
+        float controlsLeft = left + 92f*u;
 
-        float usableW = panel.right - controlsLeft - 8f*u;
-        float colW = usableW / 4f;
-        float rowH = (panel.height() - 18f*u) / 3f;
+        float rowAreaBottom = panel.top + 8f*u + 3f*72f*u;
+        if (y < rowAreaBottom) {
+            if (x < controlsLeft) return -1;
+            float usableW = panel.right - controlsLeft - 8f*u;
+            float colW = usableW / 4f;
+            int row = Math.max(0, Math.min(2,
+                    (int)((y - (panel.top + 8f*u)) / (72f*u))));
+            int col = Math.max(0, Math.min(3,
+                    (int)((x - controlsLeft) / colW)));
+            return row*4 + col;
+        }
 
-        int row = Math.max(0, Math.min(2,
-                (int)((y - (panel.top + 8f*u)) / rowH)));
-        int col = Math.max(0, Math.min(3,
-                (int)((x - controlsLeft) / colW)));
-        return row*4 + col;
+        float fxTop = panel.top + 230f*u;
+        float gap = 12f*u;
+        float fxW = (panel.right - controlsLeft - 8f*u - gap) / 2f;
+        if (y < fxTop || y > fxTop + 58f*u) return -1;
+        if (x >= controlsLeft && x <= controlsLeft + fxW) return 12;
+        if (x >= controlsLeft + fxW + gap && x <= panel.right - 8f*u) return 13;
+        return -1;
     }
 
-    private int valueAtX(int parameter, float x) {
+    private int valueAtX(int control, float x) {
         RectF panel = panelRect();
         float u = unit();
         float controlsLeft = panel.left + 10f*u + 92f*u;
-        float usableW = panel.right - controlsLeft - 8f*u;
-        float colW = usableW / 4f;
-        int col = parameter % 4;
 
-        float x0 = controlsLeft + col*colW + 4f*u;
-        float x1 = controlsLeft + (col+1)*colW - 5f*u;
-        float norm = (x - x0) / Math.max(1f, x1-x0);
-        return clamp7(Math.round(Math.max(0f, Math.min(1f, norm)) * 127f));
+        if (control < 12) {
+            float usableW = panel.right - controlsLeft - 8f*u;
+            float colW = usableW / 4f;
+            int col = control % 4;
+            float x0 = controlsLeft + col*colW + 4f*u;
+            float x1 = controlsLeft + (col+1)*colW - 5f*u;
+            float norm = (x - x0) / Math.max(1f, x1-x0);
+            return clamp7(Math.round(Math.max(0f, Math.min(1f, norm)) * 127f));
+        }
+
+        float gap = 12f*u;
+        float fxW = (panel.right - controlsLeft - 8f*u - gap) / 2f;
+        float x0 = control == 12 ? controlsLeft : controlsLeft + fxW + gap;
+        float x1 = x0 + fxW;
+        float norm = Math.max(0f, Math.min(1f, (x - x0) / Math.max(1f, x1-x0)));
+        return control == 12 ? Math.round(norm * 18f) : Math.round(norm * 127f);
     }
 
-    private void edit(int parameter, float x) {
-        if (parameter < 0 || parameter >= values.length) return;
-        int value = valueAtX(parameter, x);
-        if (values[parameter] == value) return;
-        values[parameter] = value;
-        if (listener != null) listener.onDrumParameterChanged(parameter, value);
+    private void edit(int control, float x) {
+        if (control < 0 || control > 13) return;
+        int value = valueAtX(control, x);
+
+        if (control < 12) {
+            if (values[control] == value) return;
+            values[control] = value;
+            if (listener != null) listener.onDrumParameterChanged(control, value);
+        } else if (control == 12) {
+            if (boostDb == value) return;
+            boostDb = value;
+            if (listener != null) listener.onDrumFxChanged(boostDb, distortion);
+        } else {
+            if (distortion == value) return;
+            distortion = value;
+            if (listener != null) listener.onDrumFxChanged(boostDb, distortion);
+        }
         invalidate();
     }
 
@@ -168,26 +236,26 @@ final class DrumEditorView extends View {
         int index = event.getActionIndex();
 
         if (action == MotionEvent.ACTION_DOWN) {
-            int parameter = parameterAt(event.getX(index), event.getY(index));
-            if (parameter < 0) return false;
-            activeParameter = parameter;
-            edit(parameter, event.getX(index));
+            int control = controlAt(event.getX(index), event.getY(index));
+            if (control < 0) return false;
+            activeControl = control;
+            edit(control, event.getX(index));
             return true;
         }
 
-        if (action == MotionEvent.ACTION_MOVE && activeParameter >= 0) {
-            edit(activeParameter, event.getX(0));
+        if (action == MotionEvent.ACTION_MOVE && activeControl >= 0) {
+            edit(activeControl, event.getX(0));
             return true;
         }
 
         if ((action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
-                && activeParameter >= 0) {
-            if (action == MotionEvent.ACTION_UP) edit(activeParameter, event.getX(index));
-            activeParameter = -1;
+                && activeControl >= 0) {
+            if (action == MotionEvent.ACTION_UP) edit(activeControl, event.getX(index));
+            activeControl = -1;
             return true;
         }
 
-        return activeParameter >= 0;
+        return activeControl >= 0;
     }
 
     private static int clamp7(int value) {
