@@ -167,7 +167,7 @@ def main() -> int:
             if missing_sec <= max_safe_shortfall:
                 print(f'Master render is {missing_sec:.3f} sec shorter than layout; padding final release tail with silence.')
                 with raw_path.open('ab') as pad:
-                    pad.write(b'\\0' * missing_bytes)
+                    pad.write(b'\0' * missing_bytes)
             else:
                 actual_sec = actual_bytes / float(BPF * SR)
                 expected_sec = needed_bytes / float(BPF * SR)
