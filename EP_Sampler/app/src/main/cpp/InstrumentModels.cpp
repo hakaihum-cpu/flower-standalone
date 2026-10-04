@@ -490,49 +490,67 @@ float InstrumentModels::processSax(Voice& v, double freq, float env) {
 }
 
 float InstrumentModels::processAccordion(Voice& v, double freq, float env) {
-    // Reduced-order free-reed model: damped clamped-reed oscillators driven
-    // by quasi-steady pressure flow. Aerodynamic negative damping sustains
-    // oscillation above the blowing threshold.
+    // Reduced-order free-reed model. The reed oscillation itself is the main
+    // radiating source; cavity pressure is retained as the acoustic load.
+    // This avoids the previous steady-state cancellation where flow-bodyState
+    // converged almost to zero and the instrument became effectively silent.
     const float pressure = (v.pressure > 0 ? v.pressure : channelPressure_) / 127.0f;
     const float vel = v.velocity / 127.0f;
-    const float bellows = env * (0.30f + 0.72f * control2_ + 0.18f * pressure) *
+    const float bellows = env * (0.36f + 0.82f * control2_ + 0.16f * pressure) *
                           (0.72f + 0.28f * vel);
 
     const float dt = 1.0f / float(sampleRate_);
     const float musette = 0.0010f + 0.010f * control3_;
-    const float reedDamping = 0.010f + 0.030f * control1_;
-    const float drive = clampf(bellows - 0.22f * v.bodyState, 0.0f, 1.4f);
+    const float reedDamping = 0.012f + 0.025f * control1_;
+    const float amplitudeLimit = 0.22f + 0.12f * (1.0f - control1_);
+    const float drive = clampf(bellows - 0.12f * v.bodyState, 0.0f, 1.5f);
+    const float turbulence = noise(v) * drive * 0.0015f;
 
     auto stepReed = [&](float& x, float& vv, double reedFreq) {
         const float omega = float(2.0 * kPi * reedFreq);
-        const float mu = std::max(0.0f, drive - 0.16f) * (0.045f + 0.045f * (1.0f - control1_));
-        const float nonlinear = mu * (1.0f - 2.6f * x * x);
+        const float threshold = 0.10f + 0.10f * control1_;
+        const float mu = std::max(0.0f, drive - threshold) *
+                         (0.16f + 0.20f * (1.0f - control1_));
+        const float normalizedX = x / std::max(0.08f, amplitudeLimit);
+        const float nonlinear = mu * (1.0f - normalizedX * normalizedX);
+
         const float acceleration =
                 -omega * omega * x
                 + 2.0f * omega * (nonlinear - reedDamping) * vv
-                + drive * omega * omega * 0.018f;
+                + omega * omega * (drive * 0.0035f + turbulence);
+
         vv += acceleration * dt;
         x += vv * dt;
-        x = clampf(x, -0.55f, 0.55f);
-        vv = clampf(vv, -1200.0f, 1200.0f);
+        x = clampf(x, -0.50f, 0.50f);
+        vv = clampf(vv, -1800.0f, 1800.0f);
     };
 
     stepReed(v.reedX1, v.reedV1, freq * (1.0 - musette));
     stepReed(v.reedX2, v.reedV2, freq * (1.0 + musette));
 
-    const float aperture1 = clampf(0.11f + 0.17f * (1.0f - control1_) + 0.30f * v.reedX1,
-                                   0.01f, 0.42f);
-    const float aperture2 = clampf(0.11f + 0.17f * (1.0f - control1_) + 0.30f * v.reedX2,
-                                   0.01f, 0.42f);
+    const float aperture1 = clampf(0.10f + 0.18f * (1.0f - control1_) + 0.33f * v.reedX1,
+                                   0.005f, 0.45f);
+    const float aperture2 = clampf(0.10f + 0.18f * (1.0f - control1_) + 0.33f * v.reedX2,
+                                   0.005f, 0.45f);
     const float flow = (aperture1 + aperture2) * std::sqrt(std::max(0.0f, drive));
 
-    // Small cavity pressure provides the acoustic load seen by the reeds.
-    const float bodyRate = clampf(float(2.0 * kPi * std::min(freq * 0.35, 420.0) / sampleRate_),
-                                  0.002f, 0.12f);
+    const float bodyRate = clampf(float(2.0 * kPi * std::min(freq * 0.28, 350.0) / sampleRate_),
+                                  0.0015f, 0.10f);
     v.bodyState += (flow - v.bodyState) * bodyRate;
 
-    const float reedVelocity = (v.reedV1 + v.reedV2) / std::max(1.0f, float(2.0 * kPi * freq));
-    return clampf(reedVelocity * 0.25f + (flow - v.bodyState) * 0.45f, -1.0f, 1.0f);
+    const float reedVelocity =
+            (v.reedV1 + v.reedV2) / std::max(1.0f, float(2.0 * kPi * freq));
+    const float radiated =
+            (v.reedX1 + v.reedX2) * 1.30f
+            + reedVelocity * 0.16f
+            + (flow - v.bodyState) * 0.20f;
+
+    // Remove the blowing-pressure DC component before the shared body/FX bus.
+    const float hp = radiated - v.dcX + 0.995f * v.dcY;
+    v.dcX = radiated;
+    v.dcY = hp;
+
+    return clampf(hp * 0.20f, -1.0f, 1.0f);
 }
 
 float InstrumentModels::processFeltPiano(Voice& v, double) {
