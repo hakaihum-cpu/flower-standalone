@@ -745,6 +745,42 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 .putInt(KEY_INSTRUMENT, instrumentMode).apply();
     }
 
+    @Override public void onRecorderRecord() {
+        NativeEngine.recorderToggleRecording();
+        pianoView.invalidate();
+    }
+
+    @Override public void onRecorderClear() {
+        NativeEngine.recorderClear();
+        pianoView.invalidate();
+    }
+
+    @Override public void onRecorderRandom() {
+        NativeEngine.recorderToggleRandom();
+        pianoView.invalidate();
+    }
+
+    @Override public void onRecorderClock() {
+        NativeEngine.recorderToggleClock();
+        pianoView.invalidate();
+    }
+
+    @Override public void onRecorderBpm(int bpm) {
+        NativeEngine.recorderSetBpm(bpm);
+        pianoView.invalidate();
+    }
+
+    @Override public void onRecorderTile(int slot) {
+        if (NativeEngine.recorderIsRecording()
+                && slot != NativeEngine.recorderRecordingSlot()
+                && NativeEngine.recorderValidSamples(slot) == 0) {
+            NativeEngine.recorderRecordSlot(slot);
+        } else {
+            NativeEngine.recorderPlaySlot(slot);
+        }
+        pianoView.invalidate();
+    }
+
     @Override public void onChooseBank() {
         if (instrumentMode == 8) {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
