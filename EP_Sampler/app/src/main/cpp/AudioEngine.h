@@ -39,6 +39,12 @@ public:
     void setDreamyParameters(int x, int y, int mix);
     void setAdsr(int attackMs, int decayMs, int sustainPct, int releaseMs);
     void setInstrument(int instrument);
+    void noteOnPart(int part, int note, int velocity);
+    void noteOffPart(int part, int note, int velocity);
+    void polyPressurePart(int part, int note, int pressure);
+    void channelPressurePart(int part, int pressure);
+    void controlChangePart(int part, int cc, int value);
+    void pitchBendPart(int part, int value14);
 
 private:
     AudioEngine() = default;
@@ -50,7 +56,8 @@ private:
         enum Type : uint8_t {
             NOTE_ON, NOTE_OFF, POLY_AT, CH_AT, CC, PITCH,
             DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS,
-            TAPE, TAPE_PARAMS, DREAMY_PARAMS, ADSR, INSTRUMENT
+            TAPE, TAPE_PARAMS, DREAMY_PARAMS, ADSR, INSTRUMENT,
+            PART_NOTE_ON, PART_NOTE_OFF, PART_POLY_AT, PART_CH_AT, PART_CC, PART_PITCH
         } type;
         int a=0,b=0,c=0,d=0;
     };
@@ -62,8 +69,11 @@ private:
     bool pop(Event& e);
 
     PhysicalViolin violin_;
-    InstrumentModels instrumentModels_;
-    int instrumentType_=0;
+    std::array<InstrumentModels, 7> modelParts_{};
+    int selectedInstrument_=0;
+    std::array<int, 8> partVolume_{{112,112,112,112,112,112,112,112}};
+    std::array<int, 8> partSustain_{{0,0,0,0,0,0,0,0}};
+    std::array<int, 8> partPitch_{{8192,8192,8192,8192,8192,8192,8192,8192}};
     DreamyEffect dreamy_;
     SpaceEffect space_;
     TapeEffect tape_;
@@ -87,6 +97,15 @@ private:
     int sampleRate_=48000;
 
     void handle(const Event& e);
+    void handlePartNoteOn(int part, int note, int velocity);
+    void handlePartNoteOff(int part, int note);
+    void handlePartPolyPressure(int part, int note, int pressure);
+    void handlePartChannelPressure(int part, int pressure);
+    void handlePartControlChange(int part, int cc, int value);
+    void handlePartPitchBend(int part, int value14);
+    void allNotesOffPart(int part);
+    float processPart(int part);
+    int activeVoicesPart(int part) const;
     void render(float* out, int32_t frames);
     static aaudio_data_callback_result_t dataCallback(AAudioStream*, void*, void*, int32_t);
     static void errorCallback(AAudioStream*, void*, aaudio_result_t);
