@@ -10,6 +10,18 @@
 AudioEngine& AudioEngine::instance() { static AudioEngine e; return e; }
 AudioEngine::~AudioEngine() { stop(); }
 
+bool AudioEngine::loadBank(const std::string& path) {
+    std::lock_guard<std::mutex> lock(epBankMutex_);
+    epAllNotesOff();
+    return epBank_.load(path);
+}
+
+bool AudioEngine::loadBankFd(int fd) {
+    std::lock_guard<std::mutex> lock(epBankMutex_);
+    epAllNotesOff();
+    return epBank_.loadFd(fd);
+}
+
 
 namespace {
 uint16_t readLe16(const uint8_t* p) {
@@ -352,9 +364,182 @@ int AudioEngine::audioXRunCount() const {
     return stream_ ? AAudioStream_getXRunCount(stream_) : 0;
 }
 
+
+void AudioEngine::epBeginVoice(int note, int velocity) {
+    if (!epBank_.loaded() || note < 21 || note > 108) return;
+
+    EpVoice* pick = nullptr;
+    for (auto& v : epVoices_) {
+        if (!v.active) { pick = &v; break; }
+    }
+    if (!pick) {
+        pick = &epVoices_[0];
+        for (auto& v : epVoices_) {
+            if (v.ageFrames > pick->ageFrames) pick = &v;
+        }
+    }
+
+    const uint8_t rr = uint8_t((epRrCounter_[note]++ % 3) + 1);
+    *pick = EpVoice{};
+    pick->active = true;
+    pick->keyDown = true;
+    pick->note = note;
+    pick->velocity = std::clamp(velocity, 1, 127);
+    pick->rr = rr;
+    pick->bodyVelocity = float(pick->velocity);
+    pick->targetBodyVelocity = float(pick->velocity);
+
+    const int at = epPolyAT_[note] ? epPolyAT_[note] : epChannelAT_;
+    pick->targetBodyVelocity = float(pick->velocity)
+            + (127.0f - pick->velocity) * (at / 127.0f);
+
+    for (int i = 0; i < 8; ++i) {
+        pick->sus[i] = epBank_.find(uint8_t(note), uint8_t(EP_VELS[i]), rr, SampleBank::SUSTAIN);
+        pick->rel[i] = epBank_.find(uint8_t(note), uint8_t(EP_VELS[i]), rr, SampleBank::RELEASE);
+    }
+}
+
+void AudioEngine::epReleaseVoice(int note) {
+    for (auto& v : epVoices_) {
+        if (!v.active || v.note != note || v.releasing || !v.keyDown) continue;
+        v.keyDown = false;
+        if (partSustain_[8] >= 64) {
+            v.pendingRelease = true;
+        } else {
+            v.releasing = true;
+            v.releaseFrame = 0.0;
+        }
+    }
+}
+
+void AudioEngine::epPolyPressure(int note, int pressure) {
+    if (note < 0 || note >= 128) return;
+    epPolyAT_[note] = std::clamp(pressure, 0, 127);
+    for (auto& v : epVoices_) {
+        if (!v.active || v.note != note) continue;
+        v.targetBodyVelocity = float(v.velocity)
+                + (127.0f - v.velocity) * (epPolyAT_[note] / 127.0f);
+    }
+}
+
+void AudioEngine::epChannelPressure(int pressure) {
+    epChannelAT_ = std::clamp(pressure, 0, 127);
+    for (auto& v : epVoices_) {
+        if (!v.active || epPolyAT_[v.note] != 0) continue;
+        v.targetBodyVelocity = float(v.velocity)
+                + (127.0f - v.velocity) * (epChannelAT_ / 127.0f);
+    }
+}
+
+void AudioEngine::epSustainChanged(bool down) {
+    if (down) return;
+    for (auto& v : epVoices_) {
+        if (v.active && v.pendingRelease && !v.keyDown) {
+            v.pendingRelease = false;
+            v.releasing = true;
+            v.releaseFrame = 0.0;
+        }
+    }
+}
+
+void AudioEngine::epAllNotesOff() {
+    for (auto& v : epVoices_) v = EpVoice{};
+}
+
+int AudioEngine::epActiveVoices() const {
+    int count = 0;
+    for (const auto& v : epVoices_) if (v.active) ++count;
+    return count;
+}
+
+void AudioEngine::epBracket(float velocity, int& lo, int& hi, float& mix) {
+    if (velocity <= EP_VELS[0]) { lo = hi = 0; mix = 0.0f; return; }
+    if (velocity >= EP_VELS[7]) { lo = hi = 7; mix = 0.0f; return; }
+    for (int i = 0; i < 7; ++i) {
+        if (velocity >= EP_VELS[i] && velocity <= EP_VELS[i + 1]) {
+            lo = i;
+            hi = i + 1;
+            mix = (velocity - EP_VELS[i]) / float(EP_VELS[i + 1] - EP_VELS[i]);
+            return;
+        }
+    }
+    lo = hi = 7;
+    mix = 0.0f;
+}
+
+float AudioEngine::epLayerSample(
+        const EpVoice& v, bool release, int layer, double frame, int channel) const {
+    const auto* entry = release ? v.rel[layer] : v.sus[layer];
+    return epBank_.read(entry, frame, channel);
+}
+
+void AudioEngine::epRenderVoice(EpVoice& v, float& l, float& r) {
+    if (!v.active || !epBank_.loaded()) return;
+
+    const int attackLock = int(0.250 * sampleRate_);
+    if (v.ageFrames > attackLock) {
+        v.bodyVelocity += (v.targetBodyVelocity - v.bodyVelocity) * 0.0025f;
+    }
+    const float requested = v.ageFrames <= attackLock ? float(v.velocity) : v.bodyVelocity;
+
+    int lo = 0, hi = 0;
+    float mix = 0.0f;
+    epBracket(requested, lo, hi, mix);
+
+    const double bendSemis = (double(partPitch_[8]) - 8192.0) / 8192.0 * 2.0;
+    const double ratio = std::pow(2.0, bendSemis / 12.0)
+            * (double(epBank_.sampleRate()) / double(sampleRate_));
+
+    float sl = 0.0f, sr = 0.0f;
+    if (!v.releasing) {
+        sl = epLayerSample(v, false, lo, v.frame, 0) * (1.0f - mix)
+           + epLayerSample(v, false, hi, v.frame, 0) * mix;
+        sr = epLayerSample(v, false, lo, v.frame, 1) * (1.0f - mix)
+           + epLayerSample(v, false, hi, v.frame, 1) * mix;
+        v.frame += ratio;
+
+        const auto* endRef = v.sus[hi] ? v.sus[hi] : v.sus[lo];
+        if (!endRef) {
+            v.active = false;
+        } else if (v.frame >= endRef->frames) {
+            if (v.pendingRelease && partSustain_[8] >= 64) {
+                v.frame = std::max(0.0, double(endRef->frames) - 1.001);
+            } else {
+                v.active = false;
+            }
+        }
+    } else {
+        const int xf = std::max(1, int(0.020 * sampleRate_));
+        const float x = std::clamp(float(v.releaseFrame) / float(xf), 0.0f, 1.0f);
+
+        const float bodyL = epLayerSample(v, false, lo, v.frame, 0) * (1.0f - mix)
+                          + epLayerSample(v, false, hi, v.frame, 0) * mix;
+        const float bodyR = epLayerSample(v, false, lo, v.frame, 1) * (1.0f - mix)
+                          + epLayerSample(v, false, hi, v.frame, 1) * mix;
+        const float relL = epLayerSample(v, true, lo, v.releaseFrame, 0) * (1.0f - mix)
+                         + epLayerSample(v, true, hi, v.releaseFrame, 0) * mix;
+        const float relR = epLayerSample(v, true, lo, v.releaseFrame, 1) * (1.0f - mix)
+                         + epLayerSample(v, true, hi, v.releaseFrame, 1) * mix;
+
+        sl = bodyL * (1.0f - x) + relL * x;
+        sr = bodyR * (1.0f - x) + relR * x;
+        v.frame += ratio;
+        v.releaseFrame += ratio;
+
+        const auto* endRef = v.rel[hi] ? v.rel[hi] : v.rel[lo];
+        if (!endRef || v.releaseFrame >= endRef->frames) v.active = false;
+    }
+
+    const float gain = (partVolume_[8] / 127.0f) * (epExpression_ / 127.0f);
+    l += sl * gain;
+    r += sr * gain;
+    ++v.ageFrames;
+}
+
 void AudioEngine::handlePartNoteOn(int part, int note, int velocity) {
-    part = std::clamp(part, 0, 7);
+    part = std::clamp(part, 0, 8);
     if (velocity <= 0) { handlePartNoteOff(part, note); return; }
+    if (part == 8) { epBeginVoice(note, velocity); return; }
 
     if (part == 7 && note >= 63 && note <= 68) {
         triggerDrumSample(note - 63, velocity);
@@ -366,7 +551,8 @@ void AudioEngine::handlePartNoteOn(int part, int note, int velocity) {
 }
 
 void AudioEngine::handlePartNoteOff(int part, int note) {
-    part = std::clamp(part, 0, 7);
+    part = std::clamp(part, 0, 8);
+    if (part == 8) { epReleaseVoice(note); return; }
     if (part == 7 && note >= 63 && note <= 68) {
         // Sample notes are one-shot; NoteOff does not truncate them.
         return;
@@ -377,37 +563,40 @@ void AudioEngine::handlePartNoteOff(int part, int note) {
 }
 
 void AudioEngine::handlePartPolyPressure(int part, int note, int pressure) {
-    part = std::clamp(part, 0, 7);
-    if (part == 0) violin_.polyPressure(note, pressure);
+    part = std::clamp(part, 0, 8);
+    if (part == 8) epPolyPressure(note, pressure);
+    else if (part == 0) violin_.polyPressure(note, pressure);
     else modelParts_[part - 1].polyPressure(note, pressure);
 }
 
 void AudioEngine::handlePartChannelPressure(int part, int pressure) {
-    part = std::clamp(part, 0, 7);
-    if (part == 0) violin_.channelPressure(pressure);
+    part = std::clamp(part, 0, 8);
+    if (part == 8) epChannelPressure(pressure);
+    else if (part == 0) violin_.channelPressure(pressure);
     else modelParts_[part - 1].channelPressure(pressure);
 }
 
 void AudioEngine::allNotesOffPart(int part) {
-    part = std::clamp(part, 0, 7);
-    if (part == 0) violin_.allNotesOff();
+    part = std::clamp(part, 0, 8);
+    if (part == 8) epAllNotesOff();
+    else if (part == 0) violin_.allNotesOff();
     else modelParts_[part - 1].allNotesOff();
     if (part == 7) stopDrumSamples();
 }
 
 void AudioEngine::handlePartPitchBend(int part, int value14) {
-    part = std::clamp(part, 0, 7);
+    part = std::clamp(part, 0, 8);
     value14 = std::clamp(value14, 0, 16383);
     partPitch_[part] = value14;
 
     if (part == 0) violin_.pitchBend(value14);
-    else modelParts_[part - 1].pitchBend(value14);
+    else if (part < 8) modelParts_[part - 1].pitchBend(value14);
 
     if (part == selectedInstrument_) pitch_ = value14;
 }
 
 void AudioEngine::handlePartControlChange(int part, int cc, int value) {
-    part = std::clamp(part, 0, 7);
+    part = std::clamp(part, 0, 8);
     value = std::clamp(value, 0, 127);
 
     // Per-part performance controls.
@@ -416,25 +605,27 @@ void AudioEngine::handlePartControlChange(int part, int cc, int value) {
         if (part == selectedInstrument_) cc7_ = value;
     } else if (cc == 1) {
         if (part == 0) violin_.setVibratoDepth(value / 127.0f);
-        else modelParts_[part - 1].setControl(1, value / 127.0f);
+        else if (part < 8) modelParts_[part - 1].setControl(1, value / 127.0f);
         if (part == selectedInstrument_) cc1_ = value;
     } else if (cc == 10) {
         if (part == 0) violin_.setBowPressure(value / 127.0f);
-        else modelParts_[part - 1].setControl(10, value / 127.0f);
+        else if (part < 8) modelParts_[part - 1].setControl(10, value / 127.0f);
         if (part == selectedInstrument_) cc10_ = value;
     } else if (cc == 11) {
-        if (part == 0) violin_.setBowSpeed(value / 127.0f);
+        if (part == 8) epExpression_ = value;
+        else if (part == 0) violin_.setBowSpeed(value / 127.0f);
         else modelParts_[part - 1].setControl(11, value / 127.0f);
         if (part == selectedInstrument_) cc11_ = value;
     } else if (cc == 64) {
         partSustain_[part] = value;
         const bool down = value >= 64;
-        if (part == 0) violin_.sustainChanged(down);
+        if (part == 8) epSustainChanged(down);
+        else if (part == 0) violin_.sustainChanged(down);
         else modelParts_[part - 1].sustainChanged(down);
         if (part == selectedInstrument_) cc64_ = value;
     } else if (cc == 74) {
         if (part == 0) violin_.setBowPosition(value / 127.0f);
-        else modelParts_[part - 1].setControl(74, value / 127.0f);
+        else if (part < 8) modelParts_[part - 1].setControl(74, value / 127.0f);
         if (part == selectedInstrument_) cc74_ = value;
     } else if (cc == 120 || cc == 123) {
         allNotesOffPart(part);
@@ -605,13 +796,15 @@ void AudioEngine::processPerformanceStutter(float& left, float& right) {
 }
 
 float AudioEngine::processPart(int part) {
-    part = std::clamp(part, 0, 7);
+    part = std::clamp(part, 0, 8);
+    if (part == 8) return 0.0f;
     const float raw = (part == 0) ? violin_.process() : modelParts_[part - 1].process();
     return raw * (partVolume_[part] / 127.0f);
 }
 
 int AudioEngine::activeVoicesPart(int part) const {
-    part = std::clamp(part, 0, 7);
+    part = std::clamp(part, 0, 8);
+    if (part == 8) return epActiveVoices();
     if (part == 0) return violin_.activeVoices();
     int n = modelParts_[part - 1].activeVoices();
     if (part == 7) n += activeDrumSampleVoices();
@@ -697,11 +890,11 @@ void AudioEngine::handle(const Event& e) {
             const float sus = std::clamp(e.c,0,100)/100.0f;
             const float r = static_cast<float>(std::clamp(e.d,0,5000));
             if (selectedInstrument_ == 0) violin_.setAdsr(a,d,sus,r);
-            else modelParts_[selectedInstrument_ - 1].setAdsr(a,d,sus,r);
+            else if (selectedInstrument_ < 8) modelParts_[selectedInstrument_ - 1].setAdsr(a,d,sus,r);
             break;
         }
         case Event::INSTRUMENT:
-            selectedInstrument_ = std::clamp(e.a, 0, 7);
+            selectedInstrument_ = std::clamp(e.a, 0, 8);
             cc7_ = partVolume_[selectedInstrument_];
             cc64_ = partSustain_[selectedInstrument_];
             pitch_ = partPitch_[selectedInstrument_];
@@ -716,7 +909,7 @@ void AudioEngine::handle(const Event& e) {
             partDistortion_[7] = std::clamp(e.b, 0, 127);
             break;
         case Event::PART_FX: {
-            const int part = std::clamp(e.a, 0, 7);
+            const int part = std::clamp(e.a, 0, 8);
             partBoostDb_[part] = std::clamp(e.b, 0, 18);
             partDistortion_[part] = std::clamp(e.c, 0, 127);
             break;
@@ -731,7 +924,7 @@ void AudioEngine::handle(const Event& e) {
             const bool wasActive = performanceXYActive_;
             const int oldPart = performanceXYPart_;
             performanceXYActive_ = e.a != 0;
-            performanceXYPart_ = std::clamp(e.b, 0, 7);
+            performanceXYPart_ = std::clamp(e.b, 0, 8);
             performanceXYX_ = std::clamp(e.c, 0, 127) / 127.0f;
             performanceXYY_ = std::clamp(e.d, 0, 127) / 127.0f;
 
@@ -754,6 +947,7 @@ void AudioEngine::handle(const Event& e) {
 }
 
 void AudioEngine::render(float* out,int32_t frames) {
+    std::lock_guard<std::mutex> epLock(epBankMutex_);
     Event e;
     while (pop(e)) handle(e);
 
@@ -762,15 +956,21 @@ void AudioEngine::render(float* out,int32_t frames) {
         float mixR = 0.0f;
         int activeParts = 0;
 
-        for (int part=0; part<8; ++part) {
+        for (int part=0; part<9; ++part) {
             const int voices = activeVoicesPart(part);
-            float partL = processPart(part);
-            float partR = partL;
+            float partL = 0.0f;
+            float partR = 0.0f;
 
-            if (part == 7) {
-                // One-shot drum samples join the physical drum model before
-                // the DRUMS Part FX.
-                processDrumSamples(partL, partR);
+            if (part == 8) {
+                for (auto& voice : epVoices_) epRenderVoice(voice, partL, partR);
+            } else {
+                partL = processPart(part);
+                partR = partL;
+                if (part == 7) {
+                    // One-shot drum samples join the physical drum model before
+                    // the DRUMS Part FX.
+                    processDrumSamples(partL, partR);
+                }
             }
 
             const float boost = std::pow(10.0f,
