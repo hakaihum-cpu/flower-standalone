@@ -136,21 +136,9 @@ public final class PianoView extends View {
 
     @Override protected void onDraw(Canvas c) {
         super.onDraw(c);
-
-        boolean videoReady = performanceVideoLayer != null && performanceVideoLayer.isVideoReady();
-        if (!videoReady) {
-            float scale = Math.min(getWidth() / SRC_W, getHeight() / SRC_H);
-            float dw = SRC_W * scale, dh = SRC_H * scale;
-            float leftPad = (getWidth() - dw) * 0.5f;
-            float topPad = (getHeight() - dh) * 0.5f;
-            imageRect.set(leftPad, topPad, leftPad + dw, topPad + dh);
-            paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.WHITE);
-            paint.setAlpha(255);
-            c.drawBitmap(background, null, imageRect, paint);
-            drawPressedKeys(c, scale, leftPad, topPad);
-        }
-
+        // The original MP4 is rendered by PerformanceVideoLayer underneath.
+        // Keep this view transparent so only the controls / audition keyboard
+        // sit above the full-quality video.
         drawIndicators(c);
         if (keyOverlayVisible) drawAuditionKeyboard(c);
     }
