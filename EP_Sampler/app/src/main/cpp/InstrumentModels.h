@@ -61,6 +61,8 @@ private:
         std::array<float, kDelay> delayB{};
         int writeA = 0;
         int writeB = 0;
+        int delayLengthA = 128;
+        int delayLengthB = 64;
         float filter1 = 0.0f;
         float filter2 = 0.0f;
         float dcX = 0.0f;
