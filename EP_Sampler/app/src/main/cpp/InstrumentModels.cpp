@@ -288,6 +288,7 @@ void InstrumentModels::initialisePiano(Voice& v) {
     const float inharmonicity = 0.00012f + 0.00135f * noteNorm * noteNorm;
     const float softness = 1.0f - control1_;
     const float hammerPos = 0.11f + 0.16f * control3_;
+    const float treble = clampf((v.note - 72) / 24.0f, 0.0f, 1.0f);
     const float modalScale = 0.0009f *
             clampf(float(v.frequency / 261.625565), 0.15f, 8.0f);
 
@@ -304,7 +305,11 @@ void InstrumentModels::initialisePiano(Voice& v) {
         }
 
         const float positionCoupling = std::fabs(std::sin(float(kPi) * n * hammerPos));
-        const float spectral = std::exp(-i * (0.18f + softness * 0.34f));
+        // The fixed felt low-pass used previously was too aggressive in the
+        // upper register. Treble strings have shorter contact and need a
+        // slightly more open modal excitation to retain a piano-like body.
+        const float spectralSlope = 0.18f + softness * 0.34f - 0.06f * treble;
+        const float spectral = std::exp(-i * spectralSlope);
         const float decay = std::max(0.22f, 5.5f / (1.0f + i * (0.55f + 0.28f * noteNorm)));
         setupMode(v, i, partial, decay, modalScale * positionCoupling * spectral);
     }
@@ -556,7 +561,16 @@ float InstrumentModels::processAccordion(Voice& v, double freq, float env) {
 float InstrumentModels::processFeltPiano(Voice& v, double) {
     const float t = float(v.age) / float(sampleRate_);
     const float softness = 1.0f - control1_;
-    const float contactDuration = 0.0016f + 0.0062f * softness;
+
+    // Hammer/string contact time must shorten as string frequency rises.
+    // A fixed ~4 ms contact spans multiple cycles above C5 and causes
+    // destructive cancellation, which was the source of the thin/silent
+    // upper register.
+    const float baseContact = 0.0010f + 0.0035f * softness;
+    const float registerScale = std::pow(
+            261.625565f / std::max(65.0f, float(v.frequency)), 0.75f);
+    const float contactDuration = clampf(
+            baseContact * registerScale, 0.00035f, 0.0065f);
     float hammerForce = 0.0f;
 
     if (t < contactDuration) {
