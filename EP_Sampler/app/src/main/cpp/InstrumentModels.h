@@ -32,6 +32,7 @@ public:
     void setAdsr(float attackMs, float decayMs, float sustain, float releaseMs);
 
     float process();
+    int activeVoices() const;
 
 private:
     static constexpr int kVoices = 8;
