@@ -130,6 +130,9 @@ void AudioEngine::setAdsr(int attackMs,int decayMs,int sustainPct,int releaseMs)
 void AudioEngine::setInstrument(int instrument){
     push({Event::INSTRUMENT,instrument,0,0,0});
 }
+void AudioEngine::setDrumParameter(int parameter,int value){
+    push({Event::DRUM_PARAM,parameter,value,0,0});
+}
 
 void AudioEngine::handlePartNoteOn(int part, int note, int velocity) {
     part = std::clamp(part, 0, 7);
@@ -337,6 +340,11 @@ void AudioEngine::handle(const Event& e) {
             cc7_ = partVolume_[selectedInstrument_];
             cc64_ = partSustain_[selectedInstrument_];
             pitch_ = partPitch_[selectedInstrument_];
+            break;
+        case Event::DRUM_PARAM:
+            modelParts_[6].setDrumParameter(
+                    std::clamp(e.a, 0, 11),
+                    std::clamp(e.b, 0, 127) / 127.0f);
             break;
     }
 }
