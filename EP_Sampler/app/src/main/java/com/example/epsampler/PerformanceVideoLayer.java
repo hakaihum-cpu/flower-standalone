@@ -96,6 +96,8 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
         lastVelocity = Math.max(1, Math.min(127, velocity));
         lastNoteOnMs = now;
         updateMotion();
+        handler.postDelayed(this::updateMotion, 520L);
+        handler.postDelayed(this::updateMotion, 950L);
     }
 
     void noteOff(int note) {
@@ -183,11 +185,13 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
             p.setOnPreparedListener(mp -> {
                 prepared = true;
                 applyCenterCrop(mp.getVideoWidth(), mp.getVideoHeight());
-                try {
-                    mp.start();
-                    setForwardSpeed(0.75f);
-                } catch (Exception ignored) { }
-                updateMotion();
+                if (!pausedByLifecycle) {
+                    try {
+                        mp.start();
+                        setForwardSpeed(0.75f);
+                    } catch (Exception ignored) { }
+                    updateMotion();
+                }
                 invalidate();
             });
             p.setOnVideoSizeChangedListener((mp, width, height) -> applyCenterCrop(width, height));
