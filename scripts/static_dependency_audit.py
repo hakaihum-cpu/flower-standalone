@@ -374,6 +374,16 @@ for need in [
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
 
+mode_switch = dreamy.find("if (effectMode == 2)")
+if mode_switch < 0:
+    fail("CHORDBOT MIDI transition ordering missing")
+mode_switch_end = dreamy.find("// Dreamy always receives", mode_switch)
+mode_switch_block = dreamy[mode_switch:mode_switch_end]
+if mode_switch_block.find("processChordMidi (midi);") < 0 or mode_switch_block.find("processChordBotMidi (midi);") < 0:
+    fail("CHORDBOT MIDI transition ordering missing")
+if mode_switch_block.find("processChordMidi (midi);") > mode_switch_block.find("processChordBotMidi (midi);"):
+    fail("CHORDBOT entry must stop CHORD MIDI before CHORDBOT Note On")
+
 if "notifyChordAHoldChanged" not in processor_header:
     fail("CHORD/DREAMY mode contract missing: notifyChordAHoldChanged")
 for bad in [
