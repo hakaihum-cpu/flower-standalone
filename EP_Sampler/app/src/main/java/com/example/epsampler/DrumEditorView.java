@@ -65,7 +65,14 @@ final class DrumEditorView extends View {
 
     private RectF panelRect() {
         float u = unit();
-        return new RectF(8f*u, 126f*u, getWidth()-8f*u, 432f*u);
+        return new RectF(8f*u, 126f*u, getWidth()-8f*u, 446f*u);
+    }
+
+    private RectF closeRect() {
+        float u = unit();
+        RectF panel = panelRect();
+        return new RectF(panel.right - 74f*u, panel.top + 6f*u,
+                panel.right - 10f*u, panel.top + 30f*u);
     }
 
     private float unit() {
@@ -89,8 +96,18 @@ final class DrumEditorView extends View {
         float colW = usableW / 4f;
         float rowH = 72f*u;
 
+        text.setTextSize(11.5f*u);
+        text.setColor(Color.argb(225, 244, 237, 224));
+        canvas.drawText("DRUM EDITOR", left, panel.top + 23f*u, text);
+        RectF close = closeRect();
+        paint.setColor(Color.argb(72, 238, 229, 207));
+        canvas.drawRoundRect(close, 5f*u, 5f*u, paint);
+        String closeText = "CLOSE";
+        float closeTextW = text.measureText(closeText);
+        canvas.drawText(closeText, close.centerX() - closeTextW/2f, panel.top + 23f*u, text);
+
         for (int row=0; row<3; row++) {
-            float y0 = panel.top + 8f*u + row*rowH;
+            float y0 = panel.top + 34f*u + row*rowH;
 
             text.setTextSize(13f*u);
             text.setColor(Color.argb(245, 244, 237, 224));
@@ -127,7 +144,7 @@ final class DrumEditorView extends View {
             }
         }
 
-        float fxTop = panel.top + 230f*u;
+        float fxTop = panel.top + 252f*u;
         text.setTextSize(12.5f*u);
         text.setColor(Color.argb(245, 244, 237, 224));
         canvas.drawText("DRUM BUS", left, fxTop + 23f*u, text);
@@ -165,19 +182,22 @@ final class DrumEditorView extends View {
         float left = panel.left + 10f*u;
         float controlsLeft = left + 92f*u;
 
-        float rowAreaBottom = panel.top + 8f*u + 3f*72f*u;
-        if (y < rowAreaBottom) {
+        if (closeRect().contains(x,y)) return 14;
+
+        float rowStart = panel.top + 34f*u;
+        float rowAreaBottom = rowStart + 3f*72f*u;
+        if (y >= rowStart && y < rowAreaBottom) {
             if (x < controlsLeft) return -1;
             float usableW = panel.right - controlsLeft - 8f*u;
             float colW = usableW / 4f;
             int row = Math.max(0, Math.min(2,
-                    (int)((y - (panel.top + 8f*u)) / (72f*u))));
+                    (int)((y - rowStart) / (72f*u))));
             int col = Math.max(0, Math.min(3,
                     (int)((x - controlsLeft) / colW)));
             return row*4 + col;
         }
 
-        float fxTop = panel.top + 230f*u;
+        float fxTop = panel.top + 252f*u;
         float gap = 12f*u;
         float fxW = (panel.right - controlsLeft - 8f*u - gap) / 2f;
         if (y < fxTop || y > fxTop + 58f*u) return -1;
@@ -210,7 +230,12 @@ final class DrumEditorView extends View {
     }
 
     private void edit(int control, float x) {
-        if (control < 0 || control > 13) return;
+        if (control < 0 || control > 14) return;
+        if (control == 14) {
+            activeControl = -1;
+            setVisibility(GONE);
+            return;
+        }
         int value = valueAtX(control, x);
 
         if (control < 12) {
