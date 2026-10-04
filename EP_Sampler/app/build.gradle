@@ -10,8 +10,8 @@ android {
         applicationId 'com.example.violinphysical'
         minSdk 26
         targetSdk 35
-        versionCode 17
-        versionName '1.7-touch-xy-performance'
+        versionCode 18
+        versionName '1.8-noise-burst-feltfix'
 
         externalNativeBuild {
             cmake {
