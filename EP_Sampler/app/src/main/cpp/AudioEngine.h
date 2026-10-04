@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <mutex>
+#include "SampleBank.h"
 #include "PhysicalViolin.h"
 #include "InstrumentModels.h"
 #include "DreamyEffect.h"
@@ -17,12 +19,11 @@ public:
     bool start();
     void stop();
 
-    // Kept for JNI/source compatibility with EP Sampler. The physical-model
-    // branch does not require or read a sample bank.
-    bool loadBank(const std::string&) { return true; }
-    bool loadBankFd(int) { return true; }
-    bool bankLoaded() const { return true; }
-    std::string bankStatus() const { return "MODEL READY"; }
+    // EP-SAMPLE bank. Physical-model parts remain independent of this bank.
+    bool loadBank(const std::string& path);
+    bool loadBankFd(int fd);
+    bool bankLoaded() const { return epBank_.loaded(); }
+    std::string bankStatus() const { return epBank_.status(); }
 
     void noteOn(int note, int velocity);
     void noteOff(int note, int velocity);
@@ -84,9 +85,9 @@ private:
     PhysicalViolin violin_;
     std::array<InstrumentModels, 7> modelParts_{};
     int selectedInstrument_=0;
-    std::array<int, 8> partVolume_{{112,112,112,112,112,112,112,112}};
-    std::array<int, 8> partSustain_{{0,0,0,0,0,0,0,0}};
-    std::array<int, 8> partPitch_{{8192,8192,8192,8192,8192,8192,8192,8192}};
+    std::array<int, 9> partVolume_{{112,112,112,112,112,112,112,112,127}};
+    std::array<int, 9> partSustain_{{0,0,0,0,0,0,0,0,0}};
+    std::array<int, 9> partPitch_{{8192,8192,8192,8192,8192,8192,8192,8192,8192}};
     DreamyEffect dreamy_;
     SpaceEffect space_;
     SpaceEffect feltPianoReverb_;
@@ -124,8 +125,8 @@ private:
     float spaceMix_=0.50f, spaceDecay_=0.50f;
     float tapeWow_=0.50f, tapeFlutter_=0.50f, tapeDrive_=0.50f;
     float dreamyMix_=0.34f;
-    std::array<int,8> partBoostDb_{{0,0,0,0,0,0,0,6}};
-    std::array<int,8> partDistortion_{{0,0,0,0,0,0,0,0}};
+    std::array<int,9> partBoostDb_{{0,0,0,0,0,0,0,6,0}};
+    std::array<int,9> partDistortion_{{0,0,0,0,0,0,0,0,0}};
     int feltReverbMix_=28;
     int feltReverbDecay_=58;
 
@@ -150,10 +151,49 @@ private:
     int stutterCaptureEnd_=0;
     double stutterPhase_=0.0;
 
+    // EP-SAMPLE is the ninth instrument (part 8). It deliberately keeps the
+    // proven EPBANK1 playback path separate from the eight physical-model parts.
+    struct EpVoice {
+        bool active=false;
+        bool releasing=false;
+        bool pendingRelease=false;
+        bool keyDown=false;
+        int note=0;
+        int velocity=0;
+        int rr=1;
+        double frame=0.0;
+        double releaseFrame=0.0;
+        float bodyVelocity=0.f;
+        float targetBodyVelocity=0.f;
+        int ageFrames=0;
+        std::array<const SampleBank::Entry*,8> sus{};
+        std::array<const SampleBank::Entry*,8> rel{};
+    };
+    static constexpr std::array<int,8> EP_VELS{{16,32,48,64,80,96,112,127}};
+    static constexpr int EP_MAX_VOICES = 64;
+    std::array<EpVoice,EP_MAX_VOICES> epVoices_{};
+    std::array<uint8_t,128> epRrCounter_{};
+    std::array<int,128> epPolyAT_{};
+    int epChannelAT_=0;
+    int epExpression_=127;
+    SampleBank epBank_;
+    std::mutex epBankMutex_;
+
     AAudioStream* stream_=nullptr;
     int sampleRate_=48000;
     int defaultBufferSizeFrames_=0;
     float requestedBufferBursts_=0.0f;
+
+    void epBeginVoice(int note, int velocity);
+    void epReleaseVoice(int note);
+    void epPolyPressure(int note, int pressure);
+    void epChannelPressure(int pressure);
+    void epSustainChanged(bool down);
+    void epAllNotesOff();
+    int epActiveVoices() const;
+    void epRenderVoice(EpVoice& v, float& l, float& r);
+    float epLayerSample(const EpVoice& v, bool release, int layer, double frame, int channel) const;
+    static void epBracket(float velocity, int& lo, int& hi, float& mix);
 
     void handle(const Event& e);
     void handlePartNoteOn(int part, int note, int velocity);
