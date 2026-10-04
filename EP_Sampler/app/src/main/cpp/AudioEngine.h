@@ -12,6 +12,7 @@
 #include "DreamyEffect.h"
 #include "SpaceEffect.h"
 #include "TapeEffect.h"
+#include "IntegratedRecorder.h"
 
 class AudioEngine {
 public:
@@ -59,6 +60,25 @@ public:
     void controlChangePart(int part, int cc, int value);
     void pitchBendPart(int part, int value14);
 
+    void recorderToggleRecording();
+    void recorderToggleRandom();
+    void recorderClear();
+    void recorderPlaySlot(int slot);
+    void recorderRecordSlot(int slot);
+    void recorderToggleClock();
+    void recorderSetBpm(int bpm);
+    void recorderMidiRealtime(int status);
+    bool recorderRecording() const { return recorder_.isRecording(); }
+    bool recorderRandom() const { return recorder_.isRandom(); }
+    bool recorderMidiClock() const { return recorder_.isMidiClockMode(); }
+    int recorderBpm() const { return recorder_.internalBpm(); }
+    int recorderRecordingSlot() const { return recorder_.recordingSlot(); }
+    bool recorderSlotPlaying(int slot) const { return recorder_.isSlotPlaying(slot); }
+    float recorderSlotProgress(int slot) const { return recorder_.slotProgress(slot); }
+    int recorderValidSamples(int slot) const { return recorder_.validSamples(slot); }
+    float recorderPeak(int slot, int bin) const { return recorder_.peak(slot, bin); }
+    float recorderInputLevel() const { return recorder_.inputLevel(); }
+
 private:
     AudioEngine() = default;
     ~AudioEngine();
@@ -92,6 +112,7 @@ private:
     SpaceEffect space_;
     SpaceEffect feltPianoReverb_;
     TapeEffect tape_;
+    IntegratedRecorder recorder_;
 
     struct DrumSample {
         std::vector<float> left;
