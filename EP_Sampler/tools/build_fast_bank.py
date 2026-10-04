@@ -155,8 +155,26 @@ def main() -> int:
         print('Decoding master render once...')
         decode_master(args.master_audio, raw_path)
         needed_frames = math.ceil(float(layout['total_duration_sec']) * SR)
-        if raw_path.stat().st_size < needed_frames * BPF:
-            raise ValueError('Master render is shorter than FAST_CAPTURE.layout.json')
+        needed_bytes = needed_frames * BPF
+        actual_bytes = raw_path.stat().st_size
+        if actual_bytes < needed_bytes:
+            missing_bytes = needed_bytes - actual_bytes
+            missing_sec = missing_bytes / float(BPF * SR)
+            # FL Studio may stop the render at the final NoteOff and omit only
+            # the final release tail. That is safe to zero-pad. A larger
+            # shortage means the capture itself is incomplete and must fail.
+            max_safe_shortfall = release_sec + 0.25
+            if missing_sec <= max_safe_shortfall:
+                print(f'Master render is {missing_sec:.3f} sec shorter than layout; padding final release tail with silence.')
+                with raw_path.open('ab') as pad:
+                    pad.write(b'\\0' * missing_bytes)
+            else:
+                actual_sec = actual_bytes / float(BPF * SR)
+                expected_sec = needed_bytes / float(BPF * SR)
+                raise ValueError(
+                    f'Master render is too short: {actual_sec:.3f} sec, expected {expected_sec:.3f} sec '
+                    f'(short by {missing_sec:.3f} sec)'
+                )
 
         with args.output.open('wb') as out:
             out.write(HEADER.pack(MAGIC, VERSION, SR, CH, BITS, len(entries), 0, data_offset))
