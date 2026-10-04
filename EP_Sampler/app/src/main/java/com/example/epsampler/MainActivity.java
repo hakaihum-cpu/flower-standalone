@@ -397,7 +397,13 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 .setPositiveButton("APPLY", (dialog, which) -> {
                     int selectedPart = Math.max(0, Math.min(7,
                             instrumentSpinner.getSelectedItemPosition()));
-                    partMidiChannels[selectedPart] = channelSpinner.getSelectedItemPosition();
+                    int newChannel = channelSpinner.getSelectedItemPosition();
+                    if (newChannel != partMidiChannels[selectedPart]) {
+                        // A channel reassignment is a routing boundary. Clear
+                        // this part once so notes held on the old channel cannot stick.
+                        NativeEngine.controlChangePart(selectedPart, 123, 0);
+                    }
+                    partMidiChannels[selectedPart] = newChannel;
                     if (midiController != null) midiController.setPartChannels(partMidiChannels);
 
                     applyInstrument(selectedPart);
@@ -441,7 +447,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
     private void applyInstrument(int mode) {
         mode = Math.max(0, Math.min(7, mode));
-        if (pianoView != null) pianoView.panicAuditionKeyboard();
+        if (pianoView != null) pianoView.clearForegroundForInstrumentSwitch();
 
         instrumentMode = mode;
         NativeEngine.setInstrument(instrumentMode);
