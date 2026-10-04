@@ -336,11 +336,6 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private void showConfigDialog() {
         LinearLayout root = dialogRoot();
 
-        TextView chLabel = new TextView(this);
-        chLabel.setText("MIDI CHANNEL");
-        chLabel.setTextSize(16f);
-        root.addView(chLabel);
-
         TextView instrumentLabel = new TextView(this);
         instrumentLabel.setText("INSTRUMENT");
         instrumentLabel.setTextSize(16f);
@@ -372,8 +367,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         TextView cc = new TextView(this);
         cc.setText("\nMIDI CC\n" +
-                "1 Vibrato / 7 Volume / 10 Bow Pressure / 11 Bow Speed\n" +
-                "64 Sustain / 74 Bow Position\n" +
+                "1 Modulation / 7 Volume / 10 Control 1 / 11 Control 2\n" +
+                "64 Sustain / 74 Control 3\n" +
                 "20 Boost / 21 Space Mode / 22 Space Mix / 23 Space Decay\n" +
                 "24 Tape On-Off / 25 Wow / 26 Flutter / 27 Drive\n" +
                 "28 Dreamy On-Off / 103 Dreamy X / 104 Dreamy Y / 105 Dreamy Mix");
