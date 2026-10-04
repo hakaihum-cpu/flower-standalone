@@ -159,10 +159,26 @@ void InstrumentModels::pitchBend(int value14) {
 
 void InstrumentModels::setControl(int cc, float normalized) {
     normalized = clampf(normalized, 0.0f, 1.0f);
+    if (type_ == DRUMS) {
+        if (cc == 10) drumParams_[0] = normalized;          // Kick tune
+        else if (cc == 11) drumParams_[4] = normalized;     // Hi-hat tune
+        else if (cc == 74) drumParams_[8] = normalized;     // Snare tune
+        else if (cc == 1) {                                 // Global decay convenience
+            drumParams_[1] = normalized;
+            drumParams_[5] = normalized;
+            drumParams_[9] = normalized;
+        }
+        return;
+    }
     if (cc == 1) vibrato_ = normalized;
     else if (cc == 10) control1_ = normalized;
     else if (cc == 11) control2_ = normalized;
     else if (cc == 74) control3_ = normalized;
+}
+
+void InstrumentModels::setDrumParameter(int parameter, float normalized) {
+    if (parameter < 0 || parameter >= int(drumParams_.size())) return;
+    drumParams_[parameter] = clampf(normalized, 0.0f, 1.0f);
 }
 
 void InstrumentModels::setAdsr(float a, float d, float s, float r) {
@@ -360,40 +376,43 @@ void InstrumentModels::initialiseDrums(Voice& v) {
     };
 
     const int n = v.note;
-    const bool kick = (n == 60);   // C4
-    const bool hat = (n == 61);    // C#4
-    const bool snare = (n == 62);  // D4
+    const bool kick = (n == 60);
+    const bool hat = (n == 61);
+    const bool snare = (n == 62);
 
     auto tuneRatio = [](float value) {
-        // Centre = original acoustic tuning, full range = +/- 12 semitones.
         const float semitones = (clampf(value, 0.0f, 1.0f) - 0.5f) * 24.0f;
         return std::pow(2.0f, semitones / 12.0f);
     };
 
-    double base = 180.0;
-    if (kick) base = 52.0 * tuneRatio(control1_);
-    else if (hat) base = 900.0 * tuneRatio(control2_);
-    else if (snare) base = 190.0 * tuneRatio(control3_);
+    const float tune = kick ? drumParams_[0] : (hat ? drumParams_[4] : drumParams_[8]);
+    const float decayParam = kick ? drumParams_[1] : (hat ? drumParams_[5] : drumParams_[9]);
+    const float color = hat ? drumParams_[6] : 0.5f;
 
-    // CC1 / fourth DRUMS parameter is decay, shared across the three
-    // physical resonators. Keep the historical default close to 1x.
-    const float decayScale = 0.80f + 1.70f * vibrato_;
+    double base = 180.0;
+    if (kick) base = 52.0 * tuneRatio(tune);
+    else if (hat) base = (620.0 + 620.0 * color) * tuneRatio(tune);
+    else if (snare) base = 190.0 * tuneRatio(tune);
+
+    const float decayScale = 0.38f + 2.55f * decayParam;
     const float membraneScale = clampf(float(base / 3500.0), 0.012f, 0.12f);
 
     for (int i=0; i<kModes; ++i) {
-        const float ratio = hat ? plate[i] : membrane[i];
+        float ratio = hat ? plate[i] : membrane[i];
+        if (hat) ratio *= 0.82f + color * (0.18f + 0.035f * i);
+
         const double f = base * ratio;
         const float decay = kick
-                ? std::max(0.06f, (1.15f * decayScale) / (1.0f + i * 0.48f))
+                ? std::max(0.045f, (0.92f * decayScale) / (1.0f + i * 0.48f))
                 : snare
-                    ? std::max(0.035f, (0.62f * decayScale) / (1.0f + i * 0.34f))
-                    : std::max(0.025f, (0.44f * decayScale) / (1.0f + i * 0.16f));
-        const float gain = (hat ? 0.0040f : 0.0085f * membraneScale) /
+                    ? std::max(0.028f, (0.52f * decayScale) / (1.0f + i * 0.34f))
+                    : std::max(0.018f, (0.32f * decayScale) / (1.0f + i * 0.16f));
+        const float gain = (hat ? (0.0025f + 0.0035f * color)
+                                : 0.0085f * membraneScale) /
                            (1.0f + i * (hat ? 0.09f : 0.18f));
         setupMode(v, i, f, decay, gain);
     }
 }
-
 float InstrumentModels::processFlute(Voice& v, double freq, float env) {
     // Real-time jet-drive / digital-waveguide structure: jet delay,
     // nonlinear edge function and a lossy bore reflection.
@@ -581,46 +600,73 @@ float InstrumentModels::processWoodBass(Voice& v, double, float env) {
 
 float InstrumentModels::processDrums(Voice& v, double) {
     const int n = v.note;
-    const bool kick = (n == 60);   // C4
-    const bool hat = (n == 61);    // C#4
-    const bool snare = (n == 62);  // D4
+    const bool kick = (n == 60);
+    const bool hat = (n == 61);
+    const bool snare = (n == 62);
+    const float velocity = v.velocity / 127.0f;
+    const float t = float(v.age) / float(sampleRate_);
 
-    const float strikeSamples = kick ? 22.0f : (hat ? 5.0f : 11.0f);
+    const float strikeSamples = kick
+            ? (7.0f + 22.0f * (1.0f - drumParams_[3]))
+            : hat ? 4.0f
+            : (5.0f + 16.0f * (1.0f - drumParams_[11]));
+
     float excitation = 0.0f;
     if (float(v.age) < strikeSamples) {
         const float q = (float(v.age) + 1.0f) / (strikeSamples + 1.0f);
+        const float impact = kick ? (0.75f + 0.70f * drumParams_[3])
+                                  : snare ? (0.72f + 0.72f * drumParams_[11])
+                                          : (0.68f + 0.38f * drumParams_[7]);
         excitation = std::sin(float(kPi) * q)
-                   * (0.45f + 0.75f * control2_)
-                   * (0.35f + 0.65f * (v.velocity / 127.0f));
+                   * impact
+                   * (0.35f + 0.65f * velocity);
     }
 
     float membrane = 0.0f;
     for (int i=0; i<kModes; ++i) membrane += tickMode(v, i, excitation);
 
-    const float t = float(v.age) / float(sampleRate_);
+    if (kick) {
+        const float bend = drumParams_[2];
+        const float click = drumParams_[3];
+        const float base = 52.0f * std::pow(2.0f,
+                ((drumParams_[0] - 0.5f) * 24.0f) / 12.0f);
+        const float bendSemis = 28.0f * bend * std::exp(-t * 42.0f);
+        const float f = base * std::pow(2.0f, bendSemis / 12.0f);
+        v.phase = wrapPhase(v.phase + 2.0 * kPi * f / sampleRate_);
+        const float punch = std::sin(v.phase) * std::exp(-t * 22.0f) * bend * 0.22f;
 
-    if (snare) {
-        // Snare wires are a noisy secondary resonator driven by membrane
-        // velocity/energy rather than an unrelated noise oscillator.
-        const float nse = noise(v);
-        const float drive = std::min(1.0f, std::fabs(membrane) * 22.0f);
-        const float decay = std::exp(-t * (5.0f + 11.0f * (1.0f - vibrato_)));
-        v.noiseState += (nse * drive - v.noiseState) * 0.34f;
-        return membrane * 0.72f + v.noiseState * decay * 0.34f;
-    }
-
-    if (hat) {
-        // Plate modes plus turbulent/high-frequency contact component.
         const float nse = noise(v);
         const float hp = nse - v.noiseState;
-        v.noiseState += (nse - v.noiseState) * 0.045f;
-        const float decay = std::exp(-t * (7.0f + 18.0f * (1.0f - vibrato_)));
-        return membrane * 0.55f + hp * decay * 0.24f;
+        v.noiseState += (nse - v.noiseState) * 0.10f;
+        const float clickEnv = std::exp(-t * (150.0f + 280.0f * click));
+        return membrane + punch + hp * clickEnv * click * 0.20f;
     }
 
-    return membrane;
-}
+    if (snare) {
+        const float snappy = drumParams_[10];
+        const float impact = drumParams_[11];
+        const float nse = noise(v);
+        const float drive = std::min(1.0f, std::fabs(membrane) * (8.0f + 26.0f * snappy));
+        const float noiseDecay = std::exp(-t * (5.0f + 18.0f * (1.0f - drumParams_[9])));
+        v.noiseState += (nse * drive - v.noiseState) * (0.18f + 0.34f * snappy);
 
+        const float transient = nse - v.filter2;
+        v.filter2 += (nse - v.filter2) * 0.22f;
+        const float impactEnv = std::exp(-t * (85.0f + 190.0f * impact));
+
+        return membrane * (0.82f - 0.24f * snappy)
+             + v.noiseState * noiseDecay * (0.10f + 0.52f * snappy)
+             + transient * impactEnv * impact * 0.15f;
+    }
+
+    const float noiseLevel = drumParams_[7];
+    const float nse = noise(v);
+    const float hp = nse - v.noiseState;
+    v.noiseState += (nse - v.noiseState) * (0.025f + 0.10f * drumParams_[6]);
+    const float hatDecay = std::exp(-t * (7.0f + 24.0f * (1.0f - drumParams_[5])));
+    return membrane * (0.72f - 0.22f * noiseLevel)
+         + hp * hatDecay * noiseLevel * (0.18f + 0.28f * velocity);
+}
 float InstrumentModels::processVoice(Voice& v) {
     if (!v.active) return 0.0f;
 
