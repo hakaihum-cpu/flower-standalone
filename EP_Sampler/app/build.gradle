@@ -10,8 +10,8 @@ android {
         applicationId 'com.example.violinphysical'
         minSdk 26
         targetSdk 35
-        versionCode 14
-        versionName '1.4-drum-samples'
+        versionCode 15
+        versionName '1.5-ui-presets-accordion-drumfx'
 
         externalNativeBuild {
             cmake {
