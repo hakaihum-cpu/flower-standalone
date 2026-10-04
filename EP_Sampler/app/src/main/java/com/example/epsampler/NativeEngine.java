@@ -32,6 +32,11 @@ public final class NativeEngine {
     public static native void setPartFx(int part, int boostDb, int distortion);
     public static native void setFeltReverb(int mix, int decay);
     public static native void setPerformanceXY(boolean active, int part, int x, int y);
+    public static native int setAudioBufferBursts(float bursts);
+    public static native int audioFramesPerBurst();
+    public static native int audioBufferSizeFrames();
+    public static native int audioBufferCapacityFrames();
+    public static native int audioXRunCount();
     public static native boolean loadDrumSample(int slot, byte[] wavBytes);
     public static native void noteOnPart(int part, int note, int velocity);
     public static native void noteOffPart(int part, int note, int velocity);
