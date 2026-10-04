@@ -137,12 +137,12 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
         pianoView.controlChange(103, Math.max(0, Math.min(127, Math.round(dreamX * 1.27f))));
         pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(dreamY * 1.27f))));
+        NativeEngine.setInstrument(instrumentMode);
         NativeEngine.controlChange(10, bowPressure);
         NativeEngine.controlChange(11, bowSpeed);
         NativeEngine.controlChange(74, bowPosition);
         NativeEngine.controlChange(1, vibratoDepth);
         NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
-        NativeEngine.setInstrument(instrumentMode);
         pianoView.controlChange(10, bowPressure);
         pianoView.controlChange(11, bowSpeed);
         pianoView.controlChange(74, bowPosition);
