@@ -95,6 +95,7 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
         lastNote = note;
         lastVelocity = Math.max(1, Math.min(127, velocity));
         lastNoteOnMs = now;
+        dreamyOverlay.noteOn(note, velocity, heldCount);
         updateMotion();
         handler.postDelayed(this::updateMotion, 520L);
         handler.postDelayed(this::updateMotion, 950L);
@@ -185,13 +186,10 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
             p.setOnPreparedListener(mp -> {
                 prepared = true;
                 applyCenterCrop(mp.getVideoWidth(), mp.getVideoHeight());
-                if (!pausedByLifecycle) {
-                    try {
-                        mp.start();
-                        setForwardSpeed(0.75f);
-                    } catch (Exception ignored) { }
-                    updateMotion();
-                }
+                try {
+                    mp.seekTo(0, MediaPlayer.SEEK_CLOSEST);
+                } catch (Exception ignored) { }
+                if (!pausedByLifecycle) updateMotion();
                 invalidate();
             });
             p.setOnVideoSizeChangedListener((mp, width, height) -> applyCenterCrop(width, height));
@@ -230,6 +228,17 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
     private void updateMotion() {
         if (!prepared || player == null || pausedByLifecycle) return;
 
+        // Silence means a true freeze. Do not let the background drift when
+        // nothing is being played.
+        if (heldCount == 0) {
+            reverseMode = false;
+            handler.removeCallbacks(reverseTick);
+            try {
+                if (player.isPlaying()) player.pause();
+            } catch (IllegalStateException ignored) { }
+            return;
+        }
+
         boolean wantReverse = heldCount >= 3;
         if (wantReverse) {
             if (!reverseMode) {
@@ -244,16 +253,13 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
         if (reverseMode) {
             reverseMode = false;
             handler.removeCallbacks(reverseTick);
-            try { player.start(); } catch (IllegalStateException ignored) { }
         }
 
         long now = SystemClock.uptimeMillis();
         int recent = recentCount(now, 500);
         float speed;
 
-        if (heldCount == 0) {
-            speed = 0.55f;
-        } else if (recent >= 4) {
+        if (recent >= 4) {
             speed = 2.0f;
         } else if (lastVelocity >= 108) {
             speed = 1.85f;
