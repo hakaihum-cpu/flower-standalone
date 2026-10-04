@@ -523,6 +523,16 @@ public final class PianoView extends View {
         super.onDetachedFromWindow();
     }
 
+    boolean blocksPerformanceXY(float x, float y) {
+        float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
+        if (y <= 112f*u) return true;
+        if (keyOverlayVisible) {
+            float keyTop = Math.max(150f*u, getHeight() - 255f*u) - 36f*u;
+            if (y >= keyTop) return true;
+        }
+        return false;
+    }
+
     private int effectButtonAt(float x, float y) {
         float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
         float pad = 12f*u;
