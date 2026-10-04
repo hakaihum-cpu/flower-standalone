@@ -26,6 +26,12 @@ public final class NativeEngine {
     public static native void setTapeParameters(int wow, int flutter, int drive);
     public static native void setDreamyParameters(int x, int y, int mix);
 
+    public static native int setAudioBufferBursts(float bursts);
+    public static native int audioFramesPerBurst();
+    public static native int audioBufferSizeFrames();
+    public static native int audioBufferCapacityFrames();
+    public static native int audioXRunCount();
+
     public static native void recorderToggleRecording();
     public static native void recorderToggleRandom();
     public static native void recorderClear();

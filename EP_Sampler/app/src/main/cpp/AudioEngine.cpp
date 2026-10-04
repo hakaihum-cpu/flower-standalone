@@ -29,6 +29,8 @@ bool AudioEngine::start() {
     AAudioStreamBuilder_delete(b);
     if (r != AAUDIO_OK || !stream_) { stream_=nullptr; return false; }
     sampleRate_ = AAudioStream_getSampleRate(stream_);
+    defaultBufferSizeFrames_ = AAudioStream_getBufferSizeInFrames(stream_);
+    requestedBufferBursts_ = 0.f;
     dreamy_.prepare(sampleRate_);
     dreamy_.setXY(cc103_/127.f, cc104_/127.f);
     space_.prepare(sampleRate_);
@@ -89,6 +91,35 @@ void AudioEngine::setSpaceParameters(int mix,int decay){ push({Event::SPACE_PARA
 void AudioEngine::setTape(bool on){ push({Event::TAPE,on?1:0,0,0}); }
 void AudioEngine::setTapeParameters(int wow,int flutter,int drive){ push({Event::TAPE_PARAMS,wow,flutter,drive}); }
 void AudioEngine::setDreamyParameters(int x,int y,int mix){ push({Event::DREAMY_PARAMS,x,y,mix}); }
+
+int AudioEngine::setAudioBufferBursts(float bursts) {
+    if (!stream_) return AAUDIO_ERROR_INVALID_STATE;
+    requestedBufferBursts_ = std::max(0.f, bursts);
+    int target = defaultBufferSizeFrames_;
+    if (requestedBufferBursts_ > 0.f) {
+        const int fpb = AAudioStream_getFramesPerBurst(stream_);
+        if (fpb <= 0) return AAUDIO_ERROR_INVALID_STATE;
+        target = std::max(1, int(std::lround(float(fpb) * requestedBufferBursts_)));
+    }
+    if (target <= 0) return AAUDIO_ERROR_INVALID_STATE;
+    return AAudioStream_setBufferSizeInFrames(stream_, target);
+}
+
+int AudioEngine::audioFramesPerBurst() const {
+    return stream_ ? AAudioStream_getFramesPerBurst(stream_) : 0;
+}
+
+int AudioEngine::audioBufferSizeFrames() const {
+    return stream_ ? AAudioStream_getBufferSizeInFrames(stream_) : 0;
+}
+
+int AudioEngine::audioBufferCapacityFrames() const {
+    return stream_ ? AAudioStream_getBufferCapacityInFrames(stream_) : 0;
+}
+
+int AudioEngine::audioXRunCount() const {
+    return stream_ ? AAudioStream_getXRunCount(stream_) : 0;
+}
 
 void AudioEngine::recorderToggleRecording(){ recorder_.toggleRecording(); }
 void AudioEngine::recorderToggleRandom(){ recorder_.toggleRandom(); }

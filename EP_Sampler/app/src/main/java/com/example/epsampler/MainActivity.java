@@ -38,6 +38,14 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_DREAM_MIX = "dream_mix";
     private static final String KEY_MIDI_CHANNEL = "midi_channel";
     private static final String KEY_MANUAL_SUSTAIN = "manual_sustain";
+    private static final String KEY_AUDIO_BUFFER_BURSTS = "audio_buffer_bursts";
+    private static final String[] AUDIO_BUFFER_LABELS = {
+            "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST", "1.5 BURSTS", "2 BURSTS",
+            "3 BURSTS", "4 BURSTS", "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS"
+    };
+    private static final float[] AUDIO_BUFFER_VALUES = {
+            0f, 0.5f, 0.75f, 1f, 1.5f, 2f, 3f, 4f, 5f, 6f, 7f, 8f
+    };
     private PianoView pianoView;
     private MidiController midiController;
     private volatile boolean dreamy = true;
@@ -50,6 +58,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int dreamX = 28, dreamY = 28, dreamMix = 34;
     private int midiChannel = 0;
     private boolean manualSustain = false;
+    private float audioBufferBursts = 0f;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -73,6 +82,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         dreamMix = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_MIX, 34);
         midiChannel = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_MIDI_CHANNEL, 0);
         manualSustain = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_MANUAL_SUSTAIN, false);
+        audioBufferBursts = getSharedPreferences(PREFS, MODE_PRIVATE).getFloat(KEY_AUDIO_BUFFER_BURSTS, 0f);
 
         pianoView.setBoosterStep(boosterStep);
         pianoView.setBoostDb(boostDb);
@@ -81,6 +91,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.setDreamy(dreamy);
 
         NativeEngine.start();
+        NativeEngine.setAudioBufferBursts(audioBufferBursts);
         NativeEngine.setBoosterStep(boosterStep);
         NativeEngine.setBoostDb(boostDb);
         NativeEngine.setSpaceMode(spaceMode);
@@ -277,8 +288,64 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 .setPositiveButton("CLOSE", null).show();
     }
 
+    private int audioBufferSelection(float value) {
+        int best = 0;
+        float bestDiff = Float.MAX_VALUE;
+        for (int i=0;i<AUDIO_BUFFER_VALUES.length;i++) {
+            float d = Math.abs(AUDIO_BUFFER_VALUES[i] - value);
+            if (d < bestDiff) { bestDiff = d; best = i; }
+        }
+        return best;
+    }
+
+    private String audioBufferStats(int lastResult) {
+        int fpb = NativeEngine.audioFramesPerBurst();
+        int frames = NativeEngine.audioBufferSizeFrames();
+        int capacity = NativeEngine.audioBufferCapacityFrames();
+        int xruns = NativeEngine.audioXRunCount();
+        String actual = fpb > 0
+                ? String.format(java.util.Locale.US, "%.2f", frames / (float) fpb)
+                : "N/A";
+        String result = lastResult < 0 ? "\nRequest result: " + lastResult : "";
+        return "Frames per burst: " + fpb +
+                "\nActual buffer: " + frames + " frames" +
+                "\nActual bursts: " + actual +
+                "\nCapacity: " + capacity + " frames" +
+                "\nXRuns: " + Math.max(0, xruns) + result;
+    }
+
     private void showConfigDialog() {
         LinearLayout root = dialogRoot();
+
+        TextView audioLabel = new TextView(this);
+        audioLabel.setText("AUDIO BUFFER");
+        audioLabel.setTextSize(16f);
+        root.addView(audioLabel);
+
+        Spinner audioSpinner = new Spinner(this);
+        audioSpinner.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, AUDIO_BUFFER_LABELS));
+        final float originalAudioBuffer = audioBufferBursts;
+        final int[] lastAudioResult = { 0 };
+        audioSpinner.setSelection(audioBufferSelection(audioBufferBursts));
+        root.addView(audioSpinner);
+
+        TextView audioStats = new TextView(this);
+        audioStats.setTextSize(13.5f);
+        audioStats.setPadding(0, 0, 0, 14);
+        audioStats.setText(audioBufferStats(0));
+        root.addView(audioStats);
+
+        audioSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view,
+                                                 int position, long id) {
+                float requested = AUDIO_BUFFER_VALUES[Math.max(0,
+                        Math.min(AUDIO_BUFFER_VALUES.length - 1, position))];
+                lastAudioResult[0] = NativeEngine.setAudioBufferBursts(requested);
+                audioStats.setText(audioBufferStats(lastAudioResult[0]));
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+        });
 
         TextView chLabel = new TextView(this);
         chLabel.setText("MIDI CHANNEL");
@@ -307,8 +374,17 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         cc.setTextSize(14f);
         root.addView(cc);
 
-        new AlertDialog.Builder(this).setTitle("CONFIG").setView(root)
-                .setPositiveButton("APPLY", (dialog, which) -> {
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(root);
+
+        final AlertDialog[] holder = new AlertDialog[1];
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("CONFIG").setView(scroll)
+                .setPositiveButton("APPLY", (d, which) -> {
+                    int ai = Math.max(0, Math.min(AUDIO_BUFFER_VALUES.length - 1,
+                            audioSpinner.getSelectedItemPosition()));
+                    audioBufferBursts = AUDIO_BUFFER_VALUES[ai];
+                    NativeEngine.setAudioBufferBursts(audioBufferBursts);
+
                     midiChannel = spinner.getSelectedItemPosition();
                     if (midiController != null) midiController.setChannel(midiChannel);
                     manualSustain = sustain.isChecked();
@@ -316,10 +392,26 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                     NativeEngine.controlChange(64, sus);
                     pianoView.controlChange(64, sus);
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                            .putFloat(KEY_AUDIO_BUFFER_BURSTS, audioBufferBursts)
                             .putInt(KEY_MIDI_CHANNEL, midiChannel)
                             .putBoolean(KEY_MANUAL_SUSTAIN, manualSustain).apply();
                 })
-                .setNegativeButton("CANCEL", null).show();
+                .setNegativeButton("CANCEL", (d, which) -> {
+                    NativeEngine.setAudioBufferBursts(originalAudioBuffer);
+                }).create();
+        holder[0] = dialog;
+
+        final Runnable refreshStats = new Runnable() {
+            @Override public void run() {
+                AlertDialog current = holder[0];
+                if (current == null || !current.isShowing()) return;
+                audioStats.setText(audioBufferStats(lastAudioResult[0]));
+                audioStats.postDelayed(this, 500L);
+            }
+        };
+        dialog.setOnShowListener(d -> audioStats.post(refreshStats));
+        dialog.setOnCancelListener(d -> NativeEngine.setAudioBufferBursts(originalAudioBuffer));
+        dialog.show();
     }
 
     @Override public void onRecorderRecord() {

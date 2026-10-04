@@ -36,6 +36,13 @@ public:
     void setTapeParameters(int wow, int flutter, int drive);
     void setDreamyParameters(int x, int y, int mix);
 
+    // AAudio output-buffer tuning. 0.0 means restore the stream's original AUTO size.
+    int setAudioBufferBursts(float bursts);
+    int audioFramesPerBurst() const;
+    int audioBufferSizeFrames() const;
+    int audioBufferCapacityFrames() const;
+    int audioXRunCount() const;
+
     void recorderToggleRecording();
     void recorderToggleRandom();
     void recorderClear();
@@ -107,6 +114,8 @@ private:
     float dreamyMix_ = 0.34f;
     AAudioStream* stream_=nullptr;
     int sampleRate_=48000;
+    int defaultBufferSizeFrames_=0;
+    float requestedBufferBursts_=0.f;
     std::mutex bankMutex_;
 
     void handle(const Event& e);
