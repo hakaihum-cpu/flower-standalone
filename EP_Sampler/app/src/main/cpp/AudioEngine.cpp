@@ -40,6 +40,13 @@ bool AudioEngine::start() {
     violin_.setBowPosition(0.12f);
     violin_.setVibratoDepth(0.10f);
 
+    instrumentModels_.prepare(sampleRate_);
+    instrumentModels_.setType(InstrumentModels::FLUTE);
+    instrumentModels_.setControl(1, cc1_ / 127.0f);
+    instrumentModels_.setControl(10, cc10_ / 127.0f);
+    instrumentModels_.setControl(11, cc11_ / 127.0f);
+    instrumentModels_.setControl(74, cc74_ / 127.0f);
+
     dreamy_.prepare(sampleRate_);
     dreamy_.setXY(cc103_/127.f, cc104_/127.f);
     space_.prepare(sampleRate_);
@@ -95,38 +102,59 @@ void AudioEngine::setDreamyParameters(int x,int y,int mix){ push({Event::DREAMY_
 void AudioEngine::setAdsr(int attackMs,int decayMs,int sustainPct,int releaseMs){
     push({Event::ADSR,attackMs,decayMs,sustainPct,releaseMs});
 }
+void AudioEngine::setInstrument(int instrument){
+    push({Event::INSTRUMENT,instrument,0,0,0});
+}
 
 void AudioEngine::handle(const Event& e) {
     switch(e.type) {
         case Event::NOTE_ON:
-            if (e.b <= 0) violin_.noteOff(e.a, cc64_ >= 64);
-            else violin_.noteOn(e.a, e.b);
+            if (instrumentType_ == 0) {
+                if (e.b <= 0) violin_.noteOff(e.a, cc64_ >= 64);
+                else violin_.noteOn(e.a, e.b);
+            } else {
+                if (e.b <= 0) instrumentModels_.noteOff(e.a, cc64_ >= 64);
+                else instrumentModels_.noteOn(e.a, e.b);
+            }
             break;
         case Event::NOTE_OFF:
-            violin_.noteOff(e.a, cc64_ >= 64);
+            if (instrumentType_ == 0) violin_.noteOff(e.a, cc64_ >= 64);
+            else instrumentModels_.noteOff(e.a, cc64_ >= 64);
             break;
         case Event::POLY_AT:
-            violin_.polyPressure(e.a, e.b);
+            if (instrumentType_ == 0) violin_.polyPressure(e.a, e.b);
+            else instrumentModels_.polyPressure(e.a, e.b);
             break;
         case Event::CH_AT:
-            violin_.channelPressure(e.a);
+            if (instrumentType_ == 0) violin_.channelPressure(e.a);
+            else instrumentModels_.channelPressure(e.a);
             break;
         case Event::CC:
             if (e.a == 7) {
                 cc7_ = std::clamp(e.b, 0, 127);
             } else if (e.a == 1) {
-                violin_.setVibratoDepth(std::clamp(e.b,0,127) / 127.0f);
+                cc1_ = std::clamp(e.b,0,127);
+                violin_.setVibratoDepth(cc1_ / 127.0f);
+                instrumentModels_.setControl(1, cc1_ / 127.0f);
             } else if (e.a == 10) {
-                violin_.setBowPressure(std::clamp(e.b,0,127) / 127.0f);
+                cc10_ = std::clamp(e.b,0,127);
+                violin_.setBowPressure(cc10_ / 127.0f);
+                instrumentModels_.setControl(10, cc10_ / 127.0f);
             } else if (e.a == 11) {
-                violin_.setBowSpeed(std::clamp(e.b,0,127) / 127.0f);
+                cc11_ = std::clamp(e.b,0,127);
+                violin_.setBowSpeed(cc11_ / 127.0f);
+                instrumentModels_.setControl(11, cc11_ / 127.0f);
             } else if (e.a == 64) {
                 cc64_ = std::clamp(e.b,0,127);
                 violin_.sustainChanged(cc64_ >= 64);
+                instrumentModels_.sustainChanged(cc64_ >= 64);
             } else if (e.a == 74) {
-                violin_.setBowPosition(std::clamp(e.b,0,127) / 127.0f);
+                cc74_ = std::clamp(e.b,0,127);
+                violin_.setBowPosition(cc74_ / 127.0f);
+                instrumentModels_.setControl(74, cc74_ / 127.0f);
             } else if (e.a == 120 || e.a == 123) {
                 violin_.allNotesOff();
+                instrumentModels_.allNotesOff();
             } else if (e.a==20) {
                 boostDb_=std::clamp(int(std::lround(e.b*6.0/127.0)),0,6);
             } else if (e.a==21) {
@@ -159,6 +187,7 @@ void AudioEngine::handle(const Event& e) {
         case Event::PITCH:
             pitch_=std::clamp(e.a,0,16383);
             violin_.pitchBend(pitch_);
+            instrumentModels_.pitchBend(pitch_);
             break;
         case Event::DREAMY:
             dreamy_.setEnabled(e.a!=0);
@@ -193,12 +222,28 @@ void AudioEngine::handle(const Event& e) {
             dreamyMix_=std::clamp(e.c,0,100)/100.f;
             dreamy_.setParameters(cc103_/127.f,cc104_/127.f,dreamyMix_);
             break;
-        case Event::ADSR:
-            violin_.setAdsr(
-                static_cast<float>(std::clamp(e.a,0,5000)),
-                static_cast<float>(std::clamp(e.b,0,5000)),
-                std::clamp(e.c,0,100)/100.0f,
-                static_cast<float>(std::clamp(e.d,0,5000)));
+        case Event::ADSR: {
+            const float a = static_cast<float>(std::clamp(e.a,0,5000));
+            const float d = static_cast<float>(std::clamp(e.b,0,5000));
+            const float sus = std::clamp(e.c,0,100)/100.0f;
+            const float r = static_cast<float>(std::clamp(e.d,0,5000));
+            violin_.setAdsr(a,d,sus,r);
+            if (instrumentType_ != 0) instrumentModels_.setAdsr(a,d,sus,r);
+            break;
+        }
+        case Event::INSTRUMENT:
+            instrumentType_ = std::clamp(e.a, 0, 7);
+            violin_.allNotesOff();
+            instrumentModels_.allNotesOff();
+            if (instrumentType_ != 0) {
+                instrumentModels_.setType(instrumentType_);
+                instrumentModels_.setControl(1, cc1_ / 127.0f);
+                instrumentModels_.setControl(10, cc10_ / 127.0f);
+                instrumentModels_.setControl(11, cc11_ / 127.0f);
+                instrumentModels_.setControl(74, cc74_ / 127.0f);
+                instrumentModels_.pitchBend(pitch_);
+                instrumentModels_.sustainChanged(cc64_ >= 64);
+            }
             break;
     }
 }
@@ -208,7 +253,7 @@ void AudioEngine::render(float* out,int32_t frames) {
     while (pop(e)) handle(e);
 
     for (int32_t i=0; i<frames; ++i) {
-        const float mono = violin_.process();
+        const float mono = instrumentType_ == 0 ? violin_.process() : instrumentModels_.process();
         float l = mono;
         float r = mono;
 
