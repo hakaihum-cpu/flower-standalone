@@ -17,6 +17,9 @@ import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.ScrollView;
+import android.widget.Button;
+import android.widget.Toast;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -51,6 +54,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_DRUM_SNARE_TUNE = "drum_snare_tune";// legacy migration
     private static final String KEY_DRUM_DECAY = "drum_decay";           // legacy migration
     private static final String KEY_DRUM_PARAM_PREFIX = "drum_param_";
+    private static final String KEY_DRUM_BOOST_DB = "drum_boost_db";
+    private static final String KEY_DRUM_DISTORTION = "drum_distortion";
+    private static final String PRESET_PREFS = "violin_physical_presets";
+    private static final int PRESET_SLOTS = 8;
 
     private static final String[] INSTRUMENT_NAMES = new String[] {
             "VIOLIN", "FLUTE", "SAXOPHONE", "FELT PIANO",
@@ -88,6 +95,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             64, 43, 74, 56,
             64, 53, 74, 58
     };
+    private int drumBoostDb = 6;
+    private int drumDistortion = 0;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -137,6 +146,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         instrumentMode = Math.max(0, Math.min(7,
                 getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_INSTRUMENT, 0)));
         android.content.SharedPreferences drumPrefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        drumBoostDb = Math.max(0, Math.min(18, drumPrefs.getInt(KEY_DRUM_BOOST_DB, 6)));
+        drumDistortion = Math.max(0, Math.min(127, drumPrefs.getInt(KEY_DRUM_DISTORTION, 0)));
         for (int i=0; i<drumParameters.length; i++) {
             int fallback = drumParameters[i];
             if (i == 0) fallback = drumPrefs.getInt(KEY_DRUM_KICK_TUNE, fallback);
@@ -155,6 +166,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.setInstrumentName(INSTRUMENT_NAMES[instrumentMode], INSTRUMENT_BUTTONS[instrumentMode]);
         pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
         drumEditorView.setValues(drumParameters);
+        drumEditorView.setDrumFx(drumBoostDb, drumDistortion);
         drumEditorView.setDrumsVisible(instrumentMode == 7);
         videoLayer.setInstrument(instrumentMode);
 
@@ -173,6 +185,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         for (int i=0; i<drumParameters.length; i++) {
             NativeEngine.setDrumParameter(i, drumParameters[i]);
         }
+        NativeEngine.setDrumFx(drumBoostDb, drumDistortion);
         NativeEngine.setInstrument(instrumentMode);
         if (instrumentMode != 7) {
             NativeEngine.controlChange(10, bowPressure);
@@ -308,6 +321,15 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         return root;
     }
 
+    private ScrollView scrollDialogView(LinearLayout root) {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(root, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT,
+                ScrollView.LayoutParams.WRAP_CONTENT));
+        return scroll;
+    }
+
     private void addSlider(LinearLayout root, String name, int max, int value, java.util.function.IntConsumer onChange) {
         TextView label = new TextView(this);
         label.setText(name + "  " + value);
@@ -335,7 +357,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             pianoView.setBoostDb(v);
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_BOOST_DB, v).apply();
         });
-        new AlertDialog.Builder(this).setTitle("BOOST").setView(root)
+        new AlertDialog.Builder(this).setTitle("BOOST").setView(scrollDialogView(root))
                 .setPositiveButton("CLOSE", null).show();
     }
 
@@ -351,7 +373,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             NativeEngine.setSpaceParameters(spaceMix, spaceDecay);
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_SPACE_DECAY, v).apply();
         });
-        new AlertDialog.Builder(this).setTitle("SPACE").setView(root)
+        new AlertDialog.Builder(this).setTitle("SPACE").setView(scrollDialogView(root))
                 .setPositiveButton("CLOSE", null).show();
     }
 
@@ -372,7 +394,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_TAPE_DRIVE, v).apply();
         });
-        new AlertDialog.Builder(this).setTitle("TAPE").setView(root)
+        new AlertDialog.Builder(this).setTitle("TAPE").setView(scrollDialogView(root))
                 .setPositiveButton("CLOSE", null).show();
     }
 
@@ -395,7 +417,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_DREAM_MIX, v).apply();
         });
-        new AlertDialog.Builder(this).setTitle("DREAMY").setView(root)
+        new AlertDialog.Builder(this).setTitle("DREAMY").setView(scrollDialogView(root))
                 .setPositiveButton("CLOSE", null).show();
     }
 
@@ -445,6 +467,47 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         sustain.setChecked(manualSustain);
         root.addView(sustain);
 
+        TextView presetLabel = new TextView(this);
+        presetLabel.setText("\nPRESET");
+        presetLabel.setTextSize(16f);
+        root.addView(presetLabel);
+
+        Spinner presetSpinner = new Spinner(this);
+        String[] presetSlots = new String[PRESET_SLOTS];
+        for (int i=0; i<PRESET_SLOTS; i++) presetSlots[i] = "SLOT " + (i + 1);
+        presetSpinner.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, presetSlots));
+        root.addView(presetSpinner);
+
+        LinearLayout presetButtons = new LinearLayout(this);
+        presetButtons.setOrientation(LinearLayout.HORIZONTAL);
+        Button savePreset = new Button(this);
+        savePreset.setText("PRESET SAVE");
+        Button loadPreset = new Button(this);
+        loadPreset.setText("PRESET LOAD");
+        presetButtons.addView(savePreset, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        presetButtons.addView(loadPreset, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        root.addView(presetButtons);
+
+        savePreset.setOnClickListener(v -> {
+            int slot = presetSpinner.getSelectedItemPosition();
+            savePreset(slot);
+            Toast.makeText(this, "PRESET " + (slot + 1) + " SAVED", Toast.LENGTH_SHORT).show();
+        });
+        loadPreset.setOnClickListener(v -> {
+            int slot = presetSpinner.getSelectedItemPosition();
+            if (loadPreset(slot)) {
+                instrumentSpinner.setSelection(instrumentMode);
+                channelSpinner.setSelection(partMidiChannels[instrumentMode]);
+                sustain.setChecked(manualSustain);
+                Toast.makeText(this, "PRESET " + (slot + 1) + " LOADED", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "PRESET " + (slot + 1) + " EMPTY", Toast.LENGTH_SHORT).show();
+            }
+        });
+
         TextView cc = new TextView(this);
         cc.setText("\nMIDI CC\n" +
                 "1 Modulation / 7 Volume / 10 Control 1 / 11 Control 2\n" +
@@ -455,7 +518,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         cc.setTextSize(14f);
         root.addView(cc);
 
-        new AlertDialog.Builder(this).setTitle("CONFIG").setView(root)
+        new AlertDialog.Builder(this).setTitle("CONFIG").setView(scrollDialogView(root))
                 .setPositiveButton("APPLY", (dialog, which) -> {
                     int selectedPart = Math.max(0, Math.min(7,
                             instrumentSpinner.getSelectedItemPosition()));
@@ -523,6 +586,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         }
         if (drumEditorView != null) {
             drumEditorView.setValues(drumParameters);
+            drumEditorView.setDrumFx(drumBoostDb, drumDistortion);
             drumEditorView.setDrumsVisible(instrumentMode == 7);
         }
 
@@ -535,15 +599,20 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         String[] names = modelControlNames();
 
         if (instrumentMode == 7) {
+            TextView info = new TextView(this);
+            info.setText("Edit directly on the performance screen.\n\n" +
+                    "C4 Kick / C#4 Hi-hat / D4 Snare = physical models\n" +
+                    "D#4 Close Hat / E4 Tom / F4 Crash\n" +
+                    "F#4 Kick / G4 Stick / G#4 Snare = one-shot samples\n\n" +
+                    "KICK: Tune / Decay / Bend / Click\n" +
+                    "HI-HAT: Tune / Decay / Color / Noise\n" +
+                    "SNARE: Tune / Decay / Snappy / Impact\n" +
+                    "DRUM BUS: Booster / Distortion");
+            info.setTextSize(15f);
+            root.addView(info);
             new AlertDialog.Builder(this)
                     .setTitle("DRUMS MODEL")
-                    .setMessage("Edit directly on the performance screen.\n\n" +
-                            "C4 Kick / C#4 Hi-hat / D4 Snare = physical models\n" +
-                            "D#4 Close Hat / E4 Tom / F4 Crash\n" +
-                            "F#4 Kick / G4 Stick / G#4 Snare = one-shot samples\n\n" +
-                            "KICK: Tune / Decay / Bend / Click\n" +
-                            "HI-HAT: Tune / Decay / Color / Noise\n" +
-                            "SNARE: Tune / Decay / Snappy / Impact")
+                    .setView(scrollDialogView(root))
                     .setPositiveButton("CLOSE", null)
                     .show();
             return;
@@ -592,7 +661,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         new AlertDialog.Builder(this)
                 .setTitle(INSTRUMENT_NAMES[instrumentMode] + " MODEL")
                 .setMessage(modelDescription())
-                .setView(root)
+                .setView(scrollDialogView(root))
                 .setPositiveButton("CLOSE", null)
                 .show();
     }
@@ -604,6 +673,166 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.setDrumParameter(parameter, value);
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putInt(KEY_DRUM_PARAM_PREFIX + parameter, value).apply();
+    }
+
+    @Override public void onDrumFxChanged(int boostDb, int distortion) {
+        drumBoostDb = Math.max(0, Math.min(18, boostDb));
+        drumDistortion = Math.max(0, Math.min(127, distortion));
+        NativeEngine.setDrumFx(drumBoostDb, drumDistortion);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putInt(KEY_DRUM_BOOST_DB, drumBoostDb)
+                .putInt(KEY_DRUM_DISTORTION, drumDistortion)
+                .apply();
+    }
+
+
+    private void savePreset(int slot) {
+        if (slot < 0 || slot >= PRESET_SLOTS) return;
+        String p = "slot_" + slot + "_";
+        android.content.SharedPreferences.Editor e =
+                getSharedPreferences(PRESET_PREFS, MODE_PRIVATE).edit();
+
+        e.putBoolean(p + "valid", true)
+                .putInt(p + "instrument", instrumentMode)
+                .putBoolean(p + "manual_sustain", manualSustain)
+                .putInt(p + "boost_db", boostDb)
+                .putInt(p + "space_mode", spaceMode)
+                .putInt(p + "space_mix", spaceMix)
+                .putInt(p + "space_decay", spaceDecay)
+                .putBoolean(p + "tape", tape)
+                .putInt(p + "tape_wow", tapeWow)
+                .putInt(p + "tape_flutter", tapeFlutter)
+                .putInt(p + "tape_drive", tapeDrive)
+                .putBoolean(p + "dreamy", dreamy)
+                .putInt(p + "dream_x", dreamX)
+                .putInt(p + "dream_y", dreamY)
+                .putInt(p + "dream_mix", dreamMix)
+                .putInt(p + "control1", bowPressure)
+                .putInt(p + "control2", bowSpeed)
+                .putInt(p + "control3", bowPosition)
+                .putInt(p + "mod", vibratoDepth)
+                .putInt(p + "attack", attackMs)
+                .putInt(p + "decay", decayMs)
+                .putInt(p + "sustain", sustainPct)
+                .putInt(p + "release", releaseMs)
+                .putInt(p + "drum_boost", drumBoostDb)
+                .putInt(p + "drum_dist", drumDistortion);
+        for (int i=0; i<partMidiChannels.length; i++) {
+            e.putInt(p + "midi_" + i, partMidiChannels[i]);
+        }
+        for (int i=0; i<drumParameters.length; i++) {
+            e.putInt(p + "drum_" + i, drumParameters[i]);
+        }
+        e.apply();
+    }
+
+    private boolean loadPreset(int slot) {
+        if (slot < 0 || slot >= PRESET_SLOTS) return false;
+        String p = "slot_" + slot + "_";
+        android.content.SharedPreferences sp = getSharedPreferences(PRESET_PREFS, MODE_PRIVATE);
+        if (!sp.getBoolean(p + "valid", false)) return false;
+
+        instrumentMode = Math.max(0, Math.min(7, sp.getInt(p + "instrument", instrumentMode)));
+        manualSustain = sp.getBoolean(p + "manual_sustain", manualSustain);
+        boostDb = Math.max(0, Math.min(6, sp.getInt(p + "boost_db", boostDb)));
+        boosterStep = Math.min(3, Math.round(boostDb / 2f));
+        spaceMode = Math.max(0, Math.min(3, sp.getInt(p + "space_mode", spaceMode)));
+        spaceMix = Math.max(0, Math.min(100, sp.getInt(p + "space_mix", spaceMix)));
+        spaceDecay = Math.max(0, Math.min(100, sp.getInt(p + "space_decay", spaceDecay)));
+        tape = sp.getBoolean(p + "tape", tape);
+        tapeWow = Math.max(0, Math.min(100, sp.getInt(p + "tape_wow", tapeWow)));
+        tapeFlutter = Math.max(0, Math.min(100, sp.getInt(p + "tape_flutter", tapeFlutter)));
+        tapeDrive = Math.max(0, Math.min(100, sp.getInt(p + "tape_drive", tapeDrive)));
+        dreamy = sp.getBoolean(p + "dreamy", dreamy);
+        dreamX = Math.max(0, Math.min(100, sp.getInt(p + "dream_x", dreamX)));
+        dreamY = Math.max(0, Math.min(100, sp.getInt(p + "dream_y", dreamY)));
+        dreamMix = Math.max(0, Math.min(100, sp.getInt(p + "dream_mix", dreamMix)));
+        bowPressure = Math.max(0, Math.min(127, sp.getInt(p + "control1", bowPressure)));
+        bowSpeed = Math.max(0, Math.min(127, sp.getInt(p + "control2", bowSpeed)));
+        bowPosition = Math.max(0, Math.min(127, sp.getInt(p + "control3", bowPosition)));
+        vibratoDepth = Math.max(0, Math.min(127, sp.getInt(p + "mod", vibratoDepth)));
+        attackMs = Math.max(0, Math.min(5000, sp.getInt(p + "attack", attackMs)));
+        decayMs = Math.max(0, Math.min(5000, sp.getInt(p + "decay", decayMs)));
+        sustainPct = Math.max(0, Math.min(100, sp.getInt(p + "sustain", sustainPct)));
+        releaseMs = Math.max(0, Math.min(5000, sp.getInt(p + "release", releaseMs)));
+        drumBoostDb = Math.max(0, Math.min(18, sp.getInt(p + "drum_boost", drumBoostDb)));
+        drumDistortion = Math.max(0, Math.min(127, sp.getInt(p + "drum_dist", drumDistortion)));
+
+        for (int i=0; i<partMidiChannels.length; i++) {
+            partMidiChannels[i] = Math.max(0, Math.min(16, sp.getInt(p + "midi_" + i, partMidiChannels[i])));
+        }
+        for (int i=0; i<drumParameters.length; i++) {
+            drumParameters[i] = Math.max(0, Math.min(127, sp.getInt(p + "drum_" + i, drumParameters[i])));
+        }
+
+        if (midiController != null) midiController.setPartChannels(partMidiChannels);
+        applyInstrument(instrumentMode);
+
+        NativeEngine.setBoostDb(boostDb);
+        NativeEngine.setSpaceMode(spaceMode);
+        NativeEngine.setSpaceParameters(spaceMix, spaceDecay);
+        NativeEngine.setTape(tape);
+        NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
+        NativeEngine.setDreamy(dreamy);
+        NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
+        for (int i=0; i<drumParameters.length; i++) NativeEngine.setDrumParameter(i, drumParameters[i]);
+        NativeEngine.setDrumFx(drumBoostDb, drumDistortion);
+
+        if (instrumentMode != 7) {
+            NativeEngine.controlChange(10, bowPressure);
+            NativeEngine.controlChange(11, bowSpeed);
+            NativeEngine.controlChange(74, bowPosition);
+            NativeEngine.controlChange(1, vibratoDepth);
+            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
+        }
+        NativeEngine.controlChange(64, manualSustain ? 127 : 0);
+
+        pianoView.setBoostDb(boostDb);
+        pianoView.setSpaceMode(spaceMode);
+        pianoView.setTape(tape);
+        pianoView.setDreamy(dreamy);
+        pianoView.controlChange(10, bowPressure);
+        pianoView.controlChange(11, bowSpeed);
+        pianoView.controlChange(74, bowPosition);
+        pianoView.controlChange(1, vibratoDepth);
+        pianoView.controlChange(64, manualSustain ? 127 : 0);
+        pianoView.controlChange(103, Math.max(0, Math.min(127, Math.round(dreamX * 1.27f))));
+        pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(dreamY * 1.27f))));
+        if (drumEditorView != null) {
+            drumEditorView.setValues(drumParameters);
+            drumEditorView.setDrumFx(drumBoostDb, drumDistortion);
+        }
+
+        persistLoadedPresetAsCurrent();
+        return true;
+    }
+
+    private void persistLoadedPresetAsCurrent() {
+        android.content.SharedPreferences.Editor e = getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putInt(KEY_INSTRUMENT, instrumentMode)
+                .putBoolean(KEY_MANUAL_SUSTAIN, manualSustain)
+                .putInt(KEY_BOOST_DB, boostDb)
+                .putInt(KEY_BOOST, boosterStep)
+                .putInt(KEY_SPACE, spaceMode)
+                .putInt(KEY_SPACE_MIX, spaceMix)
+                .putInt(KEY_SPACE_DECAY, spaceDecay)
+                .putBoolean(KEY_TAPE, tape)
+                .putInt(KEY_TAPE_WOW, tapeWow)
+                .putInt(KEY_TAPE_FLUTTER, tapeFlutter)
+                .putInt(KEY_TAPE_DRIVE, tapeDrive)
+                .putBoolean(KEY_DREAMY, dreamy)
+                .putInt(KEY_DREAM_X, dreamX)
+                .putInt(KEY_DREAM_Y, dreamY)
+                .putInt(KEY_DREAM_MIX, dreamMix)
+                .putInt(KEY_ATTACK_MS, attackMs)
+                .putInt(KEY_DECAY_MS, decayMs)
+                .putInt(KEY_SUSTAIN_PCT, sustainPct)
+                .putInt(KEY_RELEASE_MS, releaseMs)
+                .putInt(KEY_DRUM_BOOST_DB, drumBoostDb)
+                .putInt(KEY_DRUM_DISTORTION, drumDistortion);
+        for (int i=0; i<partMidiChannels.length; i++) e.putInt(KEY_PART_MIDI_PREFIX + i, partMidiChannels[i]);
+        for (int i=0; i<drumParameters.length; i++) e.putInt(KEY_DRUM_PARAM_PREFIX + i, drumParameters[i]);
+        e.apply();
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
