@@ -98,6 +98,7 @@ private:
     static constexpr int DRUM_SAMPLE_VOICES = 12;
     std::array<DrumSample, DRUM_SAMPLE_COUNT> drumSamples_{};
     std::array<DrumSampleVoice, DRUM_SAMPLE_VOICES> drumSampleVoices_{};
+    int drumSampleSteal_ = 0;
 
     int cc1_=14;
     int cc7_=112;
