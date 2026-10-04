@@ -261,8 +261,14 @@ final class DrumEditorView extends View {
         int index = event.getActionIndex();
 
         if (action == MotionEvent.ACTION_DOWN) {
-            int control = controlAt(event.getX(index), event.getY(index));
-            if (control < 0) return false;
+            float x = event.getX(index);
+            float y = event.getY(index);
+            int control = controlAt(x, y);
+            if (control < 0) {
+                // The editor panel itself blocks the performance XY layer
+                // even between controls.
+                return panelRect().contains(x, y);
+            }
             activeControl = control;
             edit(control, event.getX(index));
             return true;
