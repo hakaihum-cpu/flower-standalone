@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include "PhysicalViolin.h"
+#include "InstrumentModels.h"
 #include "DreamyEffect.h"
 #include "SpaceEffect.h"
 #include "TapeEffect.h"
@@ -37,6 +38,7 @@ public:
     void setTapeParameters(int wow, int flutter, int drive);
     void setDreamyParameters(int x, int y, int mix);
     void setAdsr(int attackMs, int decayMs, int sustainPct, int releaseMs);
+    void setInstrument(int instrument);
 
 private:
     AudioEngine() = default;
@@ -48,7 +50,7 @@ private:
         enum Type : uint8_t {
             NOTE_ON, NOTE_OFF, POLY_AT, CH_AT, CC, PITCH,
             DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS,
-            TAPE, TAPE_PARAMS, DREAMY_PARAMS, ADSR
+            TAPE, TAPE_PARAMS, DREAMY_PARAMS, ADSR, INSTRUMENT
         } type;
         int a=0,b=0,c=0,d=0;
     };
@@ -60,11 +62,17 @@ private:
     bool pop(Event& e);
 
     PhysicalViolin violin_;
+    InstrumentModels instrumentModels_;
+    int instrumentType_=0;
     DreamyEffect dreamy_;
     SpaceEffect space_;
     TapeEffect tape_;
 
+    int cc1_=14;
     int cc7_=112;
+    int cc10_=74;
+    int cc11_=74;
+    int cc74_=42;
     int cc64_=0;
     int cc103_=36;
     int cc104_=36;
