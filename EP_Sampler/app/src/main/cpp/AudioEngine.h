@@ -44,6 +44,7 @@ public:
     void setDrumFx(int boostDb, int distortion);
     void setPartFx(int part, int boostDb, int distortion);
     void setFeltReverb(int mix, int decay);
+    void setPerformanceXY(bool active, int part, int x, int y);
     bool loadDrumSample(int slot, const uint8_t* data, size_t size);
     void noteOnPart(int part, int note, int velocity);
     void noteOffPart(int part, int note, int velocity);
@@ -64,7 +65,7 @@ private:
             DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS,
             TAPE, TAPE_PARAMS, DREAMY_PARAMS, ADSR, INSTRUMENT,
             PART_NOTE_ON, PART_NOTE_OFF, PART_POLY_AT, PART_CH_AT, PART_CC, PART_PITCH,
-            DRUM_PARAM, DRUM_FX, PART_FX, FELT_REVERB
+            DRUM_PARAM, DRUM_FX, PART_FX, FELT_REVERB, PERFORMANCE_XY
         } type;
         int a=0,b=0,c=0,d=0;
     };
@@ -123,6 +124,22 @@ private:
     int feltReverbMix_=28;
     int feltReverbDecay_=58;
 
+    // Momentary touchscreen performance FX.
+    bool performanceXYActive_=false;
+    int performanceXYPart_=0;
+    float performanceXYX_=0.5f;
+    float performanceXYY_=0.5f;
+
+    std::vector<float> performanceDelayL_;
+    std::vector<float> performanceDelayR_;
+    int performanceDelayWrite_=0;
+
+    std::vector<float> stutterHistoryL_;
+    std::vector<float> stutterHistoryR_;
+    int stutterWrite_=0;
+    int stutterCaptureEnd_=0;
+    double stutterPhase_=0.0;
+
     AAudioStream* stream_=nullptr;
     int sampleRate_=48000;
 
@@ -138,6 +155,10 @@ private:
     void stopDrumSamples();
     void processDrumSamples(float& left, float& right);
     int activeDrumSampleVoices() const;
+    void resetPerformanceDelay();
+    void processPerformanceDelay(float& left, float& right);
+    void recordStutterHistory(float left, float right);
+    void processPerformanceStutter(float& left, float& right);
     float processPart(int part);
     int activeVoicesPart(int part) const;
     void render(float* out, int32_t frames);
