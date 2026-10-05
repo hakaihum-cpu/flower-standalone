@@ -340,6 +340,9 @@ void AudioEngine::setDrumFx(int boostDb,int distortion){
 void AudioEngine::setPartFx(int part,int boostDb,int distortion){
     push({Event::PART_FX,part,boostDb,distortion,0});
 }
+void AudioEngine::setPartMixer(int part,int volume,int pan,bool muted){
+    push({Event::PART_MIXER,part,volume,pan,muted?1:0});
+}
 void AudioEngine::setFeltReverb(int mix,int decay){
     push({Event::FELT_REVERB,mix,decay,0,0});
 }
@@ -928,6 +931,14 @@ void AudioEngine::handle(const Event& e) {
             partDistortion_[part] = std::clamp(e.c, 0, 127);
             break;
         }
+        case Event::PART_MIXER: {
+            const int part = std::clamp(e.a, 0, 8);
+            partVolume_[part] = std::clamp(e.b, 0, 127);
+            partPan_[part] = std::clamp(e.c, 0, 127);
+            partMute_[part] = e.d != 0;
+            if (part == selectedInstrument_) cc7_ = partVolume_[part];
+            break;
+        }
         case Event::FELT_REVERB:
             feltReverbMix_ = std::clamp(e.a, 0, 100);
             feltReverbDecay_ = std::clamp(e.b, 0, 100);
@@ -1015,9 +1026,24 @@ void AudioEngine::render(float* out,int32_t frames) {
                 processPerformanceDelay(partL, partR);
             }
 
+            // Mixer stage: balance-style PAN preserves the existing centre
+            // level (L=R=1.0 at PAN C) and attenuates only the opposite side.
+            // This also behaves naturally for EP-SAMPLE's stereo source.
+            if (partMute_[part]) {
+                partL = 0.0f;
+                partR = 0.0f;
+            } else {
+                const int panValue = std::clamp(partPan_[part], 0, 127);
+                const float pan = panValue < 64
+                        ? float(panValue - 64) / 64.0f
+                        : float(panValue - 64) / 63.0f;
+                if (pan < 0.0f) partR *= (1.0f + pan);
+                else if (pan > 0.0f) partL *= (1.0f - pan);
+            }
+
             mixL += partL;
             mixR += partR;
-            if (voices > 0) activeParts++;
+            if (voices > 0 && !partMute_[part]) activeParts++;
         }
 
         const float norm = activeParts > 1 ? 1.0f / std::sqrt(float(activeParts)) : 1.0f;
