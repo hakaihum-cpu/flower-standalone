@@ -15,6 +15,7 @@
    <FILE id="yinh01" name="YinPitchDetector.h" compile="0" resource="0" file="Source/YinPitchDetector.h"/>
    <FILE id="yinc01" name="YinPitchDetector.cpp" compile="1" resource="0" file="Source/YinPitchDetector.cpp"/>
    <FILE id="frmh01" name="FramePack.h" compile="0" resource="0" file="Source/FramePack.h"/>
+   <FILE id="hazh01" name="HazeProcessor.h" compile="0" resource="0" file="Source/HazeProcessor.h"/>
    <FILE id="frmc01" name="FramePack.cpp" compile="1" resource="0" file="Source/FramePack.cpp"/>
    <FILE id="prch01" name="PluginProcessor.h" compile="0" resource="0" file="Source/PluginProcessor.h"/>
    <FILE id="prcc01" name="PluginProcessor.cpp" compile="1" resource="0" file="Source/PluginProcessor.cpp"/>
