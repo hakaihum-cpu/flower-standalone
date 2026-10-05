@@ -350,7 +350,9 @@ private:
         {
             const float t =
                 (float) ((local - (double) (span - seam)) / (double) seam);
-            value += (readSpan (local - (double) span) - value) * t;
+            const double headPosition =
+                local - (double) (span - seam);
+            value += (readSpan (headPosition) - value) * t;
         }
 
         if (lane.jumpCrossfade > 0)
