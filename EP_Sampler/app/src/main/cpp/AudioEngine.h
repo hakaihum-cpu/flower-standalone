@@ -45,6 +45,7 @@ public:
     void setDrumParameter(int parameter, int value);
     void setDrumFx(int boostDb, int distortion);
     void setPartFx(int part, int boostDb, int distortion);
+    void setPartMixer(int part, int volume, int pan, bool muted);
     void setFeltReverb(int mix, int decay);
     void setPerformanceXY(bool active, int part, int x, int y);
     int setAudioBufferBursts(float bursts);
@@ -91,7 +92,7 @@ private:
             DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS,
             TAPE, TAPE_PARAMS, DREAMY_PARAMS, ADSR, INSTRUMENT,
             PART_NOTE_ON, PART_NOTE_OFF, PART_POLY_AT, PART_CH_AT, PART_CC, PART_PITCH,
-            DRUM_PARAM, DRUM_FX, PART_FX, FELT_REVERB, PERFORMANCE_XY
+            DRUM_PARAM, DRUM_FX, PART_FX, PART_MIXER, FELT_REVERB, PERFORMANCE_XY
         } type;
         int a=0,b=0,c=0,d=0;
     };
@@ -106,6 +107,8 @@ private:
     std::array<InstrumentModels, 7> modelParts_{};
     int selectedInstrument_=0;
     std::array<int, 9> partVolume_{{112,112,112,112,112,112,112,112,127}};
+    std::array<int, 9> partPan_{{64,64,64,64,64,64,64,64,64}};
+    std::array<bool, 9> partMute_{{false,false,false,false,false,false,false,false,false}};
     std::array<int, 9> partSustain_{{0,0,0,0,0,0,0,0,0}};
     std::array<int, 9> partPitch_{{8192,8192,8192,8192,8192,8192,8192,8192,8192}};
     DreamyEffect dreamy_;
