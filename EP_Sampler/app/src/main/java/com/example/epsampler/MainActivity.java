@@ -1415,11 +1415,19 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                     } else if (cc == 64) manualSustain = value >= 64;
                     if (drumEditorView != null) drumEditorView.setValues(drumParameters);
                 } else if (instrumentMode < 7) {
-                    if (cc == 1) vibratoDepth = value;
-                    else if (cc == 10) bowPressure = value;
-                    else if (cc == 11) bowSpeed = value;
-                    else if (cc == 74) bowPosition = value;
-                    else if (cc == 64) manualSustain = value >= 64;
+                    if (cc == 1) {
+                        vibratoDepth = value;
+                        if (soundDesignView != null) soundDesignView.setModelValue(3, value);
+                    } else if (cc == 10) {
+                        bowPressure = value;
+                        if (soundDesignView != null) soundDesignView.setModelValue(0, value);
+                    } else if (cc == 11) {
+                        bowSpeed = value;
+                        if (soundDesignView != null) soundDesignView.setModelValue(1, value);
+                    } else if (cc == 74) {
+                        bowPosition = value;
+                        if (soundDesignView != null) soundDesignView.setModelValue(2, value);
+                    } else if (cc == 64) manualSustain = value >= 64;
                 } else if (instrumentMode == 8 && cc == 64) {
                     manualSustain = value >= 64;
                 }
