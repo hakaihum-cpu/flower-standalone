@@ -28,6 +28,7 @@ private:
     void timerCallback() override;
     void paintMain (juce::Graphics&);
     void paintHaze (juce::Graphics&);
+    void paintChordBot (juce::Graphics&);
     void paintConfig (juce::Graphics&);
     void paintMidiControlConfig (juce::Graphics&);
     void paintBar (juce::Graphics&, juce::Rectangle<float>, const juce::String&, float, const juce::String&);
@@ -37,6 +38,8 @@ private:
     juce::Rectangle<float> holdBounds() const;
     juce::Rectangle<float> hazeParameterBounds (int index) const;
     juce::Rectangle<float> hazeToggleBounds (int index) const;
+    juce::Rectangle<float> chordBotPadBounds (int index) const;
+    int chordBotPadAtPoint (juce::Point<float>) const;
     void refreshAudioInputs();
     void selectAudioInput (int index);
     void refreshMidiOutputs();
@@ -64,6 +67,11 @@ private:
     juce::String lastAudioRouteError;
     bool l1Latched = false;
     bool r1Latched = false;
+    bool chordBotEditMode = false;
+    int chordBotEditSlot = -1;
+    int chordBotEditRoot = 0;
+    int chordBotEditQuality = 0;
+    int chordBotPressedPad = -1;
 
     static constexpr float design = 720.0f;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RealtimeChordFxAudioProcessorEditor)
