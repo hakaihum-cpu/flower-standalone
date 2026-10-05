@@ -26,7 +26,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 
 
-public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener, PerformanceXYView.Listener {
+public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener, PerformanceXYView.Listener, MixerView.Listener {
     private static final int PICK_BANK = 1001;
     private static final String PREFS = "violin_physical";
     private static final String KEY_BANK_URI = "bank_uri";
@@ -62,6 +62,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_FELT_REVERB_MIX = "felt_reverb_mix";
     private static final String KEY_FELT_REVERB_DECAY = "felt_reverb_decay";
     private static final String KEY_AUDIO_BUFFER_BURSTS = "audio_buffer_bursts";
+    private static final String KEY_MIX_VOL_PREFIX = "mix_vol_";
+    private static final String KEY_MIX_PAN_PREFIX = "mix_pan_";
+    private static final String KEY_MIX_MUTE_PREFIX = "mix_mute_";
     private static final String[] AUDIO_BUFFER_LABELS = {
             "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST", "1.5 BURSTS", "2 BURSTS",
             "3 BURSTS", "4 BURSTS", "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS"
@@ -86,6 +89,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private PerformanceVideoLayer videoLayer;
     private PerformanceXYView performanceXYView;
     private DrumEditorView drumEditorView;
+    private MixerView mixerView;
     private MidiController midiController;
     private volatile boolean dreamy = false;
     private int boosterStep = 0;
@@ -118,6 +122,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int feltReverbMix = 28;
     private int feltReverbDecay = 58;
     private float audioBufferBursts = 0f;
+    private final int[] partMixerVolume = new int[]{112,112,112,112,112,112,112,112,127};
+    private final int[] partMixerPan = new int[]{64,64,64,64,64,64,64,64,64};
+    private final boolean[] partMixerMute = new boolean[9];
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -134,6 +141,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         performanceXYView.setListener(this);
         drumEditorView = new DrumEditorView(this);
         drumEditorView.setListener(this);
+        mixerView = new MixerView(this);
+        mixerView.setListener(this);
 
         FrameLayout root = new FrameLayout(this);
         root.addView(epBackground, new FrameLayout.LayoutParams(
@@ -153,12 +162,16 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         root.addView(drumEditorView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+        root.addView(mixerView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
 
         epBackground.setZ(0f);
         videoLayer.setZ(1f);
         performanceXYView.setZ(10f);
         pianoView.setZ(20f);
         drumEditorView.setZ(30f);
+        mixerView.setZ(40f);
         setContentView(root);
 
         boosterStep = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_BOOST, 0);
@@ -178,6 +191,14 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             partMidiChannels[i] = Math.max(0, Math.min(16,
                     getSharedPreferences(PREFS, MODE_PRIVATE)
                             .getInt(KEY_PART_MIDI_PREFIX + i, i + 1)));
+            partMixerVolume[i] = Math.max(0, Math.min(127,
+                    getSharedPreferences(PREFS, MODE_PRIVATE)
+                            .getInt(KEY_MIX_VOL_PREFIX + i, i == 8 ? 127 : 112)));
+            partMixerPan[i] = Math.max(0, Math.min(127,
+                    getSharedPreferences(PREFS, MODE_PRIVATE)
+                            .getInt(KEY_MIX_PAN_PREFIX + i, 64)));
+            partMixerMute[i] = getSharedPreferences(PREFS, MODE_PRIVATE)
+                    .getBoolean(KEY_MIX_MUTE_PREFIX + i, false);
         }
         manualSustain = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_MANUAL_SUSTAIN, false);
         attackMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_ATTACK_MS, 20);
@@ -226,6 +247,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         drumEditorView.setValues(drumParameters);
         drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
         drumEditorView.setDrumsVisible(instrumentMode == 7);
+        mixerView.setMixerState(partMixerVolume, partMixerPan, partMixerMute);
         epBackground.setVisibility(instrumentMode == 8 ? View.VISIBLE : View.GONE);
         videoLayer.setVisibility(instrumentMode == 8 ? View.GONE : View.VISIBLE);
         if (instrumentMode < 8) videoLayer.setInstrument(instrumentMode);
@@ -249,6 +271,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         }
         for (int part=0; part<partBoostDb.length; part++) {
             NativeEngine.setPartFx(part, partBoostDb[part], partDistortion[part]);
+            NativeEngine.setPartMixer(part, partMixerVolume[part], partMixerPan[part], partMixerMute[part]);
         }
         NativeEngine.setDrumFx(partBoostDb[7], partDistortion[7]);
         NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
@@ -388,6 +411,36 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
     @Override public void onOpenConfig() {
         showConfigDialog();
+    }
+
+    @Override public void onOpenMixer() {
+        pianoView.setRecorderOpen(false);
+        mixerView.setMixerState(partMixerVolume, partMixerPan, partMixerMute);
+        mixerView.setVisibility(View.VISIBLE);
+        mixerView.bringToFront();
+    }
+
+    @Override public void onMixerClose() {
+        mixerView.setVisibility(View.GONE);
+        hideSystemUI();
+    }
+
+    @Override public void onMixerChanged(int part, int volume, int pan, boolean muted) {
+        if (part < 0 || part >= partMixerVolume.length) return;
+        partMixerVolume[part] = Math.max(0, Math.min(127, volume));
+        partMixerPan[part] = Math.max(0, Math.min(127, pan));
+        partMixerMute[part] = muted;
+        NativeEngine.setPartMixer(part, partMixerVolume[part], partMixerPan[part], partMixerMute[part]);
+
+        if (part == instrumentMode) {
+            pianoView.controlChange(7, partMixerVolume[part]);
+        }
+
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putInt(KEY_MIX_VOL_PREFIX + part, partMixerVolume[part])
+                .putInt(KEY_MIX_PAN_PREFIX + part, partMixerPan[part])
+                .putBoolean(KEY_MIX_MUTE_PREFIX + part, partMixerMute[part])
+                .apply();
     }
 
     private LinearLayout dialogRoot() {
@@ -1161,6 +1214,11 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     @Override public void onControlChange(int part, int cc, int value) {
         runOnUiThread(() -> {
             final boolean selectedPart = part == instrumentMode;
+
+            if (cc == 7 && part >= 0 && part < partMixerVolume.length) {
+                partMixerVolume[part] = Math.max(0, Math.min(127, value));
+                if (mixerView != null) mixerView.setPartVolume(part, partMixerVolume[part]);
+            }
 
             if (selectedPart) {
                 pianoView.controlChange(cc, value);
