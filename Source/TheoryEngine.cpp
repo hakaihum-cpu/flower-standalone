@@ -189,6 +189,112 @@ ChordPlan TheoryEngine::advance()
     return buildPlan (currentDegree, false);
 }
 
+std::array<ChordBotChoice, 8> TheoryEngine::chordBotSuggestions (
+    int seedRootPitchClass, int seedQuality)
+{
+    const int tonic = pitchClass (seedRootPitchClass);
+    const bool minorContext =
+        seedQuality == 1 || seedQuality == 4;
+    const auto& scale = minorContext ? minorScale : majorScale;
+
+    static constexpr int majorQuality[7] =
+        { 0, 1, 1, 0, 0, 1, 5 };
+    static constexpr int minorQuality[7] =
+        { 1, 5, 0, 1, 1, 0, 0 };
+    const auto& quality =
+        minorContext ? minorQuality : majorQuality;
+
+    std::vector<ChordBotChoice> candidates;
+    candidates.reserve (12);
+
+    // Rank the six other diatonic functions by the same I/i transition
+    // weights used by the live TheoryEngine.
+    for (int degree = 1; degree < 7; ++degree)
+    {
+        candidates.push_back ({
+            pitchClass (tonic + scale[(size_t) degree]),
+            quality[degree],
+            transition[0][degree]
+        });
+    }
+
+    if (! minorContext)
+    {
+        // Common functional colours after a major tonic.
+        candidates.push_back ({ pitchClass (tonic + 7), 2, 0.40f }); // V7
+        candidates.push_back ({ pitchClass (tonic + 5), 1, 0.18f }); // borrowed iv
+        candidates.push_back ({ pitchClass (tonic + 2), 4, 0.15f }); // ii7
+    }
+    else
+    {
+        // Harmonic-minor dominant plus common minor-key colour variants.
+        candidates.push_back ({ pitchClass (tonic + 7), 2, 0.40f }); // V7
+        candidates.push_back ({ pitchClass (tonic + 5), 4, 0.18f }); // iv7
+        candidates.push_back ({ pitchClass (tonic + 10), 2, 0.15f }); // bVII7
+        candidates.push_back ({ tonic, 4, 0.12f }); // i7
+    }
+
+    std::stable_sort (
+        candidates.begin(), candidates.end(),
+        [] (const ChordBotChoice& a, const ChordBotChoice& b)
+        {
+            return a.weight > b.weight;
+        });
+
+    std::array<ChordBotChoice, 8> result {};
+    int count = 0;
+    for (const auto& candidate : candidates)
+    {
+        if (candidate.rootPitchClass == tonic
+            && candidate.quality == seedQuality)
+            continue;
+
+        bool duplicate = false;
+        for (int i = 0; i < count; ++i)
+            duplicate = duplicate
+                || (result[(size_t) i].rootPitchClass
+                        == candidate.rootPitchClass
+                    && result[(size_t) i].quality
+                        == candidate.quality);
+
+        if (duplicate)
+            continue;
+
+        result[(size_t) count++] = candidate;
+        if (count == (int) result.size())
+            break;
+    }
+
+    // The candidate set above normally fills all eight slots. This fallback
+    // keeps the layout complete for unusual future quality additions.
+    for (int degree = 0; count < (int) result.size(); ++degree)
+    {
+        const int d = degree % 7;
+        ChordBotChoice candidate {
+            pitchClass (tonic + scale[(size_t) d]),
+            quality[d],
+            0.01f
+        };
+
+        if (candidate.rootPitchClass == tonic
+            && candidate.quality == seedQuality)
+            continue;
+
+        bool duplicate = false;
+        for (int i = 0; i < count; ++i)
+            duplicate = duplicate
+                || (result[(size_t) i].rootPitchClass
+                        == candidate.rootPitchClass
+                    && result[(size_t) i].quality
+                        == candidate.quality);
+
+        if (! duplicate)
+            result[(size_t) count++] = candidate;
+    }
+
+    return result;
+}
+
 std::vector<int> TheoryEngine::makeVoicing (int rootPc, const std::vector<int>& intervals) const
 {
     std::vector<int> notes;
