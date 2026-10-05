@@ -388,7 +388,7 @@ if switch0 < 0 or switch1 < 0 or "chordReverb.reset();" not in dreamy[switch0:sw
 
 for need in [
     "ParamID::effectMode",
-    '"MODE", juce::StringArray { "CHORD", "DREAMY", "HAZE" }, 0',
+    '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA" }, 0',
     "ParamID::chordMode",
     '"CHORD ENGINE", juce::StringArray { "A", "B" }, 0',
     "processChordAudio (buffer)",
