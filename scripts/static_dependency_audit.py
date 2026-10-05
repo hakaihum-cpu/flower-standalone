@@ -198,7 +198,7 @@ for need in [
     "hazeProcessor.forceShuffle",
     "effectMode == 2",
     "selectedEffectMode == 1",
-    MODE_CHOICE_TOKEN.replace('"MODE", ', '').replace(', 0', ''),
+    MODE_CHOICE_TOKEN,
 ]:
     if need not in processor:
         fail(f"HAZE processor integration missing: {need}")
