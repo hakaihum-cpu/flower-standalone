@@ -881,7 +881,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 "64 Sustain / 74 Control 3\n" +
                 "20 Boost / 21 Space Mode / 22 Space Mix / 23 Space Decay\n" +
                 "24 Tape On-Off / 25 Wow / 26 Flutter / 27 Drive\n" +
-                "28 Dreamy On-Off / 103 Dreamy X / 104 Dreamy Y / 105 Dreamy Mix");
+                "28 Dreamy On-Off / 103 Dreamy P1 / 104 Dreamy P2 / 105 Dreamy Mix\n" +
+                "106 Dreamy P3 / 107 Dreamy P4 / 108 Dreamy Mode");
         cc.setTextSize(14f);
         root.addView(cc);
 
@@ -1448,6 +1449,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             else if (cc == 103) dreamX = Math.round(value * 100f / 127f);
             else if (cc == 104) dreamY = Math.round(value * 100f / 127f);
             else if (cc == 105) dreamMix = Math.round(value * 100f / 127f);
+            else if (cc == 106) dreamP3 = Math.round(value * 100f / 127f);
+            else if (cc == 107) dreamP4 = Math.round(value * 100f / 127f);
+            else if (cc == 108) dreamMode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1,
+                    Math.round(value * (DREAM_MODE_NAMES.length - 1) / 127f)));
         });
     }
 
