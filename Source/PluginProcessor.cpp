@@ -591,11 +591,20 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             processChordB (buffer);
     }
 
-    const bool outputActive =
-        effectMode == 2
-        || (running.load (std::memory_order_relaxed)
-            && (effectMode == 1 || (haveChord && chordMidiGateOpen)));
-    applyOutputSafety (buffer, outputActive);
+    if (effectMode == 2)
+    {
+        // HAZE owns its saturation/level behaviour. In particular, its
+        // Output Bypass must remain a dry path while recording continues.
+        outputSafetyGain = 1.0f;
+        outputSafetyWasActive = false;
+    }
+    else
+    {
+        const bool outputActive =
+            running.load (std::memory_order_relaxed)
+            && (effectMode == 1 || (haveChord && chordMidiGateOpen));
+        applyOutputSafety (buffer, outputActive);
+    }
 }
 
 void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buffer)
