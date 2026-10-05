@@ -248,6 +248,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
         drumEditorView.setDrumsVisible(instrumentMode == 7);
         mixerView.setMixerState(partMixerVolume, partMixerPan, partMixerMute);
+        pianoView.controlChange(7, partMixerVolume[instrumentMode]);
         epBackground.setVisibility(instrumentMode == 8 ? View.VISIBLE : View.GONE);
         videoLayer.setVisibility(instrumentMode == 8 ? View.GONE : View.VISIBLE);
         if (instrumentMode < 8) videoLayer.setInstrument(instrumentMode);
@@ -796,6 +797,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                     INSTRUMENT_BUTTONS[instrumentMode]);
             pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
             pianoView.setSampleMode(instrumentMode == 8);
+            pianoView.controlChange(7, partMixerVolume[instrumentMode]);
             if (instrumentMode == 8) pianoView.setBankStatus(epBankStatus());
         }
         if (drumEditorView != null) {
