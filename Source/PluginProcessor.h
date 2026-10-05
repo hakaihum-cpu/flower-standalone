@@ -7,6 +7,7 @@
 #include "TheoryEngine.h"
 #include "YinPitchDetector.h"
 #include "ChordRenderers.h"
+#include "HazeProcessor.h"
 
 class RealtimeChordFxAudioProcessor final : public juce::AudioProcessor
 {
@@ -61,6 +62,7 @@ public:
     void toggleMotionRecord() noexcept { motionCommand.store (1, std::memory_order_release); }
     void clearMotion() noexcept { motionCommand.store (2, std::memory_order_release); }
     int getMotionState() const noexcept { return motionState.load (std::memory_order_relaxed); }
+    void clearHazeBuffer() noexcept { hazeProcessor.clear(); }
 
 private:
     void acceptPitch (const chordfx::PitchEstimate& estimate);
@@ -83,6 +85,8 @@ private:
     void processChordReverb (juce::AudioBuffer<float>&);
     void applyOutputSafety (juce::AudioBuffer<float>&, bool active);
     void processDreamy (juce::AudioBuffer<float>&);
+    chordfx::HazeProcessor::Params hazeParamsFromState() const noexcept;
+    void processHaze (juce::AudioBuffer<float>&, bool audible);
     void resetModeAudioState (int mode);
 
     juce::AudioProcessorValueTreeState apvts;
@@ -91,6 +95,7 @@ private:
     chordfx::SampleChordRenderer sampleChordRenderer;
     chordfx::SineArpeggiator sineArpeggiator;
     chordfx::ChordBRandomFx chordBRandomFx;
+    chordfx::HazeProcessor hazeProcessor;
     juce::Reverb chordReverb;
 
     double currentSampleRate = 48000.0;
@@ -113,7 +118,7 @@ private:
     double gateSamplesRemaining = 0.0;
     int midiClockTicks = 0;
     bool midiClockRunning = false;
-    int lastEffectMode = 0; // 0=CHORD, 1=DREAMY
+    int lastEffectMode = 0; // 0=CHORD, 1=DREAMY, 2=HAZE
     int lastChordMode = 0;  // 0=CHORD-A, 1=CHORD-B
     int pitchSamplesSinceValid = 1000000;
     float outputSafetyGain = 0.0f;
