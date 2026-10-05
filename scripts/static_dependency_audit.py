@@ -155,7 +155,7 @@ for need in [
     "params.og",
     "params.warble",
     "params.loops == 2 ? 2.0 : 1.0",
-    "sampleRate * 0.006",
+    "0.0005 : 0.006",
     "headPosition",
 ]:
     if need not in haze:
@@ -196,6 +196,9 @@ for need in [
 ]:
     if need not in processor:
         fail(f"HAZE processor integration missing: {need}")
+
+if 'if (effectMode == 2)' not in processor or "outputSafetyGain = 1.0f;" not in processor:
+    fail("HAZE Output Bypass must stay outside legacy output soft protection")
 
 for need in [
     "ParamID::hazeMix",
