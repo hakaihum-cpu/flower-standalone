@@ -533,22 +533,15 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     private void addSlider(LinearLayout root, String name, int max, int value, java.util.function.IntConsumer onChange) {
-        TextView label = new TextView(this);
-        label.setText(name + "  " + value);
-        label.setTextSize(16f);
-        root.addView(label);
-        SeekBar bar = new SeekBar(this);
-        bar.setMax(max);
-        bar.setProgress(Math.max(0, Math.min(max, value)));
-        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                label.setText(name + "  " + progress);
-                if (fromUser) onChange.accept(progress);
-            }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) { }
-            @Override public void onStopTrackingTouch(SeekBar seekBar) { }
-        });
-        root.addView(bar);
+        GraphicParameterControl control = new GraphicParameterControl(this);
+        int style = Math.floorMod(name == null ? 0 : name.hashCode(), 4);
+        control.configure(name, max, value, style, onChange::accept);
+        int h = Math.round(102f * getResources().getDisplayMetrics().density);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, h);
+        int gap = Math.round(5f * getResources().getDisplayMetrics().density);
+        lp.setMargins(0, gap, 0, gap);
+        root.addView(control, lp);
     }
 
     private void showBoostDialog() {
