@@ -26,7 +26,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 
 
-public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener, PerformanceXYView.Listener, MixerView.Listener {
+public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener, PerformanceXYView.Listener, MixerView.Listener, SoundDesignView.Listener {
     private static final int PICK_BANK = 1001;
     private static final String PREFS = "violin_physical";
     private static final String KEY_BANK_URI = "bank_uri";
@@ -146,6 +146,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private PerformanceXYView performanceXYView;
     private DrumEditorView drumEditorView;
     private MixerView mixerView;
+    private SoundDesignView soundDesignView;
     private MidiController midiController;
     private volatile boolean dreamy = false;
     private int boosterStep = 0;
@@ -200,6 +201,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         drumEditorView.setListener(this);
         mixerView = new MixerView(this);
         mixerView.setListener(this);
+        soundDesignView = new SoundDesignView(this);
+        soundDesignView.setListener(this);
 
         FrameLayout root = new FrameLayout(this);
         root.addView(epBackground, new FrameLayout.LayoutParams(
@@ -222,6 +225,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         root.addView(mixerView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+        root.addView(soundDesignView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
 
         epBackground.setZ(0f);
         videoLayer.setZ(1f);
@@ -229,6 +235,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.setZ(20f);
         drumEditorView.setZ(30f);
         mixerView.setZ(40f);
+        soundDesignView.setZ(50f);
         setContentView(root);
 
         boosterStep = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_BOOST, 0);
@@ -479,6 +486,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
     @Override public void onOpenMixer() {
         pianoView.setRecorderOpen(false);
+        if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
         mixerView.setMixerState(partMixerVolume, partMixerPan, partMixerMute);
         mixerView.setVisibility(View.VISIBLE);
         mixerView.bringToFront();
