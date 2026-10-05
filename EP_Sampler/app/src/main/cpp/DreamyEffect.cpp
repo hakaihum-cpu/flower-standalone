@@ -133,7 +133,8 @@ void DreamyEffect::grainStereo(Grain& g,
                                float& outR) {
     loopFrames = std::max(48.0, loopFrames);
     if (!g.initialized) {
-        g.phase = 0.5 * (double(&g - &grains_[0]) - 2.0 * std::floor(0.5 * double(&g - &grains_[0])));
+        const size_t index = static_cast<size_t>(&g - grains_.data());
+        g.phase = (index & 1u) ? 0.5 : 0.0;
         g.read = wrapHistory(double(write_) - resetLagFrames - g.phase * loopFrames);
         g.initialized = true;
     }
@@ -153,6 +154,7 @@ void DreamyEffect::grainStereo(Grain& g,
 }
 
 void DreamyEffect::resetNewModeState() {
+    voices_ = {};
     grains_ = {};
     std::fill(fxL_.begin(), fxL_.end(), 0.f);
     std::fill(fxR_.begin(), fxR_.end(), 0.f);
@@ -279,7 +281,9 @@ void DreamyEffect::renderHaze(float& wetL, float& wetR) {
         if (variation == 0) {
             speed = 0.82 + 0.30 * (0.5 + 0.5 * std::sin(0.17 * i + historyFrames_ * 0.000017));
         } else if (variation == 1) {
-            speed = 0.72 + 0.58 * (0.5 + 0.5 * randomSigned());
+            const double slowRandom = 0.5 + 0.5 * std::sin(
+                    0.73 * i + double(historyFrames_) * (0.000006 + 0.000004 * i));
+            speed = 0.72 + 0.58 * slowRandom;
         } else if (variation == 2) {
             speed = (i & 1) ? 2.0 : 1.0;
         } else {
@@ -305,9 +309,9 @@ void DreamyEffect::renderChromaCollage(float dryL, float dryR, float& wetL, floa
     const double drift = p3_;
     const double wobble = std::sin(kTwoPi * (0.11 + 0.42 * p4_) * t)
                         * (0.002 + 0.026 * drift);
-    const bool doubleSpeed = drift > 0.20f &&
-            (std::sin(kTwoPi * (0.37 + 0.8 * drift) * t) > (0.78 - 0.48 * drift));
-    const double speed = (doubleSpeed ? 2.0 : 1.0) + wobble;
+    const double pulse = 0.5 + 0.5 * std::sin(kTwoPi * (0.37 + 0.8 * drift) * t);
+    const double doubleSpeedBlend = drift * std::pow(std::max(0.0, pulse), 6.0);
+    const double speed = 1.0 + doubleSpeedBlend + wobble;
 
     for (int i=0; i<3; ++i) {
         grainStereo(grains_[i], speed + i * 0.004,
@@ -515,7 +519,8 @@ void DreamyEffect::process(float& l, float& r) {
 
     // Smooth every user-adjustable parameter. ~30 ms is long enough to remove
     // zipper noise yet short enough to still feel responsive under MIDI/XY.
-    const float smooth = 1.f - std::exp(-1.f / (0.030f * float(sampleRate_)));
+    const float smoothSeconds = currentMode_ == DREAMY ? 0.025f : 0.030f;
+    const float smooth = 1.f - std::exp(-1.f / (smoothSeconds * float(sampleRate_)));
     p1_ += (targetP1_ - p1_) * smooth;
     p2_ += (targetP2_ - p2_) * smooth;
     p3_ += (targetP3_ - p3_) * smooth;
@@ -615,8 +620,10 @@ void DreamyEffect::process(float& l, float& r) {
 
     if (!std::isfinite(wetL)) wetL = 0.f;
     if (!std::isfinite(wetR)) wetR = 0.f;
-    wetL = std::tanh(std::clamp(wetL, -3.0f, 3.0f));
-    wetR = std::tanh(std::clamp(wetR, -3.0f, 3.0f));
+    if (currentMode_ != DREAMY) {
+        wetL = std::tanh(std::clamp(wetL, -3.0f, 3.0f));
+        wetR = std::tanh(std::clamp(wetR, -3.0f, 3.0f));
+    }
 
     // MODE 0 keeps the existing 6 kHz damping exactly. New modes use a slightly
     // more open 8 kHz safety filter after all granular/feedback stages.
