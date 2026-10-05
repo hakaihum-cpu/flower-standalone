@@ -242,7 +242,7 @@ juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::hazeParameterBounds 
 
 juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::hazeToggleBounds (int index) const
 {
-    index = juce::jlimit (0, 10, index);
+    index = juce::jlimit (0, 11, index);
     const int row = index / 4;
     const int col = index % 4;
     return {
@@ -494,7 +494,7 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
     static constexpr const char* toggleNames[] = {
         "SPEED", "LOOPS", "WARBLE", "PATH",
         "TRANSPOSE", "ECHO", "OG", "LOCK",
-        "BYPASS", "GAIN", "CLEAR"
+        "BYPASS", "GAIN", "CLEAR", "SHUFFLE"
     };
 
     const int speed = juce::jlimit (0, 2, juce::roundToInt (
@@ -529,10 +529,11 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
         lock ? "LOCKED" : "REC",
         bypass ? "DRY" : "ACTIVE",
         gain ? "+12 dB" : "UNITY",
-        "ERASE"
+        "ERASE",
+        "REROLL"
     };
 
-    for (int i = 0; i < 11; ++i)
+    for (int i = 0; i < 12; ++i)
     {
         auto r = hazeToggleBounds (i);
         const bool emphasized =
@@ -1056,7 +1057,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
                     par->getValue() < 0.5f ? 1.0f : 0.0f);
         };
 
-        for (int i = 0; i < 11; ++i)
+        for (int i = 0; i < 12; ++i)
         {
             if (! hazeToggleBounds (i).contains (p))
                 continue;
@@ -1096,6 +1097,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             else if (i == 8) toggleBool (ParamID::hazeBypass);
             else if (i == 9) toggleBool (ParamID::hazeGain);
             else if (i == 10) processor.clearHazeBuffer();
+            else if (i == 11) processor.shuffleHaze();
 
             repaint();
             return;
