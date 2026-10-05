@@ -540,6 +540,12 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     // HAZE continuously records the raw input, even when another EFFECTS mode
     // is visible. Output bypass does not stop the record heads; LOCK does.
     hazeProcessor.setParams (hazeParamsFromState());
+
+    if (hazeClearRequested.exchange (false, std::memory_order_acq_rel))
+        hazeProcessor.clear();
+    if (hazeShuffleRequested.exchange (false, std::memory_order_acq_rel))
+        hazeProcessor.forceShuffle();
+
     hazeProcessor.captureBlock (buffer);
 
     if (chordAHoldRefreshRequested.exchange (false, std::memory_order_acq_rel)
