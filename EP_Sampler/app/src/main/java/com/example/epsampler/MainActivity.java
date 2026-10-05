@@ -640,57 +640,45 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         description.setPadding(0, 6, 0, 12);
         root.addView(description);
 
-        final TextView[] labels = new TextView[5];
-        final SeekBar[] bars = new SeekBar[5];
-        final boolean[] updating = {true};
-
+        final GraphicParameterControl[] controls = new GraphicParameterControl[5];
         for (int i=0; i<5; i++) {
             final int index = i;
-            TextView label = new TextView(this);
-            label.setTextSize(15f);
-            labels[i] = label;
-            root.addView(label);
+            GraphicParameterControl control = new GraphicParameterControl(this);
+            control.configure(index < 4 ? DREAM_PARAM_NAMES[dreamMode][index] : "MIX",
+                    100,
+                    new int[]{dreamX,dreamY,dreamP3,dreamP4,dreamMix}[index],
+                    index % 4,
+                    v -> {
+                        if (index == 0) dreamX = v;
+                        else if (index == 1) dreamY = v;
+                        else if (index == 2) dreamP3 = v;
+                        else if (index == 3) dreamP4 = v;
+                        else dreamMix = v;
+                        applyDreamySettings();
+                        persistDreamySettings();
+                    });
+            controls[i] = control;
 
-            SeekBar bar = new SeekBar(this);
-            bar.setMax(100);
-            bars[i] = bar;
-            bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    if (updating[0] || !fromUser) return;
-                    int v = Math.max(0, Math.min(100, progress));
-                    if (index == 0) dreamX = v;
-                    else if (index == 1) dreamY = v;
-                    else if (index == 2) dreamP3 = v;
-                    else if (index == 3) dreamP4 = v;
-                    else dreamMix = v;
-
-                    String name = index < 4
-                            ? DREAM_PARAM_NAMES[dreamMode][index]
-                            : "MIX";
-                    labels[index].setText(name + "  " + v + "%");
-                    applyDreamySettings();
-                    persistDreamySettings();
-                }
-                @Override public void onStartTrackingTouch(SeekBar seekBar) { }
-                @Override public void onStopTrackingTouch(SeekBar seekBar) { }
-            });
-            root.addView(bar);
+            int h = Math.round(102f * getResources().getDisplayMetrics().density);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, h);
+            int gap = Math.round(4f * getResources().getDisplayMetrics().density);
+            lp.setMargins(0, gap, 0, gap);
+            root.addView(control, lp);
         }
 
         final Runnable refresh = () -> {
-            updating[0] = true;
             int[] values = new int[]{dreamX, dreamY, dreamP3, dreamP4, dreamMix};
             for (int i=0; i<5; i++) {
                 String name = i < 4 ? DREAM_PARAM_NAMES[dreamMode][i] : "MIX";
-                labels[i].setText(name + "  " + values[i] + "%");
-                bars[i].setProgress(values[i]);
+                controls[i].setLabel(name);
+                controls[i].setValue(values[i]);
                 boolean visible = !(dreamMode == 0 && (i == 2 || i == 3));
-                labels[i].setVisibility(visible ? View.VISIBLE : View.GONE);
-                bars[i].setVisibility(visible ? View.VISIBLE : View.GONE);
+                controls[i].setVisibility(visible ? View.VISIBLE : View.GONE);
             }
             description.setText(DREAM_MODE_DESCRIPTIONS[dreamMode] +
-                    "\nP1/P2 remain mapped to Dreamy X/Y (MIDI CC103/104).");
-            updating[0] = false;
+                    "\nP1/P2 remain mapped to Dreamy X/Y (MIDI CC103/104)." +
+                    "\nDrag the graphics vertically to change values.");
         };
 
         Button defaults = new Button(this);
