@@ -83,6 +83,12 @@ public:
         filterBand = { 0.0f, 0.0f };
     }
 
+    void forceShuffle() noexcept
+    {
+        reconfigureLane (0);
+        reconfigureLane (1);
+    }
+
     void setParams (const Params& next) noexcept
     {
         params = next;
