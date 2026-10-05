@@ -57,6 +57,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     sampleChordRenderer.prepare (currentSampleRate);
     sineArpeggiator.prepare (currentSampleRate);
     chordBRandomFx.prepare (currentSampleRate);
+    hazeProcessor.prepare (currentSampleRate);
     pendingMidi = -1;
     stableCount = 0;
     haveChord = false;
@@ -73,7 +74,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordMidiRefreshRequested = false;
     chordMidiStopRequested = false;
     chordMidiGateOpen = false;
-    lastEffectMode = juce::jlimit (0, 1, juce::roundToInt (
+    lastEffectMode = juce::jlimit (0, 2, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     lastChordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -260,6 +261,7 @@ void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
     {
         sineArpeggiator.reset();
         chordBRandomFx.reset();
+        hazeProcessor.clear();
         chordReverb.reset();
 
         if (haveChord)
@@ -412,7 +414,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         juce::jmax (1, juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels()));
     const bool midiClockMode =
         apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
-    const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 2, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -535,6 +537,11 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
                       + 0.18f * blockPeak,
                       std::memory_order_relaxed);
 
+    // HAZE continuously records the raw input, even when another EFFECTS mode
+    // is visible. Output bypass does not stop the record heads; LOCK does.
+    hazeProcessor.setParams (hazeParamsFromState());
+    hazeProcessor.captureBlock (buffer);
+
     if (chordAHoldRefreshRequested.exchange (false, std::memory_order_acq_rel)
         && haveChord)
     {
@@ -574,7 +581,9 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     // the accepted standalone effect. It is wet only when DREAMY is selected.
     processDreamy (buffer);
 
-    if (effectMode == 0)
+    if (effectMode == 2)
+        hazeProcessor.renderBlock (buffer);
+    else if (effectMode == 0)
     {
         if (chordMode == 0)
             processChordAudio (buffer);
@@ -583,8 +592,9 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     }
 
     const bool outputActive =
-        running.load (std::memory_order_relaxed)
-        && (effectMode == 1 || (haveChord && chordMidiGateOpen));
+        effectMode == 2
+        || (running.load (std::memory_order_relaxed)
+            && (effectMode == 1 || (haveChord && chordMidiGateOpen)));
     applyOutputSafety (buffer, outputActive);
 }
 
@@ -604,9 +614,12 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
     // XY values are latched on touch release. Dreamy continues using the
     // last X/Y position until the next touch; touch state itself is only for
     // interaction/MIDI note-off handling.
+    const int selectedEffectMode =
+        juce::jlimit (0, 2, juce::roundToInt (
+            apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const bool enabled =
         running.load (std::memory_order_acquire)
-        && apvts.getRawParameterValue (ParamID::effectMode)->load() >= 0.5f;
+        && selectedEffectMode == 1;
     const float x = juce::jlimit (0.0f, 1.0f,
         (float) controllerX.load (std::memory_order_relaxed) / 127.0f);
     const float y = juce::jlimit (0.0f, 1.0f,
@@ -1232,6 +1245,39 @@ void RealtimeChordFxAudioProcessor::processChordMidi (juce::MidiBuffer& out)
     }
 }
 
+chordfx::HazeProcessor::Params
+RealtimeChordFxAudioProcessor::hazeParamsFromState() const noexcept
+{
+    chordfx::HazeProcessor::Params p;
+    p.mix = apvts.getRawParameterValue (ParamID::hazeMix)->load();
+    p.time = apvts.getRawParameterValue (ParamID::hazeTime)->load();
+    p.haze = apvts.getRawParameterValue (ParamID::hazeAmount)->load();
+    p.filter = apvts.getRawParameterValue (ParamID::hazeFilter)->load();
+    p.repeat = apvts.getRawParameterValue (ParamID::hazeRepeat)->load();
+    p.mod = apvts.getRawParameterValue (ParamID::hazeMod)->load();
+    p.speed = juce::jlimit (0, 2, juce::roundToInt (
+        apvts.getRawParameterValue (ParamID::hazeSpeed)->load()));
+    p.loops = juce::jlimit (0, 2, juce::roundToInt (
+        apvts.getRawParameterValue (ParamID::hazeLoops)->load()));
+    p.warble = juce::jlimit (0, 2, juce::roundToInt (
+        apvts.getRawParameterValue (ParamID::hazeWarble)->load()));
+    p.transpose =
+        apvts.getRawParameterValue (ParamID::hazeTranspose)->load() >= 0.5f;
+    p.echo =
+        apvts.getRawParameterValue (ParamID::hazeEcho)->load() >= 0.5f;
+    p.og =
+        apvts.getRawParameterValue (ParamID::hazeOg)->load() >= 0.5f;
+    p.lock =
+        apvts.getRawParameterValue (ParamID::hazeLock)->load() >= 0.5f;
+    p.bypass =
+        apvts.getRawParameterValue (ParamID::hazeBypass)->load() >= 0.5f;
+    p.highGain =
+        apvts.getRawParameterValue (ParamID::hazeGain)->load() >= 0.5f;
+    p.stereoPath =
+        apvts.getRawParameterValue (ParamID::hazePath)->load() >= 0.5f;
+    return p;
+}
+
 void RealtimeChordFxAudioProcessor::setParameterActual (const char* id, float actual)
 {
     if (auto* p = apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (actual));
@@ -1273,7 +1319,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
 {
     juce::AudioProcessorValueTreeState::ParameterLayout p;
     p.add (std::make_unique<juce::AudioParameterChoice> (
-        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY" }, 0));
+        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "HAZE" }, 0));
     p.add (std::make_unique<juce::AudioParameterChoice> (
         ParamID::chordMode, "CHORD ENGINE", juce::StringArray { "A", "B" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::complex, "COMPLEX", 0.0f, 1.0f, 0.25f));
@@ -1282,6 +1328,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::length, "LENGTH", 0.0f, 1.0f, 0.70f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hold, "HOLD", 0.0f, 1.0f, 0.0f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::effect, "EFFECT", 0.0f, 1.0f, 0.0f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeMix, "HAZE MIX", 0.0f, 1.0f, 0.55f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeTime, "HAZE TIME", 0.0f, 1.0f, 0.50f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeAmount, "HAZE AMOUNT", 0.0f, 1.0f, 0.50f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeFilter, "HAZE FILTER", 0.0f, 1.0f, 0.50f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeRepeat, "HAZE REPEAT", 0.0f, 1.0f, 0.0f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeMod, "HAZE MOD", 0.0f, 1.0f, 0.50f));
+    p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::hazeSpeed, "HAZE SPEED", juce::StringArray { ".5x", "1x", "2x" }, 1));
+    p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::hazeLoops, "HAZE LOOPS", juce::StringArray { "1", "2", "2+" }, 1));
+    p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::hazeWarble, "HAZE WARBLE", juce::StringArray { "OFF", "LIGHT", "HEAVY" }, 0));
+    p.add (std::make_unique<juce::AudioParameterBool> (ParamID::hazeTranspose, "HAZE TRANSPOSE", false));
+    p.add (std::make_unique<juce::AudioParameterBool> (ParamID::hazeEcho, "HAZE ECHO", false));
+    p.add (std::make_unique<juce::AudioParameterBool> (ParamID::hazeOg, "HAZE OG", false));
+    p.add (std::make_unique<juce::AudioParameterBool> (ParamID::hazeLock, "HAZE LOCK", false));
+    p.add (std::make_unique<juce::AudioParameterBool> (ParamID::hazeBypass, "HAZE BYPASS", false));
+    p.add (std::make_unique<juce::AudioParameterBool> (ParamID::hazeGain, "HAZE HI GAIN", false));
+    p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::hazePath, "HAZE PATH", juce::StringArray { "MONO", "STEREO" }, 1));
     p.add (std::make_unique<juce::AudioParameterInt> (ParamID::midiChannel, "MIDI CH", 1, 16, 1));
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::clockMode, "CLOCK", juce::StringArray { "Internal", "MIDI" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::internalBpm, "BPM", 40.0f, 240.0f, 120.0f));
