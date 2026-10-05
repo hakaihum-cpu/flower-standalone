@@ -1043,7 +1043,7 @@ void AudioEngine::render(float* out,int32_t frames) {
 
             mixL += partL;
             mixR += partR;
-            if (voices > 0 && !partMute_[part]) activeParts++;
+            if (voices > 0 && !partMute_[part] && partVolume_[part] > 0) activeParts++;
         }
 
         const float norm = activeParts > 1 ? 1.0f / std::sqrt(float(activeParts)) : 1.0f;
