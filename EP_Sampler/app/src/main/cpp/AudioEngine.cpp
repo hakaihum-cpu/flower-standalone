@@ -251,7 +251,9 @@ bool AudioEngine::start() {
     }
 
     dreamy_.prepare(sampleRate_);
+    dreamy_.setMode(dreamyMode_);
     dreamy_.setXY(cc103_/127.f, cc104_/127.f);
+    dreamy_.setExtraParameters(cc106_/127.f, cc107_/127.f);
     space_.prepare(sampleRate_);
     feltPianoReverb_.prepare(sampleRate_);
     feltPianoReverb_.setMode(SpaceEffect::HALL);
@@ -316,6 +318,8 @@ void AudioEngine::setSpaceParameters(int mix,int decay){ push({Event::SPACE_PARA
 void AudioEngine::setTape(bool on){ push({Event::TAPE,on?1:0,0,0}); }
 void AudioEngine::setTapeParameters(int wow,int flutter,int drive){ push({Event::TAPE_PARAMS,wow,flutter,drive}); }
 void AudioEngine::setDreamyParameters(int x,int y,int mix){ push({Event::DREAMY_PARAMS,x,y,mix,0}); }
+void AudioEngine::setDreamyMode(int mode){ push({Event::DREAMY_MODE,mode,0,0,0}); }
+void AudioEngine::setDreamyExtraParameters(int p3,int p4){ push({Event::DREAMY_EXTRA,p3,p4,0,0}); }
 
 void AudioEngine::recorderToggleRecording(){ recorder_.toggleRecording(); }
 void AudioEngine::recorderToggleRandom(){ recorder_.toggleRandom(); }
@@ -675,6 +679,15 @@ void AudioEngine::handlePartControlChange(int part, int cc, int value) {
     } else if (cc == 105) {
         dreamyMix_=value/127.f;
         dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_);
+    } else if (cc == 106) {
+        cc106_=value;
+        dreamy_.setExtraParameters(cc106_/127.f, cc107_/127.f);
+    } else if (cc == 107) {
+        cc107_=value;
+        dreamy_.setExtraParameters(cc106_/127.f, cc107_/127.f);
+    } else if (cc == 108) {
+        dreamyMode_=std::clamp(int(std::lround(value * (DreamyEffect::MODE_COUNT - 1) / 127.0)),0,DreamyEffect::MODE_COUNT-1);
+        dreamy_.setMode(dreamyMode_);
     }
 }
 
@@ -900,6 +913,15 @@ void AudioEngine::handle(const Event& e) {
             cc104_=std::clamp(int(std::lround(std::clamp(e.b,0,100)*1.27f)),0,127);
             dreamyMix_=std::clamp(e.c,0,100)/100.f;
             dreamy_.setParameters(cc103_/127.f,cc104_/127.f,dreamyMix_);
+            break;
+        case Event::DREAMY_MODE:
+            dreamyMode_=std::clamp(e.a,0,DreamyEffect::MODE_COUNT-1);
+            dreamy_.setMode(dreamyMode_);
+            break;
+        case Event::DREAMY_EXTRA:
+            cc106_=std::clamp(int(std::lround(std::clamp(e.a,0,100)*1.27f)),0,127);
+            cc107_=std::clamp(int(std::lround(std::clamp(e.b,0,100)*1.27f)),0,127);
+            dreamy_.setExtraParameters(cc106_/127.f,cc107_/127.f);
             break;
         case Event::ADSR: {
             const float a = static_cast<float>(std::clamp(e.a,0,5000));
