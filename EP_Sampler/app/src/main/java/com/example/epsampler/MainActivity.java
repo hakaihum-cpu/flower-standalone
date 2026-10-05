@@ -945,6 +945,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
     private void applyInstrument(int mode) {
         mode = Math.max(0, Math.min(8, mode));
+        if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
         if (pianoView != null) pianoView.clearForegroundForInstrumentSwitch();
 
         instrumentMode = mode;
