@@ -40,6 +40,8 @@ public:
     void setTape(bool enabled);
     void setTapeParameters(int wow, int flutter, int drive);
     void setDreamyParameters(int x, int y, int mix);
+    void setDreamyMode(int mode);
+    void setDreamyExtraParameters(int p3, int p4);
     void setAdsr(int attackMs, int decayMs, int sustainPct, int releaseMs);
     void setInstrument(int instrument);
     void setDrumParameter(int parameter, int value);
@@ -90,7 +92,7 @@ private:
         enum Type : uint8_t {
             NOTE_ON, NOTE_OFF, POLY_AT, CH_AT, CC, PITCH,
             DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS,
-            TAPE, TAPE_PARAMS, DREAMY_PARAMS, ADSR, INSTRUMENT,
+            TAPE, TAPE_PARAMS, DREAMY_PARAMS, DREAMY_MODE, DREAMY_EXTRA, ADSR, INSTRUMENT,
             PART_NOTE_ON, PART_NOTE_OFF, PART_POLY_AT, PART_CH_AT, PART_CC, PART_PITCH,
             DRUM_PARAM, DRUM_FX, PART_FX, PART_MIXER, FELT_REVERB, PERFORMANCE_XY
         } type;
@@ -143,6 +145,9 @@ private:
     int cc64_=0;
     int cc103_=36;
     int cc104_=36;
+    int cc106_=64;
+    int cc107_=64;
+    int dreamyMode_=0;
     int pitch_=8192;
     int boosterStep_=0;
     int boostDb_=0;
