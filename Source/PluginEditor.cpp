@@ -879,7 +879,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
         }
     }
 
-    const int effectMode = juce::jlimit (0, 2, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 3, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::chordMode)->load()));
@@ -891,7 +891,8 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setFont (juce::FontOptions (16.0f));
     g.drawText ("MODE", 54, 510, 220, 30, juce::Justification::centredLeft);
     const juce::String modeText =
-        effectMode == 2 ? "EUREKA"
+        effectMode == 3 ? "CHORDBOT"
+        : effectMode == 2 ? "EUREKA"
         : effectMode == 1 ? "DREAMY"
                           : (chordMode == 0 ? "CHORD-A" : "CHORD-B");
     g.drawText (modeText,
@@ -909,7 +910,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     }
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colours::white.withAlpha (0.42f));
-    g.drawText ("MODE: CHORD-A / CHORD-B / DREAMY / EUREKA", 54, 681, 590, 18, juce::Justification::centredLeft);
+    g.drawText ("MODE: CHORD-A / CHORD-B / DREAMY / EUREKA / CHORDBOT", 54, 681, 590, 18, juce::Justification::centredLeft);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
@@ -1133,7 +1134,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
         if (p.y >= 508 && p.y < 540)
         {
-            const int effect = juce::jlimit (0, 2, juce::roundToInt (
+            const int effect = juce::jlimit (0, 3, juce::roundToInt (
                 processor.state().getRawParameterValue (ParamID::effectMode)->load()));
             const int chord = juce::jlimit (0, 1, juce::roundToInt (
                 processor.state().getRawParameterValue (ParamID::chordMode)->load()));
@@ -1143,10 +1144,12 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             else if (effect == 0)
                 setChoiceActual (ParamID::effectMode, 1);      // B -> DREAMY
             else if (effect == 1)
-                setChoiceActual (ParamID::effectMode, 2);      // DREAMY -> HAZE
+                setChoiceActual (ParamID::effectMode, 2);      // DREAMY -> EUREKA
+            else if (effect == 2)
+                setChoiceActual (ParamID::effectMode, 3);      // EUREKA -> CHORDBOT
             else
             {
-                setChoiceActual (ParamID::effectMode, 0);      // HAZE -> A
+                setChoiceActual (ParamID::effectMode, 0);      // CHORDBOT -> A
                 setChoiceActual (ParamID::chordMode, 0);
             }
         }
@@ -1176,10 +1179,99 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    if (p.x >= 575 && p.y <= 70) { configVisible = true; refreshAudioInputs(); repaint(); return; }
+    if (p.x >= 575 && p.y <= 70)
+    {
+        if (chordBotPressedPad >= 0)
+        {
+            processor.triggerChordBotPad (chordBotPressedPad, false);
+            chordBotPressedPad = -1;
+        }
+        chordBotEditSlot = -1;
+        configVisible = true;
+        refreshAudioInputs();
+        repaint();
+        return;
+    }
 
-    const int effectMode = juce::jlimit (0, 2, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 3, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+
+    if (effectMode == 3)
+    {
+        if (p.x >= 480 && p.x < 580 && p.y <= 70)
+        {
+            chordBotEditMode = ! chordBotEditMode;
+            chordBotEditSlot = -1;
+            repaint();
+            return;
+        }
+
+        if (chordBotEditMode && chordBotEditSlot >= 0)
+        {
+            if (juce::Rectangle<float> (150, 282, 58, 44).contains (p))
+            {
+                chordBotEditRoot = (chordBotEditRoot + 11) % 12;
+                repaint();
+                return;
+            }
+            if (juce::Rectangle<float> (512, 282, 58, 44).contains (p))
+            {
+                chordBotEditRoot = (chordBotEditRoot + 1) % 12;
+                repaint();
+                return;
+            }
+            if (juce::Rectangle<float> (150, 360, 58, 44).contains (p))
+            {
+                chordBotEditQuality = (chordBotEditQuality + 7) % 8;
+                repaint();
+                return;
+            }
+            if (juce::Rectangle<float> (512, 360, 58, 44).contains (p))
+            {
+                chordBotEditQuality = (chordBotEditQuality + 1) % 8;
+                repaint();
+                return;
+            }
+            if (juce::Rectangle<float> (180, 454, 160, 48).contains (p))
+            {
+                processor.setChordBotSlot (
+                    chordBotEditSlot,
+                    chordBotEditRoot,
+                    chordBotEditQuality);
+                chordBotEditSlot = -1;
+                repaint();
+                return;
+            }
+            if (juce::Rectangle<float> (380, 454, 160, 48).contains (p))
+            {
+                chordBotEditSlot = -1;
+                repaint();
+                return;
+            }
+
+            return;
+        }
+
+        const int pad = chordBotPadAtPoint (p);
+        if (pad >= 0)
+        {
+            if (chordBotEditMode)
+            {
+                chordBotEditSlot = pad;
+                chordBotEditRoot =
+                    processor.getChordBotSlotRoot (pad);
+                chordBotEditQuality =
+                    processor.getChordBotSlotQuality (pad);
+            }
+            else
+            {
+                chordBotPressedPad = pad;
+                processor.triggerChordBotPad (pad, true);
+            }
+            repaint();
+        }
+        return;
+    }
 
     if (effectMode == 2)
     {
@@ -1337,6 +1429,12 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 
 void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 {
+    if (chordBotPressedPad >= 0)
+    {
+        processor.triggerChordBotPad (chordBotPressedPad, false);
+        chordBotPressedPad = -1;
+    }
+
     if (xyDragging)
     {
         xyDragging = false;
