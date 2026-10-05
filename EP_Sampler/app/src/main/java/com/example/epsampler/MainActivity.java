@@ -43,6 +43,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_DREAM_X = "dream_x";
     private static final String KEY_DREAM_Y = "dream_y";
     private static final String KEY_DREAM_MIX = "dream_mix";
+    private static final String KEY_DREAM_MODE = "dream_mode";
+    private static final String KEY_DREAM_P3 = "dream_p3";
+    private static final String KEY_DREAM_P4 = "dream_p4";
     private static final String KEY_PART_MIDI_PREFIX = "part_midi_ch_";
     private static final String KEY_MANUAL_SUSTAIN = "manual_sustain";
     private static final String KEY_ATTACK_MS = "attack_ms";
@@ -75,6 +78,59 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String PRESET_PREFS = "violin_physical_presets";
     private static final int PRESET_SLOTS = 8;
 
+    private static final String[] DREAM_MODE_NAMES = new String[] {
+            "DREAMY",
+            "MICROCOSM / MOSAIC",
+            "MICROCOSM / GLIDE",
+            "MICROCOSM / HAZE",
+            "CHROMA / COLLAGE",
+            "CHROMA / SPACE",
+            "MOOD / REVERB",
+            "MOOD / DELAY",
+            "MOOD / SLIP",
+            "MOOD / TAPE",
+            "MOOD / STRETCH"
+    };
+    private static final String[][] DREAM_PARAM_NAMES = new String[][] {
+            {"DRIFT", "FRAGMENT", "COLOR", "SPACE"},
+            {"ACTIVITY", "VARIATION", "REPEATS", "SPACE"},
+            {"ACTIVITY", "SHAPE", "REPEATS", "SPACE"},
+            {"DENSITY", "SPREAD", "VARIATION", "DIFFUSION"},
+            {"TIME", "AMOUNT", "DRIFT", "CASSETTE"},
+            {"TIME / SIZE", "AMOUNT", "DRIFT", "CASSETTE"},
+            {"CLOCK", "TIME / SIZE", "MODIFY / SMEAR", "MICRO-LOOP"},
+            {"CLOCK", "TIME", "MODIFY / FEEDBACK", "MICRO-LOOP"},
+            {"CLOCK", "REFRESH", "MODIFY / SPEED", "MICRO-LOOP"},
+            {"CLOCK", "LENGTH", "MODIFY / SPEED", "FADE"},
+            {"CLOCK", "LENGTH", "MODIFY / STRETCH", "TONE"}
+    };
+    private static final int[][] DREAM_DEFAULTS = new int[][] {
+            {28,28,50,50,34},
+            {55,25,45,35,45},
+            {35,60,40,35,45},
+            {65,55,35,65,50},
+            {42,55,32,30,45},
+            {55,60,25,20,42},
+            {50,55,70,35,45},
+            {55,45,55,30,42},
+            {50,45,65,30,45},
+            {45,50,55,65,50},
+            {50,45,55,45,48}
+    };
+    private static final String[] DREAM_MODE_DESCRIPTIONS = new String[] {
+            "Original Dreamy: +5 / +12 semitone overlapping micro-loops.",
+            "Microcosm-inspired Mosaic: overlapping loop layers at multiple playback speeds.",
+            "Microcosm-inspired Glide: overlapping short loops with moving playback speed.",
+            "Microcosm Haze: grain-density/spread wash with A-D style speed families.",
+            "Chroma Collage: looping delay with feedback, random double-speed events and Drift.",
+            "Chroma Space: large diffusion/reverb with pitch-modulated Drift.",
+            "MOOD Wet/Reverb + captured micro-loop layer.",
+            "MOOD Wet/Delay + optional micro-loop layer.",
+            "MOOD Wet/Slip: refresh + playback speed/direction.",
+            "MOOD Micro-Looper/Tape: loop length, speed/direction and fade.",
+            "MOOD Micro-Looper/Stretch: slice length, stretch direction and tone."
+    };
+
     private static final String[] INSTRUMENT_NAMES = new String[] {
             "VIOLIN", "FLUTE", "SAXOPHONE", "FELT PIANO",
             "PIANICA / ACCORDION", "XYLOPHONE", "WOOD BASS", "DRUMS",
@@ -98,7 +154,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int boostDb = 0;
     private int spaceMix = 50, spaceDecay = 50;
     private int tapeWow = 50, tapeFlutter = 50, tapeDrive = 50;
-    private int dreamX = 28, dreamY = 28, dreamMix = 34;
+    private int dreamX = 28, dreamY = 28, dreamP3 = 50, dreamP4 = 50, dreamMix = 34;
+    private int dreamMode = 0;
     private final int[] partMidiChannels = new int[]{1,2,3,4,5,6,7,8,9};
     private boolean manualSustain = false;
     private int bowPressure = 74;
@@ -184,9 +241,13 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         tapeWow = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_TAPE_WOW, 50);
         tapeFlutter = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_TAPE_FLUTTER, 50);
         tapeDrive = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_TAPE_DRIVE, 50);
-        dreamX = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_X, 28);
-        dreamY = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_Y, 28);
-        dreamMix = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_MIX, 34);
+        dreamX = Math.max(0, Math.min(100, getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_X, 28)));
+        dreamY = Math.max(0, Math.min(100, getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_Y, 28)));
+        dreamP3 = Math.max(0, Math.min(100, getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_P3, 50)));
+        dreamP4 = Math.max(0, Math.min(100, getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_P4, 50)));
+        dreamMix = Math.max(0, Math.min(100, getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_MIX, 34)));
+        dreamMode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1,
+                getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_MODE, 0)));
         for (int i=0; i<partMidiChannels.length; i++) {
             partMidiChannels[i] = Math.max(0, Math.min(16,
                     getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -264,7 +325,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.setTape(tape);
         NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
         NativeEngine.setDreamy(dreamy);
+        NativeEngine.setDreamyMode(dreamMode);
         NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
+        NativeEngine.setDreamyExtraParameters(dreamP3, dreamP4);
         pianoView.controlChange(103, Math.max(0, Math.min(127, Math.round(dreamX * 1.27f))));
         pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(dreamY * 1.27f))));
         for (int i=0; i<drumParameters.length; i++) {
@@ -997,6 +1060,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 .putBoolean(p + "dreamy", dreamy)
                 .putInt(p + "dream_x", dreamX)
                 .putInt(p + "dream_y", dreamY)
+                .putInt(p + "dream_p3", dreamP3)
+                .putInt(p + "dream_p4", dreamP4)
+                .putInt(p + "dream_mode", dreamMode)
                 .putInt(p + "dream_mix", dreamMix)
                 .putInt(p + "control1", bowPressure)
                 .putInt(p + "control2", bowSpeed)
@@ -1041,6 +1107,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         dreamy = sp.getBoolean(p + "dreamy", dreamy);
         dreamX = Math.max(0, Math.min(100, sp.getInt(p + "dream_x", dreamX)));
         dreamY = Math.max(0, Math.min(100, sp.getInt(p + "dream_y", dreamY)));
+        dreamP3 = Math.max(0, Math.min(100, sp.getInt(p + "dream_p3", dreamP3)));
+        dreamP4 = Math.max(0, Math.min(100, sp.getInt(p + "dream_p4", dreamP4)));
+        dreamMode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1,
+                sp.getInt(p + "dream_mode", dreamMode)));
         dreamMix = Math.max(0, Math.min(100, sp.getInt(p + "dream_mix", dreamMix)));
         bowPressure = Math.max(0, Math.min(127, sp.getInt(p + "control1", bowPressure)));
         bowSpeed = Math.max(0, Math.min(127, sp.getInt(p + "control2", bowSpeed)));
@@ -1082,7 +1152,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         NativeEngine.setTape(tape);
         NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
         NativeEngine.setDreamy(dreamy);
+        NativeEngine.setDreamyMode(dreamMode);
         NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
+        NativeEngine.setDreamyExtraParameters(dreamP3, dreamP4);
         for (int i=0; i<drumParameters.length; i++) NativeEngine.setDrumParameter(i, drumParameters[i]);
         for (int part=0; part<partBoostDb.length; part++) {
             NativeEngine.setPartFx(part, partBoostDb[part], partDistortion[part]);
