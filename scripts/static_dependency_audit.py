@@ -91,7 +91,7 @@ for bad in ["SynthVoice", "juce::Synthesiser", "SineVoice", "FLOWER", "MIYAKO"]:
     if bad in src:
         fail(f"forbidden cross-project/synth token in product source: {bad}")
 for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● REC",
-             "MODE","CHORD","DREAMY","HAZE","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
+             "MODE","CHORD","DREAMY","EUREKA","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
     if need not in src:
         fail(f"UI/requirement token missing: {need}")
 
@@ -109,7 +109,7 @@ for need in [
     '"WIDTH"',
     '"LENGTH"',
     '"DREAMY"',
-    '"HAZE"',
+    '"EUREKA"',
     "paintHaze (g)",
     '"X " + juce::String',
     '"CONFIG"',
@@ -197,7 +197,7 @@ for need in [
     "hazeProcessor.forceShuffle",
     "effectMode == 2",
     "selectedEffectMode == 1",
-    'juce::StringArray { "CHORD", "DREAMY", "HAZE" }',
+    'juce::StringArray { "CHORD", "DREAMY", "EUREKA" }',
 ]:
     if need not in processor:
         fail(f"HAZE processor integration missing: {need}")
