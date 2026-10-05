@@ -454,6 +454,11 @@ final class SoundDesignView extends View {
         }
     }
 
+    private float modRateHz() {
+        // PhysicalViolin uses 5.35 Hz; the other InstrumentModels use 5.2 Hz.
+        return instrumentMode == 0 ? 5.35f : 5.2f;
+    }
+
     private void drawModPage(Canvas c,float u){
         RectF cr=contentRect();
         RectF r=new RectF(cr.left+24f*u,cr.top+68f*u,
@@ -463,7 +468,9 @@ final class SoundDesignView extends View {
 
         text.setColor(Color.argb(175,244,237,224));
         text.setTextSize(12f*u);
-        c.drawText(parameterNames[3]+" · 5.2 Hz FIXED",r.left,r.top-24f*u,text);
+        c.drawText(parameterNames[3] + " · " +
+                String.format(java.util.Locale.US, "%.2f Hz FIXED", modRateHz()),
+                r.left,r.top-24f*u,text);
 
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1f*u);
