@@ -445,7 +445,7 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
 
     g.setColour (juce::Colours::white.withAlpha (0.94f));
     g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
-    g.drawText ("HAZE", 28, 20, 180, 34, juce::Justification::centredLeft);
+    g.drawText ("EUREKA", 28, 20, 180, 34, juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (12.0f));
     g.setColour (juce::Colours::white.withAlpha (0.56f));
     g.drawText ("DUAL LOOP / GLITCH / LO-FI",
@@ -738,7 +738,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setFont (juce::FontOptions (16.0f));
     g.drawText ("MODE", 54, 510, 220, 30, juce::Justification::centredLeft);
     const juce::String modeText =
-        effectMode == 2 ? "HAZE"
+        effectMode == 2 ? "EUREKA"
         : effectMode == 1 ? "DREAMY"
                           : (chordMode == 0 ? "CHORD-A" : "CHORD-B");
     g.drawText (modeText,
@@ -756,7 +756,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     }
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colours::white.withAlpha (0.42f));
-    g.drawText ("MODE: CHORD-A / CHORD-B / DREAMY / HAZE", 54, 681, 590, 18, juce::Justification::centredLeft);
+    g.drawText ("MODE: CHORD-A / CHORD-B / DREAMY / EUREKA", 54, 681, 590, 18, juce::Justification::centredLeft);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
