@@ -25,6 +25,8 @@ public final class NativeEngine {
     public static native void setTape(boolean enabled);
     public static native void setTapeParameters(int wow, int flutter, int drive);
     public static native void setDreamyParameters(int x, int y, int mix);
+    public static native void setDreamyMode(int mode);
+    public static native void setDreamyExtraParameters(int p3, int p4);
 
     public static native void recorderToggleRecording();
     public static native void recorderToggleRandom();
