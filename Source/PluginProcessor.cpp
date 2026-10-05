@@ -609,10 +609,10 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             processChordB (buffer);
     }
 
-    if (effectMode == 2)
+    if (effectMode == 2 || effectMode == 3)
     {
-        // HAZE owns its saturation/level behaviour. In particular, its
-        // Output Bypass must remain a dry path while recording continues.
+        // EUREKA owns its saturation/level behaviour. CHORDBOT is MIDI-only.
+        // Both therefore keep the dry audio path outside legacy protection.
         outputSafetyGain = 1.0f;
         outputSafetyWasActive = false;
     }
