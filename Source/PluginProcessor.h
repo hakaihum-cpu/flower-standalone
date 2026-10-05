@@ -93,7 +93,6 @@ private:
     void applyOutputSafety (juce::AudioBuffer<float>&, bool active);
     void processDreamy (juce::AudioBuffer<float>&);
     chordfx::HazeProcessor::Params hazeParamsFromState() const noexcept;
-    void processHaze (juce::AudioBuffer<float>&, bool audible);
     void resetModeAudioState (int mode);
 
     juce::AudioProcessorValueTreeState apvts;
