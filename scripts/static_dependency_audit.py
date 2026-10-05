@@ -180,6 +180,8 @@ for need in [
     '"BYPASS"',
     '"GAIN"',
     '"CLEAR"',
+    '"SHUFFLE"',
+    '"REROLL"',
 ]:
     if need not in editor:
         fail(f"HAZE UI contract missing: {need}")
@@ -190,6 +192,9 @@ for need in [
     "hazeProcessor.captureBlock",
     "hazeProcessor.renderBlock",
     "hazeParamsFromState",
+    "hazeClearRequested.exchange",
+    "hazeShuffleRequested.exchange",
+    "hazeProcessor.forceShuffle",
     "effectMode == 2",
     "selectedEffectMode == 1",
     'juce::StringArray { "CHORD", "DREAMY", "HAZE" }',
