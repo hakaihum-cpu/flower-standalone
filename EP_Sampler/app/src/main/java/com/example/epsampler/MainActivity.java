@@ -1056,6 +1056,69 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         }
     }
 
+    @Override public void onSoundDesignClose() {
+        if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
+        hideSystemUI();
+    }
+
+    @Override public void onSoundDesignModelParameterChanged(int index, int value) {
+        value = Math.max(0, Math.min(127, value));
+        if (index == 0) {
+            bowPressure = value;
+            NativeEngine.controlChange(10, value);
+            pianoView.controlChange(10, value);
+        } else if (index == 1) {
+            bowSpeed = value;
+            NativeEngine.controlChange(11, value);
+            pianoView.controlChange(11, value);
+        } else if (index == 2) {
+            bowPosition = value;
+            NativeEngine.controlChange(74, value);
+            pianoView.controlChange(74, value);
+        } else if (index == 3) {
+            vibratoDepth = value;
+            NativeEngine.controlChange(1, value);
+            pianoView.controlChange(1, value);
+        }
+    }
+
+    @Override public void onSoundDesignAdsrChanged(int attack, int decay, int sustain, int release) {
+        attackMs = Math.max(0, Math.min(2000, attack));
+        decayMs = Math.max(0, Math.min(2000, decay));
+        sustainPct = Math.max(0, Math.min(100, sustain));
+        releaseMs = Math.max(0, Math.min(3000, release));
+        NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putInt(KEY_ATTACK_MS, attackMs)
+                .putInt(KEY_DECAY_MS, decayMs)
+                .putInt(KEY_SUSTAIN_PCT, sustainPct)
+                .putInt(KEY_RELEASE_MS, releaseMs)
+                .apply();
+    }
+
+    @Override public void onSoundDesignFxChanged(int boost, int dist, int revMix, int revDecay) {
+        if (instrumentMode < 0 || instrumentMode >= partBoostDb.length) return;
+
+        partBoostDb[instrumentMode] = Math.max(0, Math.min(18, boost));
+        partDistortion[instrumentMode] = Math.max(0, Math.min(127, dist));
+        NativeEngine.setPartFx(instrumentMode,
+                partBoostDb[instrumentMode], partDistortion[instrumentMode]);
+
+        android.content.SharedPreferences.Editor e =
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(KEY_PART_BOOST_PREFIX + instrumentMode, partBoostDb[instrumentMode])
+                        .putInt(KEY_PART_DIST_PREFIX + instrumentMode, partDistortion[instrumentMode]);
+
+        if (instrumentMode == 3) {
+            feltReverbMix = Math.max(0, Math.min(100, revMix));
+            feltReverbDecay = Math.max(0, Math.min(100, revDecay));
+            NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
+            e.putInt(KEY_FELT_REVERB_MIX, feltReverbMix)
+                    .putInt(KEY_FELT_REVERB_DECAY, feltReverbDecay);
+        }
+        e.apply();
+    }
+
     @Override public void onDrumParameterChanged(int parameter, int value) {
         if (parameter < 0 || parameter >= drumParameters.length) return;
         value = Math.max(0, Math.min(127, value));
