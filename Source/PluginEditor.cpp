@@ -253,6 +253,29 @@ juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::hazeToggleBounds (in
     };
 }
 
+juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::chordBotPadBounds (int index) const
+{
+    index = juce::jlimit (0, 8, index);
+    constexpr float cell = 200.0f;
+    constexpr float gap = 10.0f;
+    const int row = index / 3;
+    const int col = index % 3;
+    return {
+        50.0f + col * (cell + gap),
+        80.0f + row * (cell + gap),
+        cell, cell
+    };
+}
+
+int RealtimeChordFxAudioProcessorEditor::chordBotPadAtPoint (
+    juce::Point<float> p) const
+{
+    for (int i = 0; i < 9; ++i)
+        if (chordBotPadBounds (i).contains (p))
+            return i;
+    return -1;
+}
+
 juce::String RealtimeChordFxAudioProcessorEditor::noteText (int midi) const
 {
     if (midi < 0) return "--";
@@ -303,10 +326,16 @@ void RealtimeChordFxAudioProcessorEditor::paint (juce::Graphics& g)
 
 void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
 {
-    const int effectMode = juce::jlimit (0, 2, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 3, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::chordMode)->load()));
+
+    if (effectMode == 3)
+    {
+        paintChordBot (g);
+        return;
+    }
 
     if (effectMode == 2)
     {
@@ -559,6 +588,130 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
     g.setColour (juce::Colours::white.withAlpha (0.44f));
     g.drawText ("Buffer keeps recording through BYPASS. LOCK stops only the record heads.",
                 30, 661, 660, 20, juce::Justification::centred);
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
+{
+    static constexpr const char* roots[] =
+        { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
+    static constexpr const char* qualities[] =
+        { "MAJ","MIN","7","MAJ7","MIN7","DIM","SUS2","SUS4" };
+
+    g.fillAll (juce::Colours::black);
+
+    g.setColour (juce::Colours::white.withAlpha (0.92f));
+    g.setFont (juce::FontOptions (19.0f).withStyle ("Bold"));
+    g.drawText ("CHORDBOT", 28, 20, 220, 32,
+                juce::Justification::centredLeft);
+
+    g.setFont (juce::FontOptions (12.0f));
+    g.setColour (juce::Colours::white.withAlpha (0.60f));
+    g.drawText ("TOP-LEFT = THEORY ROOT",
+                250, 24, 210, 24, juce::Justification::centredLeft);
+
+    g.setColour (juce::Colours::white.withAlpha (
+        chordBotEditMode ? 0.98f : 0.74f));
+    g.drawText (chordBotEditMode ? "DONE" : "EDIT",
+                500, 22, 72, 26, juce::Justification::centred);
+    g.setColour (juce::Colours::white.withAlpha (0.84f));
+    g.drawText ("CONFIG",
+                604, 22, 88, 26, juce::Justification::centredRight);
+
+    const int active = processor.getChordBotActivePad();
+
+    for (int i = 0; i < 9; ++i)
+    {
+        const auto r = chordBotPadBounds (i);
+        const bool isActive = i == active;
+        const bool isEditTarget =
+            chordBotEditMode && i == chordBotEditSlot;
+
+        if (isActive)
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.16f));
+            g.fillRoundedRectangle (r, 8.0f);
+        }
+
+        g.setColour (juce::Colours::white.withAlpha (
+            isEditTarget ? 0.98f : 0.48f));
+        g.drawRoundedRectangle (
+            r.reduced (1.0f), 8.0f,
+            isEditTarget || isActive ? 3.0f : 1.2f);
+
+        if (i == 0)
+        {
+            g.setFont (juce::FontOptions (10.5f).withStyle ("Bold"));
+            g.setColour (juce::Colours::white.withAlpha (0.58f));
+            g.drawText ("ROOT",
+                        r.getX() + 12.0f, r.getY() + 10.0f,
+                        70.0f, 20.0f, juce::Justification::centredLeft);
+        }
+
+        const int root = juce::jlimit (
+            0, 11, processor.getChordBotSlotRoot (i));
+        const int quality = juce::jlimit (
+            0, 7, processor.getChordBotSlotQuality (i));
+
+        g.setColour (juce::Colours::white.withAlpha (0.94f));
+        g.setFont (juce::FontOptions (36.0f).withStyle ("Bold"));
+        g.drawText (roots[root],
+                    r.getX() + 12.0f, r.getY() + 64.0f,
+                    r.getWidth() - 24.0f, 52.0f,
+                    juce::Justification::centred);
+
+        g.setFont (juce::FontOptions (16.0f));
+        g.setColour (juce::Colours::white.withAlpha (0.72f));
+        g.drawText (qualities[quality],
+                    r.getX() + 12.0f, r.getY() + 119.0f,
+                    r.getWidth() - 24.0f, 30.0f,
+                    juce::Justification::centred);
+    }
+
+    if (chordBotEditMode && chordBotEditSlot >= 0)
+    {
+        const juce::Rectangle<float> overlay (105.0f, 180.0f, 510.0f, 360.0f);
+        g.setColour (juce::Colours::black.withAlpha (0.96f));
+        g.fillRoundedRectangle (overlay, 12.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.76f));
+        g.drawRoundedRectangle (overlay, 12.0f, 1.5f);
+
+        g.setColour (juce::Colours::white.withAlpha (0.94f));
+        g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
+        g.drawText ("EDIT PAD " + juce::String (chordBotEditSlot + 1),
+                    140, 202, 440, 30, juce::Justification::centred);
+
+        g.setFont (juce::FontOptions (13.0f));
+        g.setColour (juce::Colours::white.withAlpha (0.62f));
+        g.drawText ("ROOT", 145, 248, 100, 34,
+                    juce::Justification::centredLeft);
+        g.drawText ("CHORD", 145, 326, 100, 34,
+                    juce::Justification::centredLeft);
+
+        g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
+        g.setColour (juce::Colours::white.withAlpha (0.92f));
+        g.drawText ("<", 150, 282, 58, 44, juce::Justification::centred);
+        g.drawText (roots[juce::jlimit (0, 11, chordBotEditRoot)],
+                    225, 282, 270, 44, juce::Justification::centred);
+        g.drawText (">", 512, 282, 58, 44, juce::Justification::centred);
+
+        g.drawText ("<", 150, 360, 58, 44, juce::Justification::centred);
+        g.drawText (qualities[juce::jlimit (0, 7, chordBotEditQuality)],
+                    225, 360, 270, 44, juce::Justification::centred);
+        g.drawText (">", 512, 360, 58, 44, juce::Justification::centred);
+
+        g.setFont (juce::FontOptions (15.0f).withStyle ("Bold"));
+        g.drawText ("SAVE", 180, 454, 160, 48, juce::Justification::centred);
+        g.setColour (juce::Colours::white.withAlpha (0.66f));
+        g.drawText ("CANCEL", 380, 454, 160, 48, juce::Justification::centred);
+
+        if (chordBotEditSlot == 0)
+        {
+            g.setFont (juce::FontOptions (10.5f));
+            g.setColour (juce::Colours::white.withAlpha (0.50f));
+            g.drawText ("Saving ROOT re-generates the other 8 theory candidates.",
+                        135, 510, 450, 18, juce::Justification::centred);
+        }
+    }
 }
 
 juce::String RealtimeChordFxAudioProcessorEditor::currentInputName() const
