@@ -725,7 +725,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
         }
     }
 
-    const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 2, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::chordMode)->load()));
@@ -736,9 +736,10 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setColour (juce::Colours::white.withAlpha (0.78f));
     g.setFont (juce::FontOptions (16.0f));
     g.drawText ("MODE", 54, 510, 220, 30, juce::Justification::centredLeft);
-    const juce::String modeText = effectMode == 1
-        ? "DREAMY"
-        : (chordMode == 0 ? "CHORD-A" : "CHORD-B");
+    const juce::String modeText =
+        effectMode == 2 ? "HAZE"
+        : effectMode == 1 ? "DREAMY"
+                          : (chordMode == 0 ? "CHORD-A" : "CHORD-B");
     g.drawText (modeText,
                 450, 510, 180, 30, juce::Justification::centredRight);
     g.drawText ("MIDI CONTROL", 54, 542, 220, 30, juce::Justification::centredLeft);
@@ -754,7 +755,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     }
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colours::white.withAlpha (0.42f));
-    g.drawText ("MODE default: CHORD-A. A/B both use C4-B5 and reverb.", 54, 681, 590, 18, juce::Justification::centredLeft);
+    g.drawText ("MODE: CHORD-A / CHORD-B / DREAMY / HAZE", 54, 681, 590, 18, juce::Justification::centredLeft);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
@@ -978,7 +979,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
         if (p.y >= 508 && p.y < 540)
         {
-            const int effect = juce::jlimit (0, 1, juce::roundToInt (
+            const int effect = juce::jlimit (0, 2, juce::roundToInt (
                 processor.state().getRawParameterValue (ParamID::effectMode)->load()));
             const int chord = juce::jlimit (0, 1, juce::roundToInt (
                 processor.state().getRawParameterValue (ParamID::chordMode)->load()));
@@ -987,9 +988,11 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
                 setChoiceActual (ParamID::chordMode, 1);       // A -> B
             else if (effect == 0)
                 setChoiceActual (ParamID::effectMode, 1);      // B -> DREAMY
+            else if (effect == 1)
+                setChoiceActual (ParamID::effectMode, 2);      // DREAMY -> HAZE
             else
             {
-                setChoiceActual (ParamID::effectMode, 0);      // DREAMY -> A
+                setChoiceActual (ParamID::effectMode, 0);      // HAZE -> A
                 setChoiceActual (ParamID::chordMode, 0);
             }
         }
@@ -1021,8 +1024,85 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (p.x >= 575 && p.y <= 70) { configVisible = true; refreshAudioInputs(); repaint(); return; }
 
-    const int effectMode = juce::jlimit (0, 1, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 2, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+
+    if (effectMode == 2)
+    {
+        static constexpr DragParam hazeParams[] = {
+            DragParam::hazeMix,
+            DragParam::hazeTime,
+            DragParam::hazeAmount,
+            DragParam::hazeFilter,
+            DragParam::hazeRepeat,
+            DragParam::hazeMod
+        };
+
+        for (int i = 0; i < 6; ++i)
+        {
+            if (hazeParameterBounds (i).contains (p))
+            {
+                dragging = hazeParams[i];
+                setParameterFromX (dragging, p.x);
+                repaint();
+                return;
+            }
+        }
+
+        auto toggleBool = [this] (const char* id)
+        {
+            if (auto* par = processor.state().getParameter (id))
+                par->setValueNotifyingHost (
+                    par->getValue() < 0.5f ? 1.0f : 0.0f);
+        };
+
+        for (int i = 0; i < 11; ++i)
+        {
+            if (! hazeToggleBounds (i).contains (p))
+                continue;
+
+            if (i == 0)
+            {
+                const int v = juce::jlimit (0, 2, juce::roundToInt (
+                    processor.state().getRawParameterValue (
+                        ParamID::hazeSpeed)->load()));
+                setChoiceActual (ParamID::hazeSpeed, (v + 1) % 3);
+            }
+            else if (i == 1)
+            {
+                const int v = juce::jlimit (0, 2, juce::roundToInt (
+                    processor.state().getRawParameterValue (
+                        ParamID::hazeLoops)->load()));
+                setChoiceActual (ParamID::hazeLoops, (v + 1) % 3);
+            }
+            else if (i == 2)
+            {
+                const int v = juce::jlimit (0, 2, juce::roundToInt (
+                    processor.state().getRawParameterValue (
+                        ParamID::hazeWarble)->load()));
+                setChoiceActual (ParamID::hazeWarble, (v + 1) % 3);
+            }
+            else if (i == 3)
+            {
+                const int v = juce::jlimit (0, 1, juce::roundToInt (
+                    processor.state().getRawParameterValue (
+                        ParamID::hazePath)->load()));
+                setChoiceActual (ParamID::hazePath, 1 - v);
+            }
+            else if (i == 4) toggleBool (ParamID::hazeTranspose);
+            else if (i == 5) toggleBool (ParamID::hazeEcho);
+            else if (i == 6) toggleBool (ParamID::hazeOg);
+            else if (i == 7) toggleBool (ParamID::hazeLock);
+            else if (i == 8) toggleBool (ParamID::hazeBypass);
+            else if (i == 9) toggleBool (ParamID::hazeGain);
+            else if (i == 10) processor.clearHazeBuffer();
+
+            repaint();
+            return;
+        }
+
+        return;
+    }
 
     if (effectMode == 0)
     {
