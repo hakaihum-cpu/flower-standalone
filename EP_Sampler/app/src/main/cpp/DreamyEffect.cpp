@@ -355,8 +355,9 @@ void DreamyEffect::renderChromaSpace(float dryL, float dryR, float& wetL, float&
 
     const float tap2L = readFx(fxL_, (0.071 + 0.29*p1_) * sampleRate_);
     const float tap2R = readFx(fxR_, (0.083 + 0.33*p1_) * sampleRate_);
-    wetL = aL * 0.72f + tap2L * 0.38f;
-    wetR = aR * 0.72f + tap2R * 0.38f;
+    const float amountGain = 0.30f + 0.70f*p2_;
+    wetL = (aL * 0.72f + tap2L * 0.38f) * amountGain;
+    wetR = (aR * 0.72f + tap2R * 0.38f) * amountGain;
 
     const float toneA = std::clamp(0.16f - 0.10f*p4_, 0.035f, 0.16f);
     toneLpL_ += (wetL - toneLpL_) * toneA;
@@ -609,9 +610,12 @@ void DreamyEffect::process(float& l, float& r) {
         currentMode_ == MICROCOSM_GLIDE ||
         currentMode_ == HAZE) {
         float rvL=0.f,rvR=0.f;
+        const float feedback = currentMode_ == HAZE
+                ? (0.18f + 0.56f*p4_)
+                : (0.10f + 0.68f*p3_); // Microcosm REPEATS
         simpleDiffusion(dryL,dryR,
                         72.0f + 360.0f*p4_,
-                        0.18f + 0.56f*p4_,
+                        feedback,
                         0.13f - 0.075f*p4_,
                         rvL,rvR);
         wetL += rvL * p4_ * 0.42f;
