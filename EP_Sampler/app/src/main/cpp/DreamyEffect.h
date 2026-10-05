@@ -53,6 +53,7 @@ private:
     };
 
     bool enabled_ = true;
+    float enableFade_ = 1.0f;
     int sampleRate_ = 48000;
 
     std::vector<float> histL_, histR_;
