@@ -21,9 +21,13 @@ public:
 
 private:
     struct AudioInputOption { juce::String type; juce::String name; };
-    enum class DragParam { none, complex, bar, width, length, hold, effect };
+    enum class DragParam {
+        none, complex, bar, width, length, hold, effect,
+        hazeMix, hazeTime, hazeAmount, hazeFilter, hazeRepeat, hazeMod
+    };
     void timerCallback() override;
     void paintMain (juce::Graphics&);
+    void paintHaze (juce::Graphics&);
     void paintConfig (juce::Graphics&);
     void paintMidiControlConfig (juce::Graphics&);
     void paintBar (juce::Graphics&, juce::Rectangle<float>, const juce::String&, float, const juce::String&);
@@ -31,6 +35,8 @@ private:
     juce::Point<float> toDesign (juce::Point<float>) const;
     juce::Rectangle<float> parameterBounds (int index) const;
     juce::Rectangle<float> holdBounds() const;
+    juce::Rectangle<float> hazeParameterBounds (int index) const;
+    juce::Rectangle<float> hazeToggleBounds (int index) const;
     void refreshAudioInputs();
     void selectAudioInput (int index);
     void refreshMidiOutputs();
