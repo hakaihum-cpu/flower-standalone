@@ -261,7 +261,6 @@ void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
     {
         sineArpeggiator.reset();
         chordBRandomFx.reset();
-        hazeProcessor.clear();
         chordReverb.reset();
 
         if (haveChord)
@@ -451,6 +450,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         sampleChordRenderer.reset();
         sineArpeggiator.reset();
         chordBRandomFx.reset();
+        hazeProcessor.clear();
         chordReverb.reset();
         haveChord = false;
         pendingMidi = -1;
