@@ -17,6 +17,13 @@ struct ChordPlan
     bool substituted = false;
 };
 
+struct ChordBotChoice
+{
+    int rootPitchClass = 0;
+    int quality = 0; // 0 MAJ, 1 MIN, 2 7, 3 MAJ7, 4 MIN7, 5 DIM, 6 SUS2, 7 SUS4
+    float weight = 0.0f;
+};
+
 class TheoryEngine
 {
 public:
@@ -29,6 +36,9 @@ public:
 
     ChordPlan noteOn (int detectedMidiNote);
     ChordPlan advance();
+
+    static std::array<ChordBotChoice, 8> chordBotSuggestions (
+        int seedRootPitchClass, int seedQuality);
 
     int getTonicPitchClass() const noexcept { return tonicPitchClass; }
     bool hasTonalCentre() const noexcept { return tonalCentreValid; }
