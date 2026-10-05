@@ -4,7 +4,7 @@ import csv, hashlib, sys, xml.etree.ElementTree as ET
 
 R = Path(__file__).resolve().parents[1]
 JUCER = R / "RealtimeChordFX_Standalone.jucer"
-MODE_CHOICE_TOKEN = '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA" }, 0'
+MODE_CHOICE_TOKEN = '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT" }, 0'
 
 EXPECTED_MODULES = {
     "juce_audio_basics",
@@ -92,7 +92,7 @@ for bad in ["SynthVoice", "juce::Synthesiser", "SineVoice", "FLOWER", "MIYAKO"]:
     if bad in src:
         fail(f"forbidden cross-project/synth token in product source: {bad}")
 for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● REC",
-             "MODE","CHORD","DREAMY","EUREKA","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
+             "MODE","CHORD","DREAMY","EUREKA","CHORDBOT","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
     if need not in src:
         fail(f"UI/requirement token missing: {need}")
 
@@ -111,7 +111,9 @@ for need in [
     '"LENGTH"',
     '"DREAMY"',
     '"EUREKA"',
+    '"CHORDBOT"',
     "paintHaze (g)",
+    "paintChordBot (g)",
     '"X " + juce::String',
     '"CONFIG"',
     'u8"● REC"',
@@ -198,13 +200,19 @@ for need in [
     "hazeProcessor.forceShuffle",
     "effectMode == 2",
     "selectedEffectMode == 1",
+    "processChordBotMidi (midi)",
+    "regenerateChordBotSuggestions",
+    "setChordBotSlot",
+    "triggerChordBotPad",
+    "chordBotLayout",
+    "selectedEffectMode == 3",
     MODE_CHOICE_TOKEN,
 ]:
     if need not in processor:
         fail(f"HAZE processor integration missing: {need}")
 
-if 'if (effectMode == 2)' not in processor or "outputSafetyGain = 1.0f;" not in processor:
-    fail("HAZE Output Bypass must stay outside legacy output soft protection")
+if 'if (effectMode == 2 || effectMode == 3)' not in processor or "outputSafetyGain = 1.0f;" not in processor:
+    fail("EUREKA/CHORDBOT must stay outside legacy output soft protection")
 
 for need in [
     "ParamID::hazeMix",
@@ -226,6 +234,36 @@ for need in [
 ]:
     if need not in processor:
         fail(f"HAZE parameter contract missing: {need}")
+
+for need in [
+    "paintChordBot",
+    "chordBotPadBounds",
+    '"TOP-LEFT = THEORY ROOT"',
+    '"EDIT"',
+    '"SAVE"',
+    "processor.triggerChordBotPad",
+    "processor.setChordBotSlot",
+]:
+    if need not in editor:
+        fail(f"CHORDBOT UI contract missing: {need}")
+
+for need in [
+    "ChordBotChoice",
+    "chordBotSuggestions",
+    "transition[0][degree]",
+]:
+    if need not in src:
+        fail(f"CHORDBOT theory contract missing: {need}")
+
+core_test = (R / "tests/core_test.cpp").read_text()
+for need in [
+    "botMajor",
+    "foundG7",
+    "botMinor",
+    "foundE7",
+]:
+    if need not in core_test:
+        fail(f"CHORDBOT regression test missing: {need}")
 
 if "isKeyCurrentlyDown" in editor:
     fail("Android Motion REC must not rely on JUCE Android isKeyCurrentlyDown()")
@@ -421,6 +459,16 @@ for need in [
 ]:
     if need not in dreamy:
         fail(f"CHORD/DREAMY mode contract missing: {need}")
+
+mode_switch = dreamy.find("if (effectMode == 3)")
+if mode_switch < 0:
+    fail("CHORDBOT MIDI transition ordering missing")
+mode_switch_end = dreamy.find("// Dreamy always receives", mode_switch)
+mode_switch_block = dreamy[mode_switch:mode_switch_end]
+if mode_switch_block.find("processChordMidi (midi);") < 0 or mode_switch_block.find("processChordBotMidi (midi);") < 0:
+    fail("CHORDBOT MIDI transition ordering missing")
+if mode_switch_block.find("processChordMidi (midi);") > mode_switch_block.find("processChordBotMidi (midi);"):
+    fail("CHORDBOT entry must stop CHORD MIDI before CHORDBOT Note On")
 
 if "notifyChordAHoldChanged" not in processor_header:
     fail("CHORD/DREAMY mode contract missing: notifyChordAHoldChanged")
