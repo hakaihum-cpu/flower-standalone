@@ -1024,9 +1024,6 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             return;
         }
 
-        LinearLayout root = dialogRoot();
-        String[] names = modelControlNames();
-
         if (instrumentMode == 7) {
             if (drumEditorView != null) {
                 drumEditorView.setValues(drumParameters);
@@ -1036,81 +1033,27 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             return;
         }
 
-        addSlider(root, names[0], 127, bowPressure, v -> {
-            bowPressure = v;
-            NativeEngine.controlChange(10, v);
-            pianoView.controlChange(10, v);
-        });
-        addSlider(root, names[1], 127, bowSpeed, v -> {
-            bowSpeed = v;
-            NativeEngine.controlChange(11, v);
-            pianoView.controlChange(11, v);
-        });
-        addSlider(root, names[2], 127, bowPosition, v -> {
-            bowPosition = v;
-            NativeEngine.controlChange(74, v);
-            pianoView.controlChange(74, v);
-        });
-        addSlider(root, names[3], 127, vibratoDepth, v -> {
-            vibratoDepth = v;
-            NativeEngine.controlChange(1, v);
-            pianoView.controlChange(1, v);
-        });
-        addSlider(root, "ATTACK ms", 2000, attackMs, v -> {
-            attackMs = v;
-            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_ATTACK_MS, v).apply();
-        });
-        addSlider(root, "DECAY ms", 2000, decayMs, v -> {
-            decayMs = v;
-            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_DECAY_MS, v).apply();
-        });
-        addSlider(root, "SUSTAIN %", 100, sustainPct, v -> {
-            sustainPct = v;
-            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_SUSTAIN_PCT, v).apply();
-        });
-        addSlider(root, "RELEASE ms", 3000, releaseMs, v -> {
-            releaseMs = v;
-            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_RELEASE_MS, v).apply();
-        });
-
-        addSlider(root, "BOOSTER dB", 18, partBoostDb[instrumentMode], v -> {
-            partBoostDb[instrumentMode] = v;
-            NativeEngine.setPartFx(instrumentMode, partBoostDb[instrumentMode],
-                    partDistortion[instrumentMode]);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                    .putInt(KEY_PART_BOOST_PREFIX + instrumentMode, v).apply();
-        });
-        addSlider(root, "DISTORTION", 127, partDistortion[instrumentMode], v -> {
-            partDistortion[instrumentMode] = v;
-            NativeEngine.setPartFx(instrumentMode, partBoostDb[instrumentMode],
-                    partDistortion[instrumentMode]);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                    .putInt(KEY_PART_DIST_PREFIX + instrumentMode, v).apply();
-        });
-        if (instrumentMode == 3) {
-            addSlider(root, "REVERB MIX", 100, feltReverbMix, v -> {
-                feltReverbMix = v;
-                NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                        .putInt(KEY_FELT_REVERB_MIX, v).apply();
-            });
-            addSlider(root, "REVERB DECAY", 100, feltReverbDecay, v -> {
-                feltReverbDecay = v;
-                NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                        .putInt(KEY_FELT_REVERB_DECAY, v).apply();
-            });
+        if (soundDesignView != null) {
+            pianoView.setRecorderOpen(false);
+            if (mixerView != null) mixerView.setVisibility(View.GONE);
+            soundDesignView.setEditorState(
+                    instrumentMode,
+                    INSTRUMENT_NAMES[instrumentMode],
+                    modelDescription(),
+                    modelControlNames(),
+                    new int[]{bowPressure, bowSpeed, bowPosition, vibratoDepth},
+                    attackMs,
+                    decayMs,
+                    sustainPct,
+                    releaseMs,
+                    partBoostDb[instrumentMode],
+                    partDistortion[instrumentMode],
+                    feltReverbMix,
+                    feltReverbDecay,
+                    instrumentMode == 3);
+            soundDesignView.setVisibility(View.VISIBLE);
+            soundDesignView.bringToFront();
         }
-        new AlertDialog.Builder(this)
-                .setTitle(INSTRUMENT_NAMES[instrumentMode] + " MODEL")
-                .setMessage(modelDescription())
-                .setView(scrollDialogView(root))
-                .setPositiveButton("CLOSE", null)
-                .show();
     }
 
     @Override public void onDrumParameterChanged(int parameter, int value) {
