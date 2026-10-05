@@ -28,6 +28,7 @@ public final class PianoView extends View {
         void onChooseBank();
         void onEditEffect(int effect);
         void onOpenConfig();
+        void onOpenMixer();
         void onRecorderRecord();
         void onRecorderClear();
         void onRecorderRandom();
@@ -385,15 +386,16 @@ public final class PianoView extends View {
                 "RECORDER",
                 instrumentButtonLabel,
                 "CONFIG",
-                keyOverlayVisible ? "KEY CLOSE" : "KEY"
+                keyOverlayVisible ? "KEY CLOSE" : "KEY",
+                "MIXER"
         };
-        float gap = 5f*u;
+        float gap = 4f*u;
         float bx0 = pad;
         float by0 = 72f*u;
         float bh = 30f*u;
-        float bw = (getWidth() - pad*2f - gap*7f) / 8f;
-        text.setTextSize(12.3f*u);
-        for (int i=0;i<8;i++) {
+        float bw = (getWidth() - pad*2f - gap*8f) / 9f;
+        text.setTextSize(11.2f*u);
+        for (int i=0;i<9;i++) {
             float l = bx0 + i*(bw+gap);
             float rr = l + bw;
             boolean active = (i==0 && boostDb>0) || (i==1 && spaceMode>0) ||
@@ -741,12 +743,12 @@ public final class PianoView extends View {
     private int effectButtonAt(float x, float y) {
         float u = Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
         float pad = 12f*u;
-        float gap = 5f*u;
+        float gap = 4f*u;
         float by0 = 72f*u;
         float bh = 30f*u;
         if (y < by0 || y > by0 + bh) return -1;
-        float bw = (getWidth() - pad*2f - gap*7f) / 8f;
-        for (int i=0;i<8;i++) {
+        float bw = (getWidth() - pad*2f - gap*8f) / 9f;
+        for (int i=0;i<9;i++) {
             float l = pad + i*(bw+gap);
             if (x >= l && x <= l+bw) return i;
         }
@@ -862,6 +864,7 @@ public final class PianoView extends View {
         else if (index==5) actionListener.onChooseBank();
         else if (index==6) actionListener.onOpenConfig();
         else if (index==7) toggleAuditionKeyboard();
+        else if (index==8) actionListener.onOpenMixer();
         return true;
     }
 
