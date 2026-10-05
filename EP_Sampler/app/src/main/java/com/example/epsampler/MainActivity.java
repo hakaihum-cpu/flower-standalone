@@ -92,7 +92,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             "MOOD / STRETCH"
     };
     private static final String[][] DREAM_PARAM_NAMES = new String[][] {
-            {"DRIFT", "FRAGMENT", "COLOR", "SPACE"},
+            {"DRIFT", "FRAGMENT", "UNUSED", "UNUSED"},
             {"ACTIVITY", "VARIATION", "REPEATS", "SPACE"},
             {"ACTIVITY", "SHAPE", "REPEATS", "SPACE"},
             {"DENSITY", "SPREAD", "VARIATION", "DIFFUSION"},
@@ -683,6 +683,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 String name = i < 4 ? DREAM_PARAM_NAMES[dreamMode][i] : "MIX";
                 labels[i].setText(name + "  " + values[i] + "%");
                 bars[i].setProgress(values[i]);
+                boolean visible = !(dreamMode == 0 && (i == 2 || i == 3));
+                labels[i].setVisibility(visible ? View.VISIBLE : View.GONE);
+                bars[i].setVisibility(visible ? View.VISIBLE : View.GONE);
             }
             description.setText(DREAM_MODE_DESCRIPTIONS[dreamMode] +
                     "\nP1/P2 remain mapped to Dreamy X/Y (MIDI CC103/104).");
@@ -704,18 +707,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         });
         root.addView(defaults);
 
-        final boolean[] firstSelection = {true};
         modeSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view,
                                                  int position, long id) {
-                int mode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1, position));
-                if (firstSelection[0]) {
-                    firstSelection[0] = false;
-                    dreamMode = mode;
-                    refresh.run();
-                    return;
-                }
-                dreamMode = mode;
+                dreamMode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1, position));
                 refresh.run();
                 applyDreamySettings();
                 persistDreamySettings();
