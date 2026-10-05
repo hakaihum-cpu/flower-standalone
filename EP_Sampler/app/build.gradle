@@ -10,8 +10,8 @@ android {
         applicationId 'com.example.epmodel'
         minSdk 26
         targetSdk 35
-        versionCode 24
-        versionName '1.14-mixer'
+        versionCode 25
+        versionName '1.15-dreamy-modes'
 
         externalNativeBuild {
             cmake {
