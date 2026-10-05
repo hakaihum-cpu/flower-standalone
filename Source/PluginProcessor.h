@@ -62,8 +62,14 @@ public:
     void toggleMotionRecord() noexcept { motionCommand.store (1, std::memory_order_release); }
     void clearMotion() noexcept { motionCommand.store (2, std::memory_order_release); }
     int getMotionState() const noexcept { return motionState.load (std::memory_order_relaxed); }
-    void clearHazeBuffer() noexcept { hazeProcessor.clear(); }
-    void shuffleHaze() noexcept { hazeProcessor.forceShuffle(); }
+    void clearHazeBuffer() noexcept
+    {
+        hazeClearRequested.store (true, std::memory_order_release);
+    }
+    void shuffleHaze() noexcept
+    {
+        hazeShuffleRequested.store (true, std::memory_order_release);
+    }
 
 private:
     void acceptPitch (const chordfx::PitchEstimate& estimate);
@@ -97,6 +103,8 @@ private:
     chordfx::SineArpeggiator sineArpeggiator;
     chordfx::ChordBRandomFx chordBRandomFx;
     chordfx::HazeProcessor hazeProcessor;
+    std::atomic<bool> hazeClearRequested { false };
+    std::atomic<bool> hazeShuffleRequested { false };
     juce::Reverb chordReverb;
 
     double currentSampleRate = 48000.0;
