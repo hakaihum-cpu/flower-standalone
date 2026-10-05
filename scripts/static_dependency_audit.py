@@ -45,6 +45,7 @@ def fail(msg):
 required = [
     "RealtimeChordFX_Standalone.jucer",
     "Source/PluginProcessor.cpp", "Source/PluginEditor.cpp", "Source/ChordRenderers.h",
+    "Source/HazeProcessor.h",
     "Source/TheoryEngine.cpp", "Source/YinPitchDetector.cpp",
     "Source/GranularPitchBank.cpp", "Source/PsolaHarmonyBank.h", "Source/FramePack.cpp",
     "Resources/classroom_frames.pack",
@@ -78,6 +79,7 @@ target_source_files = [
     "Source/GranularPitchBank.cpp","Source/GranularPitchBank.h",
     "Source/ParameterIDs.h",
     "Source/ChordRenderers.h",
+    "Source/HazeProcessor.h",
     "Source/PsolaHarmonyBank.h",
     "Source/PluginEditor.cpp","Source/PluginEditor.h",
     "Source/PluginProcessor.cpp","Source/PluginProcessor.h",
@@ -89,7 +91,7 @@ for bad in ["SynthVoice", "juce::Synthesiser", "SineVoice", "FLOWER", "MIYAKO"]:
     if bad in src:
         fail(f"forbidden cross-project/synth token in product source: {bad}")
 for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● REC",
-             "MODE","CHORD","DREAMY","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
+             "MODE","CHORD","DREAMY","HAZE","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
     if need not in src:
         fail(f"UI/requirement token missing: {need}")
 
@@ -107,16 +109,19 @@ for need in [
     '"WIDTH"',
     '"LENGTH"',
     '"DREAMY"',
+    '"HAZE"',
+    "paintHaze (g)",
     '"X " + juce::String',
     '"CONFIG"',
     'u8"● REC"',
 ]:
     if need not in main_screen:
         fail(f"CHORD/DREAMY mode-specific main UI missing: {need}")
-chord_return = main_screen.find("return;")
-if chord_return < 0:
+chord_start = main_screen.find("if (effectMode == 0)")
+chord_return = main_screen.find("return;", chord_start)
+if chord_start < 0 or chord_return < 0:
     fail("CHORD main-screen return boundary missing")
-chord_screen = main_screen[:chord_return]
+chord_screen = main_screen[chord_start:chord_return]
 for bad in [
     '"CHORD-A"',
     '"CHORD-B"',
@@ -136,6 +141,82 @@ for need in [
 ]:
     if need not in main_screen:
         fail(f"DREAMY reverb indicator missing: {need}")
+
+haze = (R / "Source/HazeProcessor.h").read_text()
+for need in [
+    "class HazeProcessor",
+    "captureBlock",
+    "renderBlock",
+    "10.0 * effectiveTime",
+    "params.echo ? 0.5f * old + 0.5f * input : input",
+    "params.lock",
+    "params.bypass",
+    "params.transpose",
+    "params.og",
+    "params.warble",
+    "params.loops == 2 ? 2.0 : 1.0",
+    "sampleRate * 0.006",
+    "headPosition",
+]:
+    if need not in haze:
+        fail(f"HAZE processor contract missing: {need}")
+
+for need in [
+    "paintHaze",
+    '"DUAL LOOP / GLITCH / LO-FI"',
+    '"MIX"',
+    '"TIME"',
+    '"HAZE"',
+    '"FILTER"',
+    '"REPEAT"',
+    '"MOD"',
+    '"SPEED"',
+    '"LOOPS"',
+    '"WARBLE"',
+    '"TRANSPOSE"',
+    '"ECHO"',
+    '"OG"',
+    '"LOCK"',
+    '"BYPASS"',
+    '"GAIN"',
+    '"CLEAR"',
+]:
+    if need not in editor:
+        fail(f"HAZE UI contract missing: {need}")
+
+processor = (R / "Source/PluginProcessor.cpp").read_text()
+for need in [
+    "hazeProcessor.prepare",
+    "hazeProcessor.captureBlock",
+    "hazeProcessor.renderBlock",
+    "hazeParamsFromState",
+    "effectMode == 2",
+    "selectedEffectMode == 1",
+    'juce::StringArray { "CHORD", "DREAMY", "HAZE" }',
+]:
+    if need not in processor:
+        fail(f"HAZE processor integration missing: {need}")
+
+for need in [
+    "ParamID::hazeMix",
+    "ParamID::hazeTime",
+    "ParamID::hazeAmount",
+    "ParamID::hazeFilter",
+    "ParamID::hazeRepeat",
+    "ParamID::hazeMod",
+    "ParamID::hazeSpeed",
+    "ParamID::hazeLoops",
+    "ParamID::hazeWarble",
+    "ParamID::hazeTranspose",
+    "ParamID::hazeEcho",
+    "ParamID::hazeOg",
+    "ParamID::hazeLock",
+    "ParamID::hazeBypass",
+    "ParamID::hazeGain",
+    "ParamID::hazePath",
+]:
+    if need not in processor:
+        fail(f"HAZE parameter contract missing: {need}")
 
 if "isKeyCurrentlyDown" in editor:
     fail("Android Motion REC must not rely on JUCE Android isKeyCurrentlyDown()")
@@ -299,7 +380,7 @@ if switch0 < 0 or switch1 < 0 or "chordReverb.reset();" not in dreamy[switch0:sw
 
 for need in [
     "ParamID::effectMode",
-    '"MODE", juce::StringArray { "CHORD", "DREAMY" }, 0',
+    '"MODE", juce::StringArray { "CHORD", "DREAMY", "HAZE" }, 0',
     "ParamID::chordMode",
     '"CHORD ENGINE", juce::StringArray { "A", "B" }, 0',
     "processChordAudio (buffer)",
