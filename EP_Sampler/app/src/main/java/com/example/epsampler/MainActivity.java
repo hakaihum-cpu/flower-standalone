@@ -592,27 +592,144 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 .setPositiveButton("CLOSE", null).show();
     }
 
+    private void applyDreamySettings() {
+        dreamMode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1, dreamMode));
+        dreamX = Math.max(0, Math.min(100, dreamX));
+        dreamY = Math.max(0, Math.min(100, dreamY));
+        dreamP3 = Math.max(0, Math.min(100, dreamP3));
+        dreamP4 = Math.max(0, Math.min(100, dreamP4));
+        dreamMix = Math.max(0, Math.min(100, dreamMix));
+
+        NativeEngine.setDreamyMode(dreamMode);
+        NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
+        NativeEngine.setDreamyExtraParameters(dreamP3, dreamP4);
+
+        // Existing performance XY / MIDI assignments continue to address P1/P2.
+        pianoView.controlChange(103, Math.max(0, Math.min(127, Math.round(dreamX * 1.27f))));
+        pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(dreamY * 1.27f))));
+    }
+
+    private void persistDreamySettings() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putInt(KEY_DREAM_MODE, dreamMode)
+                .putInt(KEY_DREAM_X, dreamX)
+                .putInt(KEY_DREAM_Y, dreamY)
+                .putInt(KEY_DREAM_P3, dreamP3)
+                .putInt(KEY_DREAM_P4, dreamP4)
+                .putInt(KEY_DREAM_MIX, dreamMix)
+                .apply();
+    }
+
     private void showDreamyDialog() {
         LinearLayout root = dialogRoot();
-        addSlider(root, "X %", 100, dreamX, v -> {
-            dreamX = v;
-            NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
-            pianoView.controlChange(103, Math.max(0, Math.min(127, Math.round(v * 1.27f))));
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_DREAM_X, v).apply();
+
+        TextView modeLabel = new TextView(this);
+        modeLabel.setText("MODE");
+        modeLabel.setTextSize(16f);
+        root.addView(modeLabel);
+
+        Spinner modeSpinner = new Spinner(this);
+        modeSpinner.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, DREAM_MODE_NAMES));
+        modeSpinner.setSelection(dreamMode);
+        root.addView(modeSpinner);
+
+        TextView description = new TextView(this);
+        description.setTextSize(13f);
+        description.setPadding(0, 6, 0, 12);
+        root.addView(description);
+
+        final TextView[] labels = new TextView[5];
+        final SeekBar[] bars = new SeekBar[5];
+        final boolean[] updating = {true};
+
+        for (int i=0; i<5; i++) {
+            final int index = i;
+            TextView label = new TextView(this);
+            label.setTextSize(15f);
+            labels[i] = label;
+            root.addView(label);
+
+            SeekBar bar = new SeekBar(this);
+            bar.setMax(100);
+            bars[i] = bar;
+            bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    if (updating[0] || !fromUser) return;
+                    int v = Math.max(0, Math.min(100, progress));
+                    if (index == 0) dreamX = v;
+                    else if (index == 1) dreamY = v;
+                    else if (index == 2) dreamP3 = v;
+                    else if (index == 3) dreamP4 = v;
+                    else dreamMix = v;
+
+                    String name = index < 4
+                            ? DREAM_PARAM_NAMES[dreamMode][index]
+                            : "MIX";
+                    labels[index].setText(name + "  " + v + "%");
+                    applyDreamySettings();
+                    persistDreamySettings();
+                }
+                @Override public void onStartTrackingTouch(SeekBar seekBar) { }
+                @Override public void onStopTrackingTouch(SeekBar seekBar) { }
+            });
+            root.addView(bar);
+        }
+
+        final Runnable refresh = () -> {
+            updating[0] = true;
+            int[] values = new int[]{dreamX, dreamY, dreamP3, dreamP4, dreamMix};
+            for (int i=0; i<5; i++) {
+                String name = i < 4 ? DREAM_PARAM_NAMES[dreamMode][i] : "MIX";
+                labels[i].setText(name + "  " + values[i] + "%");
+                bars[i].setProgress(values[i]);
+            }
+            description.setText(DREAM_MODE_DESCRIPTIONS[dreamMode] +
+                    "\nP1/P2 remain mapped to Dreamy X/Y (MIDI CC103/104).");
+            updating[0] = false;
+        };
+
+        Button defaults = new Button(this);
+        defaults.setText("MODE DEFAULT");
+        defaults.setOnClickListener(v -> {
+            int[] d = DREAM_DEFAULTS[dreamMode];
+            dreamX = d[0];
+            dreamY = d[1];
+            dreamP3 = d[2];
+            dreamP4 = d[3];
+            dreamMix = d[4];
+            refresh.run();
+            applyDreamySettings();
+            persistDreamySettings();
         });
-        addSlider(root, "Y %", 100, dreamY, v -> {
-            dreamY = v;
-            NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
-            pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(v * 1.27f))));
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_DREAM_Y, v).apply();
+        root.addView(defaults);
+
+        final boolean[] firstSelection = {true};
+        modeSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view,
+                                                 int position, long id) {
+                int mode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1, position));
+                if (firstSelection[0]) {
+                    firstSelection[0] = false;
+                    dreamMode = mode;
+                    refresh.run();
+                    return;
+                }
+                dreamMode = mode;
+                refresh.run();
+                applyDreamySettings();
+                persistDreamySettings();
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
         });
-        addSlider(root, "MIX %", 100, dreamMix, v -> {
-            dreamMix = v;
-            NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_DREAM_MIX, v).apply();
-        });
-        new AlertDialog.Builder(this).setTitle("DREAMY").setView(scrollDialogView(root))
-                .setPositiveButton("CLOSE", null).show();
+
+        refresh.run();
+
+        new AlertDialog.Builder(this)
+                .setTitle("DREAMY / TEXTURE MODES")
+                .setView(scrollDialogView(root))
+                .setPositiveButton("CLOSE", null)
+                .show();
     }
 
     private int audioBufferSelection(float value) {
