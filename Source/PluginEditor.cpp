@@ -180,17 +180,38 @@ void RealtimeChordFxAudioProcessorEditor::setParameterFromX (DragParam which, fl
     if (which == DragParam::bar) idx = 1;
     else if (which == DragParam::width) idx = 2;
     else if (which == DragParam::length) idx = 3;
-    auto r = (which == DragParam::hold || which == DragParam::effect)
-        ? holdBounds() : parameterBounds (idx);
-    const float norm = juce::jlimit (0.0f, 1.0f, (x - r.getX()) / r.getWidth());
+
+    int hazeIdx = -1;
+    if (which == DragParam::hazeMix) hazeIdx = 0;
+    else if (which == DragParam::hazeTime) hazeIdx = 1;
+    else if (which == DragParam::hazeAmount) hazeIdx = 2;
+    else if (which == DragParam::hazeFilter) hazeIdx = 3;
+    else if (which == DragParam::hazeRepeat) hazeIdx = 4;
+    else if (which == DragParam::hazeMod) hazeIdx = 5;
+
+    auto r = hazeIdx >= 0
+        ? hazeParameterBounds (hazeIdx)
+        : ((which == DragParam::hold || which == DragParam::effect)
+            ? holdBounds() : parameterBounds (idx));
+
+    const float norm =
+        juce::jlimit (0.0f, 1.0f, (x - r.getX()) / r.getWidth());
+
     if (which == DragParam::complex) setNorm (ParamID::complex, norm);
     else if (which == DragParam::width) setNorm (ParamID::width, norm);
     else if (which == DragParam::length) setNorm (ParamID::length, norm);
     else if (which == DragParam::hold) setNorm (ParamID::hold, norm);
     else if (which == DragParam::effect) setNorm (ParamID::effect, norm);
+    else if (which == DragParam::hazeMix) setNorm (ParamID::hazeMix, norm);
+    else if (which == DragParam::hazeTime) setNorm (ParamID::hazeTime, norm);
+    else if (which == DragParam::hazeAmount) setNorm (ParamID::hazeAmount, norm);
+    else if (which == DragParam::hazeFilter) setNorm (ParamID::hazeFilter, norm);
+    else if (which == DragParam::hazeRepeat) setNorm (ParamID::hazeRepeat, norm);
+    else if (which == DragParam::hazeMod) setNorm (ParamID::hazeMod, norm);
     else if (which == DragParam::bar)
     {
-        const int step = juce::jlimit (0, 3, juce::roundToInt (norm * 3.0f));
+        const int step =
+            juce::jlimit (0, 3, juce::roundToInt (norm * 3.0f));
         setNorm (ParamID::bar, step / 3.0f);
     }
 }
@@ -204,6 +225,32 @@ juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::parameterBounds (int
 juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::holdBounds() const
 {
     return { 548.0f, 516.0f, 144.0f, 56.0f };
+}
+
+juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::hazeParameterBounds (int index) const
+{
+    index = juce::jlimit (0, 5, index);
+    const int row = index / 2;
+    const int col = index % 2;
+    return {
+        34.0f + col * 344.0f,
+        92.0f + row * 112.0f,
+        308.0f,
+        78.0f
+    };
+}
+
+juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::hazeToggleBounds (int index) const
+{
+    index = juce::jlimit (0, 10, index);
+    const int row = index / 4;
+    const int col = index % 4;
+    return {
+        30.0f + col * 171.0f,
+        438.0f + row * 72.0f,
+        150.0f,
+        52.0f
+    };
 }
 
 juce::String RealtimeChordFxAudioProcessorEditor::noteText (int midi) const
