@@ -4,6 +4,7 @@ import csv, hashlib, sys, xml.etree.ElementTree as ET
 
 R = Path(__file__).resolve().parents[1]
 JUCER = R / "RealtimeChordFX_Standalone.jucer"
+MODE_CHOICE_TOKEN = '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA" }, 0'
 
 EXPECTED_MODULES = {
     "juce_audio_basics",
@@ -197,7 +198,7 @@ for need in [
     "hazeProcessor.forceShuffle",
     "effectMode == 2",
     "selectedEffectMode == 1",
-    'juce::StringArray { "CHORD", "DREAMY", "EUREKA" }',
+    MODE_CHOICE_TOKEN.replace('"MODE", ', '').replace(', 0', ''),
 ]:
     if need not in processor:
         fail(f"HAZE processor integration missing: {need}")
@@ -388,7 +389,7 @@ if switch0 < 0 or switch1 < 0 or "chordReverb.reset();" not in dreamy[switch0:sw
 
 for need in [
     "ParamID::effectMode",
-    '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA" }, 0',
+    MODE_CHOICE_TOKEN,
     "ParamID::chordMode",
     '"CHORD ENGINE", juce::StringArray { "A", "B" }, 0',
     "processChordAudio (buffer)",
