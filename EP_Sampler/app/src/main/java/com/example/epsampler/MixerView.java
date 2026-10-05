@@ -87,7 +87,7 @@ final class MixerView extends FrameLayout {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setPadding(0, 0, dp(16), 0);
-        scroll.addView(row, new HorizontalScrollView.LayoutParams(
+        scroll.addView(row, new FrameLayout.LayoutParams(
                 LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT));
 
         for (int part = 0; part < PARTS; part++) {
