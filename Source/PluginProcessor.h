@@ -63,6 +63,7 @@ public:
     void clearMotion() noexcept { motionCommand.store (2, std::memory_order_release); }
     int getMotionState() const noexcept { return motionState.load (std::memory_order_relaxed); }
     void clearHazeBuffer() noexcept { hazeProcessor.clear(); }
+    void shuffleHaze() noexcept { hazeProcessor.forceShuffle(); }
 
 private:
     void acceptPitch (const chordfx::PitchEstimate& estimate);
