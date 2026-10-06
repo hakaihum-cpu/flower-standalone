@@ -14,6 +14,7 @@ AudioEngine& AudioEngine::instance() { static AudioEngine e; return e; }
 AudioEngine::AudioEngine() {
     for (auto& active : epActiveBank_) active.store(0, std::memory_order_relaxed);
     for (auto& pending : epPendingBank_) pending.store(-1, std::memory_order_relaxed);
+    for (auto& meter : partMeterQ_) meter.store(0, std::memory_order_relaxed);
 }
 
 AudioEngine::~AudioEngine() { stop(); }
@@ -438,6 +439,12 @@ int AudioEngine::audioBufferCapacityFrames() const {
 }
 int AudioEngine::audioXRunCount() const {
     return stream_ ? AAudioStream_getXRunCount(stream_) : 0;
+}
+
+float AudioEngine::partMeter(int part) const {
+    part = std::clamp(part, 0, PART_COUNT - 1);
+    const int q = partMeterQ_[part].load(std::memory_order_relaxed);
+    return std::clamp(q / 100000.0f, 0.0f, 1.5f);
 }
 
 
@@ -1137,6 +1144,8 @@ void AudioEngine::render(float* out,int32_t frames) {
         partDrive[part] = 1.0f + 14.0f * partDistAmount[part];
     }
 
+    std::array<float,PART_COUNT> callbackPeak{};
+
     for (int32_t i=0; i<frames; ++i) {
         float mixL = 0.0f;
         float mixR = 0.0f;
@@ -1224,6 +1233,9 @@ void AudioEngine::render(float* out,int32_t frames) {
                 else if (pan > 0.0f) partL *= (1.0f - pan);
             }
 
+            const float partPeak = std::max(std::fabs(partL), std::fabs(partR));
+            callbackPeak[part] = std::max(callbackPeak[part], partPeak);
+
             mixL += partL;
             mixR += partR;
             if (voices > 0 && !partMute_[part] && partVolume_[part] > 0) activeParts++;
@@ -1248,6 +1260,19 @@ void AudioEngine::render(float* out,int32_t frames) {
         recorder_.process(baseL, baseR, mixedL, mixedR);
         out[i*2] = std::clamp(mixedL, -1.0f, 1.0f);
         out[i*2+1] = std::clamp(mixedR, -1.0f, 1.0f);
+    }
+
+    // Real per-part peak meters. Hold short transients and decay smoothly.
+    const float meterDecay = std::exp(
+            -float(std::max(1, frames)) /
+            (float(std::max(1, sampleRate_)) * 0.22f));
+    for (int part=0; part<PART_COUNT; ++part) {
+        const float previous =
+                partMeterQ_[part].load(std::memory_order_relaxed) / 100000.0f;
+        float next = std::max(callbackPeak[part], previous * meterDecay);
+        if (next < 0.00001f) next = 0.0f;
+        const int q = std::clamp(int(std::lround(next * 100000.0f)), 0, 150000);
+        partMeterQ_[part].store(q, std::memory_order_relaxed);
     }
 }
 
