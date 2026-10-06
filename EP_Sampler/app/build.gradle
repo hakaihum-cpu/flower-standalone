@@ -10,8 +10,8 @@ android {
         applicationId 'com.example.epmodel'
         minSdk 26
         targetSdk 35
-        versionCode 28
-        versionName '1.18-sample8-flute-safe'
+        versionCode 29
+        versionName '1.19-mixer-unified-ui'
 
         externalNativeBuild {
             cmake {
