@@ -100,8 +100,7 @@ private:
             DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS,
             TAPE, TAPE_PARAMS, DREAMY_PARAMS, DREAMY_MODE, DREAMY_EXTRA, ADSR, INSTRUMENT,
             PART_NOTE_ON, PART_NOTE_OFF, PART_POLY_AT, PART_CH_AT, PART_CC, PART_PITCH,
-            DRUM_PARAM, DRUM_FX, PART_FX, PART_MIXER, FELT_REVERB, PERFORMANCE_XY,
-            BANK_SWAP
+            DRUM_PARAM, DRUM_FX, PART_FX, PART_MIXER, FELT_REVERB, PERFORMANCE_XY
         } type;
         int a=0,b=0,c=0,d=0;
     };
@@ -219,6 +218,7 @@ private:
     // Two mmap objects per slot: background load writes only the inactive bank.
     std::array<std::array<SampleBank,2>,SAMPLE_BANK_COUNT> epBanks_{};
     std::array<std::atomic<int>,SAMPLE_BANK_COUNT> epActiveBank_{};
+    std::array<std::atomic<int>,SAMPLE_BANK_COUNT> epPendingBank_{};
     std::array<std::mutex,SAMPLE_BANK_COUNT> epBankLoadMutex_{};
 
     AAudioStream* stream_=nullptr;
