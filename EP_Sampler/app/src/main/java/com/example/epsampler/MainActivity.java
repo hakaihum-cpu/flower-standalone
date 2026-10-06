@@ -158,6 +158,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private SoundDesignView soundDesignView;
     private MidiController midiController;
     private volatile boolean dreamy = false;
+    private volatile boolean audioRescanInProgress = false;
     private int boosterStep = 0;
     private int spaceMode = 0;
     private boolean tape = false;
@@ -952,6 +953,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     private String audioBufferStats(int lastResult) {
+        if (audioRescanInProgress) return "Audio device rescan in progress…";
         int fpb = NativeEngine.audioFramesPerBurst();
         int frames = NativeEngine.audioBufferSizeFrames();
         int capacity = NativeEngine.audioBufferCapacityFrames();
@@ -1178,12 +1180,15 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     private void rescanAudioDevices(Button button) {
+        if (audioRescanInProgress) return;
+        audioRescanInProgress = true;
         if (button != null) button.setEnabled(false);
         panicAllParts();
 
         new Thread(() -> {
             final boolean ok = NativeEngine.restartAudioPreservingState();
             runOnUiThread(() -> {
+                audioRescanInProgress = false;
                 if (button != null) button.setEnabled(true);
                 if (ok) {
                     Toast.makeText(this,
