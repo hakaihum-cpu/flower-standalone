@@ -11,6 +11,7 @@ AudioEngine& AudioEngine::instance() { static AudioEngine e; return e; }
 
 AudioEngine::AudioEngine() {
     for (auto& active : epActiveBank_) active.store(0, std::memory_order_relaxed);
+    for (auto& pending : epPendingBank_) pending.store(-1, std::memory_order_relaxed);
 }
 
 AudioEngine::~AudioEngine() { stop(); }
@@ -20,7 +21,7 @@ bool AudioEngine::loadBank(const std::string& path) {
     const int active = epActiveBank_[0].load(std::memory_order_acquire);
     const int inactive = 1 - active;
     if (!epBanks_[0][inactive].load(path)) return false;
-    push({Event::BANK_SWAP,0,inactive,0,0});
+    epPendingBank_[0].store(inactive, std::memory_order_release);
     return true;
 }
 
@@ -39,8 +40,8 @@ bool AudioEngine::loadBankSlotFd(int slot, int fd) {
     // background thread. The audio callback never waits on this mutex.
     if (!epBanks_[slot][inactive].loadFd(fd)) return false;
 
-    // The actual bank flip happens at the next audio-buffer event boundary.
-    push({Event::BANK_SWAP,slot,inactive,0,0});
+    // The actual bank flip happens at the next audio-buffer boundary.
+    epPendingBank_[slot].store(inactive, std::memory_order_release);
     return true;
 }
 
