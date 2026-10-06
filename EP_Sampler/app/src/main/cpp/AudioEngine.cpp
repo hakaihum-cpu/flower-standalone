@@ -234,21 +234,31 @@ void AudioEngine::processDrumSamples(float& left, float& right) {
         float r = sample.right[i0] + (sample.right[i1] - sample.right[i0]) * frac;
 
         if (!drumSampleMute_[v.slot]) {
-            const float gain = v.gain
-                    * (drumSampleVolume_[v.slot] / 127.0f)
-                    * (partVolume_[7] / 127.0f);
-            l *= gain;
-            r *= gain;
+            const float partGain = partVolume_[7] / 127.0f;
 
-            const int panValue = std::clamp(drumSamplePan_[v.slot], 0, 127);
-            const float pan = panValue < 64
-                    ? float(panValue - 64) / 64.0f
-                    : float(panValue - 64) / 63.0f;
-            if (pan < 0.0f) r *= (1.0f + pan);
-            else if (pan > 0.0f) l *= (1.0f - pan);
+            // Preserve the exact legacy arithmetic path when the new submixer
+            // is untouched, so adding this feature does not alter old DRUMS sound.
+            if (drumSampleVolume_[v.slot] == 127 &&
+                    drumSamplePan_[v.slot] == 64) {
+                left += l * v.gain * partGain;
+                right += r * v.gain * partGain;
+            } else {
+                const float gain = v.gain
+                        * (drumSampleVolume_[v.slot] / 127.0f)
+                        * partGain;
+                l *= gain;
+                r *= gain;
 
-            left += l;
-            right += r;
+                const int panValue = std::clamp(drumSamplePan_[v.slot], 0, 127);
+                const float pan = panValue < 64
+                        ? float(panValue - 64) / 64.0f
+                        : float(panValue - 64) / 63.0f;
+                if (pan < 0.0f) r *= (1.0f + pan);
+                else if (pan > 0.0f) l *= (1.0f - pan);
+
+                left += l;
+                right += r;
+            }
         }
 
         v.position += double(sample.sampleRate) / outputRate;
