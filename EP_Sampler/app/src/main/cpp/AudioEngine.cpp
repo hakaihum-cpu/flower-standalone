@@ -230,12 +230,26 @@ void AudioEngine::processDrumSamples(float& left, float& right) {
 
         const size_t i1 = std::min(i0 + 1, sample.left.size() - 1);
         const float frac = float(v.position - double(i0));
-        const float l = sample.left[i0] + (sample.left[i1] - sample.left[i0]) * frac;
-        const float r = sample.right[i0] + (sample.right[i1] - sample.right[i0]) * frac;
+        float l = sample.left[i0] + (sample.left[i1] - sample.left[i0]) * frac;
+        float r = sample.right[i0] + (sample.right[i1] - sample.right[i0]) * frac;
 
-        const float partGain = partVolume_[7] / 127.0f;
-        left += l * v.gain * partGain;
-        right += r * v.gain * partGain;
+        if (!drumSampleMute_[v.slot]) {
+            const float gain = v.gain
+                    * (drumSampleVolume_[v.slot] / 127.0f)
+                    * (partVolume_[7] / 127.0f);
+            l *= gain;
+            r *= gain;
+
+            const int panValue = std::clamp(drumSamplePan_[v.slot], 0, 127);
+            const float pan = panValue < 64
+                    ? float(panValue - 64) / 64.0f
+                    : float(panValue - 64) / 63.0f;
+            if (pan < 0.0f) r *= (1.0f + pan);
+            else if (pan > 0.0f) l *= (1.0f - pan);
+
+            left += l;
+            right += r;
+        }
 
         v.position += double(sample.sampleRate) / outputRate;
         if (v.position >= double(sample.left.size())) v.active = false;
@@ -466,6 +480,9 @@ void AudioEngine::setPartFx(int part,int boostDb,int distortion){
 }
 void AudioEngine::setPartMixer(int part,int volume,int pan,bool muted){
     push({Event::PART_MIXER,part,volume,pan,muted?1:0});
+}
+void AudioEngine::setDrumSampleMixer(int slot,int volume,int pan,bool muted){
+    push({Event::DRUM_SAMPLE_MIXER,slot,volume,pan,muted?1:0});
 }
 void AudioEngine::setFeltReverb(int mix,int decay){
     push({Event::FELT_REVERB,mix,decay,0,0});
@@ -1137,6 +1154,13 @@ void AudioEngine::handle(const Event& e) {
             partPan_[part] = std::clamp(e.c, 0, 127);
             partMute_[part] = e.d != 0;
             if (part == selectedInstrument_) cc7_ = partVolume_[part];
+            break;
+        }
+        case Event::DRUM_SAMPLE_MIXER: {
+            const int slot = std::clamp(e.a, 0, DRUM_SAMPLE_COUNT - 1);
+            drumSampleVolume_[slot] = std::clamp(e.b, 0, 127);
+            drumSamplePan_[slot] = std::clamp(e.c, 0, 127);
+            drumSampleMute_[slot] = e.d != 0;
             break;
         }
         case Event::FELT_REVERB:
