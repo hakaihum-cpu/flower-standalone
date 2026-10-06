@@ -1,5 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
+#include <array>
 #include <vector>
 #include "FramePack.h"
 #include "PluginProcessor.h"
@@ -23,7 +24,8 @@ private:
     struct AudioInputOption { juce::String type; juce::String name; };
     enum class DragParam {
         none, complex, bar, width, length, hold, effect,
-        hazeMix, hazeTime, hazeAmount, hazeFilter, hazeRepeat, hazeMod
+        hazeMix, hazeTime, hazeAmount, hazeFilter, hazeRepeat, hazeMod,
+        hazeReverb
     };
     void timerCallback() override;
     void paintMain (juce::Graphics&);
@@ -45,6 +47,8 @@ private:
     void refreshMidiOutputs();
     void cycleMidiOutput (int direction);
     void updateMidiControllerFromPoint (juce::Point<float>);
+    void updateEurekaMotionPoint (juce::Point<float>);
+    int nextVisualFrame (int count, int avoid);
     void setChoiceActual (const char* id, int value);
     juce::String currentInputName() const;
     juce::String noteText (int midi) const;
@@ -52,7 +56,14 @@ private:
     RealtimeChordFxAudioProcessor& processor;
     FramePack frames;
     juce::Image currentFrame;
+    juce::Image eurekaSheet;
     int loadedFrame = -1;
+    int eurekaFrameIndex = 0;
+    int chordVisualCooldown = 0;
+    int eurekaVisualCooldown = 0;
+    float chordVisualPreviousActivity = 0.0f;
+    float eurekaVisualPreviousActivity = 0.0f;
+    uint32_t visualRandomState = 0x45464658u;
     bool configVisible = false;
     bool midiControlConfigVisible = false;
     bool xyDragging = false;
@@ -72,6 +83,19 @@ private:
     int chordBotEditRoot = 0;
     int chordBotEditQuality = 0;
     int chordBotPressedPad = -1;
+
+    bool eurekaPanelVisible = false;
+    bool eurekaMotionArmed = false;
+    bool eurekaMotionRecording = false;
+    bool eurekaMotionPlaying = false;
+    bool eurekaMotionTouchDown = false;
+    int eurekaMotionRecordIndex = 0;
+    int eurekaMotionPlaybackIndex = 0;
+    float eurekaMotionTouchX = 0.5f;
+    float eurekaMotionTouchY = 0.5f;
+    static constexpr int eurekaMotionSteps = 90; // 3 s at 30 Hz
+    std::array<float, eurekaMotionSteps> eurekaMotionMix {};
+    std::array<float, eurekaMotionSteps> eurekaMotionHaze {};
 
     static constexpr float design = 720.0f;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RealtimeChordFxAudioProcessorEditor)
