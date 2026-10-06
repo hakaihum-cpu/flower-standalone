@@ -121,7 +121,8 @@ private:
     std::array<bool, PART_COUNT> partMute_{{false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false}};
     std::array<int, PART_COUNT> partSustain_{{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}};
     std::array<int, PART_COUNT> partPitch_{{8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192}};
-    std::array<std::atomic<float>, PART_COUNT> partMeter_{};
+    // 0..100000 linear peak, using integer atomics to keep callback exchange trivial.
+    std::array<std::atomic<int>, PART_COUNT> partMeterQ_{};
     DreamyEffect dreamy_;
     SpaceEffect space_;
     SpaceEffect feltPianoReverb_;
