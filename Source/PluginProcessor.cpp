@@ -1476,6 +1476,7 @@ RealtimeChordFxAudioProcessor::hazeParamsFromState() const noexcept
     p.filter = apvts.getRawParameterValue (ParamID::hazeFilter)->load();
     p.repeat = apvts.getRawParameterValue (ParamID::hazeRepeat)->load();
     p.mod = apvts.getRawParameterValue (ParamID::hazeMod)->load();
+    p.reverb = apvts.getRawParameterValue (ParamID::hazeReverb)->load();
     p.speed = juce::jlimit (0, 2, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::hazeSpeed)->load()));
     p.loops = juce::jlimit (0, 2, juce::roundToInt (
@@ -1555,6 +1556,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeFilter, "HAZE FILTER", 0.0f, 1.0f, 0.50f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeRepeat, "HAZE REPEAT", 0.0f, 1.0f, 0.0f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeMod, "HAZE MOD", 0.0f, 1.0f, 0.50f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeReverb, "EUREKA HALL", 0.0f, 1.0f, 0.0f));
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::hazeSpeed, "HAZE SPEED", juce::StringArray { ".5x", "1x", "2x" }, 1));
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::hazeLoops, "HAZE LOOPS", juce::StringArray { "1", "2", "2+" }, 1));
     p.add (std::make_unique<juce::AudioParameterChoice> (ParamID::hazeWarble, "HAZE WARBLE", juce::StringArray { "OFF", "LIGHT", "HEAVY" }, 0));
