@@ -69,12 +69,14 @@ bool AudioEngine::loadBankSlotFd(int slot, int fd) {
 
 bool AudioEngine::bankLoaded(int slot) const {
     slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
+    std::lock_guard<std::mutex> lock(epBankLoadMutex_[slot]);
     const int index = epActiveBank_[slot].load(std::memory_order_acquire);
     return epBanks_[slot][index].loaded();
 }
 
 std::string AudioEngine::bankStatus(int slot) const {
     slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
+    std::lock_guard<std::mutex> lock(epBankLoadMutex_[slot]);
     const int index = epActiveBank_[slot].load(std::memory_order_acquire);
     return epBanks_[slot][index].status();
 }
