@@ -8,18 +8,52 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,"EPViolin",__VA_ARGS__)
 
 AudioEngine& AudioEngine::instance() { static AudioEngine e; return e; }
+
+AudioEngine::AudioEngine() {
+    for (auto& active : epActiveBank_) active.store(0, std::memory_order_relaxed);
+}
+
 AudioEngine::~AudioEngine() { stop(); }
 
 bool AudioEngine::loadBank(const std::string& path) {
-    std::lock_guard<std::mutex> lock(epBankMutex_);
-    epAllNotesOff();
-    return epBank_.load(path);
+    std::lock_guard<std::mutex> lock(epBankLoadMutex_[0]);
+    const int active = epActiveBank_[0].load(std::memory_order_acquire);
+    const int inactive = 1 - active;
+    if (!epBanks_[0][inactive].load(path)) return false;
+    push({Event::BANK_SWAP,0,inactive,0,0});
+    return true;
 }
 
 bool AudioEngine::loadBankFd(int fd) {
-    std::lock_guard<std::mutex> lock(epBankMutex_);
-    epAllNotesOff();
-    return epBank_.loadFd(fd);
+    return loadBankSlotFd(0, fd);
+}
+
+bool AudioEngine::loadBankSlotFd(int slot, int fd) {
+    slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
+    std::lock_guard<std::mutex> lock(epBankLoadMutex_[slot]);
+
+    const int active = epActiveBank_[slot].load(std::memory_order_acquire);
+    const int inactive = 1 - active;
+
+    // File I/O + mmap + EPBANK1 validation happen only on the caller's
+    // background thread. The audio callback never waits on this mutex.
+    if (!epBanks_[slot][inactive].loadFd(fd)) return false;
+
+    // The actual bank flip happens at the next audio-buffer event boundary.
+    push({Event::BANK_SWAP,slot,inactive,0,0});
+    return true;
+}
+
+bool AudioEngine::bankLoaded(int slot) const {
+    slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
+    const int index = epActiveBank_[slot].load(std::memory_order_acquire);
+    return epBanks_[slot][index].loaded();
+}
+
+std::string AudioEngine::bankStatus(int slot) const {
+    slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
+    const int index = epActiveBank_[slot].load(std::memory_order_acquire);
+    return epBanks_[slot][index].status();
 }
 
 
