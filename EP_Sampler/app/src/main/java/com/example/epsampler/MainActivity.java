@@ -71,6 +71,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_MIX_VOL_PREFIX = "mix_vol_";
     private static final String KEY_MIX_PAN_PREFIX = "mix_pan_";
     private static final String KEY_MIX_MUTE_PREFIX = "mix_mute_";
+    private static final String KEY_DRUM_SAMPLE_VOL_PREFIX = "drum_sample_vol_";
+    private static final String KEY_DRUM_SAMPLE_PAN_PREFIX = "drum_sample_pan_";
+    private static final String KEY_DRUM_SAMPLE_MUTE_PREFIX = "drum_sample_mute_";
     private static final String[] AUDIO_BUFFER_LABELS = {
             "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST", "1.5 BURSTS", "2 BURSTS",
             "3 BURSTS", "4 BURSTS", "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS"
@@ -150,6 +153,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private PerformanceVideoLayer videoLayer;
     private PerformanceXYView performanceXYView;
     private DrumEditorView drumEditorView;
+    private DrumSampleMixerView drumSampleMixerView;
     private MixerView mixerView;
     private SoundDesignView soundDesignView;
     private MidiController midiController;
@@ -205,6 +209,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             64,64,64,64,64,64,64,64
     };
     private final boolean[] partMixerMute = new boolean[16];
+    private final int[] drumSampleMixerVolume = new int[]{127,127,127,127,127,127};
+    private final int[] drumSampleMixerPan = new int[]{64,64,64,64,64,64};
+    private final boolean[] drumSampleMixerMute = new boolean[6];
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -221,6 +228,34 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         performanceXYView.setListener(this);
         drumEditorView = new DrumEditorView(this);
         drumEditorView.setListener(this);
+        drumSampleMixerView = new DrumSampleMixerView(this);
+        drumSampleMixerView.setListener(new DrumSampleMixerView.Listener() {
+            @Override public void onDrumSampleMixerClose() {
+                drumSampleMixerView.setVisibility(View.GONE);
+                if (instrumentMode == 7) {
+                    drumEditorView.setDrumsVisible(true);
+                    drumEditorView.bringToFront();
+                }
+                hideSystemUI();
+            }
+
+            @Override public void onDrumSampleMixerChanged(
+                    int slot, int volume, int pan, boolean muted) {
+                if (slot < 0 || slot >= drumSampleMixerVolume.length) return;
+                drumSampleMixerVolume[slot] = Math.max(0, Math.min(127, volume));
+                drumSampleMixerPan[slot] = Math.max(0, Math.min(127, pan));
+                drumSampleMixerMute[slot] = muted;
+                NativeEngine.setDrumSampleMixer(slot,
+                        drumSampleMixerVolume[slot],
+                        drumSampleMixerPan[slot],
+                        drumSampleMixerMute[slot]);
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(KEY_DRUM_SAMPLE_VOL_PREFIX + slot, drumSampleMixerVolume[slot])
+                        .putInt(KEY_DRUM_SAMPLE_PAN_PREFIX + slot, drumSampleMixerPan[slot])
+                        .putBoolean(KEY_DRUM_SAMPLE_MUTE_PREFIX + slot, drumSampleMixerMute[slot])
+                        .apply();
+            }
+        });
         mixerView = new MixerView(this);
         mixerView.setListener(this);
         soundDesignView = new SoundDesignView(this);
@@ -244,6 +279,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         root.addView(drumEditorView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+        root.addView(drumSampleMixerView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(mixerView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -256,6 +294,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         performanceXYView.setZ(10f);
         pianoView.setZ(20f);
         drumEditorView.setZ(30f);
+        drumSampleMixerView.setZ(35f);
         mixerView.setZ(40f);
         soundDesignView.setZ(50f);
         setContentView(root);
