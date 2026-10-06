@@ -26,6 +26,7 @@ final class MixerChannelTile extends View {
     private int pan = 64;
     private boolean muted = false;
     private boolean selected = false;
+    private float meter = 0.0f;
     private Listener listener;
 
     MixerChannelTile(Context context) {
@@ -54,6 +55,11 @@ final class MixerChannelTile extends View {
 
     void setSelected(boolean selected) {
         this.selected = selected;
+        invalidate();
+    }
+
+    void setMeter(float level) {
+        meter = Math.max(0.0f, Math.min(1.5f, level));
         invalidate();
     }
 
@@ -97,15 +103,44 @@ final class MixerChannelTile extends View {
         String display = name.length() > 12 ? name.substring(0, 12) : name;
         canvas.drawText(display, card.left + 8f*u, card.top + 23f*u, text);
 
+        // Real post-fader VU at the right edge. Convert linear peak to a
+        // readable -60..0 dB display instead of drawing the raw amplitude.
+        float vuLeft = card.right - 10f*u;
+        float vuRight = card.right - 5f*u;
+        float vuTop = card.top + 42f*u;
+        float vuBottom = card.bottom - 12f*u;
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.argb(28,244,237,224));
+        canvas.drawRoundRect(new RectF(vuLeft,vuTop,vuRight,vuBottom),
+                2f*u,2f*u,paint);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(0.8f*u);
+        paint.setColor(Color.argb(62,244,237,224));
+        for (int i=1;i<6;i++) {
+            float ty = vuTop + (vuBottom-vuTop)*i/6f;
+            canvas.drawLine(vuLeft-2f*u,ty,vuRight,ty,paint);
+        }
+        float db = 20f * (float)Math.log10(Math.max(0.000001f, meter));
+        float vu = Math.max(0f, Math.min(1f, (db + 60f) / 60f));
+        float fillTop = vuBottom - (vuBottom-vuTop)*vu;
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.argb(muted ? 75 : 220,244,237,224));
+        canvas.drawRoundRect(new RectF(vuLeft,fillTop,vuRight,vuBottom),
+                2f*u,2f*u,paint);
+        if (meter >= 1.0f) {
+            paint.setColor(Color.rgb(244,237,224));
+            canvas.drawRect(vuLeft-1f*u,vuTop-4f*u,vuRight+1f*u,vuTop-1f*u,paint);
+        }
+
         text.setTextAlign(Paint.Align.RIGHT);
         text.setTextSize(18.5f*u);
         canvas.drawText(Integer.toString(volume),
-                card.right - 8f*u, card.top + 25f*u, text);
+                vuLeft - 6f*u, card.top + 25f*u, text);
 
         text.setTextAlign(Paint.Align.LEFT);
         text.setTextSize(8.5f*u);
         text.setColor(Color.argb(125,244,237,224));
-        canvas.drawText("VOL", card.right - 34f*u, card.top + 39f*u, text);
+        canvas.drawText("VOL", card.right - 42f*u, card.top + 39f*u, text);
 
         // Blackbox-like compact pan position line, using the existing monochrome palette.
         float lineLeft = card.left + 10f*u;
