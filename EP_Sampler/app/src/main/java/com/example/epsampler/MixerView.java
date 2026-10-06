@@ -18,19 +18,28 @@ final class MixerView extends FrameLayout {
         void onMixerChanged(int part, int volume, int pan, boolean muted);
     }
 
-    private static final int PARTS = 9;
+    private static final int PARTS = 16;
     private static final String[] NAMES = {
             "VIOLIN", "FLUTE", "SAX", "FELT", "ACCORD",
-            "XYLO", "BASS", "DRUMS", "EP"
+            "XYLO", "BASS", "DRUMS",
+            "SAMPLE 1", "SAMPLE 2", "SAMPLE 3", "SAMPLE 4",
+            "SAMPLE 5", "SAMPLE 6", "SAMPLE 7", "SAMPLE 8"
     };
 
+    private final TextView[] nameLabels = new TextView[PARTS];
     private final SeekBar[] volumeBars = new SeekBar[PARTS];
     private final SeekBar[] panBars = new SeekBar[PARTS];
     private final TextView[] volumeLabels = new TextView[PARTS];
     private final TextView[] panLabels = new TextView[PARTS];
     private final Button[] muteButtons = new Button[PARTS];
-    private final int[] volumes = {112,112,112,112,112,112,112,112,127};
-    private final int[] pans = {64,64,64,64,64,64,64,64,64};
+    private final int[] volumes = {
+            112,112,112,112,112,112,112,112,
+            127,127,127,127,127,127,127,127
+    };
+    private final int[] pans = {
+            64,64,64,64,64,64,64,64,
+            64,64,64,64,64,64,64,64
+    };
     private final boolean[] mutes = new boolean[PARTS];
 
     private Listener listener;
@@ -105,6 +114,7 @@ final class MixerView extends FrameLayout {
 
             TextView name = text(NAMES[part], 16f);
             name.setGravity(Gravity.CENTER);
+            nameLabels[part] = name;
             strip.addView(name, new LinearLayout.LayoutParams(
                     LayoutParams.MATCH_PARENT, dp(42)));
 
@@ -176,6 +186,18 @@ final class MixerView extends FrameLayout {
 
     void setListener(Listener listener) {
         this.listener = listener;
+    }
+
+    void setPartNames(String[] names) {
+        if (names == null) return;
+        for (int i=0; i<PARTS && i<names.length; i++) {
+            String value = names[i] == null || names[i].trim().isEmpty()
+                    ? NAMES[i] : names[i].trim();
+            if (nameLabels[i] != null) nameLabels[i].setText(value);
+            if (volumeBars[i] != null) volumeBars[i].setContentDescription(value + " volume");
+            if (panBars[i] != null) panBars[i].setContentDescription(value + " pan");
+            if (muteButtons[i] != null) muteButtons[i].setContentDescription(value + " mute");
+        }
     }
 
     void setMixerState(int[] sourceVolumes, int[] sourcePans, boolean[] sourceMutes) {
