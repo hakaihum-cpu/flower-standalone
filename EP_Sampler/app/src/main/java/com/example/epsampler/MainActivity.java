@@ -20,6 +20,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.ScrollView;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.Toast;
 
 import java.io.ByteArrayOutputStream;
@@ -29,7 +30,9 @@ import java.io.InputStream;
 public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener, PerformanceXYView.Listener, MixerView.Listener, SoundDesignView.Listener {
     private static final int PICK_BANK = 1001;
     private static final String PREFS = "violin_physical";
-    private static final String KEY_BANK_URI = "bank_uri";
+    private static final String KEY_BANK_URI = "bank_uri"; // legacy SAMPLE 1
+    private static final String KEY_BANK_URI_PREFIX = "sample_bank_uri_";
+    private static final String KEY_BANK_NAME_PREFIX = "sample_bank_name_";
     private static final String KEY_BOOST = "boost_step";
     private static final String KEY_SPACE = "space_mode";
     private static final String KEY_TAPE = "tape_on";
@@ -134,11 +137,13 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String[] INSTRUMENT_NAMES = new String[] {
             "VIOLIN", "FLUTE", "SAXOPHONE", "FELT PIANO",
             "PIANICA / ACCORDION", "XYLOPHONE", "WOOD BASS", "DRUMS",
-            "EP-SAMPLE"
+            "SAMPLE 1", "SAMPLE 2", "SAMPLE 3", "SAMPLE 4",
+            "SAMPLE 5", "SAMPLE 6", "SAMPLE 7", "SAMPLE 8"
     };
     private static final String[] INSTRUMENT_BUTTONS = new String[] {
             "VIOLIN", "FLUTE", "SAX", "FELT",
-            "ACCORD", "XYLO", "BASS", "DRUMS", "EP"
+            "ACCORD", "XYLO", "BASS", "DRUMS",
+            "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"
     };
     private PianoView pianoView;
     private ImageView epBackground;
@@ -157,7 +162,14 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int tapeWow = 50, tapeFlutter = 50, tapeDrive = 50;
     private int dreamX = 28, dreamY = 28, dreamP3 = 50, dreamP4 = 50, dreamMix = 34;
     private int dreamMode = 0;
-    private final int[] partMidiChannels = new int[]{1,2,3,4,5,6,7,8,9};
+    private final int[] partMidiChannels = new int[]{
+            1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
+    };
+    private final String[] sampleBankNames = new String[]{
+            "SAMPLE 1","SAMPLE 2","SAMPLE 3","SAMPLE 4",
+            "SAMPLE 5","SAMPLE 6","SAMPLE 7","SAMPLE 8"
+    };
+    private int pendingBankSlot = 0;
     private boolean manualSustain = false;
     private int bowPressure = 74;
     private int bowSpeed = 74;
@@ -175,14 +187,24 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     };
     private int drumBoostDb = 6;
     private int drumDistortion = 0;
-    private final int[] partBoostDb = new int[]{0,0,0,0,0,0,0,6,0};
-    private final int[] partDistortion = new int[]{0,0,0,0,0,0,0,0,0};
+    private final int[] partBoostDb = new int[]{
+            0,0,0,0,0,0,0,6,0,0,0,0,0,0,0,0
+    };
+    private final int[] partDistortion = new int[]{
+            0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    };
     private int feltReverbMix = 28;
     private int feltReverbDecay = 58;
     private float audioBufferBursts = 0f;
-    private final int[] partMixerVolume = new int[]{112,112,112,112,112,112,112,112,127};
-    private final int[] partMixerPan = new int[]{64,64,64,64,64,64,64,64,64};
-    private final boolean[] partMixerMute = new boolean[9];
+    private final int[] partMixerVolume = new int[]{
+            112,112,112,112,112,112,112,112,
+            127,127,127,127,127,127,127,127
+    };
+    private final int[] partMixerPan = new int[]{
+            64,64,64,64,64,64,64,64,
+            64,64,64,64,64,64,64,64
+    };
+    private final boolean[] partMixerMute = new boolean[16];
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
