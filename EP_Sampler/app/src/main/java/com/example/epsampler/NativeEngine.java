@@ -56,6 +56,7 @@ public final class NativeEngine {
     public static native void setDrumFx(int boostDb, int distortion);
     public static native void setPartFx(int part, int boostDb, int distortion);
     public static native void setPartMixer(int part, int volume, int pan, boolean muted);
+    public static native void setDrumSampleMixer(int slot, int volume, int pan, boolean muted);
     public static native void setFeltReverb(int mix, int decay);
     public static native void setPerformanceXY(boolean active, int part, int x, int y);
     public static native int setAudioBufferBursts(float bursts);
