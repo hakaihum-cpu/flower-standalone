@@ -710,6 +710,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     @Override public void onOpenMixer() {
         pianoView.setRecorderOpen(false);
         if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
+        if (drumSampleMixerView != null) drumSampleMixerView.setVisibility(View.GONE);
         mixerView.setPartNames(mixerPartNames());
         mixerView.setMixerState(partMixerVolume, partMixerPan, partMixerMute);
         mixerView.setVisibility(View.VISIBLE);
@@ -1227,6 +1228,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private void applyInstrument(int mode) {
         mode = Math.max(0, Math.min(15, mode));
         if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
+        if (drumSampleMixerView != null) drumSampleMixerView.setVisibility(View.GONE);
         if (pianoView != null) pianoView.clearForegroundForInstrumentSwitch();
 
         instrumentMode = mode;
@@ -1410,6 +1412,17 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                     .putInt(KEY_FELT_REVERB_DECAY, feltReverbDecay);
         }
         e.apply();
+    }
+
+    @Override public void onOpenDrumSampleMixer() {
+        pianoView.setRecorderOpen(false);
+        if (mixerView != null) mixerView.setVisibility(View.GONE);
+        if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
+        if (drumEditorView != null) drumEditorView.setDrumsVisible(false);
+        drumSampleMixerView.setMixerState(
+                drumSampleMixerVolume, drumSampleMixerPan, drumSampleMixerMute);
+        drumSampleMixerView.setVisibility(View.VISIBLE);
+        drumSampleMixerView.bringToFront();
     }
 
     @Override public void onDrumParameterChanged(int parameter, int value) {
