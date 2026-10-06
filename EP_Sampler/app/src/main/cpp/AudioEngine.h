@@ -54,6 +54,7 @@ public:
     void setDrumFx(int boostDb, int distortion);
     void setPartFx(int part, int boostDb, int distortion);
     void setPartMixer(int part, int volume, int pan, bool muted);
+    void setDrumSampleMixer(int slot, int volume, int pan, bool muted);
     void setFeltReverb(int mix, int decay);
     void setPerformanceXY(bool active, int part, int x, int y);
     int setAudioBufferBursts(float bursts);
@@ -102,7 +103,8 @@ private:
             DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS,
             TAPE, TAPE_PARAMS, DREAMY_PARAMS, DREAMY_MODE, DREAMY_EXTRA, ADSR, INSTRUMENT,
             PART_NOTE_ON, PART_NOTE_OFF, PART_POLY_AT, PART_CH_AT, PART_CC, PART_PITCH,
-            DRUM_PARAM, DRUM_FX, PART_FX, PART_MIXER, FELT_REVERB, PERFORMANCE_XY
+            DRUM_PARAM, DRUM_FX, PART_FX, PART_MIXER, DRUM_SAMPLE_MIXER,
+            FELT_REVERB, PERFORMANCE_XY
         } type;
         int a=0,b=0,c=0,d=0;
     };
@@ -146,6 +148,9 @@ private:
     static constexpr int DRUM_SAMPLE_VOICES = 12;
     std::array<DrumSample, DRUM_SAMPLE_COUNT> drumSamples_{};
     std::array<DrumSampleVoice, DRUM_SAMPLE_VOICES> drumSampleVoices_{};
+    std::array<int,DRUM_SAMPLE_COUNT> drumSampleVolume_{{127,127,127,127,127,127}};
+    std::array<int,DRUM_SAMPLE_COUNT> drumSamplePan_{{64,64,64,64,64,64}};
+    std::array<bool,DRUM_SAMPLE_COUNT> drumSampleMute_{{false,false,false,false,false,false}};
     int drumSampleSteal_ = 0;
 
     int cc1_=14;
