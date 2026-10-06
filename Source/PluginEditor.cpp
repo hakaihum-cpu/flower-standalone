@@ -188,6 +188,7 @@ void RealtimeChordFxAudioProcessorEditor::setParameterFromX (DragParam which, fl
     else if (which == DragParam::hazeFilter) hazeIdx = 3;
     else if (which == DragParam::hazeRepeat) hazeIdx = 4;
     else if (which == DragParam::hazeMod) hazeIdx = 5;
+    else if (which == DragParam::hazeReverb) hazeIdx = 6;
 
     auto r = hazeIdx >= 0
         ? hazeParameterBounds (hazeIdx)
@@ -208,6 +209,7 @@ void RealtimeChordFxAudioProcessorEditor::setParameterFromX (DragParam which, fl
     else if (which == DragParam::hazeFilter) setNorm (ParamID::hazeFilter, norm);
     else if (which == DragParam::hazeRepeat) setNorm (ParamID::hazeRepeat, norm);
     else if (which == DragParam::hazeMod) setNorm (ParamID::hazeMod, norm);
+    else if (which == DragParam::hazeReverb) setNorm (ParamID::hazeReverb, norm);
     else if (which == DragParam::bar)
     {
         const int step =
@@ -229,14 +231,14 @@ juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::holdBounds() const
 
 juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::hazeParameterBounds (int index) const
 {
-    index = juce::jlimit (0, 5, index);
+    index = juce::jlimit (0, 6, index);
     const int row = index / 2;
     const int col = index % 2;
     return {
         34.0f + col * 344.0f,
-        92.0f + row * 112.0f,
+        96.0f + row * 79.0f,
         308.0f,
-        78.0f
+        62.0f
     };
 }
 
@@ -247,7 +249,7 @@ juce::Rectangle<float> RealtimeChordFxAudioProcessorEditor::hazeToggleBounds (in
     const int col = index % 4;
     return {
         30.0f + col * 171.0f,
-        438.0f + row * 72.0f,
+        424.0f + row * 72.0f,
         150.0f,
         52.0f
     };
