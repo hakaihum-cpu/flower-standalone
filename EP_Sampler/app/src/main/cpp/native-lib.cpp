@@ -130,3 +130,7 @@ extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_audioX
         JNIEnv*, jclass) {
     return AudioEngine::instance().audioXRunCount();
 }
+extern "C" JNIEXPORT jfloat JNICALL Java_com_example_epsampler_NativeEngine_partMeter(
+        JNIEnv*, jclass, jint part) {
+    return AudioEngine::instance().partMeter(part);
+}
