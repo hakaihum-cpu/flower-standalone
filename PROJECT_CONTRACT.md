@@ -4,6 +4,12 @@ Status: ACTIVE (local bootstrap; dedicated remote repository not yet attached)
 
 This project is a completely separate product from FLOWER and MIYAKO. It adopts the FLOWER operational discipline only; source, assets, issues, builds and release state are isolated.
 
+## Authoritative operation state
+- Before any repository write or CI build, read `CURRENT_OPERATION_STATE.json`.
+- Repository state is authoritative; chat memory is never sufficient by itself.
+- If repository, active branch, protected-branch policy, or CI provider does not match that file, stop before modifying source or starting a build.
+- `scripts/verify_operation_context.py --ci` enforces the repository/branch/CI contract before CircleCI performs materialization or compilation.
+
 ## Golden Baseline
 - `main` is reserved for a user-approved Golden Baseline once a dedicated repository exists.
 - Build success never promotes a revision automatically.
