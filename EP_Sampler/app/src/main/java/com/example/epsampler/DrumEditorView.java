@@ -12,6 +12,7 @@ final class DrumEditorView extends View {
     interface Listener {
         void onDrumParameterChanged(int parameter, int value);
         void onDrumFxChanged(int boostDb, int distortion);
+        void onOpenDrumSampleMixer();
     }
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -75,6 +76,13 @@ final class DrumEditorView extends View {
                 panel.right - 10f*u, panel.top + 30f*u);
     }
 
+    private RectF sampleMixerRect() {
+        float u = unit();
+        RectF close = closeRect();
+        return new RectF(close.left - 122f*u, close.top,
+                close.left - 6f*u, close.bottom);
+    }
+
     private float unit() {
         return Math.max(0.75f, Math.min(getWidth(), getHeight()) / 720f);
     }
@@ -99,6 +107,15 @@ final class DrumEditorView extends View {
         text.setTextSize(11.5f*u);
         text.setColor(Color.argb(225, 244, 237, 224));
         canvas.drawText("DRUM EDITOR", left, panel.top + 23f*u, text);
+        RectF sampleMixer = sampleMixerRect();
+        paint.setColor(Color.argb(52, 238, 229, 207));
+        canvas.drawRoundRect(sampleMixer, 5f*u, 5f*u, paint);
+        String mixerText = "SAMPLE MIXER";
+        text.setTextSize(10.5f*u);
+        float mixerTextW = text.measureText(mixerText);
+        canvas.drawText(mixerText, sampleMixer.centerX() - mixerTextW/2f,
+                panel.top + 23f*u, text);
+
         RectF close = closeRect();
         paint.setColor(Color.argb(72, 238, 229, 207));
         canvas.drawRoundRect(close, 5f*u, 5f*u, paint);
@@ -183,6 +200,7 @@ final class DrumEditorView extends View {
         float controlsLeft = left + 92f*u;
 
         if (closeRect().contains(x,y)) return 14;
+        if (sampleMixerRect().contains(x,y)) return 15;
 
         float rowStart = panel.top + 34f*u;
         float rowAreaBottom = rowStart + 3f*72f*u;
@@ -230,10 +248,16 @@ final class DrumEditorView extends View {
     }
 
     private void edit(int control, float x) {
-        if (control < 0 || control > 14) return;
+        if (control < 0 || control > 15) return;
         if (control == 14) {
             activeControl = -1;
             setVisibility(GONE);
+            return;
+        }
+        if (control == 15) {
+            activeControl = -1;
+            setVisibility(GONE);
+            if (listener != null) listener.onOpenDrumSampleMixer();
             return;
         }
         int value = valueAtX(control, x);
