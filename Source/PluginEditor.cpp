@@ -131,9 +131,14 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
     frames.load (BinaryData::classroom_frames_pack, BinaryData::classroom_frames_packSize);
     currentFrame = frames.getFrame (0);
     loadedFrame = 0;
-    eurekaSheet = juce::ImageFileFormat::loadFrom (
-        BinaryData::eureka_frames_jpg,
-        (size_t) BinaryData::eureka_frames_jpgSize);
+    eurekaFrames.load (
+        BinaryData::eureka_frames_pack,
+        BinaryData::eureka_frames_packSize);
+    if (eurekaFrames.getFrameCount() > 0)
+    {
+        currentEurekaFrame = eurekaFrames.getFrame (0);
+        loadedEurekaFrame = 0;
+    }
 
    #if JUCE_ANDROID
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
@@ -365,7 +370,7 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             loadedFrame = frame;
         }
     }
-    else if (effectMode == 2)
+    else if (effectMode == 2 && eurekaFrames.getFrameCount() > 0)
     {
         if (eurekaVisualCooldown > 0)
             --eurekaVisualCooldown;
@@ -378,8 +383,16 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             && (attack || eurekaVisualCooldown <= 0))
         {
             eurekaFrameIndex =
-                nextVisualFrame (140, eurekaFrameIndex);
+                nextVisualFrame (
+                    eurekaFrames.getFrameCount(), eurekaFrameIndex);
             eurekaVisualCooldown = 4; // ~133 ms
+        }
+
+        if (eurekaFrameIndex != loadedEurekaFrame)
+        {
+            currentEurekaFrame =
+                eurekaFrames.getFrame (eurekaFrameIndex);
+            loadedEurekaFrame = eurekaFrameIndex;
         }
 
         eurekaVisualPreviousActivity = activity;
@@ -589,32 +602,12 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
 {
     g.fillAll (juce::Colours::black);
 
-    if (eurekaSheet.isValid())
+    if (currentEurekaFrame.isValid())
     {
-        constexpr int columns = 14;
-        constexpr int rows = 10;
-        const int frame = juce::jlimit (0, columns * rows - 1, eurekaFrameIndex);
-        const int column = frame % columns;
-        const int row = frame / columns;
-
-        const int x0 = juce::roundToInt (
-            (double) column * eurekaSheet.getWidth() / columns);
-        const int x1 = juce::roundToInt (
-            (double) (column + 1) * eurekaSheet.getWidth() / columns);
-        const int y0 = juce::roundToInt (
-            (double) row * eurekaSheet.getHeight() / rows);
-        const int y1 = juce::roundToInt (
-            (double) (row + 1) * eurekaSheet.getHeight() / rows);
-
-        const juce::Rectangle<float> source (
-            (float) (x0 + 1), (float) (y0 + 1),
-            (float) juce::jmax (1, x1 - x0 - 2),
-            (float) juce::jmax (1, y1 - y0 - 2));
-
         g.drawImage (
-            eurekaSheet,
+            currentEurekaFrame,
             juce::Rectangle<float> (0.0f, 0.0f, design, design),
-            source);
+            juce::RectanglePlacement::stretchToFit);
     }
 
     juce::ColourGradient topShade (
