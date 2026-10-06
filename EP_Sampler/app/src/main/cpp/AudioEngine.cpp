@@ -639,9 +639,12 @@ void AudioEngine::epRenderVoice(EpVoice& v, float& l, float& r) {
 }
 
 void AudioEngine::handlePartNoteOn(int part, int note, int velocity) {
-    part = std::clamp(part, 0, 8);
+    part = std::clamp(part, 0, PART_COUNT - 1);
     if (velocity <= 0) { handlePartNoteOff(part, note); return; }
-    if (part == 8) { epBeginVoice(note, velocity); return; }
+    if (part >= 8) {
+        epBeginVoice(part - 8, note, velocity);
+        return;
+    }
 
     if (part == 7 && note >= 63 && note <= 68) {
         triggerDrumSample(note - 63, velocity);
@@ -653,8 +656,11 @@ void AudioEngine::handlePartNoteOn(int part, int note, int velocity) {
 }
 
 void AudioEngine::handlePartNoteOff(int part, int note) {
-    part = std::clamp(part, 0, 8);
-    if (part == 8) { epReleaseVoice(note); return; }
+    part = std::clamp(part, 0, PART_COUNT - 1);
+    if (part >= 8) {
+        epReleaseVoice(part - 8, note);
+        return;
+    }
     if (part == 7 && note >= 63 && note <= 68) {
         // Sample notes are one-shot; NoteOff does not truncate them.
         return;
@@ -665,29 +671,29 @@ void AudioEngine::handlePartNoteOff(int part, int note) {
 }
 
 void AudioEngine::handlePartPolyPressure(int part, int note, int pressure) {
-    part = std::clamp(part, 0, 8);
-    if (part == 8) epPolyPressure(note, pressure);
+    part = std::clamp(part, 0, PART_COUNT - 1);
+    if (part >= 8) epPolyPressure(part - 8, note, pressure);
     else if (part == 0) violin_.polyPressure(note, pressure);
     else modelParts_[part - 1].polyPressure(note, pressure);
 }
 
 void AudioEngine::handlePartChannelPressure(int part, int pressure) {
-    part = std::clamp(part, 0, 8);
-    if (part == 8) epChannelPressure(pressure);
+    part = std::clamp(part, 0, PART_COUNT - 1);
+    if (part >= 8) epChannelPressure(part - 8, pressure);
     else if (part == 0) violin_.channelPressure(pressure);
     else modelParts_[part - 1].channelPressure(pressure);
 }
 
 void AudioEngine::allNotesOffPart(int part) {
-    part = std::clamp(part, 0, 8);
-    if (part == 8) epAllNotesOff();
+    part = std::clamp(part, 0, PART_COUNT - 1);
+    if (part >= 8) epAllNotesOff(part - 8);
     else if (part == 0) violin_.allNotesOff();
     else modelParts_[part - 1].allNotesOff();
     if (part == 7) stopDrumSamples();
 }
 
 void AudioEngine::handlePartPitchBend(int part, int value14) {
-    part = std::clamp(part, 0, 8);
+    part = std::clamp(part, 0, PART_COUNT - 1);
     value14 = std::clamp(value14, 0, 16383);
     partPitch_[part] = value14;
 
@@ -698,7 +704,7 @@ void AudioEngine::handlePartPitchBend(int part, int value14) {
 }
 
 void AudioEngine::handlePartControlChange(int part, int cc, int value) {
-    part = std::clamp(part, 0, 8);
+    part = std::clamp(part, 0, PART_COUNT - 1);
     value = std::clamp(value, 0, 127);
 
     // Per-part performance controls.
@@ -714,14 +720,14 @@ void AudioEngine::handlePartControlChange(int part, int cc, int value) {
         else if (part < 8) modelParts_[part - 1].setControl(10, value / 127.0f);
         if (part == selectedInstrument_) cc10_ = value;
     } else if (cc == 11) {
-        if (part == 8) epExpression_ = value;
+        if (part >= 8) epExpression_[part - 8] = value;
         else if (part == 0) violin_.setBowSpeed(value / 127.0f);
         else modelParts_[part - 1].setControl(11, value / 127.0f);
         if (part == selectedInstrument_) cc11_ = value;
     } else if (cc == 64) {
         partSustain_[part] = value;
         const bool down = value >= 64;
-        if (part == 8) epSustainChanged(down);
+        if (part >= 8) epSustainChanged(part - 8, down);
         else if (part == 0) violin_.sustainChanged(down);
         else modelParts_[part - 1].sustainChanged(down);
         if (part == selectedInstrument_) cc64_ = value;
