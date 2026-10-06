@@ -89,7 +89,7 @@ public:
     float recorderInputLevel() const { return recorder_.inputLevel(); }
 
 private:
-    AudioEngine() = default;
+    AudioEngine();
     ~AudioEngine();
     AudioEngine(const AudioEngine&) = delete;
     AudioEngine& operator=(const AudioEngine&) = delete;
