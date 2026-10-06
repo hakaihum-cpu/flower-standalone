@@ -10,6 +10,9 @@ public final class NativeEngine {
     public static native boolean loadBankFd(int fd);
     public static native boolean isBankLoaded();
     public static native String bankStatus();
+    public static native boolean loadBankSlotFd(int slot, int fd);
+    public static native boolean isBankSlotLoaded(int slot);
+    public static native String bankSlotStatus(int slot);
 
     public static native void noteOn(int note, int velocity);
     public static native void noteOff(int note, int velocity);
