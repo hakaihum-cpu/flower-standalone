@@ -101,6 +101,10 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setPar
         JNIEnv*, jclass, jint part, jint volume, jint pan, jboolean muted) {
     AudioEngine::instance().setPartMixer(part, volume, pan, muted == JNI_TRUE);
 }
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setDrumSampleMixer(
+        JNIEnv*, jclass, jint slot, jint volume, jint pan, jboolean muted) {
+    AudioEngine::instance().setDrumSampleMixer(slot, volume, pan, muted == JNI_TRUE);
+}
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setFeltReverb(
         JNIEnv*, jclass, jint mix, jint decay) {
     AudioEngine::instance().setFeltReverb(mix, decay);
