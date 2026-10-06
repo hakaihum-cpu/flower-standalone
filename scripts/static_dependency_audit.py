@@ -51,8 +51,9 @@ required = [
     "Source/GranularPitchBank.cpp", "Source/PsolaHarmonyBank.h", "Source/FramePack.cpp",
     "Resources/classroom_frames.pack",
     "Resources/classroom_frames_manifest.csv",
-    "Resources/eureka_frames.jpg",
+    "Resources/eureka_frames.pack",
     "Resources/effects_app_icon.jpg",
+    "Resources/effects_app_icon.b64",
     "PROJECT_CONTRACT.md", "BUILD_HISTORY.csv", "THIRD_PARTY_NOTICES.md",
     "scripts/materialize_frame_pack.py",
     "scripts/patch_android_native_parallelism.py",
@@ -76,9 +77,34 @@ if sha != "1e888dbed69e259c52d2cb2bd192faa5c7f29dcf76eafcda9fdb2a2d03f2d658":
 if pack[:4] != b"CRF1":
     fail("frame pack magic mismatch")
 
+eureka_chunks = sorted((R / "Resources/eureka_frame_chunks").glob("*.b64"))
+if len(eureka_chunks) != 18:
+    fail(f"expected 18 EUREKA source chunks, got {len(eureka_chunks)}")
+
+eureka_pack = (R / "Resources/eureka_frames.pack").read_bytes()
+if len(eureka_pack) != 1534459:
+    fail(f"EUREKA frame pack size mismatch: {len(eureka_pack)}")
+eureka_sha = hashlib.sha256(eureka_pack).hexdigest()
+if eureka_sha != "2f83c3ef9997926452c20fcdfade60011d930d76fbebb05e291e51db4867e986":
+    fail(f"EUREKA frame pack sha256 mismatch: {eureka_sha}")
+if eureka_pack[:4] != b"CRF1":
+    fail("EUREKA frame pack magic mismatch")
+eureka_count = int.from_bytes(eureka_pack[4:8], "little")
+if eureka_count != 140:
+    fail(f"EUREKA frame count mismatch: {eureka_count}")
+
+icon = (R / "Resources/effects_app_icon.jpg").read_bytes()
+if len(icon) != 27540:
+    fail(f"launcher icon size mismatch: {len(icon)}")
+icon_sha = hashlib.sha256(icon).hexdigest()
+if icon_sha != "f4d9d841e5f4789588c53c8babcc849663911583907b259436e683c8268ee703":
+    fail(f"launcher icon sha256 mismatch: {icon_sha}")
+if not icon.startswith(b"\xff\xd8"):
+    fail("launcher icon is not JPEG")
+
 jucer_text = JUCER.read_text()
 for need in [
-    'name="eureka_frames.jpg" compile="0" resource="1" file="Resources/eureka_frames.jpg"',
+    'name="eureka_frames.pack" compile="0" resource="1" file="Resources/eureka_frames.pack"',
     'name="effects_app_icon.jpg" compile="0" resource="0" file="Resources/effects_app_icon.jpg"',
     'smallIcon="appic1"',
     'bigIcon="appic1"',
@@ -289,10 +315,11 @@ for need in [
         fail(f"CHORDBOT regression test missing: {need}")
 
 for need in [
-    "BinaryData::eureka_frames_jpg",
-    "eurekaSheet",
-    "constexpr int columns = 14",
-    "constexpr int rows = 10",
+    "BinaryData::eureka_frames_pack",
+    "eurekaFrames",
+    "currentEurekaFrame",
+    "loadedEurekaFrame",
+    "eurekaFrames.getFrameCount()",
     "eurekaFrameIndex",
     "nextVisualFrame",
     "chordVisualCooldown",
