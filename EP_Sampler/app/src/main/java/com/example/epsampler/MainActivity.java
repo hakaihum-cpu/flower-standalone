@@ -437,37 +437,180 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         }
     }
 
-    private String epBankStatus() {
-        String ch = partMidiChannels[8] <= 0 ? "OFF" : "CH" + partMidiChannels[8];
-        return NativeEngine.isBankLoaded()
-                ? "EP-SAMPLE " + NativeEngine.bankStatus() + " " + ch
-                : "EP-SAMPLE BANK — " + ch;
+    private String sanitizeBankName(String value, int slot) {
+        String fallback = "SAMPLE " + (slot + 1);
+        if (value == null) return fallback;
+        String clean = value.trim().replaceAll("[\\r\\n\\t]+", " ");
+        if (clean.isEmpty()) return fallback;
+        if (clean.length() > 24) clean = clean.substring(0, 24);
+        return clean;
     }
 
-    private void loadExistingBank() {
-        String saved = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_BANK_URI, null);
-        if (saved == null || saved.isEmpty()) {
-            if (instrumentMode == 8) pianoView.setBankStatus(epBankStatus());
-            return;
+    private String instrumentNameFor(int part) {
+        part = Math.max(0, Math.min(15, part));
+        return part < 8 ? INSTRUMENT_NAMES[part] : sampleBankNames[part - 8];
+    }
+
+    private String instrumentButtonFor(int part) {
+        part = Math.max(0, Math.min(15, part));
+        if (part < 8) return INSTRUMENT_BUTTONS[part];
+        String name = sampleBankNames[part - 8];
+        return name.length() <= 8 ? name : name.substring(0, 8);
+    }
+
+    private String[] mixerPartNames() {
+        String[] names = new String[16];
+        for (int part=0; part<16; part++) names[part] = instrumentNameFor(part);
+        return names;
+    }
+
+    private String sampleBankStatus(int slot) {
+        slot = Math.max(0, Math.min(7, slot));
+        int part = 8 + slot;
+        String ch = partMidiChannels[part] <= 0 ? "OFF" : "CH" + partMidiChannels[part];
+        return NativeEngine.isBankSlotLoaded(slot)
+                ? sampleBankNames[slot] + " " + NativeEngine.bankSlotStatus(slot) + " " + ch
+                : sampleBankNames[slot] + " BANK — " + ch;
+    }
+
+    private void refreshSelectedSampleStatus() {
+        if (instrumentMode < 8 || pianoView == null) return;
+        pianoView.setBankStatus(sampleBankStatus(instrumentMode - 8));
+    }
+
+    private void loadExistingBanks() {
+        new Thread(() -> {
+            android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+            for (int slot=0; slot<8; slot++) {
+                String saved = prefs.getString(KEY_BANK_URI_PREFIX + slot, null);
+                if ((saved == null || saved.isEmpty()) && slot == 0) {
+                    // Migrate the single-bank MASTER preference without losing it.
+                    saved = prefs.getString(KEY_BANK_URI, null);
+                }
+                if (saved == null || saved.isEmpty()) continue;
+
+                boolean ok = false;
+                try (ParcelFileDescriptor pfd =
+                             getContentResolver().openFileDescriptor(Uri.parse(saved), "r")) {
+                    if (pfd != null) ok = NativeEngine.loadBankSlotFd(slot, pfd.getFd());
+                } catch (Exception ignored) {
+                }
+
+                final int loadedSlot = slot;
+                final boolean result = ok;
+                runOnUiThread(() -> {
+                    if (instrumentMode == 8 + loadedSlot) {
+                        if (result) {
+                            // The active pointer flips at the next audio buffer.
+                            pianoView.postDelayed(this::refreshSelectedSampleStatus, 60L);
+                        } else {
+                            String ch = partMidiChannels[8 + loadedSlot] <= 0
+                                    ? "OFF" : "CH" + partMidiChannels[8 + loadedSlot];
+                            pianoView.setBankStatus(
+                                    sampleBankNames[loadedSlot] + " BANK ERROR " + ch);
+                        }
+                    }
+                });
+            }
+        }, "BankRestore").start();
+    }
+
+    private void loadBankUri(int slot, Uri uri) {
+        slot = Math.max(0, Math.min(7, slot));
+        final int targetSlot = slot;
+        if (instrumentMode == 8 + targetSlot) {
+            pianoView.setBankStatus(sampleBankNames[targetSlot] + " BANK LOADING…");
         }
-        loadBankUri(Uri.parse(saved));
-    }
 
-    private void loadBankUri(Uri uri) {
-        if (instrumentMode == 8) pianoView.setBankStatus("EP-SAMPLE BANK LOADING…");
         new Thread(() -> {
             boolean ok = false;
             try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "r")) {
-                if (pfd != null) ok = NativeEngine.loadBankFd(pfd.getFd());
+                if (pfd != null) ok = NativeEngine.loadBankSlotFd(targetSlot, pfd.getFd());
             } catch (Exception ignored) {
             }
             final boolean result = ok;
             runOnUiThread(() -> {
-                if (instrumentMode == 8) {
-                    pianoView.setBankStatus(result ? epBankStatus() : "EP-SAMPLE BANK ERROR");
+                if (instrumentMode == 8 + targetSlot) {
+                    if (result) {
+                        pianoView.postDelayed(this::refreshSelectedSampleStatus, 60L);
+                    } else {
+                        String ch = partMidiChannels[8 + targetSlot] <= 0
+                                ? "OFF" : "CH" + partMidiChannels[8 + targetSlot];
+                        pianoView.setBankStatus(
+                                sampleBankNames[targetSlot] + " BANK ERROR " + ch);
+                    }
                 }
             });
-        }, "BankOpen").start();
+        }, "BankOpen-" + (targetSlot + 1)).start();
+    }
+
+    private void saveBankName(int slot, String value) {
+        slot = Math.max(0, Math.min(7, slot));
+        sampleBankNames[slot] = sanitizeBankName(value, slot);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(KEY_BANK_NAME_PREFIX + slot, sampleBankNames[slot])
+                .apply();
+        if (mixerView != null) mixerView.setPartNames(mixerPartNames());
+        if (instrumentMode == 8 + slot && pianoView != null) {
+            pianoView.setInstrumentName(sampleBankNames[slot], instrumentButtonFor(8 + slot));
+            refreshSelectedSampleStatus();
+        }
+    }
+
+    private void launchBankPicker(int slot) {
+        pendingBankSlot = Math.max(0, Math.min(7, slot));
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/octet-stream");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES,
+                new String[]{"application/octet-stream", "application/x-binary", "*/*"});
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(intent, PICK_BANK);
+    }
+
+    private void showSampleBankDialog(int slot) {
+        slot = Math.max(0, Math.min(7, slot));
+        final int targetSlot = slot;
+        LinearLayout root = dialogRoot();
+
+        TextView channel = new TextView(this);
+        channel.setText("SAMPLE " + (slot + 1) + " / MIDI CH " + (9 + slot));
+        channel.setTextSize(14f);
+        root.addView(channel);
+
+        EditText name = new EditText(this);
+        name.setSingleLine(true);
+        name.setText(sampleBankNames[slot]);
+        name.setHint("BANK NAME");
+        root.addView(name);
+
+        TextView status = new TextView(this);
+        status.setText(sampleBankStatus(slot));
+        status.setTextSize(12f);
+        root.addView(status);
+
+        Button saveName = new Button(this);
+        saveName.setText("SAVE NAME");
+        saveName.setOnClickListener(v -> {
+            saveBankName(targetSlot, name.getText().toString());
+            status.setText(sampleBankStatus(targetSlot));
+        });
+        root.addView(saveName);
+
+        Button choose = new Button(this);
+        choose.setText("CHOOSE BIN");
+        choose.setOnClickListener(v -> {
+            saveBankName(targetSlot, name.getText().toString());
+            launchBankPicker(targetSlot);
+        });
+        root.addView(choose);
+
+        new AlertDialog.Builder(this)
+                .setTitle("SAMPLE BANK " + (slot + 1))
+                .setView(root)
+                .setPositiveButton("CLOSE", null)
+                .show();
     }
 
     @Override public void onToggleDreamy() {
