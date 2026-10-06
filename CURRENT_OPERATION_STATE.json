@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "project": "EFFECTS / RealtimeChordFX",
+  "repository": "hakaihum-cpu/flower-standalone",
+  "active_branch": "feature/haze-emulation",
+  "protected_branch": "main",
+  "main_write_allowed": false,
+  "merge_to_main_requires_explicit_user_instruction": true,
+  "ci_provider": "CircleCI",
+  "ci_workflow": "manual_android_build",
+  "manual_build_parameter": "run_build=true",
+  "github_actions_allowed": false,
+  "failed_build_retry_policy": "root_cause_must_be_identified_before_rerun",
+  "source_of_truth": "repository_state_not_chat_memory",
+  "current_context": {
+    "eureka_frame_count": 140,
+    "eureka_frame_pack": "Resources/eureka_frames.pack",
+    "launcher_icon": "Resources/effects_app_icon.jpg",
+    "last_failed_build": "Build 128 / step 102",
+    "last_failure": "binascii.Error: Excess data after padding while materializing base64 chunks",
+    "failure_fix_commit": "d4cea150d1cef012787d90cb9752e6c6aceb8ae3"
+  }
+}
