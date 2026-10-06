@@ -10,8 +10,8 @@ android {
         applicationId 'com.example.epmodel'
         minSdk 26
         targetSdk 35
-        versionCode 29
-        versionName '1.19-mixer-unified-ui'
+        versionCode 30
+        versionName '1.20-mixer-grid-vu'
 
         externalNativeBuild {
             cmake {
