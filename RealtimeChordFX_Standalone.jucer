@@ -24,7 +24,7 @@
   </GROUP>
   <GROUP id="res0001" name="Resources">
    <FILE id="pack01" name="classroom_frames.pack" compile="0" resource="1" file="Resources/classroom_frames.pack"/>
-   <FILE id="eufr01" name="eureka_frames.jpg" compile="0" resource="1" file="Resources/eureka_frames.jpg"/>
+   <FILE id="eufr01" name="eureka_frames.pack" compile="0" resource="1" file="Resources/eureka_frames.pack"/>
    <FILE id="appic1" name="effects_app_icon.jpg" compile="0" resource="0" file="Resources/effects_app_icon.jpg"/>
   </GROUP>
  </MAINGROUP>
