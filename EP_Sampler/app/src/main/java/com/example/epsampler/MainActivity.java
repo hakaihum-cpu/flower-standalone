@@ -1107,7 +1107,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
     private String modelDescription() {
         switch (instrumentMode) {
-            case 1: return "Jet-drive + lossy bore digital waveguide";
+            case 1: return "Jet / bore waveguide + stable standing-wave core";
             case 2: return "Nonlinear single reed + two-section bore waveguide";
             case 3: return "Nonlinear felt contact + stiff-string modal resonators";
             case 4: return "Self-excited free reeds + pressure/airflow coupling";
