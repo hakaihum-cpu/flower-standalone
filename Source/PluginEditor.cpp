@@ -131,6 +131,9 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
     frames.load (BinaryData::classroom_frames_pack, BinaryData::classroom_frames_packSize);
     currentFrame = frames.getFrame (0);
     loadedFrame = 0;
+    eurekaSheet = juce::ImageFileFormat::loadFrom (
+        BinaryData::eureka_frames_jpg,
+        (size_t) BinaryData::eureka_frames_jpgSize);
 
    #if JUCE_ANDROID
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
@@ -304,17 +307,129 @@ void RealtimeChordFxAudioProcessorEditor::paintBar (juce::Graphics& g,
     g.drawText (text, r, juce::Justification::centredLeft);
 }
 
+int RealtimeChordFxAudioProcessorEditor::nextVisualFrame (
+    int count, int avoid)
+{
+    if (count <= 1)
+        return 0;
+
+    visualRandomState ^= visualRandomState << 13;
+    visualRandomState ^= visualRandomState >> 17;
+    visualRandomState ^= visualRandomState << 5;
+
+    int frame = (int) (visualRandomState % (uint32_t) count);
+    if (frame == avoid)
+        frame = (frame + 1) % count;
+    return frame;
+}
+
 void RealtimeChordFxAudioProcessorEditor::timerCallback()
 {
     if (! hasKeyboardFocus (true))
         grabKeyboardFocus();
 
-    const int frame = processor.getVisualFrame();
-    if (frame != loadedFrame && frames.getFrameCount() > 0)
+    const int effectMode = juce::jlimit (0, 3, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+
+    const float activity = juce::jmax (
+        processor.getInputPeakRaw(),
+        processor.getInputRmsRaw() * 2.2f);
+
+    if (effectMode == 0 && frames.getFrameCount() > 0)
     {
-        currentFrame = frames.getFrame (frame);
-        loadedFrame = frame;
+        if (chordVisualCooldown > 0)
+            --chordVisualCooldown;
+
+        const bool attack =
+            activity > 0.007f
+            && activity > chordVisualPreviousActivity * 1.35f + 0.002f;
+
+        if (activity > 0.010f
+            && (attack || chordVisualCooldown <= 0))
+        {
+            const int frame =
+                nextVisualFrame (frames.getFrameCount(), loadedFrame);
+            currentFrame = frames.getFrame (frame);
+            loadedFrame = frame;
+            chordVisualCooldown = 5; // ~167 ms at 30 Hz
+        }
+
+        chordVisualPreviousActivity = activity;
     }
+    else if (effectMode == 1 && frames.getFrameCount() > 0)
+    {
+        const int frame = processor.getVisualFrame();
+        if (frame != loadedFrame)
+        {
+            currentFrame = frames.getFrame (frame);
+            loadedFrame = frame;
+        }
+    }
+    else if (effectMode == 2)
+    {
+        if (eurekaVisualCooldown > 0)
+            --eurekaVisualCooldown;
+
+        const bool attack =
+            activity > 0.006f
+            && activity > eurekaVisualPreviousActivity * 1.28f + 0.0015f;
+
+        if (activity > 0.009f
+            && (attack || eurekaVisualCooldown <= 0))
+        {
+            eurekaFrameIndex =
+                nextVisualFrame (140, eurekaFrameIndex);
+            eurekaVisualCooldown = 4; // ~133 ms
+        }
+
+        eurekaVisualPreviousActivity = activity;
+
+        auto setNorm = [this] (const char* id, float value)
+        {
+            if (auto* parameter = processor.state().getParameter (id))
+                parameter->setValueNotifyingHost (
+                    juce::jlimit (0.0f, 1.0f, value));
+        };
+
+        if (eurekaMotionRecording)
+        {
+            const float mix =
+                juce::jlimit (0.0f, 1.0f, eurekaMotionTouchX);
+            const float haze =
+                juce::jlimit (0.0f, 1.0f, 1.0f - eurekaMotionTouchY);
+
+            setNorm (ParamID::hazeMix, mix);
+            setNorm (ParamID::hazeAmount, haze);
+
+            if (eurekaMotionRecordIndex < eurekaMotionSteps)
+            {
+                eurekaMotionMix[(size_t) eurekaMotionRecordIndex] = mix;
+                eurekaMotionHaze[(size_t) eurekaMotionRecordIndex] = haze;
+                ++eurekaMotionRecordIndex;
+            }
+
+            if (eurekaMotionRecordIndex >= eurekaMotionSteps)
+            {
+                eurekaMotionRecording = false;
+                eurekaMotionTouchDown = false;
+                eurekaMotionPlaying = true;
+                eurekaMotionPlaybackIndex = 0;
+            }
+        }
+        else if (eurekaMotionPlaying)
+        {
+            setNorm (
+                ParamID::hazeMix,
+                eurekaMotionMix[(size_t) eurekaMotionPlaybackIndex]);
+            setNorm (
+                ParamID::hazeAmount,
+                eurekaMotionHaze[(size_t) eurekaMotionPlaybackIndex]);
+
+            eurekaMotionPlaybackIndex =
+                (eurekaMotionPlaybackIndex + 1) % eurekaMotionSteps;
+        }
+    }
+
     repaint();
 }
 
