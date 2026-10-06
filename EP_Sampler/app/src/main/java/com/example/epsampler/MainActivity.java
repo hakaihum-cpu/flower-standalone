@@ -954,7 +954,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         Spinner instrumentSpinner = new Spinner(this);
         instrumentSpinner.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, INSTRUMENT_NAMES));
+                android.R.layout.simple_spinner_dropdown_item, mixerPartNames()));
         instrumentSpinner.setSelection(instrumentMode);
         root.addView(instrumentSpinner);
 
@@ -974,7 +974,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         instrumentSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-                int part = Math.max(0, Math.min(8, position));
+                int part = Math.max(0, Math.min(15, position));
                 channelSpinner.setSelection(partMidiChannels[part]);
             }
             @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
@@ -1050,7 +1050,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                     audioBufferBursts = AUDIO_BUFFER_VALUES[ai];
                     NativeEngine.setAudioBufferBursts(audioBufferBursts);
 
-                    int selectedPart = Math.max(0, Math.min(8,
+                    int selectedPart = Math.max(0, Math.min(15,
                             instrumentSpinner.getSelectedItemPosition()));
                     int newChannel = channelSpinner.getSelectedItemPosition();
                     if (newChannel != partMidiChannels[selectedPart]) {
@@ -1116,27 +1116,27 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     private void applyInstrument(int mode) {
-        mode = Math.max(0, Math.min(8, mode));
+        mode = Math.max(0, Math.min(15, mode));
         if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
         if (pianoView != null) pianoView.clearForegroundForInstrumentSwitch();
 
         instrumentMode = mode;
         NativeEngine.setInstrument(instrumentMode);
 
-        if (epBackground != null) epBackground.setVisibility(instrumentMode == 8 ? View.VISIBLE : View.GONE);
+        if (epBackground != null) epBackground.setVisibility(instrumentMode >= 8 ? View.VISIBLE : View.GONE);
         if (videoLayer != null) {
-            videoLayer.setVisibility(instrumentMode == 8 ? View.GONE : View.VISIBLE);
+            videoLayer.setVisibility(instrumentMode >= 8 ? View.GONE : View.VISIBLE);
             if (instrumentMode < 8) videoLayer.setInstrument(instrumentMode);
         }
         if (performanceXYView != null) performanceXYView.setInstrumentMode(instrumentMode);
         if (pianoView != null) {
             pianoView.setInstrumentName(
-                    INSTRUMENT_NAMES[instrumentMode],
-                    INSTRUMENT_BUTTONS[instrumentMode]);
+                    instrumentNameFor(instrumentMode),
+                    instrumentButtonFor(instrumentMode));
             pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
-            pianoView.setSampleMode(instrumentMode == 8);
+            pianoView.setSampleMode(instrumentMode >= 8);
             pianoView.controlChange(7, partMixerVolume[instrumentMode]);
-            if (instrumentMode == 8) pianoView.setBankStatus(epBankStatus());
+            if (instrumentMode >= 8) pianoView.setBankStatus(sampleBankStatus(instrumentMode - 8));
         }
         if (drumEditorView != null) {
             drumEditorView.setValues(drumParameters);
@@ -1185,15 +1185,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     @Override public void onChooseBank() {
-        if (instrumentMode == 8) {
-            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("application/octet-stream");
-            intent.putExtra(Intent.EXTRA_MIME_TYPES,
-                    new String[]{"application/octet-stream", "application/x-binary", "*/*"});
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-            startActivityForResult(intent, PICK_BANK);
+        if (instrumentMode >= 8) {
+            showSampleBankDialog(instrumentMode - 8);
             return;
         }
 
@@ -1374,7 +1367,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         android.content.SharedPreferences sp = getSharedPreferences(PRESET_PREFS, MODE_PRIVATE);
         if (!sp.getBoolean(p + "valid", false)) return false;
 
-        instrumentMode = Math.max(0, Math.min(8, sp.getInt(p + "instrument", instrumentMode)));
+        instrumentMode = Math.max(0, Math.min(15, sp.getInt(p + "instrument", instrumentMode)));
         manualSustain = sp.getBoolean(p + "manual_sustain", manualSustain);
         boostDb = Math.max(0, Math.min(6, sp.getInt(p + "boost_db", boostDb)));
         boosterStep = Math.min(3, Math.round(boostDb / 2f));
@@ -1517,8 +1510,13 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             getContentResolver().takePersistableUriPermission(uri, flags & Intent.FLAG_GRANT_READ_URI_PERMISSION);
         } catch (SecurityException ignored) {
         }
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_BANK_URI, uri.toString()).apply();
-        loadBankUri(uri);
+        final int slot = Math.max(0, Math.min(7, pendingBankSlot));
+        android.content.SharedPreferences.Editor bankEdit =
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putString(KEY_BANK_URI_PREFIX + slot, uri.toString());
+        if (slot == 0) bankEdit.putString(KEY_BANK_URI, uri.toString());
+        bankEdit.apply();
+        loadBankUri(slot, uri);
     }
 
     @Override protected void onResume() {
@@ -1601,7 +1599,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                         bowPosition = value;
                         if (soundDesignView != null) soundDesignView.setModelValue(2, value);
                     } else if (cc == 64) manualSustain = value >= 64;
-                } else if (instrumentMode == 8 && cc == 64) {
+                } else if (instrumentMode >= 8 && cc == 64) {
                     manualSustain = value >= 64;
                 }
             }
