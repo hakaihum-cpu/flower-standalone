@@ -14,6 +14,11 @@ jobs:
       - checkout
 
       - run:
+          name: Verify authoritative operation context
+          command: |
+            python3 scripts/verify_operation_context.py --ci
+
+      - run:
           name: Materialize exact supplied frame pack
           command: |
             python3 scripts/materialize_frame_pack.py
