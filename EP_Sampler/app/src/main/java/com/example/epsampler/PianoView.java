@@ -26,6 +26,7 @@ public final class PianoView extends View {
         void onToggleTape();
         void onToggleDreamy();
         void onChooseBank();
+        void onSelectInstrument();
         void onEditEffect(int effect);
         void onOpenConfig();
         void onOpenMixer();
@@ -856,12 +857,18 @@ public final class PianoView extends View {
             actionListener.onEditEffect(index);
             return true;
         }
+        if (heldMs >= 550 && index == 5) {
+            // Preserve the previous top-button behavior as a long-press:
+            // edit the current model / drum page / sample bank.
+            actionListener.onChooseBank();
+            return true;
+        }
         if (index==0) actionListener.onCycleBooster();
         else if (index==1) actionListener.onCycleSpace();
         else if (index==2) actionListener.onToggleTape();
         else if (index==3) actionListener.onToggleDreamy();
         else if (index==4) toggleRecorderDrawer();
-        else if (index==5) actionListener.onChooseBank();
+        else if (index==5) actionListener.onSelectInstrument();
         else if (index==6) actionListener.onOpenConfig();
         else if (index==7) toggleAuditionKeyboard();
         else if (index==8) actionListener.onOpenMixer();
