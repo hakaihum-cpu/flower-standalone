@@ -265,8 +265,8 @@ final class MixerView extends FrameLayout {
         part = Math.max(0, Math.min(PARTS - 1, part));
         int old = selectedPart;
         selectedPart = part;
-        if (tiles[old] != null) tiles[old].setSelected(false);
-        if (tiles[selectedPart] != null) tiles[selectedPart].setSelected(true);
+        if (tiles[old] != null) tiles[old].setTileSelected(false);
+        if (tiles[selectedPart] != null) tiles[selectedPart].setTileSelected(true);
         refreshEditor();
     }
 
