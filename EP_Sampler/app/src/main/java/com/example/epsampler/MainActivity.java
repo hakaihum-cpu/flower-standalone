@@ -137,13 +137,13 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String[] INSTRUMENT_NAMES = new String[] {
             "VIOLIN", "FLUTE", "SAXOPHONE", "FELT PIANO",
             "PIANICA / ACCORDION", "XYLOPHONE", "WOOD BASS", "DRUMS",
-            "SAMPLE 1", "SAMPLE 2", "SAMPLE 3", "SAMPLE 4",
+            "EP-SAMPLE", "SAMPLE 2", "SAMPLE 3", "SAMPLE 4",
             "SAMPLE 5", "SAMPLE 6", "SAMPLE 7", "SAMPLE 8"
     };
     private static final String[] INSTRUMENT_BUTTONS = new String[] {
             "VIOLIN", "FLUTE", "SAX", "FELT",
             "ACCORD", "XYLO", "BASS", "DRUMS",
-            "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"
+            "EP", "S2", "S3", "S4", "S5", "S6", "S7", "S8"
     };
     private PianoView pianoView;
     private ImageView epBackground;
@@ -985,7 +985,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         });
 
         TextView routingHelp = new TextView(this);
-        routingHelp.setText("Same CH on multiple instruments = layer. OFF = no external MIDI.");
+        routingHelp.setText("Default routing: physical parts CH1-8, sample banks CH9-16. Same CH = layer. OFF = no external MIDI.");
         routingHelp.setTextSize(13f);
         root.addView(routingHelp);
 
