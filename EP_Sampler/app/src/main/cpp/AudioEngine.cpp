@@ -338,6 +338,66 @@ void AudioEngine::stop() {
     stream_ = nullptr;
 }
 
+bool AudioEngine::restartAudioPreservingState() {
+    // Explicit device rescan path: reopen only the AAudio stream. DSP objects,
+    // SampleBank mappings and IntegratedRecorder buffers stay untouched.
+    const int requestedRate = sampleRate_ > 1000 ? sampleRate_ : 48000;
+    const float previousBursts = requestedBufferBursts_;
+
+    if (stream_) {
+        AAudioStream_requestStop(stream_);
+        AAudioStream_close(stream_);
+        stream_ = nullptr;
+    }
+
+    AAudioStreamBuilder* b = nullptr;
+    if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) return false;
+    AAudioStreamBuilder_setDirection(b, AAUDIO_DIRECTION_OUTPUT);
+    AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT);
+    AAudioStreamBuilder_setChannelCount(b, 2);
+    AAudioStreamBuilder_setSampleRate(b, requestedRate);
+    AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+    AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_EXCLUSIVE);
+    AAudioStreamBuilder_setDataCallback(b, dataCallback, this);
+    AAudioStreamBuilder_setErrorCallback(b, errorCallback, this);
+
+    aaudio_result_t r = AAudioStreamBuilder_openStream(b, &stream_);
+    if (r != AAUDIO_OK) {
+        AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_SHARED);
+        r = AAudioStreamBuilder_openStream(b, &stream_);
+    }
+    AAudioStreamBuilder_delete(b);
+
+    if (r != AAUDIO_OK || !stream_) {
+        stream_ = nullptr;
+        return false;
+    }
+
+    const int reopenedRate = AAudioStream_getSampleRate(stream_);
+    if (reopenedRate != requestedRate) {
+        // Re-preparing the whole DSP graph here would destroy recorder content.
+        // Fail safely instead; the caller can retry after the device route settles.
+        AAudioStream_close(stream_);
+        stream_ = nullptr;
+        return false;
+    }
+
+    sampleRate_ = reopenedRate;
+    defaultBufferSizeFrames_ = AAudioStream_getBufferSizeInFrames(stream_);
+
+    if (AAudioStream_requestStart(stream_) != AAUDIO_OK) {
+        AAudioStream_close(stream_);
+        stream_ = nullptr;
+        return false;
+    }
+
+    requestedBufferBursts_ = 0.0f;
+    if (previousBursts > 0.0f) {
+        setAudioBufferBursts(previousBursts);
+    }
+    return true;
+}
+
 void AudioEngine::push(Event e) {
     const uint32_t w = write_.load(std::memory_order_relaxed);
     const uint32_t n = (w + 1) % QUEUE;
