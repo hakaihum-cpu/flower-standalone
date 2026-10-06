@@ -4,46 +4,90 @@ import base64
 import hashlib
 
 ROOT = Path(__file__).resolve().parents[1]
-CHUNK_DIR = ROOT / 'Resources' / 'frame_chunks'
-OUT = ROOT / 'Resources' / 'classroom_frames.pack'
+
+# Existing 300-frame classroom bank.
+CLASSROOM_CHUNK_DIR = ROOT / 'Resources' / 'frame_chunks'
+CLASSROOM_OUT = ROOT / 'Resources' / 'classroom_frames.pack'
+CLASSROOM_SHA256 = '1e888dbed69e259c52d2cb2bd192faa5c7f29dcf76eafcda9fdb2a2d03f2d658'
+CLASSROOM_SIZE = 4464088
+
+# User-supplied EUREKA ZIP: 301.jpg .. 440.jpg, packed without re-encoding.
+EUREKA_CHUNK_DIR = ROOT / 'Resources' / 'eureka_frame_chunks'
+EUREKA_OUT = ROOT / 'Resources' / 'eureka_frames.pack'
+EUREKA_SHA256 = '2f83c3ef9997926452c20fcdfade60011d930d76fbebb05e291e51db4867e986'
+EUREKA_SIZE = 1534459
+EUREKA_COUNT = 140
+
+# User-selected launcher artwork.
+ICON_B64 = ROOT / 'Resources' / 'effects_app_icon.b64'
 ICON_OUT = ROOT / 'Resources' / 'effects_app_icon.jpg'
-EXPECTED_SHA256 = '1e888dbed69e259c52d2cb2bd192faa5c7f29dcf76eafcda9fdb2a2d03f2d658'
-EXPECTED_SIZE = 4464088
+ICON_SHA256 = 'f4d9d841e5f4789588c53c8babcc849663911583907b259436e683c8268ee703'
+ICON_SIZE = 27540
 
-parts = sorted(CHUNK_DIR.glob('chunk_*.b64'))
-if len(parts) != 13:
-    raise SystemExit(f'[FAIL] expected 13 frame chunks, got {len(parts)}')
 
-data = bytearray()
-for path in parts:
-    encoded = ''.join(path.read_text(encoding='ascii').split())
-    data.extend(base64.b64decode(encoded, validate=True))
+def decode_chunks(paths):
+    encoded = ''.join(
+        ''.join(path.read_text(encoding='ascii').split())
+        for path in paths
+    )
+    return base64.b64decode(encoded, validate=True)
 
-if len(data) != EXPECTED_SIZE:
-    raise SystemExit(f'[FAIL] reconstructed frame pack size {len(data)} != {EXPECTED_SIZE}')
-sha = hashlib.sha256(data).hexdigest()
-if sha != EXPECTED_SHA256:
-    raise SystemExit(f'[FAIL] reconstructed frame pack sha256 {sha} != {EXPECTED_SHA256}')
-OUT.write_bytes(data)
 
-# The selected launcher artwork is supplied as frame 01 in the same exact
-# classroom corpus. CRF1 layout: magic + u32 count + <u64 offset,u32 size> table.
-if data[:4] != b'CRF1':
-    raise SystemExit('[FAIL] classroom frame pack magic mismatch')
-count = int.from_bytes(data[4:8], 'little')
-if count < 1:
-    raise SystemExit('[FAIL] classroom frame pack has no frames')
+def validate_crf1(data, expected_count, label):
+    if data[:4] != b'CRF1':
+        raise SystemExit(f'[FAIL] {label} magic mismatch')
+    count = int.from_bytes(data[4:8], 'little')
+    if count != expected_count:
+        raise SystemExit(
+            f'[FAIL] {label} frame count {count} != {expected_count}')
 
-entry = 8
-offset = int.from_bytes(data[entry:entry + 8], 'little')
-size = int.from_bytes(data[entry + 8:entry + 12], 'little')
-if offset + size > len(data) or size < 4:
-    raise SystemExit('[FAIL] classroom frame 01 bounds invalid')
 
-icon = bytes(data[offset:offset + size])
+classroom_parts = sorted(CLASSROOM_CHUNK_DIR.glob('chunk_*.b64'))
+if len(classroom_parts) != 13:
+    raise SystemExit(
+        f'[FAIL] expected 13 classroom frame chunks, got {len(classroom_parts)}')
+classroom = decode_chunks(classroom_parts)
+if len(classroom) != CLASSROOM_SIZE:
+    raise SystemExit(
+        f'[FAIL] reconstructed classroom pack size {len(classroom)} != {CLASSROOM_SIZE}')
+classroom_sha = hashlib.sha256(classroom).hexdigest()
+if classroom_sha != CLASSROOM_SHA256:
+    raise SystemExit(
+        f'[FAIL] reconstructed classroom pack sha256 {classroom_sha} != {CLASSROOM_SHA256}')
+validate_crf1(classroom, 300, 'classroom frame pack')
+CLASSROOM_OUT.write_bytes(classroom)
+
+eureka_parts = sorted(EUREKA_CHUNK_DIR.glob('*.b64'))
+if len(eureka_parts) != 18:
+    raise SystemExit(
+        f'[FAIL] expected 18 EUREKA frame chunks, got {len(eureka_parts)}')
+eureka = decode_chunks(eureka_parts)
+if len(eureka) != EUREKA_SIZE:
+    raise SystemExit(
+        f'[FAIL] reconstructed EUREKA pack size {len(eureka)} != {EUREKA_SIZE}')
+eureka_sha = hashlib.sha256(eureka).hexdigest()
+if eureka_sha != EUREKA_SHA256:
+    raise SystemExit(
+        f'[FAIL] reconstructed EUREKA pack sha256 {eureka_sha} != {EUREKA_SHA256}')
+validate_crf1(eureka, EUREKA_COUNT, 'EUREKA frame pack')
+EUREKA_OUT.write_bytes(eureka)
+
+icon_encoded = ''.join(ICON_B64.read_text(encoding='ascii').split())
+icon = base64.b64decode(icon_encoded, validate=True)
+if len(icon) != ICON_SIZE:
+    raise SystemExit(
+        f'[FAIL] launcher icon size {len(icon)} != {ICON_SIZE}')
+icon_sha = hashlib.sha256(icon).hexdigest()
+if icon_sha != ICON_SHA256:
+    raise SystemExit(
+        f'[FAIL] launcher icon sha256 {icon_sha} != {ICON_SHA256}')
 if not icon.startswith(b'\xff\xd8'):
-    raise SystemExit('[FAIL] classroom frame 01 is not JPEG')
+    raise SystemExit('[FAIL] launcher icon is not JPEG')
 ICON_OUT.write_bytes(icon)
 
-print(f'[PASS] materialized exact frame pack: {len(data)} bytes sha256={sha}')
-print(f'[PASS] materialized launcher icon from supplied frame 01: {len(icon)} bytes')
+print(
+    f'[PASS] classroom pack: {len(classroom)} bytes sha256={classroom_sha}')
+print(
+    f'[PASS] EUREKA pack: {len(eureka)} bytes / {EUREKA_COUNT} frames sha256={eureka_sha}')
+print(
+    f'[PASS] launcher icon: {len(icon)} bytes sha256={icon_sha}')
