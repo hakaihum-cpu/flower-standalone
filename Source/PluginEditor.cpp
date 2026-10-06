@@ -1242,6 +1242,21 @@ void RealtimeChordFxAudioProcessorEditor::updateMidiControllerFromPoint (juce::P
     processor.setMidiControllerXY (x, y, true);
 }
 
+void RealtimeChordFxAudioProcessorEditor::updateEurekaMotionPoint (
+    juce::Point<float> p)
+{
+    eurekaMotionTouchX =
+        juce::jlimit (0.0f, 1.0f, p.x / design);
+    eurekaMotionTouchY =
+        juce::jlimit (0.0f, 1.0f, p.y / design);
+
+    if (auto* mix = processor.state().getParameter (ParamID::hazeMix))
+        mix->setValueNotifyingHost (eurekaMotionTouchX);
+
+    if (auto* haze = processor.state().getParameter (ParamID::hazeAmount))
+        haze->setValueNotifyingHost (1.0f - eurekaMotionTouchY);
+}
+
 void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
     const auto p = toDesign (e.position);
@@ -1489,19 +1504,58 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (effectMode == 2)
     {
+        if (p.x >= 470.0f && p.x < 575.0f && p.y <= 70.0f)
+        {
+            eurekaPanelVisible = ! eurekaPanelVisible;
+            eurekaMotionTouchDown = false;
+            repaint();
+            return;
+        }
+
+        if (! eurekaPanelVisible)
+        {
+            if (! eurekaMotionArmed)
+            {
+                eurekaMotionPlaying = false;
+                eurekaMotionRecording = false;
+                eurekaMotionRecordIndex = 0;
+                eurekaMotionPlaybackIndex = 0;
+                eurekaMotionArmed = true;
+                eurekaMotionTouchDown = false;
+            }
+            else
+            {
+                // The arm tap and the recording drag are intentionally
+                // separate gestures. The second press may become the drag.
+                eurekaMotionTouchDown = true;
+                eurekaMotionTouchX =
+                    juce::jlimit (0.0f, 1.0f, p.x / design);
+                eurekaMotionTouchY =
+                    juce::jlimit (0.0f, 1.0f, p.y / design);
+            }
+
+            repaint();
+            return;
+        }
+
         static constexpr DragParam hazeParams[] = {
             DragParam::hazeMix,
             DragParam::hazeTime,
             DragParam::hazeAmount,
             DragParam::hazeFilter,
             DragParam::hazeRepeat,
-            DragParam::hazeMod
+            DragParam::hazeMod,
+            DragParam::hazeReverb
         };
 
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < 7; ++i)
         {
             if (hazeParameterBounds (i).contains (p))
             {
+                eurekaMotionArmed = false;
+                eurekaMotionRecording = false;
+                eurekaMotionPlaying = false;
+                eurekaMotionTouchDown = false;
                 dragging = hazeParams[i];
                 setParameterFromX (dragging, p.x);
                 repaint();
@@ -1627,6 +1681,37 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
     if (midiControlConfigVisible || configVisible)
         return;
 
+    const int effectMode = juce::jlimit (0, 3, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+
+    if (effectMode == 2
+        && ! eurekaPanelVisible
+        && eurekaMotionArmed
+        && eurekaMotionTouchDown)
+    {
+        if (! eurekaMotionRecording)
+        {
+            eurekaMotionRecording = true;
+            eurekaMotionPlaying = false;
+            eurekaMotionArmed = false;
+            eurekaMotionRecordIndex = 0;
+            eurekaMotionPlaybackIndex = 0;
+        }
+
+        updateEurekaMotionPoint (toDesign (e.position));
+        repaint();
+        return;
+    }
+
+    if (effectMode == 2
+        && ! eurekaPanelVisible
+        && eurekaMotionRecording)
+    {
+        updateEurekaMotionPoint (toDesign (e.position));
+        repaint();
+        return;
+    }
+
     if (xyDragging)
     {
         updateMidiControllerFromPoint (toDesign (e.position));
@@ -1643,6 +1728,8 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 
 void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 {
+    eurekaMotionTouchDown = false;
+
     if (chordBotPressedPad >= 0)
     {
         processor.triggerChordBotPad (chordBotPressedPad, false);
