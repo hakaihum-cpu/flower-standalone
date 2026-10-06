@@ -54,7 +54,8 @@ required = [
     "Resources/eureka_frames.pack",
     "Resources/effects_app_icon.jpg",
     "Resources/effects_app_icon.b64",
-    "PROJECT_CONTRACT.md", "BUILD_HISTORY.csv", "THIRD_PARTY_NOTICES.md",
+    "PROJECT_CONTRACT.md", "CURRENT_OPERATION_STATE.json", "BUILD_HISTORY.csv", "THIRD_PARTY_NOTICES.md",
+    "scripts/verify_operation_context.py",
     "scripts/materialize_frame_pack.py",
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_juce_android_gamepad_keys.py",
@@ -63,6 +64,30 @@ required = [
 for rel in required:
     if not (R / rel).is_file():
         fail(f"missing {rel}")
+
+state_text = (R / "CURRENT_OPERATION_STATE.json").read_text(encoding="utf-8")
+for need in [
+    '"repository": "hakaihum-cpu/flower-standalone"',
+    '"active_branch": "feature/haze-emulation"',
+    '"protected_branch": "main"',
+    '"main_write_allowed": false',
+    '"ci_provider": "CircleCI"',
+    '"github_actions_allowed": false',
+    '"source_of_truth": "repository_state_not_chat_memory"',
+]:
+    if need not in state_text:
+        fail(f"authoritative operation state missing: {need}")
+
+operation_guard = (R / "scripts/verify_operation_context.py").read_text(encoding="utf-8")
+for need in [
+    "CURRENT_OPERATION_STATE.json",
+    "CIRCLE_PROJECT_USERNAME",
+    "CIRCLE_PROJECT_REPONAME",
+    "CIRCLE_BRANCH",
+    "GitHub Actions workflow files exist",
+]:
+    if need not in operation_guard:
+        fail(f"operation-context guard missing: {need}")
 
 # Exact user-supplied visual bank.
 rows = list(csv.DictReader((R / "Resources/classroom_frames_manifest.csv").open(encoding="utf-8")))
@@ -628,6 +653,8 @@ for bad_ref in ["FLOWER_Standalone.jucer","SynthVoice","Carnival","flower_"]:
 ci = (R / ".circleci/config.yml").read_text()
 for need in [
     "run_build:", "default: false",
+    "Verify authoritative operation context",
+    "python3 scripts/verify_operation_context.py --ci",
     "Materialize exact supplied frame pack",
     "no_output_timeout: 30m",
     "CMAKE_BUILD_PARALLEL_LEVEL=2",
