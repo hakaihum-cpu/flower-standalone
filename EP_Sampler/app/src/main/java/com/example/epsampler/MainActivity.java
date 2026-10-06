@@ -166,7 +166,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
     };
     private final String[] sampleBankNames = new String[]{
-            "SAMPLE 1","SAMPLE 2","SAMPLE 3","SAMPLE 4",
+            "EP-SAMPLE","SAMPLE 2","SAMPLE 3","SAMPLE 4",
             "SAMPLE 5","SAMPLE 6","SAMPLE 7","SAMPLE 8"
     };
     private int pendingBankSlot = 0;
@@ -280,7 +280,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         for (int slot=0; slot<sampleBankNames.length; slot++) {
             sampleBankNames[slot] = sanitizeBankName(
                     getSharedPreferences(PREFS, MODE_PRIVATE)
-                            .getString(KEY_BANK_NAME_PREFIX + slot, "SAMPLE " + (slot + 1)),
+                            .getString(KEY_BANK_NAME_PREFIX + slot,
+                                    slot == 0 ? "EP-SAMPLE" : "SAMPLE " + (slot + 1)),
                     slot);
         }
         for (int i=0; i<partMidiChannels.length; i++) {
@@ -438,7 +439,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     private String sanitizeBankName(String value, int slot) {
-        String fallback = "SAMPLE " + (slot + 1);
+        String fallback = slot == 0 ? "EP-SAMPLE" : "SAMPLE " + (slot + 1);
         if (value == null) return fallback;
         String clean = value.trim().replaceAll("[\\r\\n\\t]+", " ");
         if (clean.isEmpty()) return fallback;
@@ -575,7 +576,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         LinearLayout root = dialogRoot();
 
         TextView channel = new TextView(this);
-        channel.setText("SAMPLE " + (slot + 1) + " / MIDI CH " + (9 + slot));
+        int configuredCh = partMidiChannels[8 + slot];
+        channel.setText("SAMPLE " + (slot + 1) + " / " +
+                (configuredCh <= 0 ? "MIDI OFF" : "MIDI CH " + configuredCh));
         channel.setTextSize(14f);
         root.addView(channel);
 
@@ -659,6 +662,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     @Override public void onOpenMixer() {
         pianoView.setRecorderOpen(false);
         if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
+        mixerView.setPartNames(mixerPartNames());
         mixerView.setMixerState(partMixerVolume, partMixerPan, partMixerMute);
         mixerView.setVisibility(View.VISIBLE);
         mixerView.bringToFront();
