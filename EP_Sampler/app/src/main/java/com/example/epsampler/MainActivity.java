@@ -277,13 +277,19 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         dreamMix = Math.max(0, Math.min(100, getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_MIX, 34)));
         dreamMode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1,
                 getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_MODE, 0)));
+        for (int slot=0; slot<sampleBankNames.length; slot++) {
+            sampleBankNames[slot] = sanitizeBankName(
+                    getSharedPreferences(PREFS, MODE_PRIVATE)
+                            .getString(KEY_BANK_NAME_PREFIX + slot, "SAMPLE " + (slot + 1)),
+                    slot);
+        }
         for (int i=0; i<partMidiChannels.length; i++) {
             partMidiChannels[i] = Math.max(0, Math.min(16,
                     getSharedPreferences(PREFS, MODE_PRIVATE)
                             .getInt(KEY_PART_MIDI_PREFIX + i, i + 1)));
             partMixerVolume[i] = Math.max(0, Math.min(127,
                     getSharedPreferences(PREFS, MODE_PRIVATE)
-                            .getInt(KEY_MIX_VOL_PREFIX + i, i == 8 ? 127 : 112)));
+                            .getInt(KEY_MIX_VOL_PREFIX + i, i >= 8 ? 127 : 112)));
             partMixerPan[i] = Math.max(0, Math.min(127,
                     getSharedPreferences(PREFS, MODE_PRIVATE)
                             .getInt(KEY_MIX_PAN_PREFIX + i, 64)));
@@ -295,7 +301,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         decayMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DECAY_MS, 120);
         sustainPct = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SUSTAIN_PCT, 90);
         releaseMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_RELEASE_MS, 300);
-        instrumentMode = Math.max(0, Math.min(8,
+        instrumentMode = Math.max(0, Math.min(15,
                 getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_INSTRUMENT, 0)));
         android.content.SharedPreferences drumPrefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         drumBoostDb = Math.max(0, Math.min(18, drumPrefs.getInt(KEY_DRUM_BOOST_DB, 6)));
@@ -330,22 +336,23 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.setSpaceMode(spaceMode);
         pianoView.setTape(tape);
         pianoView.setDreamy(dreamy);
-        pianoView.setInstrumentName(INSTRUMENT_NAMES[instrumentMode], INSTRUMENT_BUTTONS[instrumentMode]);
+        pianoView.setInstrumentName(instrumentNameFor(instrumentMode), instrumentButtonFor(instrumentMode));
         pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
-        pianoView.setSampleMode(instrumentMode == 8);
+        pianoView.setSampleMode(instrumentMode >= 8);
         performanceXYView.setInstrumentMode(instrumentMode);
         drumEditorView.setValues(drumParameters);
         drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
         drumEditorView.setDrumsVisible(instrumentMode == 7);
+        mixerView.setPartNames(mixerPartNames());
         mixerView.setMixerState(partMixerVolume, partMixerPan, partMixerMute);
         pianoView.controlChange(7, partMixerVolume[instrumentMode]);
-        epBackground.setVisibility(instrumentMode == 8 ? View.VISIBLE : View.GONE);
-        videoLayer.setVisibility(instrumentMode == 8 ? View.GONE : View.VISIBLE);
+        epBackground.setVisibility(instrumentMode >= 8 ? View.VISIBLE : View.GONE);
+        videoLayer.setVisibility(instrumentMode >= 8 ? View.GONE : View.VISIBLE);
         if (instrumentMode < 8) videoLayer.setInstrument(instrumentMode);
 
         loadDrumSampleAssets();
         NativeEngine.start();
-        loadExistingBank();
+        loadExistingBanks();
         NativeEngine.setAudioBufferBursts(audioBufferBursts);
         NativeEngine.setBoosterStep(boosterStep);
         NativeEngine.setBoostDb(boostDb);
