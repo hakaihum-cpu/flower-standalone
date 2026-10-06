@@ -51,6 +51,8 @@ required = [
     "Source/GranularPitchBank.cpp", "Source/PsolaHarmonyBank.h", "Source/FramePack.cpp",
     "Resources/classroom_frames.pack",
     "Resources/classroom_frames_manifest.csv",
+    "Resources/eureka_frames.jpg",
+    "Resources/effects_app_icon.jpg",
     "PROJECT_CONTRACT.md", "BUILD_HISTORY.csv", "THIRD_PARTY_NOTICES.md",
     "scripts/materialize_frame_pack.py",
     "scripts/patch_android_native_parallelism.py",
@@ -73,6 +75,16 @@ if sha != "1e888dbed69e259c52d2cb2bd192faa5c7f29dcf76eafcda9fdb2a2d03f2d658":
     fail(f"frame pack sha256 mismatch: {sha}")
 if pack[:4] != b"CRF1":
     fail("frame pack magic mismatch")
+
+jucer_text = JUCER.read_text()
+for need in [
+    'name="eureka_frames.jpg" compile="0" resource="1" file="Resources/eureka_frames.jpg"',
+    'name="effects_app_icon.jpg" compile="0" resource="0" file="Resources/effects_app_icon.jpg"',
+    'smallIcon="appic1"',
+    'bigIcon="appic1"',
+]:
+    if need not in jucer_text:
+        fail(f"EUREKA supplied-image resource contract missing: {need}")
 
 # Product isolation / no synth implementation.
 target_source_files = [
@@ -157,6 +169,10 @@ for need in [
     "params.transpose",
     "params.og",
     "params.warble",
+    "params.reverb",
+    "hallReverb",
+    "hall.roomSize = 0.88f",
+    "0.52f * params.reverb",
     "params.loops == 2 ? 2.0 : 1.0",
     "0.0005 : 0.006",
     "headPosition",
@@ -185,6 +201,12 @@ for need in [
     '"CLEAR"',
     '"SHUFFLE"',
     '"REROLL"',
+    '"PANEL"',
+    '"CLOSE"',
+    '"REVERB / HALL"',
+    '"MOTION ARM"',
+    'u8"● MOTION REC"',
+    '"MOTION PLAY"',
 ]:
     if need not in editor:
         fail(f"HAZE UI contract missing: {need}")
@@ -221,6 +243,7 @@ for need in [
     "ParamID::hazeFilter",
     "ParamID::hazeRepeat",
     "ParamID::hazeMod",
+    "ParamID::hazeReverb",
     "ParamID::hazeSpeed",
     "ParamID::hazeLoops",
     "ParamID::hazeWarble",
@@ -264,6 +287,29 @@ for need in [
 ]:
     if need not in core_test:
         fail(f"CHORDBOT regression test missing: {need}")
+
+for need in [
+    "BinaryData::eureka_frames_jpg",
+    "eurekaSheet",
+    "constexpr int columns = 14",
+    "constexpr int rows = 10",
+    "eurekaFrameIndex",
+    "nextVisualFrame",
+    "chordVisualCooldown",
+    "eurekaVisualCooldown",
+    "processor.getInputPeakRaw()",
+    "processor.getInputRmsRaw()",
+    "eurekaPanelVisible",
+    "eurekaMotionSteps = 90",
+    "eurekaMotionArmed",
+    "eurekaMotionRecording",
+    "eurekaMotionPlaying",
+    "updateEurekaMotionPoint",
+    "ParamID::hazeMix",
+    "ParamID::hazeAmount",
+]:
+    if need not in editor and need not in (R / "Source/PluginEditor.h").read_text():
+        fail(f"EUREKA frame/motion contract missing: {need}")
 
 if "isKeyCurrentlyDown" in editor:
     fail("Android Motion REC must not rely on JUCE Android isKeyCurrentlyDown()")
