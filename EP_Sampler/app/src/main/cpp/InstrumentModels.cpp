@@ -442,75 +442,81 @@ void InstrumentModels::initialiseDrums(Voice& v) {
     }
 }
 float InstrumentModels::processFlute(Voice& v, double freq, float env) {
-    // Stable jet-drive / open-bore waveguide.
+    // Hybrid jet / bore model.
     //
-    // The previous version tuned the bore from freq*0.66666 and returned only
-    // a weak bore tap. On RG Rotate this could settle into mostly turbulent
-    // breath instead of a clear pitched oscillation. The bore is now tuned to
-    // the played fundamental and receives a stronger, filtered open-end return.
-    const float vel = v.velocity / 127.0f;
+    // The original implementation could collapse into mostly turbulent breath:
+    // its bore was tuned from freq*0.66666 and the radiated bore component was
+    // weak.  Keep the nonlinear delayed jet for flute-like movement, but anchor
+    // the standing wave to the requested fundamental so every playable note has
+    // an unambiguous pitched core.
+    const float velocity = v.velocity / 127.0f;
     const float pressure = (v.pressure > 0 ? v.pressure : channelPressure_) / 127.0f;
 
-    const float breathGain = (0.46f + 0.46f * vel) *
-                             (0.56f + 0.58f * control2_ + 0.12f * pressure);
-    float breath = env * breathGain;
+    float breath = env
+            * (0.46f + 0.46f * velocity)
+            * (0.56f + 0.58f * control2_ + 0.12f * pressure);
 
-    // Breath noise remains audible but subordinate to the resonating bore.
     const float n = noise(v);
-    const float noiseGain = 0.010f + 0.055f * control1_;
-    const float vibGain = 0.015f + 0.10f * vibrato_;
-    breath *= 1.0f + noiseGain * n
-            + vibGain * std::sin(v.vibratoPhase);
+    breath *= 1.0f + (0.005f + 0.025f * control1_) * n;
 
-    // One round trip per played period, with a small phase allowance for the
-    // reflection filter. Fractional readDelay keeps bend/vibrato continuous.
+    // One round trip per played period. Fractional readDelay keeps pitch bend
+    // and vibrato smooth.
     const float boreDelay = clampf(
-            float(sampleRate_ / std::max(35.0, freq) - 1.35),
+            float(sampleRate_ / std::max(35.0, freq) - 1.0),
             3.0f, float(kDelay - 4));
 
-    // Embouchure/jet geometry changes the delay from mouth to edge, not the
-    // acoustic bore pitch itself.
-    const float jetRatio = 0.16f + 0.24f * control3_;
-    const float jetDelay = clampf(boreDelay * jetRatio, 1.0f, float(kDelay - 4));
+    // Embouchure controls jet travel time without detuning the bore.
+    const float jetDelay = clampf(
+            boreDelay * (0.15f + 0.20f * control3_),
+            1.0f, float(kDelay - 4));
 
     const float boreOut = readDelay(v.delayA, v.writeA, boreDelay);
 
-    // Open-end reflection: low-pass losses suppress unstable upper partials
-    // while retaining enough loop gain to sustain a flute tone.
-    const float reflectionRate = 0.22f + 0.18f * (1.0f - control1_);
-    v.filter1 += (boreOut - v.filter1) * reflectionRate;
-    const float reflected = -v.filter1 * (0.86f + 0.07f * control2_);
+    // Lossy open-end reflection.
+    v.filter1 += (boreOut - v.filter1)
+            * (0.20f + 0.20f * (1.0f - control1_));
+    const float reflected = -v.filter1 * (0.83f + 0.08f * control2_);
 
-    // The delayed pressure difference hits the edge non-linearity.
-    const float pressureDiff = clampf(breath + 0.42f * reflected, -1.35f, 1.35f);
-    const float jetOld = readDelay(v.delayB, v.writeB, jetDelay);
+    const float pressureDiff =
+            clampf(breath + 0.30f * reflected, -1.20f, 1.20f);
+    const float delayedJet = readDelay(v.delayB, v.writeB, jetDelay);
     writeDelay(v.delayB, v.writeB, pressureDiff);
 
-    // Smooth odd jet transfer. This sign reinforces the intended bore mode
-    // instead of cancelling it at the operating point.
-    const float x = clampf(jetOld, -1.20f, 1.20f);
-    float jet = x * (1.0f - x * x);
-    jet = clampf(jet, -0.85f, 0.85f);
-
-    // A short tonal seed starts the self-oscillation reliably, then vanishes.
-    v.phase = wrapPhase(v.phase + 2.0 * kPi * freq / sampleRate_);
-    const float ageSec = float(v.age) / float(sampleRate_);
-    const float startSeed = std::sin(v.phase) * std::exp(-ageSec * 30.0f)
-                          * (0.018f + 0.018f * vel);
-
+    const float x = clampf(delayedJet, -1.0f, 1.0f);
+    const float jet = x * (1.0f - x * x);
     const float boreIn =
-            0.10f * breath
-            + 0.92f * jet
-            + reflected
-            + startSeed;
-    writeDelay(v.delayA, v.writeA, clampf(boreIn, -1.25f, 1.25f));
+            0.06f * breath
+            + 0.65f * jet
+            + reflected;
+    writeDelay(v.delayA, v.writeA, clampf(boreIn, -1.20f, 1.20f));
 
-    // Radiated pressure is primarily the resonant bore; keep only a very small
-    // air component so BREATH still changes character without becoming the sound.
-    v.filter2 += (boreOut - v.filter2) * 0.035f;
-    const float tone = boreOut - 0.08f * v.filter2;
-    const float air = n * breath * (0.006f + 0.010f * control1_);
-    return clampf(0.68f * tone + air, -1.0f, 1.0f);
+    // Remove the DC operating point of the pressure loop before radiation.
+    const float boreHp = boreOut - v.dcX + 0.995f * v.dcY;
+    v.dcX = boreOut;
+    v.dcY = boreHp;
+
+    // Stable standing-wave core.  The nonlinear bore remains audible and
+    // modulates the colour, while this component prevents the model from
+    // degenerating into unpitched air at difficult registers.
+    v.phase = wrapPhase(v.phase + 2.0 * kPi * freq / sampleRate_);
+    const float fundamental = std::sin(v.phase);
+    const float harmonic2 = std::sin(2.0 * v.phase);
+    const float harmonic3 = std::sin(3.0 * v.phase);
+
+    const float tonal =
+            fundamental * (0.52f + 0.10f * (1.0f - control1_))
+            + harmonic2 * (0.11f + 0.12f * control2_)
+            + harmonic3 * (0.025f + 0.040f * control1_);
+
+    // BREATH now changes excitation and colour; it is no longer the dominant
+    // output source.  Keep a small audible air component for realism.
+    const float air = n * breath * (0.004f + 0.009f * control1_);
+
+    return clampf(
+            0.55f * tonal * env
+            + 0.22f * boreHp
+            + air,
+            -1.0f, 1.0f);
 }
 
 float InstrumentModels::processSax(Voice& v, double freq, float env) {
