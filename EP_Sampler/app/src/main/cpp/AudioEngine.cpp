@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstring>
 #include <utility>
+#include <thread>
+#include <chrono>
 
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,"EPViolin",__VA_ARGS__)
 
@@ -18,6 +20,17 @@ AudioEngine::~AudioEngine() { stop(); }
 
 bool AudioEngine::loadBank(const std::string& path) {
     std::lock_guard<std::mutex> lock(epBankLoadMutex_[0]);
+
+    // Do not reuse either double-buffer bank while a previous swap is still
+    // pending. The audio callback publishes the new active index before
+    // clearing pending, so observing -1 guarantees the inactive index is safe.
+    for (int waitMs = 0;
+         waitMs < 250 && epPendingBank_[0].load(std::memory_order_acquire) >= 0;
+         ++waitMs) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    if (epPendingBank_[0].load(std::memory_order_acquire) >= 0) return false;
+
     const int active = epActiveBank_[0].load(std::memory_order_acquire);
     const int inactive = 1 - active;
     if (!epBanks_[0][inactive].load(path)) return false;
@@ -32,6 +45,15 @@ bool AudioEngine::loadBankFd(int fd) {
 bool AudioEngine::loadBankSlotFd(int slot, int fd) {
     slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
     std::lock_guard<std::mutex> lock(epBankLoadMutex_[slot]);
+
+    // A two-bank slot must not start writing the old inactive bank until the
+    // previous pending swap is fully committed by the audio callback.
+    for (int waitMs = 0;
+         waitMs < 250 && epPendingBank_[slot].load(std::memory_order_acquire) >= 0;
+         ++waitMs) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    if (epPendingBank_[slot].load(std::memory_order_acquire) >= 0) return false;
 
     const int active = epActiveBank_[slot].load(std::memory_order_acquire);
     const int inactive = 1 - active;
@@ -1084,17 +1106,34 @@ void AudioEngine::render(float* out,int32_t frames) {
     // Complete bank switches only at an audio-buffer boundary. The expensive
     // mmap/validation work has already happened on a background thread.
     for (int slot=0; slot<SAMPLE_BANK_COUNT; ++slot) {
-        const int pending = epPendingBank_[slot].exchange(-1, std::memory_order_acq_rel);
+        const int pending = epPendingBank_[slot].load(std::memory_order_acquire);
         if (pending >= 0) {
             // Existing voices reference the old bank's Entry pointers. Retire
             // them before flipping the immutable bank generation.
             epAllNotesOff(slot);
+
+            // Publish ACTIVE first, then clear PENDING. Background loaders wait
+            // for PENDING == -1, so they can never unload the just-activated map.
             epActiveBank_[slot].store(std::clamp(pending,0,1), std::memory_order_release);
+            epPendingBank_[slot].store(-1, std::memory_order_release);
         }
     }
 
     Event e;
     while (pop(e)) handle(e);
+
+    // Part FX settings are stable for this callback because events were drained
+    // above. Compute expensive coefficients once per buffer, not per sample.
+    std::array<float,PART_COUNT> partBoostGain{};
+    std::array<float,PART_COUNT> partDistAmount{};
+    std::array<float,PART_COUNT> partDrive{};
+    for (int part=0; part<PART_COUNT; ++part) {
+        partBoostGain[part] = std::pow(10.0f,
+                float(std::clamp(partBoostDb_[part], 0, 18)) / 20.0f);
+        partDistAmount[part] =
+                std::clamp(partDistortion_[part], 0, 127) / 127.0f;
+        partDrive[part] = 1.0f + 14.0f * partDistAmount[part];
+    }
 
     for (int32_t i=0; i<frames; ++i) {
         float mixL = 0.0f;
@@ -1134,16 +1173,28 @@ void AudioEngine::render(float* out,int32_t frames) {
                 }
             }
 
-            const float boost = std::pow(10.0f,
-                    float(std::clamp(partBoostDb_[part], 0, 18)) / 20.0f);
-            const float distAmount = std::clamp(partDistortion_[part], 0, 127) / 127.0f;
-            const float drive = 1.0f + 14.0f * distAmount;
-            auto partFx = [&](float x) {
-                const float saturated = std::tanh(x * drive);
-                return ((1.0f - distAmount) * x + distAmount * saturated) * boost;
-            };
-            partL = partFx(partL);
-            partR = partFx(partR);
+            const bool xyActiveForPart =
+                    performanceXYPart_ == part &&
+                    (performanceXYActive_ || performanceXYGate_ > 0.0005f);
+
+            // A silent SAMPLE part has no local stateful FX. Skip it completely
+            // unless its momentary XY delay is still active.
+            if (part >= 8 && voices == 0 && !xyActiveForPart) continue;
+
+            const float boost = partBoostGain[part];
+            const float distAmount = partDistAmount[part];
+            if (distAmount > 0.0f) {
+                const float drive = partDrive[part];
+                auto partFx = [&](float x) {
+                    const float saturated = std::tanh(x * drive);
+                    return ((1.0f - distAmount) * x + distAmount * saturated) * boost;
+                };
+                partL = partFx(partL);
+                partR = partFx(partR);
+            } else if (boost != 1.0f) {
+                partL *= boost;
+                partR *= boost;
+            }
 
             // FELT PIANO only: dedicated local reverb before the momentary XY delay.
             if (part == 3) feltPianoReverb_.process(partL, partR);
@@ -1155,8 +1206,7 @@ void AudioEngine::render(float* out,int32_t frames) {
                 } else {
                     recordStutterHistory(partL, partR);
                 }
-            } else if (performanceXYPart_ == part &&
-                    (performanceXYActive_ || performanceXYGate_ > 0.0005f)) {
+            } else if (xyActiveForPart) {
                 processPerformanceDelay(partL, partR);
             }
 
