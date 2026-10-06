@@ -53,7 +53,7 @@ final class MixerChannelTile extends View {
         invalidate();
     }
 
-    void setSelected(boolean selected) {
+    void setTileSelected(boolean selected) {
         this.selected = selected;
         invalidate();
     }
