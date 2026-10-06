@@ -157,7 +157,7 @@ final class MixerView extends FrameLayout {
             volume.setContentDescription(NAMES[part] + " volume");
             volumeControls[part] = volume;
             LinearLayout.LayoutParams volumeLp = new LinearLayout.LayoutParams(
-                    LayoutParams.MATCH_PARENT, dp(116));
+                    LayoutParams.MATCH_PARENT, 0, 1f);
             volumeLp.setMargins(0, dp(3), 0, dp(5));
             strip.addView(volume, volumeLp);
 
@@ -175,7 +175,7 @@ final class MixerView extends FrameLayout {
             pan.setContentDescription(NAMES[part] + " pan");
             panControls[part] = pan;
             LinearLayout.LayoutParams panLp = new LinearLayout.LayoutParams(
-                    LayoutParams.MATCH_PARENT, dp(116));
+                    LayoutParams.MATCH_PARENT, 0, 1f);
             panLp.setMargins(0, 0, 0, dp(8));
             strip.addView(pan, panLp);
 
