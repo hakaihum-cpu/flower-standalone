@@ -219,7 +219,7 @@ private:
     std::array<std::array<SampleBank,2>,SAMPLE_BANK_COUNT> epBanks_{};
     std::array<std::atomic<int>,SAMPLE_BANK_COUNT> epActiveBank_{};
     std::array<std::atomic<int>,SAMPLE_BANK_COUNT> epPendingBank_{};
-    std::array<std::mutex,SAMPLE_BANK_COUNT> epBankLoadMutex_{};
+    mutable std::array<std::mutex,SAMPLE_BANK_COUNT> epBankLoadMutex_{};
 
     AAudioStream* stream_=nullptr;
     int sampleRate_=48000;
