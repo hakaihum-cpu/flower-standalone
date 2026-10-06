@@ -15,6 +15,7 @@ inline constexpr const char* hazeAmount = "hazeAmount";
 inline constexpr const char* hazeFilter = "hazeFilter";
 inline constexpr const char* hazeRepeat = "hazeRepeat";
 inline constexpr const char* hazeMod = "hazeMod";
+inline constexpr const char* hazeReverb = "hazeReverb";
 inline constexpr const char* hazeSpeed = "hazeSpeed";
 inline constexpr const char* hazeLoops = "hazeLoops";
 inline constexpr const char* hazeWarble = "hazeWarble";
