@@ -62,6 +62,7 @@ public:
     int audioBufferCapacityFrames() const;
     int audioXRunCount() const;
     float partMeter(int part) const;
+    bool restartAudioPreservingState();
     bool loadDrumSample(int slot, const uint8_t* data, size_t size);
     void noteOnPart(int part, int note, int velocity);
     void noteOffPart(int part, int note, int velocity);
