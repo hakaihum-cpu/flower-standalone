@@ -32,6 +32,7 @@ final class MidiController {
     private final List<MidiDevice> devices = new ArrayList<>();
     private final List<MidiOutputPort> ports = new ArrayList<>();
     private int pendingOpens = 0;
+    private int scanGeneration = 0;
 
     // 0 = OFF, 1..16 = MIDI channel. Sixteen parts default one-to-one to CH1..16.
     private final int[] partChannels = new int[]{
@@ -60,25 +61,30 @@ final class MidiController {
     void start() {
         if (midiManager == null) return;
         midiManager.registerDeviceCallback(callback, main);
-        for (MidiDeviceInfo info : midiManager.getDevices()) open(info);
+        rescan();
+    }
+
+    void rescan() {
+        if (midiManager == null) return;
+        final int generation = ++scanGeneration;
+        closeAll();
+        for (MidiDeviceInfo info : midiManager.getDevices()) open(info, generation);
     }
 
     void stop() {
         if (midiManager == null) return;
+        ++scanGeneration;
         midiManager.unregisterDeviceCallback(callback);
         closeAll();
     }
 
     private final MidiManager.DeviceCallback callback = new MidiManager.DeviceCallback() {
-        @Override public void onDeviceAdded(MidiDeviceInfo device) { open(device); }
-        @Override public void onDeviceRemoved(MidiDeviceInfo device) { reopenAll(); }
+        @Override public void onDeviceAdded(MidiDeviceInfo device) {
+            open(device, scanGeneration);
+        }
+        @Override public void onDeviceRemoved(MidiDeviceInfo device) { rescan(); }
         @Override public void onDeviceStatusChanged(MidiDeviceStatus status) { }
     };
-
-    private void reopenAll() {
-        closeAll();
-        for (MidiDeviceInfo info : midiManager.getDevices()) open(info);
-    }
 
     private void closeAll() {
         for (MidiOutputPort p : ports) {
@@ -93,12 +99,16 @@ final class MidiController {
         listener.onConnectionCountChanged(0);
     }
 
-    private void open(MidiDeviceInfo info) {
+    private void open(MidiDeviceInfo info, int generation) {
         if (midiManager == null) return;
         pendingOpens++;
         midiManager.openDevice(info, device -> {
             pendingOpens--;
             if (device == null) return;
+            if (generation != scanGeneration) {
+                try { device.close(); } catch (IOException ignored) { }
+                return;
+            }
             devices.add(device);
             for (MidiDeviceInfo.PortInfo pi : info.getPorts()) {
                 if (pi.getType() != MidiDeviceInfo.PortInfo.TYPE_OUTPUT) continue;
