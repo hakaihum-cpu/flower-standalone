@@ -336,6 +336,16 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             partMixerMute[i] = getSharedPreferences(PREFS, MODE_PRIVATE)
                     .getBoolean(KEY_MIX_MUTE_PREFIX + i, false);
         }
+        for (int slot=0; slot<drumSampleMixerVolume.length; slot++) {
+            drumSampleMixerVolume[slot] = Math.max(0, Math.min(127,
+                    getSharedPreferences(PREFS, MODE_PRIVATE)
+                            .getInt(KEY_DRUM_SAMPLE_VOL_PREFIX + slot, 127)));
+            drumSampleMixerPan[slot] = Math.max(0, Math.min(127,
+                    getSharedPreferences(PREFS, MODE_PRIVATE)
+                            .getInt(KEY_DRUM_SAMPLE_PAN_PREFIX + slot, 64)));
+            drumSampleMixerMute[slot] = getSharedPreferences(PREFS, MODE_PRIVATE)
+                    .getBoolean(KEY_DRUM_SAMPLE_MUTE_PREFIX + slot, false);
+        }
         manualSustain = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_MANUAL_SUSTAIN, false);
         attackMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_ATTACK_MS, 20);
         decayMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DECAY_MS, 120);
@@ -385,6 +395,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         drumEditorView.setDrumsVisible(instrumentMode == 7);
         mixerView.setPartNames(mixerPartNames());
         mixerView.setMixerState(partMixerVolume, partMixerPan, partMixerMute);
+        drumSampleMixerView.setMixerState(
+                drumSampleMixerVolume, drumSampleMixerPan, drumSampleMixerMute);
         pianoView.controlChange(7, partMixerVolume[instrumentMode]);
         epBackground.setVisibility(instrumentMode >= 8 ? View.VISIBLE : View.GONE);
         videoLayer.setVisibility(instrumentMode >= 8 ? View.GONE : View.VISIBLE);
@@ -413,6 +425,12 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             NativeEngine.setPartFx(part, partBoostDb[part], partDistortion[part]);
             NativeEngine.setPartMixer(part, partMixerVolume[part], partMixerPan[part], partMixerMute[part]);
         }
+        for (int slot=0; slot<drumSampleMixerVolume.length; slot++) {
+            NativeEngine.setDrumSampleMixer(slot,
+                    drumSampleMixerVolume[slot],
+                    drumSampleMixerPan[slot],
+                    drumSampleMixerMute[slot]);
+        }
         NativeEngine.setDrumFx(partBoostDb[7], partDistortion[7]);
         NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
         NativeEngine.setInstrument(instrumentMode);
@@ -438,17 +456,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     private void loadDrumSampleAssets() {
-        final String[] files = new String[]{
-                "drum_closehat.wav",
-                "drum_tom.wav",
-                "drum_crash.wav",
-                "drum_kick.wav",
-                "drum_stick.wav",
-                "drum_snaire.wav"
-        };
-
-        for (int slot=0; slot<files.length; slot++) {
-            try (InputStream in = getAssets().open(files[slot]);
+        for (int slot=0; slot<DrumSampleMixerView.FILE_NAMES.length; slot++) {
+            try (InputStream in = getAssets().open(DrumSampleMixerView.FILE_NAMES[slot]);
                  ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                 byte[] buffer = new byte[64 * 1024];
                 int count;
