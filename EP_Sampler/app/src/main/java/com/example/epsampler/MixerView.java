@@ -6,16 +6,15 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
-import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
- * Sixteen-part mixer using the same visual/control language as the other
- * graphical CONFIG editors.
+ * Sixteen-part 4x4 mixer overview with one shared detail editor.
  *
- * Audio routing and mixer semantics are unchanged: this view still exposes only
- * Volume / Pan / Mute through the existing Listener contract.
+ * The visual language is intentionally the same as SoundDesignView and the
+ * other graphical CONFIG pages: black field, warm white graphics, translucent
+ * cards and direct graphical controls.
  */
 final class MixerView extends FrameLayout {
     interface Listener {
@@ -35,12 +34,8 @@ final class MixerView extends FrameLayout {
             "SAMPLE 5", "SAMPLE 6", "SAMPLE 7", "SAMPLE 8"
     };
 
-    private final TextView[] nameLabels = new TextView[PARTS];
-    private final GraphicParameterControl[] volumeControls =
-            new GraphicParameterControl[PARTS];
-    private final GraphicParameterControl[] panControls =
-            new GraphicParameterControl[PARTS];
-    private final TextView[] muteControls = new TextView[PARTS];
+    private final MixerChannelTile[] tiles = new MixerChannelTile[PARTS];
+    private final String[] partNames = NAMES.clone();
 
     private final int[] volumes = {
             112,112,112,112,112,112,112,112,
@@ -51,10 +46,28 @@ final class MixerView extends FrameLayout {
             64,64,64,64,64,64,64,64
     };
     private final boolean[] mutes = new boolean[PARTS];
-    private final String[] partNames = NAMES.clone();
 
     private Listener listener;
     private boolean updating = false;
+    private int selectedPart = 0;
+
+    private TextView selectedName;
+    private TextView selectedNumber;
+    private GraphicParameterControl volumeEditor;
+    private GraphicParameterControl panEditor;
+    private TextView muteEditor;
+
+    private final Runnable meterTick = new Runnable() {
+        @Override public void run() {
+            if (getVisibility() != View.VISIBLE) return;
+            for (int part=0; part<PARTS; part++) {
+                if (tiles[part] != null) {
+                    tiles[part].setMeter(NativeEngine.partMeter(part));
+                }
+            }
+            postDelayed(this, 50L);
+        }
+    };
 
     MixerView(Context context) {
         super(context);
@@ -65,16 +78,15 @@ final class MixerView extends FrameLayout {
 
         LinearLayout page = new LinearLayout(context);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(14), dp(12), dp(14), dp(14));
+        page.setPadding(dp(12), dp(10), dp(12), dp(12));
         addView(page, new FrameLayout.LayoutParams(
                 LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
-        // Header follows SoundDesignView: title on the left, compact panel CLOSE.
         LinearLayout header = new LinearLayout(context);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         page.addView(header, new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT, dp(48)));
+                LayoutParams.MATCH_PARENT, dp(46)));
 
         TextView title = text("MIXER", 21f);
         header.addView(title, new LinearLayout.LayoutParams(
@@ -89,111 +101,125 @@ final class MixerView extends FrameLayout {
         close.setOnClickListener(v -> {
             if (listener != null) listener.onMixerClose();
         });
-        LinearLayout.LayoutParams closeLp =
-                new LinearLayout.LayoutParams(dp(88), dp(36));
-        closeLp.setMargins(dp(8), 0, 0, 0);
-        header.addView(close, closeLp);
+        header.addView(close, new LinearLayout.LayoutParams(dp(88), dp(36)));
 
         TextView help = text(
-                "VOLUME / PAN / MUTE   ·   DRAG GRAPHICS ↑↓   ·   SWIPE SIDEWAYS",
-                10.5f);
-        help.setTextColor(Color.argb(160, FG_R, FG_G, FG_B));
-        LinearLayout.LayoutParams helpLp = new LinearLayout.LayoutParams(
-                LayoutParams.MATCH_PARENT, dp(34));
-        helpLp.setMargins(0, 0, 0, dp(4));
-        page.addView(help, helpLp);
+                "16 PARTS  ·  TAP A CELL TO EDIT  ·  REAL POST-FADER VU",
+                9.5f);
+        help.setTextColor(Color.argb(145, FG_R, FG_G, FG_B));
+        page.addView(help, new LinearLayout.LayoutParams(
+                LayoutParams.MATCH_PARENT, dp(26)));
 
-        HorizontalScrollView scroll = new HorizontalScrollView(context);
-        scroll.setFillViewport(false);
-        scroll.setHorizontalScrollBarEnabled(false);
-        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-        page.addView(scroll, new LinearLayout.LayoutParams(
+        // 4x4 overview: all sixteen parts are visible at once.
+        LinearLayout grid = new LinearLayout(context);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams gridLp = new LinearLayout.LayoutParams(
+                LayoutParams.MATCH_PARENT, 0, 2.15f);
+        gridLp.setMargins(0, 0, 0, dp(7));
+        page.addView(grid, gridLp);
+
+        for (int row=0; row<4; row++) {
+            LinearLayout rowLayout = new LinearLayout(context);
+            rowLayout.setOrientation(LinearLayout.HORIZONTAL);
+            grid.addView(rowLayout, new LinearLayout.LayoutParams(
+                    LayoutParams.MATCH_PARENT, 0, 1f));
+
+            for (int col=0; col<4; col++) {
+                final int part = row*4 + col;
+                MixerChannelTile tile = new MixerChannelTile(context);
+                tile.setListener(() -> selectPart(part));
+                tiles[part] = tile;
+
+                LinearLayout.LayoutParams tileLp = new LinearLayout.LayoutParams(
+                        0, LayoutParams.MATCH_PARENT, 1f);
+                tileLp.setMargins(dp(2), dp(2), dp(2), dp(2));
+                rowLayout.addView(tile, tileLp);
+            }
+        }
+
+        // Selected-part detail editor. This is the OP-1-like focus layer:
+        // one part becomes large and direct after choosing it in the overview.
+        LinearLayout editor = new LinearLayout(context);
+        editor.setOrientation(LinearLayout.VERTICAL);
+        editor.setPadding(dp(9), dp(7), dp(9), dp(8));
+        editor.setBackground(panelDrawable(false));
+        page.addView(editor, new LinearLayout.LayoutParams(
+                LayoutParams.MATCH_PARENT, 0, 1.0f));
+
+        LinearLayout editorHeader = new LinearLayout(context);
+        editorHeader.setOrientation(LinearLayout.HORIZONTAL);
+        editorHeader.setGravity(Gravity.CENTER_VERTICAL);
+        editor.addView(editorHeader, new LinearLayout.LayoutParams(
+                LayoutParams.MATCH_PARENT, dp(30)));
+
+        selectedName = text(partNames[0], 14f);
+        selectedName.setSingleLine(true);
+        editorHeader.addView(selectedName, new LinearLayout.LayoutParams(
+                0, LayoutParams.MATCH_PARENT, 1f));
+
+        selectedNumber = text("PART 01", 9.5f);
+        selectedNumber.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+        selectedNumber.setTextColor(Color.argb(135, FG_R, FG_G, FG_B));
+        editorHeader.addView(selectedNumber, new LinearLayout.LayoutParams(
+                dp(74), LayoutParams.MATCH_PARENT));
+
+        LinearLayout controls = new LinearLayout(context);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
+        editor.addView(controls, new LinearLayout.LayoutParams(
                 LayoutParams.MATCH_PARENT, 0, 1f));
 
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.TOP);
-        row.setPadding(0, 0, dp(16), 0);
-        scroll.addView(row, new FrameLayout.LayoutParams(
-                LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT));
+        volumeEditor = new GraphicParameterControl(context);
+        volumeEditor.configure(
+                "VOLUME",
+                127,
+                volumes[0],
+                GraphicParameterControl.STYLE_FIELD,
+                value -> {
+                    if (updating) return;
+                    volumes[selectedPart] = clamp7(value);
+                    refreshTile(selectedPart);
+                    notifyChange(selectedPart);
+                });
+        LinearLayout.LayoutParams volLp = new LinearLayout.LayoutParams(
+                0, LayoutParams.MATCH_PARENT, 1f);
+        volLp.setMargins(0, 0, dp(5), 0);
+        controls.addView(volumeEditor, volLp);
 
-        for (int part = 0; part < PARTS; part++) {
-            final int p = part;
+        panEditor = new GraphicParameterControl(context);
+        panEditor.configure(
+                panText(pans[0]),
+                127,
+                pans[0],
+                GraphicParameterControl.STYLE_FIELD,
+                value -> {
+                    if (updating) return;
+                    pans[selectedPart] = clamp7(value);
+                    panEditor.setLabel(panText(pans[selectedPart]));
+                    refreshTile(selectedPart);
+                    notifyChange(selectedPart);
+                });
+        LinearLayout.LayoutParams panLp = new LinearLayout.LayoutParams(
+                0, LayoutParams.MATCH_PARENT, 1f);
+        panLp.setMargins(0, 0, dp(5), 0);
+        controls.addView(panEditor, panLp);
 
-            LinearLayout strip = new LinearLayout(context);
-            strip.setOrientation(LinearLayout.VERTICAL);
-            strip.setGravity(Gravity.CENTER_HORIZONTAL);
-            strip.setPadding(dp(8), dp(8), dp(8), dp(8));
-            strip.setBackground(panelDrawable(false));
+        muteEditor = text("MUTE", 11.5f);
+        muteEditor.setGravity(Gravity.CENTER);
+        muteEditor.setClickable(true);
+        muteEditor.setFocusable(true);
+        muteEditor.setOnClickListener(v -> {
+            if (updating) return;
+            mutes[selectedPart] = !mutes[selectedPart];
+            updateMuteEditor();
+            refreshTile(selectedPart);
+            notifyChange(selectedPart);
+        });
+        controls.addView(muteEditor, new LinearLayout.LayoutParams(
+                dp(88), LayoutParams.MATCH_PARENT));
 
-            LinearLayout.LayoutParams stripLp = new LinearLayout.LayoutParams(
-                    dp(172), LayoutParams.MATCH_PARENT);
-            stripLp.setMargins(0, 0, dp(8), 0);
-            row.addView(strip, stripLp);
-
-            TextView name = text(NAMES[part], 14f);
-            name.setGravity(Gravity.CENTER);
-            name.setSingleLine(true);
-            nameLabels[part] = name;
-            strip.addView(name, new LinearLayout.LayoutParams(
-                    LayoutParams.MATCH_PARENT, dp(36)));
-
-            TextView partNumber = text(twoDigit(part + 1), 9.5f);
-            partNumber.setGravity(Gravity.CENTER);
-            partNumber.setTextColor(Color.argb(105, FG_R, FG_G, FG_B));
-            strip.addView(partNumber, new LinearLayout.LayoutParams(
-                    LayoutParams.MATCH_PARENT, dp(20)));
-
-            GraphicParameterControl volume = new GraphicParameterControl(context);
-            volume.configure(
-                    "VOLUME",
-                    127,
-                    volumes[part],
-                    GraphicParameterControl.STYLE_FIELD,
-                    value -> {
-                        volumes[p] = clamp7(value);
-                        if (!updating) notifyChange(p);
-                    });
-            volume.setContentDescription(NAMES[part] + " volume");
-            volumeControls[part] = volume;
-            LinearLayout.LayoutParams volumeLp = new LinearLayout.LayoutParams(
-                    LayoutParams.MATCH_PARENT, 0, 1f);
-            volumeLp.setMargins(0, dp(3), 0, dp(5));
-            strip.addView(volume, volumeLp);
-
-            GraphicParameterControl pan = new GraphicParameterControl(context);
-            pan.configure(
-                    panText(pans[part]),
-                    127,
-                    pans[part],
-                    GraphicParameterControl.STYLE_FIELD,
-                    value -> {
-                        pans[p] = clamp7(value);
-                        panControls[p].setLabel(panText(pans[p]));
-                        if (!updating) notifyChange(p);
-                    });
-            pan.setContentDescription(NAMES[part] + " pan");
-            panControls[part] = pan;
-            LinearLayout.LayoutParams panLp = new LinearLayout.LayoutParams(
-                    LayoutParams.MATCH_PARENT, 0, 1f);
-            panLp.setMargins(0, 0, 0, dp(8));
-            strip.addView(pan, panLp);
-
-            TextView mute = text("MUTE", 12f);
-            mute.setGravity(Gravity.CENTER);
-            mute.setClickable(true);
-            mute.setFocusable(true);
-            mute.setContentDescription(NAMES[part] + " mute");
-            mute.setOnClickListener(v -> {
-                mutes[p] = !mutes[p];
-                updateMuteControl(p);
-                if (!updating) notifyChange(p);
-            });
-            muteControls[part] = mute;
-            strip.addView(mute, new LinearLayout.LayoutParams(
-                    LayoutParams.MATCH_PARENT, dp(42)));
-            updateMuteControl(part);
-        }
+        for (int part=0; part<PARTS; part++) refreshTile(part);
+        selectPart(0);
     }
 
     void setListener(Listener listener) {
@@ -202,39 +228,27 @@ final class MixerView extends FrameLayout {
 
     void setPartNames(String[] names) {
         if (names == null) return;
-        for (int i = 0; i < PARTS && i < names.length; i++) {
+        for (int i=0; i<PARTS && i<names.length; i++) {
             String value = names[i] == null || names[i].trim().isEmpty()
                     ? NAMES[i] : names[i].trim();
             partNames[i] = value;
-
-            if (nameLabels[i] != null) nameLabels[i].setText(value);
-            if (volumeControls[i] != null)
-                volumeControls[i].setContentDescription(value + " volume");
-            if (panControls[i] != null)
-                panControls[i].setContentDescription(value + " pan");
-            if (muteControls[i] != null)
-                muteControls[i].setContentDescription(value + " mute");
+            refreshTile(i);
         }
+        refreshEditor();
     }
 
     void setMixerState(int[] sourceVolumes, int[] sourcePans, boolean[] sourceMutes) {
         updating = true;
-        for (int i = 0; i < PARTS; i++) {
+        for (int i=0; i<PARTS; i++) {
             if (sourceVolumes != null && i < sourceVolumes.length)
                 volumes[i] = clamp7(sourceVolumes[i]);
             if (sourcePans != null && i < sourcePans.length)
                 pans[i] = clamp7(sourcePans[i]);
             if (sourceMutes != null && i < sourceMutes.length)
                 mutes[i] = sourceMutes[i];
-
-            if (volumeControls[i] != null)
-                volumeControls[i].setValue(volumes[i]);
-            if (panControls[i] != null) {
-                panControls[i].setValue(pans[i]);
-                panControls[i].setLabel(panText(pans[i]));
-            }
-            updateMuteControl(i);
+            refreshTile(i);
         }
+        refreshEditor();
         updating = false;
     }
 
@@ -242,25 +256,80 @@ final class MixerView extends FrameLayout {
         if (part < 0 || part >= PARTS) return;
         updating = true;
         volumes[part] = clamp7(volume);
-        if (volumeControls[part] != null)
-            volumeControls[part].setValue(volumes[part]);
+        refreshTile(part);
+        if (part == selectedPart) refreshEditor();
         updating = false;
     }
 
-    private void notifyChange(int part) {
-        if (listener != null)
-            listener.onMixerChanged(part, volumes[part], pans[part], mutes[part]);
+    private void selectPart(int part) {
+        part = Math.max(0, Math.min(PARTS - 1, part));
+        int old = selectedPart;
+        selectedPart = part;
+        if (tiles[old] != null) tiles[old].setSelected(false);
+        if (tiles[selectedPart] != null) tiles[selectedPart].setSelected(true);
+        refreshEditor();
     }
 
-    private void updateMuteControl(int part) {
-        TextView view = muteControls[part];
-        if (view == null) return;
+    private void refreshTile(int part) {
+        if (part < 0 || part >= PARTS || tiles[part] == null) return;
+        tiles[part].setState(
+                partNames[part],
+                volumes[part],
+                pans[part],
+                mutes[part],
+                part == selectedPart);
+    }
 
-        view.setText(mutes[part] ? "MUTED" : "MUTE");
-        view.setBackground(panelDrawable(mutes[part]));
-        view.setTextColor(mutes[part]
-                ? Color.rgb(20, 20, 19)
-                : Color.rgb(FG_R, FG_G, FG_B));
+    private void refreshEditor() {
+        if (selectedName == null) return;
+        updating = true;
+
+        selectedName.setText(partNames[selectedPart]);
+        selectedNumber.setText("PART " + twoDigit(selectedPart + 1));
+
+        volumeEditor.setValue(volumes[selectedPart]);
+        volumeEditor.setContentDescription(
+                partNames[selectedPart] + " volume");
+
+        panEditor.setValue(pans[selectedPart]);
+        panEditor.setLabel(panText(pans[selectedPart]));
+        panEditor.setContentDescription(
+                partNames[selectedPart] + " pan");
+
+        muteEditor.setContentDescription(
+                partNames[selectedPart] + " mute");
+        updateMuteEditor();
+
+        updating = false;
+    }
+
+    private void updateMuteEditor() {
+        if (muteEditor == null) return;
+        boolean active = mutes[selectedPart];
+        muteEditor.setText(active ? "MUTED" : "MUTE");
+        muteEditor.setBackground(panelDrawable(active));
+        muteEditor.setTextColor(active
+                ? Color.rgb(20,20,19)
+                : Color.rgb(FG_R,FG_G,FG_B));
+    }
+
+    private void notifyChange(int part) {
+        if (listener != null) {
+            listener.onMixerChanged(
+                    part, volumes[part], pans[part], mutes[part]);
+        }
+    }
+
+    @Override protected void onVisibilityChanged(View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        if (changedView != this) return;
+        removeCallbacks(meterTick);
+        if (visibility == View.VISIBLE) post(meterTick);
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        removeCallbacks(meterTick);
+        super.onDetachedFromWindow();
     }
 
     private String panText(int value) {
@@ -288,7 +357,6 @@ final class MixerView extends FrameLayout {
         return t;
     }
 
-    // Same panel palette and active inversion used by the graphical CONFIG UI.
     private GradientDrawable panelDrawable(boolean active) {
         GradientDrawable d = new GradientDrawable();
         d.setCornerRadius(dp(7));
