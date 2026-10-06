@@ -1081,7 +1081,18 @@ void AudioEngine::handle(const Event& e) {
 }
 
 void AudioEngine::render(float* out,int32_t frames) {
-    std::lock_guard<std::mutex> epLock(epBankMutex_);
+    // Complete bank switches only at an audio-buffer boundary. The expensive
+    // mmap/validation work has already happened on a background thread.
+    for (int slot=0; slot<SAMPLE_BANK_COUNT; ++slot) {
+        const int pending = epPendingBank_[slot].exchange(-1, std::memory_order_acq_rel);
+        if (pending >= 0) {
+            // Existing voices reference the old bank's Entry pointers. Retire
+            // them before flipping the immutable bank generation.
+            epAllNotesOff(slot);
+            epActiveBank_[slot].store(std::clamp(pending,0,1), std::memory_order_release);
+        }
+    }
+
     Event e;
     while (pop(e)) handle(e);
 
@@ -1090,14 +1101,30 @@ void AudioEngine::render(float* out,int32_t frames) {
         float mixR = 0.0f;
         int activeParts = 0;
 
-        for (int part=0; part<9; ++part) {
-            const int voices = activeVoicesPart(part);
+        // Render the shared 64-voice sample pool once per frame, then route the
+        // results to SAMPLE parts 8..15. This avoids scanning 64 voices eight times.
+        std::array<float,SAMPLE_BANK_COUNT> sampleL{};
+        std::array<float,SAMPLE_BANK_COUNT> sampleR{};
+        std::array<int,SAMPLE_BANK_COUNT> sampleVoices{};
+        for (auto& voice : epVoices_) {
+            if (!voice.active) continue;
+            const int slot = std::clamp(voice.bankSlot,0,SAMPLE_BANK_COUNT-1);
+            epRenderVoice(voice, sampleL[slot], sampleR[slot]);
+            if (voice.active) sampleVoices[slot]++;
+        }
+
+        for (int part=0; part<PART_COUNT; ++part) {
             float partL = 0.0f;
             float partR = 0.0f;
+            int voices = 0;
 
-            if (part == 8) {
-                for (auto& voice : epVoices_) epRenderVoice(voice, partL, partR);
+            if (part >= 8) {
+                const int slot = part - 8;
+                partL = sampleL[slot];
+                partR = sampleR[slot];
+                voices = sampleVoices[slot];
             } else {
+                voices = activeVoicesPart(part);
                 partL = processPart(part);
                 partR = partL;
                 if (part == 7) {
@@ -1126,8 +1153,6 @@ void AudioEngine::render(float* out,int32_t frames) {
                         (performanceXYActive_ || performanceXYGate_ > 0.0005f)) {
                     processPerformanceStutter(partL, partR);
                 } else {
-                    // Keep one second of recent DRUMS audio ready so Stutter
-                    // responds immediately when the user touches the XY area.
                     recordStutterHistory(partL, partR);
                 }
             } else if (performanceXYPart_ == part &&
@@ -1135,9 +1160,6 @@ void AudioEngine::render(float* out,int32_t frames) {
                 processPerformanceDelay(partL, partR);
             }
 
-            // Mixer stage: balance-style PAN preserves the existing centre
-            // level (L=R=1.0 at PAN C) and attenuates only the opposite side.
-            // This also behaves naturally for EP-SAMPLE's stereo source.
             if (partMute_[part]) {
                 partL = 0.0f;
                 partR = 0.0f;
@@ -1169,8 +1191,6 @@ void AudioEngine::render(float* out,int32_t frames) {
         const float baseL = std::isfinite(l) ? std::tanh(l * outGain) : 0.0f;
         const float baseR = std::isfinite(r) ? std::tanh(r * outGain) : 0.0f;
 
-        // Capture the finished unified instrument mix after global FX/master,
-        // but never feed recorder playback back into its own recording input.
         float mixedL = baseL;
         float mixedR = baseR;
         recorder_.process(baseL, baseR, mixedL, mixedR);
