@@ -26,11 +26,11 @@ ICON_SIZE = 27540
 
 
 def decode_chunks(paths):
-    encoded = ''.join(
-        ''.join(path.read_text(encoding='ascii').split())
-        for path in paths
-    )
-    return base64.b64decode(encoded, validate=True)
+    decoded = bytearray()
+    for path in paths:
+        encoded = ''.join(path.read_text(encoding='ascii').split())
+        decoded.extend(base64.b64decode(encoded, validate=True))
+    return bytes(decoded)
 
 
 def validate_crf1(data, expected_count, label):
