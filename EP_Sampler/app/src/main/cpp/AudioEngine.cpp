@@ -913,15 +913,15 @@ void AudioEngine::processPerformanceStutter(float& left, float& right) {
 }
 
 float AudioEngine::processPart(int part) {
-    part = std::clamp(part, 0, 8);
-    if (part == 8) return 0.0f;
+    part = std::clamp(part, 0, PART_COUNT - 1);
+    if (part >= 8) return 0.0f;
     const float raw = (part == 0) ? violin_.process() : modelParts_[part - 1].process();
     return raw * (partVolume_[part] / 127.0f);
 }
 
 int AudioEngine::activeVoicesPart(int part) const {
-    part = std::clamp(part, 0, 8);
-    if (part == 8) return epActiveVoices();
+    part = std::clamp(part, 0, PART_COUNT - 1);
+    if (part >= 8) return epActiveVoices(part - 8);
     if (part == 0) return violin_.activeVoices();
     int n = modelParts_[part - 1].activeVoices();
     if (part == 7) n += activeDrumSampleVoices();
@@ -1020,7 +1020,7 @@ void AudioEngine::handle(const Event& e) {
             break;
         }
         case Event::INSTRUMENT:
-            selectedInstrument_ = std::clamp(e.a, 0, 8);
+            selectedInstrument_ = std::clamp(e.a, 0, PART_COUNT - 1);
             cc7_ = partVolume_[selectedInstrument_];
             cc64_ = partSustain_[selectedInstrument_];
             pitch_ = partPitch_[selectedInstrument_];
@@ -1035,13 +1035,13 @@ void AudioEngine::handle(const Event& e) {
             partDistortion_[7] = std::clamp(e.b, 0, 127);
             break;
         case Event::PART_FX: {
-            const int part = std::clamp(e.a, 0, 8);
+            const int part = std::clamp(e.a, 0, PART_COUNT - 1);
             partBoostDb_[part] = std::clamp(e.b, 0, 18);
             partDistortion_[part] = std::clamp(e.c, 0, 127);
             break;
         }
         case Event::PART_MIXER: {
-            const int part = std::clamp(e.a, 0, 8);
+            const int part = std::clamp(e.a, 0, PART_COUNT - 1);
             partVolume_[part] = std::clamp(e.b, 0, 127);
             partPan_[part] = std::clamp(e.c, 0, 127);
             partMute_[part] = e.d != 0;
@@ -1058,7 +1058,7 @@ void AudioEngine::handle(const Event& e) {
             const bool wasActive = performanceXYActive_;
             const int oldPart = performanceXYPart_;
             performanceXYActive_ = e.a != 0;
-            performanceXYPart_ = std::clamp(e.b, 0, 8);
+            performanceXYPart_ = std::clamp(e.b, 0, PART_COUNT - 1);
             performanceXYX_ = std::clamp(e.c, 0, 127) / 127.0f;
             performanceXYY_ = std::clamp(e.d, 0, 127) / 127.0f;
 
