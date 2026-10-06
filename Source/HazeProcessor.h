@@ -19,6 +19,7 @@ public:
         float filter = 0.50f;
         float repeat = 0.0f;
         float mod = 0.50f;
+        float reverb = 0.0f;
         int speed = 1;      // 0=.5x, 1=1x, 2=2x
         int loops = 1;      // 0=1, 1=2, 2=2+
         int warble = 0;     // 0=none, 1=light, 2=heavy
@@ -64,6 +65,8 @@ public:
         filterBand = { 0.0f, 0.0f };
         currentSpeed = 1.0;
         randomState = 0x48415A45u;
+        hallReverb.setSampleRate (sampleRate);
+        hallReverb.reset();
     }
 
     void clear() noexcept
@@ -81,6 +84,7 @@ public:
             warbleBuffer.clear();
         filterLow = { 0.0f, 0.0f };
         filterBand = { 0.0f, 0.0f };
+        hallReverb.reset();
     }
 
     void forceShuffle() noexcept
@@ -98,6 +102,7 @@ public:
         params.filter = clamp01 (params.filter);
         params.repeat = clamp01 (params.repeat);
         params.mod = clamp01 (params.mod);
+        params.reverb = clamp01 (params.reverb);
         params.speed = std::clamp (params.speed, 0, 2);
         params.loops = std::clamp (params.loops, 0, 2);
         params.warble = std::clamp (params.warble, 0, 2);
@@ -165,6 +170,23 @@ public:
             if (channels > 1)
                 buffer.setSample (1, i, finite (outR));
         }
+
+        juce::Reverb::Parameters hall;
+        hall.roomSize = 0.88f;
+        hall.damping = 0.42f;
+        hall.wetLevel = params.bypass ? 0.0f : 0.52f * params.reverb;
+        hall.dryLevel = 1.0f;
+        hall.width = 1.0f;
+        hall.freezeMode = 0.0f;
+        hallReverb.setParameters (hall);
+
+        if (channels >= 2)
+            hallReverb.processStereo (
+                buffer.getWritePointer (0),
+                buffer.getWritePointer (1), samples);
+        else
+            hallReverb.processMono (
+                buffer.getWritePointer (0), samples);
     }
 
 private:
@@ -547,6 +569,7 @@ private:
     std::array<float, 2> filterLow { 0.0f, 0.0f };
     std::array<float, 2> filterBand { 0.0f, 0.0f };
 
+    juce::Reverb hallReverb;
     juce::AudioBuffer<float> warbleBuffer;
     int warbleWrite = 0;
     float warblePhase = 0.0f;
