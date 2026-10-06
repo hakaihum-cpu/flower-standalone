@@ -20,11 +20,17 @@ public:
     bool start();
     void stop();
 
-    // EP-SAMPLE bank. Physical-model parts remain independent of this bank.
-    bool loadBank(const std::string& path);
-    bool loadBankFd(int fd);
-    bool bankLoaded() const { return epBank_.loaded(); }
-    std::string bankStatus() const { return epBank_.status(); }
+    // SAMPLE parts occupy MIDI parts 8..15 (CH9..16 by default).
+    // Slot loads happen into an inactive mmap bank and are swapped on the
+    // audio thread without holding a file-I/O mutex in the callback.
+    static constexpr int SAMPLE_BANK_COUNT = 8;
+    bool loadBank(const std::string& path);              // legacy slot 0
+    bool loadBankFd(int fd);                             // legacy slot 0
+    bool loadBankSlotFd(int slot, int fd);
+    bool bankLoaded() const { return bankLoaded(0); }    // legacy slot 0
+    bool bankLoaded(int slot) const;
+    std::string bankStatus() const { return bankStatus(0); }
+    std::string bankStatus(int slot) const;
 
     void noteOn(int note, int velocity);
     void noteOff(int note, int velocity);
@@ -94,7 +100,8 @@ private:
             DREAMY, BOOST, BOOST_DB, SPACE_MODE, SPACE_PARAMS,
             TAPE, TAPE_PARAMS, DREAMY_PARAMS, DREAMY_MODE, DREAMY_EXTRA, ADSR, INSTRUMENT,
             PART_NOTE_ON, PART_NOTE_OFF, PART_POLY_AT, PART_CH_AT, PART_CC, PART_PITCH,
-            DRUM_PARAM, DRUM_FX, PART_FX, PART_MIXER, FELT_REVERB, PERFORMANCE_XY
+            DRUM_PARAM, DRUM_FX, PART_FX, PART_MIXER, FELT_REVERB, PERFORMANCE_XY,
+            BANK_SWAP
         } type;
         int a=0,b=0,c=0,d=0;
     };
@@ -108,11 +115,12 @@ private:
     PhysicalViolin violin_;
     std::array<InstrumentModels, 7> modelParts_{};
     int selectedInstrument_=0;
-    std::array<int, 9> partVolume_{{112,112,112,112,112,112,112,112,127}};
-    std::array<int, 9> partPan_{{64,64,64,64,64,64,64,64,64}};
-    std::array<bool, 9> partMute_{{false,false,false,false,false,false,false,false,false}};
-    std::array<int, 9> partSustain_{{0,0,0,0,0,0,0,0,0}};
-    std::array<int, 9> partPitch_{{8192,8192,8192,8192,8192,8192,8192,8192,8192}};
+    static constexpr int PART_COUNT = 16;
+    std::array<int, PART_COUNT> partVolume_{{112,112,112,112,112,112,112,112,127,127,127,127,127,127,127,127}};
+    std::array<int, PART_COUNT> partPan_{{64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64}};
+    std::array<bool, PART_COUNT> partMute_{{false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false}};
+    std::array<int, PART_COUNT> partSustain_{{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}};
+    std::array<int, PART_COUNT> partPitch_{{8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192}};
     DreamyEffect dreamy_;
     SpaceEffect space_;
     SpaceEffect feltPianoReverb_;
@@ -154,8 +162,8 @@ private:
     float spaceMix_=0.50f, spaceDecay_=0.50f;
     float tapeWow_=0.50f, tapeFlutter_=0.50f, tapeDrive_=0.50f;
     float dreamyMix_=0.34f;
-    std::array<int,9> partBoostDb_{{0,0,0,0,0,0,0,6,0}};
-    std::array<int,9> partDistortion_{{0,0,0,0,0,0,0,0,0}};
+    std::array<int,PART_COUNT> partBoostDb_{{0,0,0,0,0,0,0,6,0,0,0,0,0,0,0,0}};
+    std::array<int,PART_COUNT> partDistortion_{{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}};
     int feltReverbMix_=28;
     int feltReverbDecay_=58;
 
@@ -180,13 +188,15 @@ private:
     int stutterCaptureEnd_=0;
     double stutterPhase_=0.0;
 
-    // EP-SAMPLE is the ninth instrument (part 8). It deliberately keeps the
-    // proven EPBANK1 playback path separate from the eight physical-model parts.
+    // Eight SAMPLE banks share one 64-voice pool. Each voice snapshots the
+    // active double-buffer bank index at NoteOn so no mmap changes underneath it.
     struct EpVoice {
         bool active=false;
         bool releasing=false;
         bool pendingRelease=false;
         bool keyDown=false;
+        int bankSlot=0;
+        int bankIndex=0;
         int note=0;
         int velocity=0;
         int rr=1;
@@ -201,25 +211,31 @@ private:
     static constexpr std::array<int,8> EP_VELS{{16,32,48,64,80,96,112,127}};
     static constexpr int EP_MAX_VOICES = 64;
     std::array<EpVoice,EP_MAX_VOICES> epVoices_{};
-    std::array<uint8_t,128> epRrCounter_{};
-    std::array<int,128> epPolyAT_{};
-    int epChannelAT_=0;
-    int epExpression_=127;
-    SampleBank epBank_;
-    std::mutex epBankMutex_;
+    std::array<std::array<uint8_t,128>,SAMPLE_BANK_COUNT> epRrCounter_{};
+    std::array<std::array<int,128>,SAMPLE_BANK_COUNT> epPolyAT_{};
+    std::array<int,SAMPLE_BANK_COUNT> epChannelAT_{{0,0,0,0,0,0,0,0}};
+    std::array<int,SAMPLE_BANK_COUNT> epExpression_{{127,127,127,127,127,127,127,127}};
+
+    // Two mmap objects per slot: background load writes only the inactive bank.
+    std::array<std::array<SampleBank,2>,SAMPLE_BANK_COUNT> epBanks_{};
+    std::array<std::atomic<int>,SAMPLE_BANK_COUNT> epActiveBank_{};
+    std::array<std::mutex,SAMPLE_BANK_COUNT> epBankLoadMutex_{};
 
     AAudioStream* stream_=nullptr;
     int sampleRate_=48000;
     int defaultBufferSizeFrames_=0;
     float requestedBufferBursts_=0.0f;
 
-    void epBeginVoice(int note, int velocity);
-    void epReleaseVoice(int note);
-    void epPolyPressure(int note, int pressure);
-    void epChannelPressure(int pressure);
-    void epSustainChanged(bool down);
+    const SampleBank& epBankForVoice(const EpVoice& v) const;
+    const SampleBank& epActiveBank(int slot) const;
+    void epBeginVoice(int slot, int note, int velocity);
+    void epReleaseVoice(int slot, int note);
+    void epPolyPressure(int slot, int note, int pressure);
+    void epChannelPressure(int slot, int pressure);
+    void epSustainChanged(int slot, bool down);
+    void epAllNotesOff(int slot);
     void epAllNotesOff();
-    int epActiveVoices() const;
+    int epActiveVoices(int slot) const;
     void epRenderVoice(EpVoice& v, float& l, float& r);
     float epLayerSample(const EpVoice& v, bool release, int layer, double frame, int channel) const;
     static void epBracket(float velocity, int& lo, int& hi, float& mix);
