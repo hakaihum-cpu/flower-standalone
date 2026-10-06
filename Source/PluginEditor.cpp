@@ -589,16 +589,93 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
 {
     g.fillAll (juce::Colours::black);
 
-    g.setColour (juce::Colours::white.withAlpha (0.94f));
+    if (eurekaSheet.isValid())
+    {
+        constexpr int columns = 14;
+        constexpr int rows = 10;
+        const int frame = juce::jlimit (0, columns * rows - 1, eurekaFrameIndex);
+        const int column = frame % columns;
+        const int row = frame / columns;
+
+        const int x0 = juce::roundToInt (
+            (double) column * eurekaSheet.getWidth() / columns);
+        const int x1 = juce::roundToInt (
+            (double) (column + 1) * eurekaSheet.getWidth() / columns);
+        const int y0 = juce::roundToInt (
+            (double) row * eurekaSheet.getHeight() / rows);
+        const int y1 = juce::roundToInt (
+            (double) (row + 1) * eurekaSheet.getHeight() / rows);
+
+        const juce::Rectangle<float> source (
+            (float) (x0 + 1), (float) (y0 + 1),
+            (float) juce::jmax (1, x1 - x0 - 2),
+            (float) juce::jmax (1, y1 - y0 - 2));
+
+        g.drawImage (
+            eurekaSheet,
+            juce::Rectangle<float> (0.0f, 0.0f, design, design),
+            source);
+    }
+
+    juce::ColourGradient topShade (
+        juce::Colours::black.withAlpha (0.58f), 360.0f, 0.0f,
+        juce::Colours::transparentBlack, 360.0f, 135.0f, false);
+    g.setGradientFill (topShade);
+    g.fillRect (0.0f, 0.0f, 720.0f, 145.0f);
+
+    if (eurekaMotionArmed || eurekaMotionRecording)
+    {
+        g.setColour (juce::Colour (0xfff23a36));
+        g.drawRect (
+            juce::Rectangle<float> (8.0f, 8.0f, 704.0f, 704.0f), 3.0f);
+        g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
+        g.drawText (
+            eurekaMotionRecording ? juce::String::fromUTF8 (u8"● MOTION REC")
+                                  : "MOTION ARM",
+            24, 54, 170, 24, juce::Justification::centredLeft);
+    }
+    else if (eurekaMotionPlaying)
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.82f));
+        g.setFont (juce::FontOptions (13.0f).withStyle ("Bold"));
+        g.drawText ("MOTION PLAY", 24, 54, 150, 24,
+                    juce::Justification::centredLeft);
+    }
+
+    g.setColour (juce::Colours::white.withAlpha (0.96f));
     g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
-    g.drawText ("EUREKA", 28, 20, 180, 34, juce::Justification::centredLeft);
+    g.drawText ("EUREKA", 28, 18, 180, 34,
+                juce::Justification::centredLeft);
+
     g.setFont (juce::FontOptions (12.0f));
-    g.setColour (juce::Colours::white.withAlpha (0.56f));
+    g.setColour (juce::Colours::white.withAlpha (0.72f));
     g.drawText ("DUAL LOOP / GLITCH / LO-FI",
-                176, 25, 260, 24, juce::Justification::centredLeft);
-    g.setColour (juce::Colours::white.withAlpha (0.88f));
+                176, 24, 260, 24, juce::Justification::centredLeft);
+
+    g.setColour (juce::Colours::white.withAlpha (0.94f));
+    g.drawText (eurekaPanelVisible ? "CLOSE" : "PANEL",
+                490, 22, 78, 24, juce::Justification::centred);
     g.drawText ("CONFIG", 604, 22, 88, 24,
                 juce::Justification::centredRight);
+
+    if (! eurekaPanelVisible)
+    {
+        g.setFont (juce::FontOptions (11.0f));
+        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.drawText (
+            eurekaMotionArmed
+                ? "DRAG TO RECORD 3 SEC  ·  X=MIX  Y=HAZE"
+                : "TAP IMAGE TO ARM MOTION",
+            30, 674, 660, 20, juce::Justification::centred);
+        return;
+    }
+
+    g.setColour (juce::Colours::black.withAlpha (0.76f));
+    g.fillRoundedRectangle (
+        juce::Rectangle<float> (18.0f, 72.0f, 684.0f, 612.0f), 12.0f);
+    g.setColour (juce::Colours::white.withAlpha (0.28f));
+    g.drawRoundedRectangle (
+        juce::Rectangle<float> (18.0f, 72.0f, 684.0f, 612.0f), 12.0f, 1.0f);
 
     const float mix =
         processor.state().getRawParameterValue (ParamID::hazeMix)->load();
@@ -612,6 +689,8 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
         processor.state().getRawParameterValue (ParamID::hazeRepeat)->load();
     const float mod =
         processor.state().getRawParameterValue (ParamID::hazeMod)->load();
+    const float hall =
+        processor.state().getRawParameterValue (ParamID::hazeReverb)->load();
 
     const float loopA = 10.0f * time;
     const float loopB = 10.0f * (1.0f - time);
@@ -622,17 +701,25 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
               juce::String (loopA, 1) + "s / "
               + juce::String (loopB, 1) + "s");
     paintBar (g, hazeParameterBounds (2), "HAZE", haze,
-              haze < 0.485f ? "JUMP " + juce::String (juce::roundToInt ((0.5f - haze) * 200.0f))
-                            : haze > 0.515f ? "LO-FI " + juce::String (juce::roundToInt ((haze - 0.5f) * 200.0f))
-                                           : "NEUTRAL");
+              haze < 0.485f
+                  ? "JUMP " + juce::String (
+                        juce::roundToInt ((0.5f - haze) * 200.0f))
+                  : haze > 0.515f
+                      ? "LO-FI " + juce::String (
+                            juce::roundToInt ((haze - 0.5f) * 200.0f))
+                      : "NEUTRAL");
     paintBar (g, hazeParameterBounds (3), "FILTER", filter,
-              filter < 0.485f ? "LOWPASS"
-                              : filter > 0.515f ? "BANDPASS" : "NEUTRAL");
+              filter < 0.485f
+                  ? "LOWPASS"
+                  : filter > 0.515f ? "BANDPASS" : "NEUTRAL");
     paintBar (g, hazeParameterBounds (4), "REPEAT", repeat,
               juce::String (juce::roundToInt (repeat * 100.0f)) + "%");
     paintBar (g, hazeParameterBounds (5), "MOD", mod,
-              mod < 0.485f ? "TIME / REPEAT"
-                           : mod > 0.515f ? "HAZE" : "NEUTRAL");
+              mod < 0.485f
+                  ? "TIME / REPEAT"
+                  : mod > 0.515f ? "HAZE" : "NEUTRAL");
+    paintBar (g, hazeParameterBounds (6), "REVERB / HALL", hall,
+              juce::String (juce::roundToInt (hall * 100.0f)) + "%");
 
     static constexpr const char* speedText[] = { ".5x", "1x", "2x" };
     static constexpr const char* loopText[] = { "1", "2", "2+" };
@@ -650,19 +737,26 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
     const int warble = juce::jlimit (0, 2, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::hazeWarble)->load()));
     const bool transpose =
-        processor.state().getRawParameterValue (ParamID::hazeTranspose)->load() >= 0.5f;
+        processor.state().getRawParameterValue (
+            ParamID::hazeTranspose)->load() >= 0.5f;
     const bool echo =
-        processor.state().getRawParameterValue (ParamID::hazeEcho)->load() >= 0.5f;
+        processor.state().getRawParameterValue (
+            ParamID::hazeEcho)->load() >= 0.5f;
     const bool og =
-        processor.state().getRawParameterValue (ParamID::hazeOg)->load() >= 0.5f;
+        processor.state().getRawParameterValue (
+            ParamID::hazeOg)->load() >= 0.5f;
     const bool lock =
-        processor.state().getRawParameterValue (ParamID::hazeLock)->load() >= 0.5f;
+        processor.state().getRawParameterValue (
+            ParamID::hazeLock)->load() >= 0.5f;
     const bool bypass =
-        processor.state().getRawParameterValue (ParamID::hazeBypass)->load() >= 0.5f;
+        processor.state().getRawParameterValue (
+            ParamID::hazeBypass)->load() >= 0.5f;
     const bool gain =
-        processor.state().getRawParameterValue (ParamID::hazeGain)->load() >= 0.5f;
+        processor.state().getRawParameterValue (
+            ParamID::hazeGain)->load() >= 0.5f;
     const bool stereo =
-        processor.state().getRawParameterValue (ParamID::hazePath)->load() >= 0.5f;
+        processor.state().getRawParameterValue (
+            ParamID::hazePath)->load() >= 0.5f;
 
     const juce::String values[] = {
         speedText[speed],
@@ -690,21 +784,24 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
         g.fillRoundedRectangle (r, 6.0f);
         g.setColour (juce::Colours::white.withAlpha (
             emphasized ? 0.94f : 0.46f));
-        g.drawRoundedRectangle (r, 6.0f, emphasized ? 2.0f : 1.0f);
+        g.drawRoundedRectangle (
+            r, 6.0f, emphasized ? 2.0f : 1.0f);
 
         g.setFont (juce::FontOptions (10.0f));
         g.setColour (juce::Colours::white.withAlpha (0.52f));
-        g.drawText (toggleNames[i], r.removeFromTop (19.0f),
-                    juce::Justification::centred);
+        g.drawText (
+            toggleNames[i], r.removeFromTop (19.0f),
+            juce::Justification::centred);
         g.setFont (juce::FontOptions (13.0f).withStyle ("Bold"));
         g.setColour (juce::Colours::white.withAlpha (0.90f));
         g.drawText (values[i], r, juce::Justification::centred);
     }
 
     g.setFont (juce::FontOptions (10.5f));
-    g.setColour (juce::Colours::white.withAlpha (0.44f));
-    g.drawText ("Buffer keeps recording through BYPASS. LOCK stops only the record heads.",
-                30, 661, 660, 20, juce::Justification::centred);
+    g.setColour (juce::Colours::white.withAlpha (0.58f));
+    g.drawText (
+        "BYPASS keeps recording. LOCK stops record heads. Motion: X=MIX / Y=HAZE.",
+        30, 658, 660, 20, juce::Justification::centred);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
