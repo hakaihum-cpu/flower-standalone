@@ -55,9 +55,11 @@ private:
 
     RealtimeChordFxAudioProcessor& processor;
     FramePack frames;
+    FramePack eurekaFrames;
     juce::Image currentFrame;
-    juce::Image eurekaSheet;
+    juce::Image currentEurekaFrame;
     int loadedFrame = -1;
+    int loadedEurekaFrame = -1;
     int eurekaFrameIndex = 0;
     int chordVisualCooldown = 0;
     int eurekaVisualCooldown = 0;
