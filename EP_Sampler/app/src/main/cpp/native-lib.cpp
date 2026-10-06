@@ -10,6 +10,9 @@ extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_lo
 extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_loadBankFd(JNIEnv*,jclass,jint fd){return AudioEngine::instance().loadBankFd(fd);}
 extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_isBankLoaded(JNIEnv*,jclass){return AudioEngine::instance().bankLoaded();}
 extern "C" JNIEXPORT jstring JNICALL Java_com_example_epsampler_NativeEngine_bankStatus(JNIEnv* env,jclass){auto s=AudioEngine::instance().bankStatus();return env->NewStringUTF(s.c_str());}
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_loadBankSlotFd(JNIEnv*,jclass,jint slot,jint fd){return AudioEngine::instance().loadBankSlotFd(slot,fd);}
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_isBankSlotLoaded(JNIEnv*,jclass,jint slot){return AudioEngine::instance().bankLoaded(slot);}
+extern "C" JNIEXPORT jstring JNICALL Java_com_example_epsampler_NativeEngine_bankSlotStatus(JNIEnv* env,jclass,jint slot){auto s=AudioEngine::instance().bankStatus(slot);return env->NewStringUTF(s.c_str());}
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_noteOn(JNIEnv*,jclass,jint n,jint v){AudioEngine::instance().noteOn(n,v);}
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_noteOff(JNIEnv*,jclass,jint n,jint v){AudioEngine::instance().noteOff(n,v);}
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_polyPressure(JNIEnv*,jclass,jint n,jint p){AudioEngine::instance().polyPressure(n,p);}
