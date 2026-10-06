@@ -417,45 +417,70 @@ int AudioEngine::audioXRunCount() const {
 }
 
 
-void AudioEngine::epBeginVoice(int note, int velocity) {
-    if (!epBank_.loaded() || note < 21 || note > 108) return;
+const SampleBank& AudioEngine::epActiveBank(int slot) const {
+    slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
+    const int index = epActiveBank_[slot].load(std::memory_order_acquire);
+    return epBanks_[slot][index];
+}
+
+const SampleBank& AudioEngine::epBankForVoice(const EpVoice& v) const {
+    const int slot = std::clamp(v.bankSlot, 0, SAMPLE_BANK_COUNT - 1);
+    const int index = std::clamp(v.bankIndex, 0, 1);
+    return epBanks_[slot][index];
+}
+
+void AudioEngine::epBeginVoice(int slot, int note, int velocity) {
+    slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
+    if (note < 21 || note > 108) return;
+
+    const int bankIndex = epActiveBank_[slot].load(std::memory_order_acquire);
+    const SampleBank& bank = epBanks_[slot][bankIndex];
+    if (!bank.loaded()) return;
 
     EpVoice* pick = nullptr;
     for (auto& v : epVoices_) {
         if (!v.active) { pick = &v; break; }
     }
     if (!pick) {
+        // Shared 64-voice pool: steal the oldest voice across all eight banks.
         pick = &epVoices_[0];
         for (auto& v : epVoices_) {
             if (v.ageFrames > pick->ageFrames) pick = &v;
         }
     }
 
-    const uint8_t rr = uint8_t((epRrCounter_[note]++ % 3) + 1);
+    const uint8_t rr = uint8_t((epRrCounter_[slot][note]++ % 3) + 1);
     *pick = EpVoice{};
     pick->active = true;
     pick->keyDown = true;
+    pick->bankSlot = slot;
+    pick->bankIndex = bankIndex;
     pick->note = note;
     pick->velocity = std::clamp(velocity, 1, 127);
     pick->rr = rr;
     pick->bodyVelocity = float(pick->velocity);
     pick->targetBodyVelocity = float(pick->velocity);
 
-    const int at = epPolyAT_[note] ? epPolyAT_[note] : epChannelAT_;
+    const int at = epPolyAT_[slot][note]
+            ? epPolyAT_[slot][note]
+            : epChannelAT_[slot];
     pick->targetBodyVelocity = float(pick->velocity)
             + (127.0f - pick->velocity) * (at / 127.0f);
 
     for (int i = 0; i < 8; ++i) {
-        pick->sus[i] = epBank_.find(uint8_t(note), uint8_t(EP_VELS[i]), rr, SampleBank::SUSTAIN);
-        pick->rel[i] = epBank_.find(uint8_t(note), uint8_t(EP_VELS[i]), rr, SampleBank::RELEASE);
+        pick->sus[i] = bank.find(uint8_t(note), uint8_t(EP_VELS[i]), rr, SampleBank::SUSTAIN);
+        pick->rel[i] = bank.find(uint8_t(note), uint8_t(EP_VELS[i]), rr, SampleBank::RELEASE);
     }
 }
 
-void AudioEngine::epReleaseVoice(int note) {
+void AudioEngine::epReleaseVoice(int slot, int note) {
+    slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
+    const int part = 8 + slot;
     for (auto& v : epVoices_) {
-        if (!v.active || v.note != note || v.releasing || !v.keyDown) continue;
+        if (!v.active || v.bankSlot != slot || v.note != note ||
+                v.releasing || !v.keyDown) continue;
         v.keyDown = false;
-        if (partSustain_[8] >= 64) {
+        if (partSustain_[part] >= 64) {
             v.pendingRelease = true;
         } else {
             v.releasing = true;
@@ -464,29 +489,32 @@ void AudioEngine::epReleaseVoice(int note) {
     }
 }
 
-void AudioEngine::epPolyPressure(int note, int pressure) {
+void AudioEngine::epPolyPressure(int slot, int note, int pressure) {
+    slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
     if (note < 0 || note >= 128) return;
-    epPolyAT_[note] = std::clamp(pressure, 0, 127);
+    epPolyAT_[slot][note] = std::clamp(pressure, 0, 127);
     for (auto& v : epVoices_) {
-        if (!v.active || v.note != note) continue;
+        if (!v.active || v.bankSlot != slot || v.note != note) continue;
         v.targetBodyVelocity = float(v.velocity)
-                + (127.0f - v.velocity) * (epPolyAT_[note] / 127.0f);
+                + (127.0f - v.velocity) * (epPolyAT_[slot][note] / 127.0f);
     }
 }
 
-void AudioEngine::epChannelPressure(int pressure) {
-    epChannelAT_ = std::clamp(pressure, 0, 127);
+void AudioEngine::epChannelPressure(int slot, int pressure) {
+    slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
+    epChannelAT_[slot] = std::clamp(pressure, 0, 127);
     for (auto& v : epVoices_) {
-        if (!v.active || epPolyAT_[v.note] != 0) continue;
+        if (!v.active || v.bankSlot != slot || epPolyAT_[slot][v.note] != 0) continue;
         v.targetBodyVelocity = float(v.velocity)
-                + (127.0f - v.velocity) * (epChannelAT_ / 127.0f);
+                + (127.0f - v.velocity) * (epChannelAT_[slot] / 127.0f);
     }
 }
 
-void AudioEngine::epSustainChanged(bool down) {
+void AudioEngine::epSustainChanged(int slot, bool down) {
+    slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
     if (down) return;
     for (auto& v : epVoices_) {
-        if (v.active && v.pendingRelease && !v.keyDown) {
+        if (v.active && v.bankSlot == slot && v.pendingRelease && !v.keyDown) {
             v.pendingRelease = false;
             v.releasing = true;
             v.releaseFrame = 0.0;
@@ -494,13 +522,23 @@ void AudioEngine::epSustainChanged(bool down) {
     }
 }
 
+void AudioEngine::epAllNotesOff(int slot) {
+    slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
+    for (auto& v : epVoices_) {
+        if (v.active && v.bankSlot == slot) v = EpVoice{};
+    }
+}
+
 void AudioEngine::epAllNotesOff() {
     for (auto& v : epVoices_) v = EpVoice{};
 }
 
-int AudioEngine::epActiveVoices() const {
+int AudioEngine::epActiveVoices(int slot) const {
+    slot = std::clamp(slot, 0, SAMPLE_BANK_COUNT - 1);
     int count = 0;
-    for (const auto& v : epVoices_) if (v.active) ++count;
+    for (const auto& v : epVoices_) {
+        if (v.active && v.bankSlot == slot) ++count;
+    }
     return count;
 }
 
@@ -522,11 +560,20 @@ void AudioEngine::epBracket(float velocity, int& lo, int& hi, float& mix) {
 float AudioEngine::epLayerSample(
         const EpVoice& v, bool release, int layer, double frame, int channel) const {
     const auto* entry = release ? v.rel[layer] : v.sus[layer];
-    return epBank_.read(entry, frame, channel);
+    return epBankForVoice(v).read(entry, frame, channel);
 }
 
 void AudioEngine::epRenderVoice(EpVoice& v, float& l, float& r) {
-    if (!v.active || !epBank_.loaded()) return;
+    if (!v.active) return;
+
+    const SampleBank& bank = epBankForVoice(v);
+    if (!bank.loaded()) {
+        v.active = false;
+        return;
+    }
+
+    const int slot = std::clamp(v.bankSlot, 0, SAMPLE_BANK_COUNT - 1);
+    const int part = 8 + slot;
 
     const int attackLock = int(0.250 * sampleRate_);
     if (v.ageFrames > attackLock) {
@@ -538,9 +585,9 @@ void AudioEngine::epRenderVoice(EpVoice& v, float& l, float& r) {
     float mix = 0.0f;
     epBracket(requested, lo, hi, mix);
 
-    const double bendSemis = (double(partPitch_[8]) - 8192.0) / 8192.0 * 2.0;
+    const double bendSemis = (double(partPitch_[part]) - 8192.0) / 8192.0 * 2.0;
     const double ratio = std::pow(2.0, bendSemis / 12.0)
-            * (double(epBank_.sampleRate()) / double(sampleRate_));
+            * (double(bank.sampleRate()) / double(sampleRate_));
 
     float sl = 0.0f, sr = 0.0f;
     if (!v.releasing) {
@@ -554,7 +601,7 @@ void AudioEngine::epRenderVoice(EpVoice& v, float& l, float& r) {
         if (!endRef) {
             v.active = false;
         } else if (v.frame >= endRef->frames) {
-            if (v.pendingRelease && partSustain_[8] >= 64) {
+            if (v.pendingRelease && partSustain_[part] >= 64) {
                 v.frame = std::max(0.0, double(endRef->frames) - 1.001);
             } else {
                 v.active = false;
@@ -570,8 +617,8 @@ void AudioEngine::epRenderVoice(EpVoice& v, float& l, float& r) {
                           + epLayerSample(v, false, hi, v.frame, 1) * mix;
         const float relL = epLayerSample(v, true, lo, v.releaseFrame, 0) * (1.0f - mix)
                          + epLayerSample(v, true, hi, v.releaseFrame, 0) * mix;
-        const float relR = epLayerSample(v, true, lo, v.releaseFrame, 1) * (1.0f - mix)
-                         + epLayerSample(v, true, hi, v.releaseFrame, 1) * mix;
+        const float relR = epLayerSample(v, true, hi, v.releaseFrame, 1) * mix
+                         + epLayerSample(v, true, lo, v.releaseFrame, 1) * (1.0f - mix);
 
         sl = bodyL * (1.0f - x) + relL * x;
         sr = bodyR * (1.0f - x) + relR * x;
@@ -582,10 +629,9 @@ void AudioEngine::epRenderVoice(EpVoice& v, float& l, float& r) {
         if (!endRef || v.releaseFrame >= endRef->frames) v.active = false;
     }
 
-    // The standalone EP master used 3.2x while the physical-model master uses 1.55x.
-    // Compensate only the EP part so its established level is retained after the shared master.
     constexpr float EP_LEVEL_COMPENSATION = 3.2f / 1.55f;
-    const float gain = (partVolume_[8] / 127.0f) * (epExpression_ / 127.0f)
+    const float gain = (partVolume_[part] / 127.0f)
+            * (epExpression_[slot] / 127.0f)
             * EP_LEVEL_COMPENSATION;
     l += sl * gain;
     r += sr * gain;
