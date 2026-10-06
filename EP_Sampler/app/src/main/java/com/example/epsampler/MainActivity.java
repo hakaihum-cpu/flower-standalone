@@ -951,6 +951,33 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
         });
 
+        TextView deviceLabel = new TextView(this);
+        deviceLabel.setText("DEVICE RESCAN");
+        deviceLabel.setTextSize(16f);
+        root.addView(deviceLabel);
+
+        LinearLayout rescanButtons = new LinearLayout(this);
+        rescanButtons.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button rescanMidi = new Button(this);
+        rescanMidi.setText("RESCAN MIDI");
+        rescanMidi.setOnClickListener(v -> {
+            if (midiController != null) {
+                midiController.rescan();
+                Toast.makeText(this, "MIDI RESCAN STARTED", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        Button rescanAudio = new Button(this);
+        rescanAudio.setText("RESCAN AUDIO");
+        rescanAudio.setOnClickListener(v -> rescanAudioDevices(rescanAudio));
+
+        rescanButtons.addView(rescanMidi, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        rescanButtons.addView(rescanAudio, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        root.addView(rescanButtons);
+
         TextView instrumentLabel = new TextView(this);
         instrumentLabel.setText("INSTRUMENT");
         instrumentLabel.setTextSize(16f);
@@ -1092,6 +1119,36 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         dialog.show();
     }
 
+    private String audioDeviceSummary() {
+        android.media.AudioManager manager =
+                (android.media.AudioManager) getSystemService(AUDIO_SERVICE);
+        if (manager == null) return "device list unavailable";
+        int inputs = manager.getDevices(android.media.AudioManager.GET_DEVICES_INPUTS).length;
+        int outputs = manager.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).length;
+        return "IN " + inputs + " / OUT " + outputs;
+    }
+
+    private void rescanAudioDevices(Button button) {
+        if (button != null) button.setEnabled(false);
+        panicAllParts();
+
+        new Thread(() -> {
+            final boolean ok = NativeEngine.restartAudioPreservingState();
+            runOnUiThread(() -> {
+                if (button != null) button.setEnabled(true);
+                if (ok) {
+                    Toast.makeText(this,
+                            "AUDIO RESCAN OK  " + audioDeviceSummary(),
+                            Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this,
+                            "AUDIO RESCAN FAILED — AUDIO STATE KEPT",
+                            Toast.LENGTH_LONG).show();
+                }
+            });
+        }, "AudioRescan").start();
+    }
+
     private String[] modelControlNames() {
         switch (instrumentMode) {
             case 1: return new String[]{"EMBOUCHURE", "BREATH", "JET COLOR", "VIBRATO"};
@@ -1150,6 +1207,24 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putInt(KEY_INSTRUMENT, instrumentMode).apply();
+    }
+
+    @Override public void onSelectInstrument() {
+        pianoView.setRecorderOpen(false);
+        final String[] names = mixerPartNames();
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("CONTROL TARGET")
+                .setSingleChoiceItems(names, instrumentMode, null)
+                .setNegativeButton("CANCEL", null)
+                .create();
+        dialog.setOnShowListener(ignored -> {
+            android.widget.ListView list = dialog.getListView();
+            list.setOnItemClickListener((parent, view, position, id) -> {
+                applyInstrument(Math.max(0, Math.min(15, position)));
+                dialog.dismiss();
+            });
+        });
+        dialog.show();
     }
 
     @Override public void onRecorderRecord() {
