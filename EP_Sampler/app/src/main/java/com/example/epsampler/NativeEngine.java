@@ -6,6 +6,7 @@ public final class NativeEngine {
 
     public static native boolean start();
     public static native void stop();
+    public static native boolean restartAudioPreservingState();
     public static native boolean loadBank(String path);
     public static native boolean loadBankFd(int fd);
     public static native boolean isBankLoaded();
