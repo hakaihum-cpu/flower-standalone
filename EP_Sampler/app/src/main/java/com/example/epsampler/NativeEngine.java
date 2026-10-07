@@ -72,4 +72,22 @@ public final class NativeEngine {
     public static native void channelPressurePart(int part, int pressure);
     public static native void controlChangePart(int part, int cc, int value);
     public static native void pitchBendPart(int part, int value14);
+
+    public static native void sequencerPlay();
+    public static native void sequencerStop();
+    public static native void sequencerToggleRecord();
+    public static native void sequencerSetClick(boolean enabled);
+    public static native void sequencerSetBpm(int bpm);
+    public static native void sequencerSetSelectedTrack(int track);
+    public static native void sequencerSetTrackPart(int track, int part);
+    public static native void sequencerClearTrack(int track);
+    public static native void sequencerToggleGridNote(int track, int step, int note, int velocity);
+    public static native boolean sequencerIsPlaying();
+    public static native boolean sequencerIsRecording();
+    public static native boolean sequencerIsClickOn();
+    public static native int sequencerBpm();
+    public static native int sequencerSelectedTrack();
+    public static native int sequencerPlayheadTick();
+    public static native int sequencerTrackPart(int track);
+    public static native int[] sequencerNotes(int track);
 }
