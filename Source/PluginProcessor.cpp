@@ -1624,7 +1624,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
 {
     juce::AudioProcessorValueTreeState::ParameterLayout p;
     p.add (std::make_unique<juce::AudioParameterChoice> (
-        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT" }, 0));
+        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORD BOT" }, 0));
     p.add (std::make_unique<juce::AudioParameterChoice> (
         ParamID::chordMode, "CHORD ENGINE", juce::StringArray { "A", "B" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::complex, "COMPLEX", 0.0f, 1.0f, 0.25f));
