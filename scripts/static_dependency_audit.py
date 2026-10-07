@@ -117,9 +117,14 @@ for required_ci in [
     "ActiveProcessorCount=2",
     "--max-workers=2",
     "native-job-pools.txt",
+    "ndk;28.1.13356709",
+    'ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.1.13356709"',
 ]:
     if required_ci not in circle:
-        fail(f"CircleCI native parallelism control missing: {required_ci}")
+        fail(f"CircleCI build contract missing: {required_ci}")
+
+if "ndk;26.1.10909125" in circle:
+    fail("stale CircleCI NDK 26.1 reference reintroduced")
 
 patcher = (ROOT / "scripts/patch_android_native_parallelism.py").read_text(encoding="utf-8")
 for required_patcher in [
