@@ -6,6 +6,7 @@
 
 #include "PluginProcessor.h"
 #include "RetroLookAndFeel.h"
+#include "FramePack.h"
 
 class PerformancePadComponent final : public juce::Component,
                                       private juce::Timer
@@ -55,8 +56,14 @@ private:
     void notify();
     void updateVisualTimer();
     void timerCallback() override;
+    void chooseNextMixedVisual();
 
     std::array<juce::Image, 100> frameImages;
+    FramePack videoFrames;
+    juce::Image currentVideoFrame;
+    int currentMixedVisual = -1;
+    int visualCooldown = 0;
+    uint32_t visualRandomState = 0x464C5752u;
     bool arpIndicatorOn = true;
     bool delayIndicatorOn = true;
     bool yEffectIndicatorOn = true;
@@ -93,7 +100,9 @@ public:
                     int scale,
                     bool effectsEnabled,
                     bool yEffectDreamy,
-                    int midiChannel);
+                    int midiChannel,
+                    int audioBufferMode,
+                    const juce::String& audioStatus);
     void moveSelection (int delta);
     void adjustSelected (int delta);
     void activateSelected();
@@ -103,6 +112,7 @@ public:
     std::function<void(bool)> onEffectsChanged;
     std::function<void(bool)> onYEffectModeChanged;
     std::function<void(int)> onMidiChannelChanged;
+    std::function<void(int)> onAudioBufferChanged;
     std::function<void()> onCarnivalRequested;
     std::function<void()> onCloseRequested;
 
@@ -112,6 +122,8 @@ private:
     bool effectsEnabled = true;
     bool yEffectDreamy = false;
     int midiChannel = 1;
+    int audioBufferMode = 0;
+    juce::String audioStatus;
     int selectedRow = 0;
 
     void notifyCurrentRow();
@@ -213,6 +225,9 @@ private:
     void toggleDelay();
     void toggleGranular();
     void toggleConfig();
+    bool applyAudioBufferMode (int mode);
+    void refreshAudioBufferStatus();
+    juce::String makeAudioBufferStatus() const;
     void stopAll();
     void beginDpadControl (int keyCode);
     void endDpadControl();
@@ -238,6 +253,12 @@ private:
     bool granularEnabled = true;
     bool yEffectDreamy = false;
     int midiChannel = 1;
+    int audioBufferMode = 0;
+    int audioDefaultBufferFrames = -1;
+    int audioFramesPerBurst = 0;
+    int audioActualBufferFrames = 0;
+    double audioActualSampleRate = 0.0;
+    juce::String audioBufferError;
     bool configVisible = false;
     bool carnivalVisible = false;
 
