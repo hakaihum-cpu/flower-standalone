@@ -188,6 +188,25 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setPer
     AudioEngine::instance().setPerformanceXY(active == JNI_TRUE, part, x, y);
 }
 
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_setAudioOutputDevice(
+        JNIEnv*, jclass, jint deviceId) {
+    return AudioEngine::instance().setAudioOutputDevice(deviceId);
+}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_audioDeviceId(
+        JNIEnv*, jclass) {
+    return AudioEngine::instance().audioDeviceId();
+}
+extern "C" JNIEXPORT jstring JNICALL Java_com_example_epsampler_NativeEngine_audioPerformanceModeName(
+        JNIEnv* env, jclass) {
+    const auto value = AudioEngine::instance().audioPerformanceModeName();
+    return env->NewStringUTF(value.c_str());
+}
+extern "C" JNIEXPORT jstring JNICALL Java_com_example_epsampler_NativeEngine_audioSharingModeName(
+        JNIEnv* env, jclass) {
+    const auto value = AudioEngine::instance().audioSharingModeName();
+    return env->NewStringUTF(value.c_str());
+}
+
 extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_setAudioBufferBursts(
         JNIEnv*, jclass, jfloat bursts) {
     return AudioEngine::instance().setAudioBufferBursts(bursts);
