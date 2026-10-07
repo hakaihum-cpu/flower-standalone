@@ -1755,21 +1755,27 @@ bool RealtimeChordFxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 
     if (key.getKeyCode() == juce::KeyPress::F17Key)
     {
-        l1Latched = true;
-        if (auto* wet = processor.state().getParameter (ParamID::wet))
-            wet->setValueNotifyingHost (
-                juce::jlimit (0.0f, 1.0f, wet->getValue() - 0.05f));
-        repaint();
+        if (! l1Latched)
+        {
+            l1Latched = true;
+            if (auto* wet = processor.state().getParameter (ParamID::wet))
+                wet->setValueNotifyingHost (
+                    juce::jlimit (0.0f, 1.0f, wet->getValue() - 0.05f));
+            repaint();
+        }
         return true;
     }
 
     if (key.getKeyCode() == juce::KeyPress::F18Key)
     {
-        r1Latched = true;
-        if (auto* wet = processor.state().getParameter (ParamID::wet))
-            wet->setValueNotifyingHost (
-                juce::jlimit (0.0f, 1.0f, wet->getValue() + 0.05f));
-        repaint();
+        if (! r1Latched)
+        {
+            r1Latched = true;
+            if (auto* wet = processor.state().getParameter (ParamID::wet))
+                wet->setValueNotifyingHost (
+                    juce::jlimit (0.0f, 1.0f, wet->getValue() + 0.05f));
+            repaint();
+        }
         return true;
     }
 
