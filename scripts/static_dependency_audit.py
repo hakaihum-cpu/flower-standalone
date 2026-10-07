@@ -327,16 +327,26 @@ for need in [
     "processor.getInputPeakRaw()",
     "processor.getInputRmsRaw()",
     "eurekaPanelVisible",
-    "eurekaMotionSteps = 90",
+    "eurekaXYTouchDown",
+    "updateEurekaXYPoint",
+    "ParamID::hazeRepeat",
+    "ParamID::hazeTime",
+    "ParamID::hazeReverb",
+    "XY STUTTER",
+    "UP-RIGHT REVERB",
+]:
+    if need not in editor and need not in (R / "Source/PluginEditor.h").read_text():
+        fail(f"EUREKA frame/XY contract missing: {need}")
+
+for removed in [
+    "eurekaMotionSteps",
     "eurekaMotionArmed",
     "eurekaMotionRecording",
     "eurekaMotionPlaying",
     "updateEurekaMotionPoint",
-    "ParamID::hazeMix",
-    "ParamID::hazeAmount",
 ]:
-    if need not in editor and need not in (R / "Source/PluginEditor.h").read_text():
-        fail(f"EUREKA frame/motion contract missing: {need}")
+    if removed in editor or removed in (R / "Source/PluginEditor.h").read_text():
+        fail(f"obsolete EUREKA Motion REC contract still present: {removed}")
 
 if "isKeyCurrentlyDown" in editor:
     fail("Android Motion REC must not rely on JUCE Android isKeyCurrentlyDown()")
@@ -364,6 +374,19 @@ for need in [
 ]:
     if need not in editor:
         fail(f"Android input/startup contract missing: {need}")
+
+for need in [
+    "ParamID::wet",
+    "ParamID::boostDb",
+    "saveUserPreset",
+    "loadUserPreset",
+    '"BOOST OFF"',
+    '"WET  "',
+    '"SAVE"',
+    '"LOAD"',
+]:
+    if need not in src:
+        fail(f"WET/BOOST/SAVE-LOAD contract missing: {need}")
 
 motion = (R / "Source/PluginProcessor.cpp").read_text()
 for need in [
