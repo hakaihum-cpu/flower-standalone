@@ -78,19 +78,19 @@ if pack[:4] != b"CRF1":
     fail("frame pack magic mismatch")
 
 eureka_chunks = sorted((R / "Resources/eureka_frame_chunks").glob("*.b64"))
-if len(eureka_chunks) != 18:
-    fail(f"expected 18 EUREKA source chunks, got {len(eureka_chunks)}")
+if len(eureka_chunks) != 21:
+    fail(f"expected 21 EUREKA source chunks, got {len(eureka_chunks)}")
 
 eureka_pack = (R / "Resources/eureka_frames.pack").read_bytes()
-if len(eureka_pack) != 1534459:
+if len(eureka_pack) != 1872671:
     fail(f"EUREKA frame pack size mismatch: {len(eureka_pack)}")
 eureka_sha = hashlib.sha256(eureka_pack).hexdigest()
-if eureka_sha != "2f83c3ef9997926452c20fcdfade60011d930d76fbebb05e291e51db4867e986":
+if eureka_sha != "827b5aa6a339927cb909a5ffe1b129513d946911cc78ea96d34aa110e6cd1883":
     fail(f"EUREKA frame pack sha256 mismatch: {eureka_sha}")
 if eureka_pack[:4] != b"CRF1":
     fail("EUREKA frame pack magic mismatch")
 eureka_count = int.from_bytes(eureka_pack[4:8], "little")
-if eureka_count != 140:
+if eureka_count != 144:
     fail(f"EUREKA frame count mismatch: {eureka_count}")
 
 icon = (R / "Resources/effects_app_icon.jpg").read_bytes()
