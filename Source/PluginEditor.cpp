@@ -421,7 +421,7 @@ void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g
     const float boostDb = juce::jlimit (
         0.0f, 14.0f,
         processor.state().getRawParameterValue (ParamID::boostDb)->load());
-    const juce::Rectangle<float> boostBounds (395.0f, 16.0f, 90.0f, 38.0f);
+    const juce::Rectangle<float> boostBounds (395.0f, 16.0f, 70.0f, 38.0f);
 
     g.setColour (juce::Colours::black.withAlpha (0.46f));
     g.fillRoundedRectangle (boostBounds, 6.0f);
@@ -1230,19 +1230,26 @@ void RealtimeChordFxAudioProcessorEditor::updateMidiControllerFromPoint (juce::P
     processor.setMidiControllerXY (x, y, true);
 }
 
-void RealtimeChordFxAudioProcessorEditor::updateEurekaMotionPoint (
+void RealtimeChordFxAudioProcessorEditor::updateEurekaXYPoint (
     juce::Point<float> p)
 {
-    eurekaMotionTouchX =
+    eurekaXYX =
         juce::jlimit (0.0f, 1.0f, p.x / design);
-    eurekaMotionTouchY =
-        juce::jlimit (0.0f, 1.0f, p.y / design);
+    eurekaXYY =
+        juce::jlimit (0.0f, 1.0f, 1.0f - p.y / design);
 
-    if (auto* mix = processor.state().getParameter (ParamID::hazeMix))
-        mix->setValueNotifyingHost (eurekaMotionTouchX);
+    // X makes the active repeat span progressively shorter (stutter).
+    // Y shifts the dual-loop balance; the top-right corner adds the deepest hall.
+    const float stutter = 0.20f + 0.80f * eurekaXYX;
+    const float loopPosition = 0.15f + 0.70f * eurekaXYY;
+    const float hall = std::pow (eurekaXYX * eurekaXYY, 1.25f);
 
-    if (auto* haze = processor.state().getParameter (ParamID::hazeAmount))
-        haze->setValueNotifyingHost (1.0f - eurekaMotionTouchY);
+    if (auto* repeat = processor.state().getParameter (ParamID::hazeRepeat))
+        repeat->setValueNotifyingHost (stutter);
+    if (auto* time = processor.state().getParameter (ParamID::hazeTime))
+        time->setValueNotifyingHost (loopPosition);
+    if (auto* reverb = processor.state().getParameter (ParamID::hazeReverb))
+        reverb->setValueNotifyingHost (hall);
 }
 
 void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
@@ -1343,6 +1350,21 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (configVisible)
     {
+        if (juce::Rectangle<float> (360.0f, 22.0f, 80.0f, 38.0f).contains (p))
+        {
+            globalPresetMessage = processor.saveUserPreset()
+                ? "PARAMETERS SAVED" : "SAVE FAILED";
+            repaint();
+            return;
+        }
+        if (juce::Rectangle<float> (452.0f, 22.0f, 80.0f, 38.0f).contains (p))
+        {
+            globalPresetMessage = processor.loadUserPreset()
+                ? "PARAMETERS LOADED"
+                : (processor.hasUserPreset() ? "LOAD FAILED" : "NO SAVED PARAMETERS");
+            repaint();
+            return;
+        }
         if (p.x >= 590 && p.y <= 74) { configVisible = false; repaint(); return; }
         int y = 126;
         const int maxRows = juce::jmin (6, (int) audioInputs.size());
@@ -1392,6 +1414,23 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             auto* par = processor.state().getParameter (ParamID::internalBpm);
             par->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, par->getValue() + (p.x > 360 ? 1.0f/200.0f : -1.0f/200.0f)));
         }
+        repaint();
+        return;
+    }
+
+    if (juce::Rectangle<float> (395.0f, 16.0f, 70.0f, 38.0f).contains (p))
+    {
+        const float current = juce::jlimit (
+            0.0f, 14.0f,
+            processor.state().getRawParameterValue (ParamID::boostDb)->load());
+        const float next =
+            current < 1.75f ? 3.5f
+            : current < 5.25f ? 7.0f
+            : current < 8.75f ? 10.5f
+            : current < 12.25f ? 14.0f
+                               : 0.0f;
+        if (auto* boost = processor.state().getParameter (ParamID::boostDb))
+            boost->setValueNotifyingHost (boost->convertTo0to1 (next));
         repaint();
         return;
     }
@@ -1495,33 +1534,15 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         if (p.x >= 470.0f && p.x < 575.0f && p.y <= 70.0f)
         {
             eurekaPanelVisible = ! eurekaPanelVisible;
-            eurekaMotionTouchDown = false;
+            eurekaXYTouchDown = false;
             repaint();
             return;
         }
 
         if (! eurekaPanelVisible)
         {
-            if (! eurekaMotionArmed)
-            {
-                eurekaMotionPlaying = false;
-                eurekaMotionRecording = false;
-                eurekaMotionRecordIndex = 0;
-                eurekaMotionPlaybackIndex = 0;
-                eurekaMotionArmed = true;
-                eurekaMotionTouchDown = false;
-            }
-            else
-            {
-                // The arm tap and the recording drag are intentionally
-                // separate gestures. The second press may become the drag.
-                eurekaMotionTouchDown = true;
-                eurekaMotionTouchX =
-                    juce::jlimit (0.0f, 1.0f, p.x / design);
-                eurekaMotionTouchY =
-                    juce::jlimit (0.0f, 1.0f, p.y / design);
-            }
-
+            eurekaXYTouchDown = true;
+            updateEurekaXYPoint (p);
             repaint();
             return;
         }
@@ -1540,10 +1561,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         {
             if (hazeParameterBounds (i).contains (p))
             {
-                eurekaMotionArmed = false;
-                eurekaMotionRecording = false;
-                eurekaMotionPlaying = false;
-                eurekaMotionTouchDown = false;
+                eurekaXYTouchDown = false;
                 dragging = hazeParams[i];
                 setParameterFromX (dragging, p.x);
                 repaint();
@@ -1674,28 +1692,9 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 
     if (effectMode == 2
         && ! eurekaPanelVisible
-        && eurekaMotionArmed
-        && eurekaMotionTouchDown)
+        && eurekaXYTouchDown)
     {
-        if (! eurekaMotionRecording)
-        {
-            eurekaMotionRecording = true;
-            eurekaMotionPlaying = false;
-            eurekaMotionArmed = false;
-            eurekaMotionRecordIndex = 0;
-            eurekaMotionPlaybackIndex = 0;
-        }
-
-        updateEurekaMotionPoint (toDesign (e.position));
-        repaint();
-        return;
-    }
-
-    if (effectMode == 2
-        && ! eurekaPanelVisible
-        && eurekaMotionRecording)
-    {
-        updateEurekaMotionPoint (toDesign (e.position));
+        updateEurekaXYPoint (toDesign (e.position));
         repaint();
         return;
     }
@@ -1716,7 +1715,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 
 void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 {
-    eurekaMotionTouchDown = false;
+    eurekaXYTouchDown = false;
 
     if (chordBotPressedPad >= 0)
     {
@@ -1743,23 +1742,21 @@ bool RealtimeChordFxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
     if (key.getKeyCode() == juce::KeyPress::F17Key)
     {
-        if (! l1Latched)
-        {
-            l1Latched = true;
-            processor.toggleMotionRecord();
-            repaint();
-        }
+        l1Latched = true;
+        if (auto* wet = processor.state().getParameter (ParamID::wet))
+            wet->setValueNotifyingHost (
+                juce::jlimit (0.0f, 1.0f, wet->getValue() - 0.05f));
+        repaint();
         return true;
     }
 
     if (key.getKeyCode() == juce::KeyPress::F18Key)
     {
-        if (! r1Latched)
-        {
-            r1Latched = true;
-            processor.clearMotion();
-            repaint();
-        }
+        r1Latched = true;
+        if (auto* wet = processor.state().getParameter (ParamID::wet))
+            wet->setValueNotifyingHost (
+                juce::jlimit (0.0f, 1.0f, wet->getValue() + 0.05f));
+        repaint();
         return true;
     }
 
@@ -1772,6 +1769,7 @@ bool RealtimeChordFxAudioProcessorEditor::keyStateChanged (bool isKeyDown)
     {
         l1Latched = false;
         r1Latched = false;
+        repaint();
     }
     return false;
 }
