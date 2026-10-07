@@ -3,6 +3,8 @@
 
 #if JUCE_ANDROID
  #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+ #include <jni.h>
+ #include <juce_core/native/juce_JNIHelpers_android.h>
 #endif
 
 #include <cmath>
@@ -25,6 +27,87 @@ constexpr const char* scaleNames[]
 {
     "MINOR PENT", "NATURAL MINOR", "MAJOR", "DORIAN", "RANDOM"
 };
+
+constexpr const char* audioBufferNames[]
+{
+    "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST",
+    "1.5 BURSTS", "2 BURSTS", "3 BURSTS", "4 BURSTS",
+    "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS"
+};
+
+constexpr float audioBufferBursts[]
+{
+    0.0f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f,
+    3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f
+};
+
+#if JUCE_ANDROID
+int getAndroidOutputFramesPerBuffer()
+{
+    auto* env = juce::getEnv();
+    if (env == nullptr)
+        return 0;
+
+    const auto context = juce::getAppContext();
+    if (context == nullptr)
+        return 0;
+
+    jclass contextClass = env->GetObjectClass (context.get());
+    if (contextClass == nullptr)
+        return 0;
+
+    jmethodID getSystemService = env->GetMethodID (
+        contextClass, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
+    if (getSystemService == nullptr)
+    {
+        env->DeleteLocalRef (contextClass);
+        return 0;
+    }
+
+    jstring audioService = env->NewStringUTF ("audio");
+    jobject audioManager = env->CallObjectMethod (
+        context.get(), getSystemService, audioService);
+    env->DeleteLocalRef (audioService);
+    env->DeleteLocalRef (contextClass);
+    if (audioManager == nullptr)
+        return 0;
+
+    jclass audioManagerClass = env->FindClass ("android/media/AudioManager");
+    jmethodID getProperty = audioManagerClass != nullptr
+        ? env->GetMethodID (
+            audioManagerClass, "getProperty",
+            "(Ljava/lang/String;)Ljava/lang/String;")
+        : nullptr;
+
+    int frames = 0;
+    if (getProperty != nullptr)
+    {
+        jstring key = env->NewStringUTF (
+            "android.media.property.OUTPUT_FRAMES_PER_BUFFER");
+        jstring value = static_cast<jstring> (
+            env->CallObjectMethod (audioManager, getProperty, key));
+        env->DeleteLocalRef (key);
+
+        if (value != nullptr)
+        {
+            const char* chars = env->GetStringUTFChars (value, nullptr);
+            if (chars != nullptr)
+            {
+                frames = juce::String::fromUTF8 (chars).getIntValue();
+                env->ReleaseStringUTFChars (value, chars);
+            }
+            env->DeleteLocalRef (value);
+        }
+    }
+
+    if (audioManagerClass != nullptr)
+        env->DeleteLocalRef (audioManagerClass);
+    env->DeleteLocalRef (audioManager);
+    return juce::jmax (0, frames);
+}
+#else
+int getAndroidOutputFramesPerBuffer() { return 0; }
+#endif
 
 }
 
@@ -51,6 +134,13 @@ PerformancePadComponent::PerformancePadComponent()
             bytes + FlowerFrameData::offsets[index],
             FlowerFrameData::sizes[index]);
     }
+
+    videoFrames.load (
+        BinaryData::flower_video_frames_pack,
+        BinaryData::flower_video_frames_packSize);
+
+    if (videoFrames.getFrameCount() > 0)
+        startTimerHz (30);
 }
 
 int PerformancePadComponent::getPatternIndex() const noexcept
@@ -100,6 +190,47 @@ void PerformancePadComponent::endPhysicalKeyControl()
     repaint();
 }
 
+void PerformancePadComponent::chooseNextMixedVisual()
+{
+    const int videoCount = videoFrames.getFrameCount();
+    const int totalCount = tileCount + videoCount;
+    if (totalCount <= 0)
+        return;
+
+    visualRandomState ^= visualRandomState << 13;
+    visualRandomState ^= visualRandomState >> 17;
+    visualRandomState ^= visualRandomState << 5;
+
+    int next = static_cast<int> (
+        visualRandomState % static_cast<uint32_t> (totalCount));
+
+    if (totalCount > 1 && next == currentMixedVisual)
+        next = (next + 1) % totalCount;
+
+    currentMixedVisual = next;
+    if (currentMixedVisual >= tileCount)
+        currentVideoFrame =
+            videoFrames.getFrame (currentMixedVisual - tileCount);
+    else
+        currentVideoFrame = {};
+}
+
+void PerformancePadComponent::timerCallback()
+{
+    if (! active && ! held && ! physicalPointerVisible)
+        return;
+
+    if (visualCooldown > 0)
+    {
+        --visualCooldown;
+        return;
+    }
+
+    chooseNextMixedVisual();
+    visualCooldown = 4; // EFFECTS cadence: about 133 ms at 30 Hz.
+    repaint();
+}
+
 void PerformancePadComponent::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colours::black);
@@ -116,8 +247,16 @@ void PerformancePadComponent::paint (juce::Graphics& g)
 
     jassert (visualTileIndex >= 0 && visualTileIndex < tileCount);
 
-    const auto& frame = frameImages[static_cast<size_t> (visualTileIndex)];
-    if (! frame.isValid())
+    const auto& fallbackFrame =
+        frameImages[static_cast<size_t> (visualTileIndex)];
+    const juce::Image* frame = &fallbackFrame;
+
+    if (currentMixedVisual >= 0 && currentMixedVisual < tileCount)
+        frame = &frameImages[static_cast<size_t> (currentMixedVisual)];
+    else if (currentMixedVisual >= tileCount && currentVideoFrame.isValid())
+        frame = &currentVideoFrame;
+
+    if (! frame->isValid())
     {
         g.setColour (juce::Colours::white);
         g.setFont (juce::FontOptions (16.0f).withStyle ("Bold"));
@@ -131,9 +270,9 @@ void PerformancePadComponent::paint (juce::Graphics& g)
     // Use every pixel of the selected frame and stretch the whole image
     // directly to the full 720 x 720 canvas. No crop, inset, cover or atlas.
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-    g.drawImage (frame,
+    g.drawImage (*frame,
                  0, 0, getWidth(), getHeight(),
-                 0, 0, frame.getWidth(), frame.getHeight(),
+                 0, 0, frame->getWidth(), frame->getHeight(),
                  false);
 
     if (physicalPointerVisible)
@@ -163,6 +302,10 @@ void PerformancePadComponent::mouseDown (const juce::MouseEvent& e)
     lastPoint = e.position;
     lastEventMs = juce::Time::getMillisecondCounterHiRes();
     touchDragged = false;
+
+    chooseNextMixedVisual();
+    visualCooldown = 4;
+    repaint();
 
     if (onTouchStarted)
         onTouchStarted();
@@ -239,9 +382,9 @@ void PerformancePadComponent::notify()
 
 juce::Rectangle<int> ConfigScreenComponent::getRowBounds (int row) const
 {
-    constexpr int rowHeight = 104;
-    constexpr int firstY = 188;
-    return { 72, firstY + row * rowHeight, 576, 78 };
+    constexpr int rowHeight = 82;
+    constexpr int firstY = 172;
+    return { 72, firstY + row * rowHeight, 576, 66 };
 }
 
 juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
@@ -252,19 +395,23 @@ juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
 
 void ConfigScreenComponent::setValues (int newRootKey,
                                        int newScale,
-                                       bool newEffectsEnabled)
+                                       bool newEffectsEnabled,
+                                       int newAudioBufferMode,
+                                       const juce::String& newAudioStatus)
 {
     rootKey = juce::jlimit (0, 11, newRootKey);
     scaleIndex = juce::jlimit (0, 4, newScale);
     effectsEnabled = newEffectsEnabled;
+    audioBufferMode = juce::jlimit (0, 11, newAudioBufferMode);
+    audioStatus = newAudioStatus;
     repaint();
 }
 
 void ConfigScreenComponent::moveSelection (int delta)
 {
-    selectedRow = (selectedRow + delta) % 3;
+    selectedRow = (selectedRow + delta) % 4;
     if (selectedRow < 0)
-        selectedRow += 3;
+        selectedRow += 4;
     repaint();
 }
 
@@ -288,12 +435,21 @@ void ConfigScreenComponent::adjustSelected (int delta)
         if (onScaleChanged)
             onScaleChanged (scaleIndex);
     }
-    else
+    else if (selectedRow == 2)
     {
         effectsEnabled = ! effectsEnabled;
 
         if (onEffectsChanged)
             onEffectsChanged (effectsEnabled);
+    }
+    else
+    {
+        audioBufferMode = (audioBufferMode + delta) % 12;
+        if (audioBufferMode < 0)
+            audioBufferMode += 12;
+
+        if (onAudioBufferChanged)
+            onAudioBufferChanged (audioBufferMode);
     }
 
     repaint();
@@ -316,10 +472,15 @@ void ConfigScreenComponent::notifyCurrentRow()
         if (onScaleChanged)
             onScaleChanged (scaleIndex);
     }
-    else
+    else if (selectedRow == 2)
     {
         if (onEffectsChanged)
             onEffectsChanged (effectsEnabled);
+    }
+    else
+    {
+        if (onAudioBufferChanged)
+            onAudioBufferChanged (audioBufferMode);
     }
 }
 
@@ -345,7 +506,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
                 72, 124, 576, 34,
                 juce::Justification::centredLeft);
 
-    for (int row = 0; row < 3; ++row)
+    for (int row = 0; row < 4; ++row)
     {
         const auto bounds = getRowBounds (row);
         const bool selected = row == selectedRow;
@@ -373,10 +534,15 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
             label = "SCALE";
             value = scaleNames[scaleIndex];
         }
-        else
+        else if (row == 2)
         {
             label = "DEFAULT EFFECT";
             value = effectsEnabled ? "ON" : "OFF";
+        }
+        else
+        {
+            label = "AUDIO BUFFER";
+            value = audioBufferNames[audioBufferMode];
         }
 
         g.drawText (label,
@@ -397,10 +563,11 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xff77705f));
     g.setFont (juce::FontOptions (15.0f));
     g.drawFittedText (
-        "DEFAULT EFFECT applies to DELAY and GRANULAR at startup. "
-        "A / Y can still toggle them independently during performance.",
-        72, 530, 576, 80,
-        juce::Justification::topLeft, 3);
+        audioStatus.isNotEmpty()
+            ? audioStatus
+            : "AUDIO: waiting for Android output buffer information",
+        72, 512, 576, 108,
+        juce::Justification::topLeft, 4);
 }
 
 void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
@@ -424,7 +591,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    for (int row = 0; row < 3; ++row)
+    for (int row = 0; row < 4; ++row)
     {
         const auto bounds = getRowBounds (row);
         if (! bounds.contains (designPoint))
@@ -495,7 +662,13 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     scaleIndex = processor.getConfiguredScale();
     delayEnabled = processor.getDefaultEffectsEnabled();
     granularEnabled = delayEnabled;
-    configScreen.setValues (rootClass, scaleIndex, delayEnabled);
+    audioBufferMode = processor.getAudioBufferMode();
+    refreshAudioBufferStatus();
+    if (audioBufferMode != 0)
+        applyAudioBufferMode (audioBufferMode);
+    configScreen.setValues (
+        rootClass, scaleIndex, delayEnabled,
+        audioBufferMode, makeAudioBufferStatus());
 
     performancePad.onPadChanged =
         [this] (float x, float y, float speed, float horizontalDirection, bool active)
@@ -538,6 +711,25 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             delayEnabled = enabled;
             granularEnabled = enabled;
             processor.setDefaultEffectsEnabled (enabled);
+        };
+
+    configScreen.onAudioBufferChanged =
+        [this] (int mode)
+        {
+            const int previous = audioBufferMode;
+            if (applyAudioBufferMode (mode))
+            {
+                audioBufferMode = mode;
+                processor.setAudioBufferMode (audioBufferMode);
+            }
+            else
+            {
+                applyAudioBufferMode (previous);
+            }
+
+            configScreen.setValues (
+                rootClass, scaleIndex, delayEnabled,
+                audioBufferMode, makeAudioBufferStatus());
         };
 
     configScreen.onCloseRequested =
@@ -584,7 +776,8 @@ void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
 
     processor.setConfiguredRoot (rootClass);
     configScreen.setValues (rootClass, scaleIndex,
-                            processor.getDefaultEffectsEnabled());
+                            processor.getDefaultEffectsEnabled(),
+                            audioBufferMode, makeAudioBufferStatus());
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
@@ -601,7 +794,8 @@ void FlowerStandaloneAudioProcessorEditor::cycleScale (int delta)
 
     processor.setConfiguredScale (scaleIndex);
     configScreen.setValues (rootClass, scaleIndex,
-                            processor.getDefaultEffectsEnabled());
+                            processor.getDefaultEffectsEnabled(),
+                            audioBufferMode, makeAudioBufferStatus());
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleHold()
@@ -629,6 +823,121 @@ void FlowerStandaloneAudioProcessorEditor::toggleGranular()
     processor.setPerformanceGranularEnabled (granularEnabled);
 }
 
+void FlowerStandaloneAudioProcessorEditor::refreshAudioBufferStatus()
+{
+#if JUCE_ANDROID
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+    {
+        juce::AudioDeviceManager::AudioDeviceSetup setup;
+        holder->deviceManager.getAudioDeviceSetup (setup);
+
+        if (audioDefaultBufferFrames <= 0)
+            audioDefaultBufferFrames = juce::jmax (1, setup.bufferSize);
+
+        audioFramesPerBurst = getAndroidOutputFramesPerBuffer();
+        if (audioFramesPerBurst <= 0)
+            audioFramesPerBurst = audioDefaultBufferFrames;
+
+        audioActualBufferFrames = setup.bufferSize;
+        audioActualSampleRate = setup.sampleRate;
+    }
+#endif
+}
+
+juce::String FlowerStandaloneAudioProcessorEditor::makeAudioBufferStatus() const
+{
+    if (audioActualBufferFrames <= 0 || audioActualSampleRate <= 0.0)
+        return "AUDIO: output buffer information unavailable"
+             + (audioBufferError.isNotEmpty()
+                    ? "\n" + audioBufferError
+                    : juce::String());
+
+    const double ms =
+        1000.0 * static_cast<double> (audioActualBufferFrames)
+        / audioActualSampleRate;
+    const double bursts = audioFramesPerBurst > 0
+        ? static_cast<double> (audioActualBufferFrames)
+            / static_cast<double> (audioFramesPerBurst)
+        : 0.0;
+
+    juce::String result =
+        "AUDIO: " + juce::String (audioActualBufferFrames)
+        + " frames / " + juce::String (ms, 2) + " ms"
+        + "\nBASE BURST: " + juce::String (audioFramesPerBurst)
+        + " frames / ACTUAL: " + juce::String (bursts, 2) + " bursts";
+
+    if (audioBufferError.isNotEmpty())
+        result += "\n" + audioBufferError;
+
+    return result;
+}
+
+bool FlowerStandaloneAudioProcessorEditor::applyAudioBufferMode (int mode)
+{
+#if JUCE_ANDROID
+    auto* holder = juce::StandalonePluginHolder::getInstance();
+    if (holder == nullptr)
+    {
+        audioBufferError = "Buffer request failed: standalone holder unavailable";
+        return false;
+    }
+
+    mode = juce::jlimit (0, 11, mode);
+    refreshAudioBufferStatus();
+
+    juce::AudioDeviceManager::AudioDeviceSetup setup;
+    holder->deviceManager.getAudioDeviceSetup (setup);
+
+    int targetFrames = audioDefaultBufferFrames;
+    if (mode > 0)
+    {
+        const int base = juce::jmax (1, audioFramesPerBurst);
+        targetFrames = juce::jmax (
+            1, juce::roundToInt (
+                static_cast<float> (base) * audioBufferBursts[mode]));
+
+        if (auto* device = holder->deviceManager.getCurrentAudioDevice())
+        {
+            const auto available = device->getAvailableBufferSizes();
+            if (! available.isEmpty())
+            {
+                int nearest = available[0];
+                int nearestDistance = std::abs (nearest - targetFrames);
+                for (const int candidate : available)
+                {
+                    const int distance = std::abs (candidate - targetFrames);
+                    if (distance < nearestDistance)
+                    {
+                        nearest = candidate;
+                        nearestDistance = distance;
+                    }
+                }
+                targetFrames = nearest;
+            }
+        }
+    }
+
+    setup.bufferSize = targetFrames;
+    const auto error =
+        holder->deviceManager.setAudioDeviceSetup (setup, true);
+
+    if (error.isNotEmpty())
+    {
+        audioBufferError = "BUFFER REQUEST: " + error;
+        refreshAudioBufferStatus();
+        return false;
+    }
+
+    audioBufferError.clear();
+    refreshAudioBufferStatus();
+    return true;
+#else
+    juce::ignoreUnused (mode);
+    audioBufferError = "AUDIO BUFFER is Android-only";
+    return false;
+#endif
+}
+
 void FlowerStandaloneAudioProcessorEditor::toggleConfig()
 {
     configVisible = ! configVisible;
@@ -642,10 +951,13 @@ void FlowerStandaloneAudioProcessorEditor::toggleConfig()
         if (bpmAdjustActive)
             endBpmAdjust();
 
+        refreshAudioBufferStatus();
         configScreen.setValues (
             rootClass,
             scaleIndex,
-            processor.getDefaultEffectsEnabled());
+            processor.getDefaultEffectsEnabled(),
+            audioBufferMode,
+            makeAudioBufferStatus());
 
         // SELECT-opened CONFIG must use the exact same fullscreen bounds as
         // the performance surface. The CONFIG UI itself is authored in a

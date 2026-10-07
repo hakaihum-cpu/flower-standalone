@@ -54,9 +54,11 @@ public:
     int getConfiguredRoot() const noexcept;
     int getConfiguredScale() const noexcept;
     bool getDefaultEffectsEnabled() const noexcept;
+    int getAudioBufferMode() const noexcept;
     void setConfiguredRoot (int noteClass);
     void setConfiguredScale (int scaleIndex);
     void setDefaultEffectsEnabled (bool enabled);
+    void setAudioBufferMode (int mode);
 
     void getFlowerWaveform (std::array<float, flowerWaveformBins>& destination) const noexcept;
     bool hasFlowerLoop() const noexcept { return flowerLoopLengthSamples.load (std::memory_order_relaxed) > 0; }

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,10 +20,13 @@ REQUIRED = [
     "Source/PluginEditor.h",
     "Source/PluginEditor.cpp",
     "Source/FlowerFrameData.h",
+    "Source/FramePack.h",
+    "Source/FramePack.cpp",
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_juce_android_gamepad_keys.py",
+    "scripts/materialize_flower_video_pack.py",
 ]
 
 FORBIDDEN_SOURCE_TOKENS = [
@@ -91,7 +95,9 @@ for required_ref in [
     "Source/SynthVoice.cpp",
     "Source/RetroLookAndFeel.cpp",
     "Source/PluginProcessor.cpp",
+    "Source/FramePack.cpp",
     "Source/PluginEditor.cpp",
+    "Resources/flower_video_frames.pack",
 ]:
     if required_ref not in jucer_text:
         fail(f"JUCER reference missing: {required_ref}")
@@ -161,6 +167,14 @@ for forbidden_old_visual in [
 
 frame_data_text = (ROOT / "Source/FlowerFrameData.h").read_text(encoding="utf-8")
 
+video_pack = (ROOT / "Resources/flower_video_frames.pack").read_bytes()
+if len(video_pack) != 1872671:
+    fail(f"FLOWER video frame pack size mismatch: {len(video_pack)}")
+if hashlib.sha256(video_pack).hexdigest() != "827b5aa6a339927cb909a5ffe1b129513d946911cc78ea96d34aa110e6cd1883":
+    fail("FLOWER video frame pack sha256 mismatch")
+if video_pack[:4] != b"CRF1" or int.from_bytes(video_pack[4:8], "little") != 144:
+    fail("FLOWER video frame pack contract mismatch")
+
 for required_frame_data in [
     "frameCount = 100",
     "decodedPayloadSize = 1138410",
@@ -189,6 +203,12 @@ for required_visual_ui in [
     "tileCount = tileColumns * tileRows",
     "static_assert (tileCount == 100",
     "onTapStopRequested",
+    '#include "FramePack.h"',
+    "BinaryData::flower_video_frames_pack",
+    "videoFrames.getFrameCount()",
+    "chooseNextMixedVisual",
+    "visualCooldown = 4",
+    "currentMixedVisual",
 ]:
     if required_visual_ui not in editor_text and required_visual_ui not in editor_header:
         fail(f"XY direct-frame visual contract missing: {required_visual_ui}")
@@ -228,6 +248,12 @@ for required_xy_ui in [
     "toggleArp",
     "toggleDelay",
     "toggleGranular",
+    "onAudioBufferChanged",
+    "getAndroidOutputFramesPerBuffer",
+    "android.media.property.OUTPUT_FRAMES_PER_BUFFER",
+    "setAudioDeviceSetup",
+    "audioBufferBursts",
+    "makeAudioBufferStatus",
 ]:
     if required_xy_ui not in editor_text and required_xy_ui not in editor_header:
         fail(f"XY fullscreen/physical-key contract missing: {required_xy_ui}")
@@ -308,6 +334,8 @@ print("[PASS] Flower XY standalone static dependency audit")
 print("[PASS] obsolete contact-sheet resource excluded from generated target")
 print("[PASS] Android fullscreen editor follows actual logical bounds (physical panel no longer clipped)")
 print("[PASS] exact 100 user-cut JPEG frame bank embedded")
+print("[PASS] EFFECTS four-video bank retained as 144 sampled JPEG frames")
+print("[PASS] still/video mixed random visual cadence present (~133 ms)")
 print("[PASS] runtime does not use the old contact sheet")
 print("[PASS] selected pre-cut JPEG is loaded as an independent frame")
 print("[PASS] source frame is drawn in full with no coordinate crop")
@@ -321,5 +349,6 @@ print("[PASS] X looper transport REC->STOP->OVERDUB and long-clear contract pres
 print("[PASS] L/R BPM hold-repeat contract present (max 200 BPM)")
 print("[PASS] Android physical-key down/up bridge patch present")
 print("[PASS] Android standalone startup safeguards present")
+print("[PASS] Android output-buffer burst control/status contract present")
 print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
 print("[PASS] CircleCI native parallelism controls present")

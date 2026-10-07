@@ -14,6 +14,11 @@ jobs:
       - checkout
 
       - run:
+          name: Materialize supplied EFFECTS video frame pack
+          command: |
+            python3 scripts/materialize_flower_video_pack.py
+
+      - run:
           name: Static dependency audit
           command: |
             python3 scripts/static_dependency_audit.py

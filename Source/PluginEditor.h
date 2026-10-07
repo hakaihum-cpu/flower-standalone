@@ -6,8 +6,10 @@
 
 #include "PluginProcessor.h"
 #include "RetroLookAndFeel.h"
+#include "FramePack.h"
 
-class PerformancePadComponent final : public juce::Component
+class PerformancePadComponent final : public juce::Component,
+                                      private juce::Timer
 {
 public:
     using PadCallback = std::function<void(float x,
@@ -43,8 +45,15 @@ private:
 
     void updateFromEvent (const juce::MouseEvent& e, bool isActive);
     void notify();
+    void timerCallback() override;
+    void chooseNextMixedVisual();
 
     std::array<juce::Image, 100> frameImages;
+    FramePack videoFrames;
+    juce::Image currentVideoFrame;
+    int currentMixedVisual = -1;
+    int visualCooldown = 0;
+    uint32_t visualRandomState = 0x464C5752u;
 
     float xValue = 0.28f;
     float yValue = 0.28f;
@@ -70,7 +79,8 @@ public:
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
 
-    void setValues (int rootKey, int scale, bool effectsEnabled);
+    void setValues (int rootKey, int scale, bool effectsEnabled,
+                    int audioBufferMode, const juce::String& audioStatus);
     void moveSelection (int delta);
     void adjustSelected (int delta);
     void activateSelected();
@@ -78,12 +88,15 @@ public:
     std::function<void(int)> onRootChanged;
     std::function<void(int)> onScaleChanged;
     std::function<void(bool)> onEffectsChanged;
+    std::function<void(int)> onAudioBufferChanged;
     std::function<void()> onCloseRequested;
 
 private:
     int rootKey = 0;
     int scaleIndex = 0;
     bool effectsEnabled = true;
+    int audioBufferMode = 0;
+    juce::String audioStatus;
     int selectedRow = 0;
 
     void notifyCurrentRow();
@@ -114,6 +127,9 @@ private:
     void toggleDelay();
     void toggleGranular();
     void toggleConfig();
+    bool applyAudioBufferMode (int mode);
+    void refreshAudioBufferStatus();
+    juce::String makeAudioBufferStatus() const;
     void stopAll();
     void beginDpadControl (int keyCode);
     void endDpadControl();
@@ -137,6 +153,12 @@ private:
     bool delayEnabled = true;
     bool granularEnabled = true;
     bool configVisible = false;
+    int audioBufferMode = 0;
+    int audioDefaultBufferFrames = 0;
+    int audioFramesPerBurst = 0;
+    int audioActualBufferFrames = 0;
+    double audioActualSampleRate = 0.0;
+    juce::String audioBufferError;
 
     bool dpadActive = false;
     int dpadKeyCode = 0;
