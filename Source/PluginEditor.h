@@ -154,7 +154,7 @@ private:
     bool granularEnabled = true;
     bool configVisible = false;
     int audioBufferMode = 0;
-    int audioDefaultBufferFrames = 0;
+    int audioDefaultBufferFrames = -1;
     int audioFramesPerBurst = 0;
     int audioActualBufferFrames = 0;
     double audioActualSampleRate = 0.0;
