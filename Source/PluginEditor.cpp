@@ -976,9 +976,19 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setColour (juce::Colours::white.withAlpha (0.90f));
     g.setFont (juce::FontOptions (20.0f));
     g.drawText ("CONFIG", 34, 26, 180, 32, juce::Justification::centredLeft);
+    const juce::Rectangle<float> saveBounds (360.0f, 22.0f, 80.0f, 38.0f);
+    const juce::Rectangle<float> loadBounds (452.0f, 22.0f, 80.0f, 38.0f);
+    g.setColour (juce::Colours::white.withAlpha (0.10f));
+    g.fillRoundedRectangle (saveBounds, 6.0f);
+    g.fillRoundedRectangle (loadBounds, 6.0f);
+    g.setColour (juce::Colours::white.withAlpha (0.58f));
+    g.drawRoundedRectangle (saveBounds, 6.0f, 1.0f);
+    g.drawRoundedRectangle (loadBounds, 6.0f, 1.0f);
+    g.setColour (juce::Colours::white.withAlpha (0.90f));
+    g.setFont (juce::FontOptions (13.0f).withStyle ("Bold"));
+    g.drawText ("SAVE", saveBounds, juce::Justification::centred);
+    g.drawText ("LOAD", loadBounds, juce::Justification::centred);
     g.setFont (juce::FontOptions (13.0f));
-    g.drawText ("SAVE", 360, 28, 80, 26, juce::Justification::centred);
-    g.drawText ("LOAD", 452, 28, 80, 26, juce::Justification::centred);
     g.drawText ("CLOSE", 620, 30, 70, 24, juce::Justification::centredRight);
 
     if (globalPresetMessage.isNotEmpty())
@@ -1541,8 +1551,11 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
         if (! eurekaPanelVisible)
         {
-            eurekaXYTouchDown = true;
-            updateEurekaXYPoint (p);
+            if (p.y > 70.0f)
+            {
+                eurekaXYTouchDown = true;
+                updateEurekaXYPoint (p);
+            }
             repaint();
             return;
         }
