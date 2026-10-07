@@ -29,6 +29,7 @@ private:
     };
     void timerCallback() override;
     void paintMain (juce::Graphics&);
+    void paintGlobalControls (juce::Graphics&);
     void paintHaze (juce::Graphics&);
     void paintChordBot (juce::Graphics&);
     void paintConfig (juce::Graphics&);
@@ -47,7 +48,7 @@ private:
     void refreshMidiOutputs();
     void cycleMidiOutput (int direction);
     void updateMidiControllerFromPoint (juce::Point<float>);
-    void updateEurekaMotionPoint (juce::Point<float>);
+    void updateEurekaXYPoint (juce::Point<float>);
     int nextVisualFrame (int count, int avoid);
     void setChoiceActual (const char* id, int value);
     juce::String currentInputName() const;
@@ -77,6 +78,7 @@ private:
     int selectedMidiOutput = -1;
     int midiPresetSlot = 1;
     juce::String midiPresetMessage;
+    juce::String globalPresetMessage;
     juce::String lastAudioRouteError;
     bool l1Latched = false;
     bool r1Latched = false;
@@ -87,17 +89,9 @@ private:
     int chordBotPressedPad = -1;
 
     bool eurekaPanelVisible = false;
-    bool eurekaMotionArmed = false;
-    bool eurekaMotionRecording = false;
-    bool eurekaMotionPlaying = false;
-    bool eurekaMotionTouchDown = false;
-    int eurekaMotionRecordIndex = 0;
-    int eurekaMotionPlaybackIndex = 0;
-    float eurekaMotionTouchX = 0.5f;
-    float eurekaMotionTouchY = 0.5f;
-    static constexpr int eurekaMotionSteps = 90; // 3 s at 30 Hz
-    std::array<float, eurekaMotionSteps> eurekaMotionMix {};
-    std::array<float, eurekaMotionSteps> eurekaMotionHaze {};
+    bool eurekaXYTouchDown = false;
+    float eurekaXYX = 0.5f;
+    float eurekaXYY = 0.5f;
 
     static constexpr float design = 720.0f;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RealtimeChordFxAudioProcessorEditor)
