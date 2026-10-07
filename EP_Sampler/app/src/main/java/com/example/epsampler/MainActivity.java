@@ -1,1641 +1,398 @@
 package com.example.epsampler;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.Intent;
+import android.app.PendingIntent;
+import android.content.*;
+import android.graphics.Color;
+import android.hardware.usb.*;
 import android.net.Uri;
-import android.os.Bundle;
-import android.os.ParcelFileDescriptor;
+import android.os.*;
 import android.provider.Settings;
+import android.text.method.ScrollingMovementMethod;
 import android.view.View;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
-import android.widget.ArrayAdapter;
-import android.widget.FrameLayout;
-import android.widget.ImageView;
-import android.widget.CheckBox;
-import android.widget.LinearLayout;
-import android.widget.SeekBar;
-import android.widget.Spinner;
-import android.widget.TextView;
-import android.widget.ScrollView;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.Toast;
+import android.widget.*;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * DaVinci Resolve Speed Editor diagnostic probe.
+ *
+ * The HID key/report mapping and the mutual-authentication algorithm are based on
+ * Sylvain Munaut's Apache-2.0-licensed blackmagic-misc/bmd.py implementation.
+ * This app is a clean Android/UsbHost implementation intended only to discover
+ * the actual reports produced by the user's hardware before EP-SAMPLE mapping.
+ */
+public class MainActivity extends Activity {
+    private static final int USB_VID = 0x1edb;
+    private static final int USB_PID = 0xda0e;
+    private static final String ACTION_USB_PERMISSION = "com.example.epmodel.speededitorprobe.USB_PERMISSION";
+    private static final int REQ_EXPORT = 701;
 
-public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener, PerformanceXYView.Listener, MixerView.Listener, SoundDesignView.Listener {
-    private static final int PICK_BANK = 1001;
-    private static final String PREFS = "violin_physical";
-    private static final String KEY_BANK_URI = "bank_uri"; // legacy SAMPLE 1
-    private static final String KEY_BANK_URI_PREFIX = "sample_bank_uri_";
-    private static final String KEY_BANK_NAME_PREFIX = "sample_bank_name_";
-    private static final String KEY_BOOST = "boost_step";
-    private static final String KEY_SPACE = "space_mode";
-    private static final String KEY_TAPE = "tape_on";
-    private static final String KEY_DREAMY = "dreamy_on";
-    private static final String KEY_BOOST_DB = "boost_db";
-    private static final String KEY_SPACE_MIX = "space_mix";
-    private static final String KEY_SPACE_DECAY = "space_decay";
-    private static final String KEY_TAPE_WOW = "tape_wow";
-    private static final String KEY_TAPE_FLUTTER = "tape_flutter";
-    private static final String KEY_TAPE_DRIVE = "tape_drive";
-    private static final String KEY_DREAM_X = "dream_x";
-    private static final String KEY_DREAM_Y = "dream_y";
-    private static final String KEY_DREAM_MIX = "dream_mix";
-    private static final String KEY_DREAM_MODE = "dream_mode";
-    private static final String KEY_DREAM_P3 = "dream_p3";
-    private static final String KEY_DREAM_P4 = "dream_p4";
-    private static final String KEY_PART_MIDI_PREFIX = "part_midi_ch_";
-    private static final String KEY_MANUAL_SUSTAIN = "manual_sustain";
-    private static final String KEY_ATTACK_MS = "attack_ms";
-    private static final String KEY_DECAY_MS = "decay_ms";
-    private static final String KEY_SUSTAIN_PCT = "sustain_pct";
-    private static final String KEY_RELEASE_MS = "release_ms";
-    private static final String KEY_INSTRUMENT = "instrument_mode";
-    private static final String KEY_DRUM_KICK_TUNE = "drum_kick_tune";   // legacy migration
-    private static final String KEY_DRUM_HAT_TUNE = "drum_hat_tune";     // legacy migration
-    private static final String KEY_DRUM_SNARE_TUNE = "drum_snare_tune";// legacy migration
-    private static final String KEY_DRUM_DECAY = "drum_decay";           // legacy migration
-    private static final String KEY_DRUM_PARAM_PREFIX = "drum_param_";
-    private static final String KEY_DRUM_BOOST_DB = "drum_boost_db";
-    private static final String KEY_DRUM_DISTORTION = "drum_distortion";
-    private static final String KEY_PART_BOOST_PREFIX = "part_boost_db_";
-    private static final String KEY_PART_DIST_PREFIX = "part_distortion_";
-    private static final String KEY_FELT_REVERB_MIX = "felt_reverb_mix";
-    private static final String KEY_FELT_REVERB_DECAY = "felt_reverb_decay";
-    private static final String KEY_AUDIO_BUFFER_BURSTS = "audio_buffer_bursts";
-    private static final String KEY_MIX_VOL_PREFIX = "mix_vol_";
-    private static final String KEY_MIX_PAN_PREFIX = "mix_pan_";
-    private static final String KEY_MIX_MUTE_PREFIX = "mix_mute_";
-    private static final String[] AUDIO_BUFFER_LABELS = {
-            "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST", "1.5 BURSTS", "2 BURSTS",
-            "3 BURSTS", "4 BURSTS", "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS"
-    };
-    private static final float[] AUDIO_BUFFER_VALUES = {
-            0f, 0.5f, 0.75f, 1f, 1.5f, 2f, 3f, 4f, 5f, 6f, 7f, 8f
-    };
-    private static final String PRESET_PREFS = "violin_physical_presets";
-    private static final int PRESET_SLOTS = 8;
+    private UsbManager usbManager;
+    private UsbDevice device;
+    private UsbDeviceConnection connection;
+    private UsbInterface hidInterface;
+    private UsbEndpoint inEndpoint;
+    private Thread readerThread;
+    private final AtomicBoolean running = new AtomicBoolean(false);
 
-    private static final String[] DREAM_MODE_NAMES = new String[] {
-            "DREAMY",
-            "MICROCOSM / MOSAIC",
-            "MICROCOSM / GLIDE",
-            "MICROCOSM / HAZE",
-            "CHROMA / COLLAGE",
-            "CHROMA / SPACE",
-            "MOOD / REVERB",
-            "MOOD / DELAY",
-            "MOOD / SLIP",
-            "MOOD / TAPE",
-            "MOOD / STRETCH"
-    };
-    private static final String[][] DREAM_PARAM_NAMES = new String[][] {
-            {"DRIFT", "FRAGMENT", "UNUSED", "UNUSED"},
-            {"ACTIVITY", "VARIATION", "REPEATS", "SPACE"},
-            {"ACTIVITY", "SHAPE", "REPEATS", "SPACE"},
-            {"DENSITY", "SPREAD", "VARIATION", "DIFFUSION"},
-            {"TIME", "AMOUNT", "DRIFT", "CASSETTE"},
-            {"TIME / SIZE", "AMOUNT", "DRIFT", "CASSETTE"},
-            {"CLOCK", "TIME / SIZE", "MODIFY / SMEAR", "MICRO-LOOP"},
-            {"CLOCK", "TIME", "MODIFY / FEEDBACK", "MICRO-LOOP"},
-            {"CLOCK", "REFRESH", "MODIFY / SPEED", "MICRO-LOOP"},
-            {"CLOCK", "LENGTH", "MODIFY / SPEED", "FADE"},
-            {"CLOCK", "LENGTH", "MODIFY / STRETCH", "TONE"}
-    };
-    private static final int[][] DREAM_DEFAULTS = new int[][] {
-            {28,28,50,50,34},
-            {55,25,45,35,45},
-            {35,60,40,35,45},
-            {65,55,35,65,50},
-            {42,55,32,30,45},
-            {55,60,25,20,42},
-            {50,55,70,35,45},
-            {55,45,55,30,42},
-            {50,45,65,30,45},
-            {45,50,55,65,50},
-            {50,45,55,45,48}
-    };
-    private static final String[] DREAM_MODE_DESCRIPTIONS = new String[] {
-            "Original Dreamy: +5 / +12 semitone overlapping micro-loops.",
-            "Microcosm-inspired Mosaic: overlapping loop layers at multiple playback speeds.",
-            "Microcosm-inspired Glide: overlapping short loops with moving playback speed.",
-            "Microcosm Haze: grain-density/spread wash with A-D style speed families.",
-            "Chroma Collage: looping delay with feedback, random double-speed events and Drift.",
-            "Chroma Space: large diffusion/reverb with pitch-modulated Drift.",
-            "MOOD Wet/Reverb + captured micro-loop layer.",
-            "MOOD Wet/Delay + optional micro-loop layer.",
-            "MOOD Wet/Slip: refresh + playback speed/direction.",
-            "MOOD Micro-Looper/Tape: loop length, speed/direction and fade.",
-            "MOOD Micro-Looper/Stretch: slice length, stretch direction and tone."
+    private TextView statusView, stepView, lastView, progressView;
+    private Button nextButton, backButton, skipButton, exportButton, restartButton;
+
+    private final Object logLock = new Object();
+    private final StringBuilder rawLog = new StringBuilder(128 * 1024);
+    private final ArrayList<StepResult> results = new ArrayList<>();
+    private int stepIndex = 0;
+    private long stepStartMs;
+    private int dialEventsThisStep = 0;
+    private Set<Integer> lastHeld = new HashSet<>();
+    private long authAtMs = 0;
+    private int authTimeoutSec = 0;
+
+    private static class KeyDef {
+        final int code; final String label;
+        KeyDef(int c, String l) { code=c; label=l; }
+    }
+    private static class Step {
+        final String prompt;
+        final Integer expectedKey;
+        final boolean dial;
+        Step(String p, Integer k, boolean d) { prompt=p; expectedKey=k; dial=d; }
+    }
+    private static class StepResult {
+        int index; String prompt; String result; long elapsedMs; String detail="";
+    }
+
+    private static final KeyDef[] KEYS = new KeyDef[] {
+        new KeyDef(0x01,"SMART INSRT [CLIP]"), new KeyDef(0x02,"APPND [CLIP]"),
+        new KeyDef(0x03,"RIPL O/WR"), new KeyDef(0x04,"CLOSE UP [YPOS]"),
+        new KeyDef(0x05,"PLACE ON TOP"), new KeyDef(0x06,"SRC O/WR"),
+        new KeyDef(0x07,"IN [CLR]"), new KeyDef(0x08,"OUT [CLR]"),
+        new KeyDef(0x09,"TRIM IN"), new KeyDef(0x0a,"TRIM OUT"),
+        new KeyDef(0x0b,"ROLL [SLIDE]"), new KeyDef(0x0c,"SLIP SRC"),
+        new KeyDef(0x0d,"SLIP DEST"), new KeyDef(0x0e,"TRANS DUR [SET]"),
+        new KeyDef(0x0f,"CUT"), new KeyDef(0x10,"DIS"), new KeyDef(0x11,"SMTH CUT"),
+        new KeyDef(0x1a,"SOURCE"), new KeyDef(0x1b,"TIMELINE"),
+        new KeyDef(0x1c,"SHTL"), new KeyDef(0x1d,"JOG"), new KeyDef(0x1e,"SCRL"),
+        new KeyDef(0x31,"ESC [UNDO]"), new KeyDef(0x1f,"SYNC BIN"),
+        new KeyDef(0x2c,"AUDIO LEVEL [MARK]"), new KeyDef(0x2d,"FULL VIEW [RVW]"),
+        new KeyDef(0x22,"TRANS [TITLE]"), new KeyDef(0x2f,"SPLIT [MOVE]"),
+        new KeyDef(0x2e,"SNAP [=]"), new KeyDef(0x2b,"RIPL DEL"),
+        new KeyDef(0x33,"CAM 1"), new KeyDef(0x34,"CAM 2"), new KeyDef(0x35,"CAM 3"),
+        new KeyDef(0x36,"CAM 4"), new KeyDef(0x37,"CAM 5"), new KeyDef(0x38,"CAM 6"),
+        new KeyDef(0x39,"CAM 7"), new KeyDef(0x3a,"CAM 8"), new KeyDef(0x3b,"CAM 9"),
+        new KeyDef(0x30,"LIVE O/WR [RND]"), new KeyDef(0x25,"VIDEO ONLY"),
+        new KeyDef(0x26,"AUDIO ONLY"), new KeyDef(0x3c,"STOP/PLAY")
     };
 
-    private static final String[] INSTRUMENT_NAMES = new String[] {
-            "VIOLIN", "FLUTE", "SAXOPHONE", "FELT PIANO",
-            "PIANICA / ACCORDION", "XYLOPHONE", "WOOD BASS", "DRUMS",
-            "EP-SAMPLE", "SAMPLE 2", "SAMPLE 3", "SAMPLE 4",
-            "SAMPLE 5", "SAMPLE 6", "SAMPLE 7", "SAMPLE 8"
-    };
-    private static final String[] INSTRUMENT_BUTTONS = new String[] {
-            "VIOLIN", "FLUTE", "SAX", "FELT",
-            "ACCORD", "XYLO", "BASS", "DRUMS",
-            "EP", "S2", "S3", "S4", "S5", "S6", "S7", "S8"
-    };
-    private PianoView pianoView;
-    private ImageView epBackground;
-    private PerformanceVideoLayer videoLayer;
-    private PerformanceXYView performanceXYView;
-    private DrumEditorView drumEditorView;
-    private MixerView mixerView;
-    private SoundDesignView soundDesignView;
-    private MidiController midiController;
-    private volatile boolean dreamy = false;
-    private int boosterStep = 0;
-    private int spaceMode = 0;
-    private boolean tape = false;
-    private int boostDb = 0;
-    private int spaceMix = 50, spaceDecay = 50;
-    private int tapeWow = 50, tapeFlutter = 50, tapeDrive = 50;
-    private int dreamX = 28, dreamY = 28, dreamP3 = 50, dreamP4 = 50, dreamMix = 34;
-    private int dreamMode = 0;
-    private final int[] partMidiChannels = new int[]{
-            1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
-    };
-    private final String[] sampleBankNames = new String[]{
-            "EP-SAMPLE","SAMPLE 2","SAMPLE 3","SAMPLE 4",
-            "SAMPLE 5","SAMPLE 6","SAMPLE 7","SAMPLE 8"
-    };
-    private int pendingBankSlot = 0;
-    private boolean manualSustain = false;
-    private int bowPressure = 74;
-    private int bowSpeed = 74;
-    private int bowPosition = 42;
-    private int vibratoDepth = 14;
-    private int attackMs = 20;
-    private int decayMs = 120;
-    private int sustainPct = 90;
-    private int releaseMs = 300;
-    private int instrumentMode = 0;
-    private final int[] drumParameters = new int[]{
-            64, 58, 46, 38,
-            64, 43, 74, 56,
-            64, 53, 74, 58
-    };
-    private int drumBoostDb = 6;
-    private int drumDistortion = 0;
-    private final int[] partBoostDb = new int[]{
-            0,0,0,0,0,0,0,6,0,0,0,0,0,0,0,0
-    };
-    private final int[] partDistortion = new int[]{
-            0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-    };
-    private int feltReverbMix = 28;
-    private int feltReverbDecay = 58;
-    private float audioBufferBursts = 0f;
-    private final int[] partMixerVolume = new int[]{
-            112,112,112,112,112,112,112,112,
-            127,127,127,127,127,127,127,127
-    };
-    private final int[] partMixerPan = new int[]{
-            64,64,64,64,64,64,64,64,
-            64,64,64,64,64,64,64,64
-    };
-    private final boolean[] partMixerMute = new boolean[16];
+    private final ArrayList<Step> steps = new ArrayList<>();
 
-    @Override protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        hideSystemUI();
-        epBackground = new ImageView(this);
-        epBackground.setImageResource(com.example.epsampler.R.drawable.piano_reference);
-        epBackground.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        epBackground.setBackgroundColor(android.graphics.Color.BLACK);
-        videoLayer = new PerformanceVideoLayer(this);
-        pianoView = new PianoView(this);
-        pianoView.setPerformanceVideoLayer(videoLayer);
-        pianoView.setActionListener(this);
-        performanceXYView = new PerformanceXYView(this, pianoView);
-        performanceXYView.setListener(this);
-        drumEditorView = new DrumEditorView(this);
-        drumEditorView.setListener(this);
-        mixerView = new MixerView(this);
-        mixerView.setListener(this);
-        soundDesignView = new SoundDesignView(this);
-        soundDesignView.setListener(this);
-
-        FrameLayout root = new FrameLayout(this);
-        root.addView(epBackground, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(videoLayer, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-        // Performance XY sits below the control UI. PianoView returns false for
-        // blank-area ACTION_DOWN events so those gestures still reach XY.
-        root.addView(performanceXYView, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(pianoView, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(drumEditorView, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(mixerView, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(soundDesignView, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-
-        epBackground.setZ(0f);
-        videoLayer.setZ(1f);
-        performanceXYView.setZ(10f);
-        pianoView.setZ(20f);
-        drumEditorView.setZ(30f);
-        mixerView.setZ(40f);
-        soundDesignView.setZ(50f);
-        setContentView(root);
-
-        boosterStep = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_BOOST, 0);
-        spaceMode = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SPACE, 0);
-        tape = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_TAPE, false);
-        dreamy = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_DREAMY, false);
-        boostDb = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_BOOST_DB, boosterStep * 2);
-        spaceMix = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SPACE_MIX, 50);
-        spaceDecay = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SPACE_DECAY, 50);
-        tapeWow = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_TAPE_WOW, 50);
-        tapeFlutter = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_TAPE_FLUTTER, 50);
-        tapeDrive = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_TAPE_DRIVE, 50);
-        dreamX = Math.max(0, Math.min(100, getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_X, 28)));
-        dreamY = Math.max(0, Math.min(100, getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_Y, 28)));
-        dreamP3 = Math.max(0, Math.min(100, getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_P3, 50)));
-        dreamP4 = Math.max(0, Math.min(100, getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_P4, 50)));
-        dreamMix = Math.max(0, Math.min(100, getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_MIX, 34)));
-        dreamMode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1,
-                getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DREAM_MODE, 0)));
-        for (int slot=0; slot<sampleBankNames.length; slot++) {
-            sampleBankNames[slot] = sanitizeBankName(
-                    getSharedPreferences(PREFS, MODE_PRIVATE)
-                            .getString(KEY_BANK_NAME_PREFIX + slot,
-                                    slot == 0 ? "EP-SAMPLE" : "SAMPLE " + (slot + 1)),
-                    slot);
-        }
-        for (int i=0; i<partMidiChannels.length; i++) {
-            partMidiChannels[i] = Math.max(0, Math.min(16,
-                    getSharedPreferences(PREFS, MODE_PRIVATE)
-                            .getInt(KEY_PART_MIDI_PREFIX + i, i + 1)));
-            partMixerVolume[i] = Math.max(0, Math.min(127,
-                    getSharedPreferences(PREFS, MODE_PRIVATE)
-                            .getInt(KEY_MIX_VOL_PREFIX + i, i >= 8 ? 127 : 112)));
-            partMixerPan[i] = Math.max(0, Math.min(127,
-                    getSharedPreferences(PREFS, MODE_PRIVATE)
-                            .getInt(KEY_MIX_PAN_PREFIX + i, 64)));
-            partMixerMute[i] = getSharedPreferences(PREFS, MODE_PRIVATE)
-                    .getBoolean(KEY_MIX_MUTE_PREFIX + i, false);
-        }
-        manualSustain = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_MANUAL_SUSTAIN, false);
-        attackMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_ATTACK_MS, 20);
-        decayMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_DECAY_MS, 120);
-        sustainPct = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SUSTAIN_PCT, 90);
-        releaseMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_RELEASE_MS, 300);
-        instrumentMode = Math.max(0, Math.min(15,
-                getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_INSTRUMENT, 0)));
-        android.content.SharedPreferences drumPrefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-        drumBoostDb = Math.max(0, Math.min(18, drumPrefs.getInt(KEY_DRUM_BOOST_DB, 6)));
-        drumDistortion = Math.max(0, Math.min(127, drumPrefs.getInt(KEY_DRUM_DISTORTION, 0)));
-        for (int i=0; i<partBoostDb.length; i++) {
-            int boostFallback = (i == 7) ? drumBoostDb : 0;
-            int distFallback = (i == 7) ? drumDistortion : 0;
-            partBoostDb[i] = Math.max(0, Math.min(18,
-                    drumPrefs.getInt(KEY_PART_BOOST_PREFIX + i, boostFallback)));
-            partDistortion[i] = Math.max(0, Math.min(127,
-                    drumPrefs.getInt(KEY_PART_DIST_PREFIX + i, distFallback)));
-        }
-        drumBoostDb = partBoostDb[7];
-        drumDistortion = partDistortion[7];
-        feltReverbMix = Math.max(0, Math.min(100,
-                drumPrefs.getInt(KEY_FELT_REVERB_MIX, 28)));
-        feltReverbDecay = Math.max(0, Math.min(100,
-                drumPrefs.getInt(KEY_FELT_REVERB_DECAY, 58)));
-        audioBufferBursts = drumPrefs.getFloat(KEY_AUDIO_BUFFER_BURSTS, 0f);
-        for (int i=0; i<drumParameters.length; i++) {
-            int fallback = drumParameters[i];
-            if (i == 0) fallback = drumPrefs.getInt(KEY_DRUM_KICK_TUNE, fallback);
-            else if (i == 4) fallback = drumPrefs.getInt(KEY_DRUM_HAT_TUNE, fallback);
-            else if (i == 8) fallback = drumPrefs.getInt(KEY_DRUM_SNARE_TUNE, fallback);
-            else if (i == 1 || i == 5 || i == 9) fallback = drumPrefs.getInt(KEY_DRUM_DECAY, fallback);
-            drumParameters[i] = Math.max(0, Math.min(127,
-                    drumPrefs.getInt(KEY_DRUM_PARAM_PREFIX + i, fallback)));
-        }
-
-        pianoView.setBoosterStep(boosterStep);
-        pianoView.setBoostDb(boostDb);
-        pianoView.setSpaceMode(spaceMode);
-        pianoView.setTape(tape);
-        pianoView.setDreamy(dreamy);
-        pianoView.setInstrumentName(instrumentNameFor(instrumentMode), instrumentButtonFor(instrumentMode));
-        pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
-        pianoView.setSampleMode(instrumentMode >= 8);
-        performanceXYView.setInstrumentMode(instrumentMode);
-        drumEditorView.setValues(drumParameters);
-        drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
-        drumEditorView.setDrumsVisible(instrumentMode == 7);
-        mixerView.setPartNames(mixerPartNames());
-        mixerView.setMixerState(partMixerVolume, partMixerPan, partMixerMute);
-        pianoView.controlChange(7, partMixerVolume[instrumentMode]);
-        epBackground.setVisibility(instrumentMode >= 8 ? View.VISIBLE : View.GONE);
-        videoLayer.setVisibility(instrumentMode >= 8 ? View.GONE : View.VISIBLE);
-        if (instrumentMode < 8) videoLayer.setInstrument(instrumentMode);
-
-        loadDrumSampleAssets();
-        NativeEngine.start();
-        loadExistingBanks();
-        NativeEngine.setAudioBufferBursts(audioBufferBursts);
-        NativeEngine.setBoosterStep(boosterStep);
-        NativeEngine.setBoostDb(boostDb);
-        NativeEngine.setSpaceMode(spaceMode);
-        NativeEngine.setSpaceParameters(spaceMix, spaceDecay);
-        NativeEngine.setTape(tape);
-        NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
-        NativeEngine.setDreamy(dreamy);
-        NativeEngine.setDreamyMode(dreamMode);
-        NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
-        NativeEngine.setDreamyExtraParameters(dreamP3, dreamP4);
-        pianoView.controlChange(103, Math.max(0, Math.min(127, Math.round(dreamX * 1.27f))));
-        pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(dreamY * 1.27f))));
-        for (int i=0; i<drumParameters.length; i++) {
-            NativeEngine.setDrumParameter(i, drumParameters[i]);
-        }
-        for (int part=0; part<partBoostDb.length; part++) {
-            NativeEngine.setPartFx(part, partBoostDb[part], partDistortion[part]);
-            NativeEngine.setPartMixer(part, partMixerVolume[part], partMixerPan[part], partMixerMute[part]);
-        }
-        NativeEngine.setDrumFx(partBoostDb[7], partDistortion[7]);
-        NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
-        NativeEngine.setInstrument(instrumentMode);
-        if (instrumentMode < 7) {
-            NativeEngine.controlChange(10, bowPressure);
-            NativeEngine.controlChange(11, bowSpeed);
-            NativeEngine.controlChange(74, bowPosition);
-            NativeEngine.controlChange(1, vibratoDepth);
-            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
-            pianoView.controlChange(10, bowPressure);
-            pianoView.controlChange(11, bowSpeed);
-            pianoView.controlChange(74, bowPosition);
-            pianoView.controlChange(1, vibratoDepth);
-        }
-        if (manualSustain) {
-            NativeEngine.controlChange(64, 127);
-            pianoView.controlChange(64, 127);
-        }
-
-        midiController = new MidiController(this, this);
-        midiController.setPartChannels(partMidiChannels);
-        midiController.start();
+    @Override public void onCreate(Bundle b) {
+        super.onCreate(b);
+        buildSteps();
+        buildUi();
+        usbManager = (UsbManager)getSystemService(Context.USB_SERVICE);
+        IntentFilter f = new IntentFilter();
+        f.addAction(ACTION_USB_PERMISSION);
+        f.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+        f.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(usbReceiver, f, Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(usbReceiver, f);
+        resetSession();
     }
 
-    private void loadDrumSampleAssets() {
-        final String[] files = new String[]{
-                "drum_closehat.wav",
-                "drum_tom.wav",
-                "drum_crash.wav",
-                "drum_kick.wav",
-                "drum_stick.wav",
-                "drum_snaire.wav"
-        };
-
-        for (int slot=0; slot<files.length; slot++) {
-            try (InputStream in = getAssets().open(files[slot]);
-                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                byte[] buffer = new byte[64 * 1024];
-                int count;
-                while ((count = in.read(buffer)) >= 0) {
-                    if (count > 0) out.write(buffer, 0, count);
-                }
-                NativeEngine.loadDrumSample(slot, out.toByteArray());
-            } catch (Exception ignored) {
-                // Missing sample does not affect C4/C#4/D4 physical drums.
-            }
-        }
-    }
-
-    private void hideSystemUI() {
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
-                View.SYSTEM_UI_FLAG_FULLSCREEN |
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-        if (android.os.Build.VERSION.SDK_INT >= 30 && getWindow().getInsetsController() != null) {
-            getWindow().getInsetsController().hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-            getWindow().getInsetsController().setSystemBarsBehavior(
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-        }
-    }
-
-    private String sanitizeBankName(String value, int slot) {
-        String fallback = slot == 0 ? "EP-SAMPLE" : "SAMPLE " + (slot + 1);
-        if (value == null) return fallback;
-        String clean = value.trim().replaceAll("[\\r\\n\\t]+", " ");
-        if (clean.isEmpty()) return fallback;
-        if (clean.length() > 24) clean = clean.substring(0, 24);
-        return clean;
-    }
-
-    private String instrumentNameFor(int part) {
-        part = Math.max(0, Math.min(15, part));
-        return part < 8 ? INSTRUMENT_NAMES[part] : sampleBankNames[part - 8];
-    }
-
-    private String instrumentButtonFor(int part) {
-        part = Math.max(0, Math.min(15, part));
-        if (part < 8) return INSTRUMENT_BUTTONS[part];
-        String name = sampleBankNames[part - 8];
-        return name.length() <= 8 ? name : name.substring(0, 8);
-    }
-
-    private String[] mixerPartNames() {
-        String[] names = new String[16];
-        for (int part=0; part<16; part++) names[part] = instrumentNameFor(part);
-        return names;
-    }
-
-    private String sampleBankStatus(int slot) {
-        slot = Math.max(0, Math.min(7, slot));
-        int part = 8 + slot;
-        String ch = partMidiChannels[part] <= 0 ? "OFF" : "CH" + partMidiChannels[part];
-        return NativeEngine.isBankSlotLoaded(slot)
-                ? sampleBankNames[slot] + " " + NativeEngine.bankSlotStatus(slot) + " " + ch
-                : sampleBankNames[slot] + " BANK — " + ch;
-    }
-
-    private void refreshSelectedSampleStatus() {
-        if (instrumentMode < 8 || pianoView == null) return;
-        pianoView.setBankStatus(sampleBankStatus(instrumentMode - 8));
-    }
-
-    private void loadExistingBanks() {
-        new Thread(() -> {
-            android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-            for (int slot=0; slot<8; slot++) {
-                String saved = prefs.getString(KEY_BANK_URI_PREFIX + slot, null);
-                if ((saved == null || saved.isEmpty()) && slot == 0) {
-                    // Migrate the single-bank MASTER preference without losing it.
-                    saved = prefs.getString(KEY_BANK_URI, null);
-                }
-                if (saved == null || saved.isEmpty()) continue;
-
-                boolean ok = false;
-                try (ParcelFileDescriptor pfd =
-                             getContentResolver().openFileDescriptor(Uri.parse(saved), "r")) {
-                    if (pfd != null) ok = NativeEngine.loadBankSlotFd(slot, pfd.getFd());
-                } catch (Exception ignored) {
-                }
-
-                final int loadedSlot = slot;
-                final boolean result = ok;
-                runOnUiThread(() -> {
-                    if (instrumentMode == 8 + loadedSlot) {
-                        if (result) {
-                            // The active pointer flips at the next audio buffer.
-                            pianoView.postDelayed(this::refreshSelectedSampleStatus, 60L);
-                        } else {
-                            String ch = partMidiChannels[8 + loadedSlot] <= 0
-                                    ? "OFF" : "CH" + partMidiChannels[8 + loadedSlot];
-                            pianoView.setBankStatus(
-                                    sampleBankNames[loadedSlot] + " BANK ERROR " + ch);
-                        }
-                    }
-                });
-            }
-        }, "BankRestore").start();
-    }
-
-    private void loadBankUri(int slot, Uri uri) {
-        slot = Math.max(0, Math.min(7, slot));
-        final int targetSlot = slot;
-        if (instrumentMode == 8 + targetSlot) {
-            pianoView.setBankStatus(sampleBankNames[targetSlot] + " BANK LOADING…");
-        }
-
-        new Thread(() -> {
-            boolean ok = false;
-            try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "r")) {
-                if (pfd != null) ok = NativeEngine.loadBankSlotFd(targetSlot, pfd.getFd());
-            } catch (Exception ignored) {
-            }
-            final boolean result = ok;
-            runOnUiThread(() -> {
-                if (instrumentMode == 8 + targetSlot) {
-                    if (result) {
-                        pianoView.postDelayed(this::refreshSelectedSampleStatus, 60L);
-                    } else {
-                        String ch = partMidiChannels[8 + targetSlot] <= 0
-                                ? "OFF" : "CH" + partMidiChannels[8 + targetSlot];
-                        pianoView.setBankStatus(
-                                sampleBankNames[targetSlot] + " BANK ERROR " + ch);
-                    }
-                }
-            });
-        }, "BankOpen-" + (targetSlot + 1)).start();
-    }
-
-    private void saveBankName(int slot, String value) {
-        slot = Math.max(0, Math.min(7, slot));
-        sampleBankNames[slot] = sanitizeBankName(value, slot);
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putString(KEY_BANK_NAME_PREFIX + slot, sampleBankNames[slot])
-                .apply();
-        if (mixerView != null) mixerView.setPartNames(mixerPartNames());
-        if (instrumentMode == 8 + slot && pianoView != null) {
-            pianoView.setInstrumentName(sampleBankNames[slot], instrumentButtonFor(8 + slot));
-            refreshSelectedSampleStatus();
-        }
-    }
-
-    private void launchBankPicker(int slot) {
-        pendingBankSlot = Math.max(0, Math.min(7, slot));
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("application/octet-stream");
-        intent.putExtra(Intent.EXTRA_MIME_TYPES,
-                new String[]{"application/octet-stream", "application/x-binary", "*/*"});
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
-                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        startActivityForResult(intent, PICK_BANK);
-    }
-
-    private void showSampleBankDialog(int slot) {
-        slot = Math.max(0, Math.min(7, slot));
-        final int targetSlot = slot;
-        LinearLayout root = dialogRoot();
-
-        TextView channel = new TextView(this);
-        int configuredCh = partMidiChannels[8 + slot];
-        channel.setText("SAMPLE " + (slot + 1) + " / " +
-                (configuredCh <= 0 ? "MIDI OFF" : "MIDI CH " + configuredCh));
-        channel.setTextSize(14f);
-        root.addView(channel);
-
-        EditText name = new EditText(this);
-        name.setSingleLine(true);
-        name.setText(sampleBankNames[slot]);
-        name.setHint("BANK NAME");
-        root.addView(name);
-
-        TextView status = new TextView(this);
-        status.setText(sampleBankStatus(slot));
-        status.setTextSize(12f);
-        root.addView(status);
-
-        Button saveName = new Button(this);
-        saveName.setText("SAVE NAME");
-        saveName.setOnClickListener(v -> {
-            saveBankName(targetSlot, name.getText().toString());
-            status.setText(sampleBankStatus(targetSlot));
-        });
-        root.addView(saveName);
-
-        Button choose = new Button(this);
-        choose.setText("CHOOSE BIN");
-        choose.setOnClickListener(v -> {
-            saveBankName(targetSlot, name.getText().toString());
-            launchBankPicker(targetSlot);
-        });
-        root.addView(choose);
-
-        new AlertDialog.Builder(this)
-                .setTitle("SAMPLE BANK " + (slot + 1))
-                .setView(root)
-                .setPositiveButton("CLOSE", null)
-                .show();
-    }
-
-    @Override public void onToggleDreamy() {
-        dreamy = !dreamy;
-        NativeEngine.setDreamy(dreamy);
-        pianoView.setDreamy(dreamy);
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_DREAMY, dreamy).apply();
-    }
-
-    @Override public void onCycleBooster() {
-        boosterStep = (boosterStep + 1) % 4;
-        boostDb = boosterStep * 2;
-        NativeEngine.setBoosterStep(boosterStep);
-        NativeEngine.setBoostDb(boostDb);
-        pianoView.setBoosterStep(boosterStep);
-        pianoView.setBoostDb(boostDb);
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putInt(KEY_BOOST, boosterStep).putInt(KEY_BOOST_DB, boostDb).apply();
-    }
-
-    @Override public void onCycleSpace() {
-        spaceMode = (spaceMode + 1) % 4;
-        NativeEngine.setSpaceMode(spaceMode);
-        pianoView.setSpaceMode(spaceMode);
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_SPACE, spaceMode).apply();
-    }
-
-    @Override public void onToggleTape() {
-        tape = !tape;
-        NativeEngine.setTape(tape);
-        pianoView.setTape(tape);
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_TAPE, tape).apply();
-    }
-
-    @Override public void onEditEffect(int effect) {
-        if (effect == PianoView.EFFECT_BOOST) showBoostDialog();
-        else if (effect == PianoView.EFFECT_SPACE) showSpaceDialog();
-        else if (effect == PianoView.EFFECT_TAPE) showTapeDialog();
-        else if (effect == PianoView.EFFECT_DREAMY) showDreamyDialog();
-    }
-
-    @Override public void onOpenConfig() {
-        showConfigDialog();
-    }
-
-    @Override public void onOpenMixer() {
-        pianoView.setRecorderOpen(false);
-        if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
-        mixerView.setPartNames(mixerPartNames());
-        mixerView.setMixerState(partMixerVolume, partMixerPan, partMixerMute);
-        mixerView.setVisibility(View.VISIBLE);
-        mixerView.bringToFront();
-    }
-
-    @Override public void onMixerClose() {
-        mixerView.setVisibility(View.GONE);
-        hideSystemUI();
-    }
-
-    @Override public void onMixerChanged(int part, int volume, int pan, boolean muted) {
-        if (part < 0 || part >= partMixerVolume.length) return;
-        partMixerVolume[part] = Math.max(0, Math.min(127, volume));
-        partMixerPan[part] = Math.max(0, Math.min(127, pan));
-        partMixerMute[part] = muted;
-        NativeEngine.setPartMixer(part, partMixerVolume[part], partMixerPan[part], partMixerMute[part]);
-
-        if (part == instrumentMode) {
-            pianoView.controlChange(7, partMixerVolume[part]);
-        }
-
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putInt(KEY_MIX_VOL_PREFIX + part, partMixerVolume[part])
-                .putInt(KEY_MIX_PAN_PREFIX + part, partMixerPan[part])
-                .putBoolean(KEY_MIX_MUTE_PREFIX + part, partMixerMute[part])
-                .apply();
-    }
-
-    private LinearLayout dialogRoot() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        int p = Math.round(18f * getResources().getDisplayMetrics().density);
-        root.setPadding(p, p / 2, p, p / 2);
-        return root;
-    }
-
-    private ScrollView scrollDialogView(LinearLayout root) {
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.addView(root, new ScrollView.LayoutParams(
-                ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT));
-        return scroll;
-    }
-
-    private void addSlider(LinearLayout root, String name, int max, int value, java.util.function.IntConsumer onChange) {
-        GraphicParameterControl control = new GraphicParameterControl(this);
-        int style = Math.floorMod(name == null ? 0 : name.hashCode(), 4);
-        control.configure(name, max, value, style, onChange::accept);
-        int h = Math.round(102f * getResources().getDisplayMetrics().density);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, h);
-        int gap = Math.round(5f * getResources().getDisplayMetrics().density);
-        lp.setMargins(0, gap, 0, gap);
-        root.addView(control, lp);
-    }
-
-    private void showBoostDialog() {
-        LinearLayout root = dialogRoot();
-        addSlider(root, "BOOST dB", 6, boostDb, v -> {
-            boostDb = v;
-            NativeEngine.setBoostDb(v);
-            pianoView.setBoostDb(v);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_BOOST_DB, v).apply();
-        });
-        new AlertDialog.Builder(this).setTitle("BOOST").setView(scrollDialogView(root))
-                .setPositiveButton("CLOSE", null).show();
-    }
-
-    private void showSpaceDialog() {
-        LinearLayout root = dialogRoot();
-        addSlider(root, "MIX %", 100, spaceMix, v -> {
-            spaceMix = v;
-            NativeEngine.setSpaceParameters(spaceMix, spaceDecay);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_SPACE_MIX, v).apply();
-        });
-        addSlider(root, "DECAY %", 100, spaceDecay, v -> {
-            spaceDecay = v;
-            NativeEngine.setSpaceParameters(spaceMix, spaceDecay);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_SPACE_DECAY, v).apply();
-        });
-        new AlertDialog.Builder(this).setTitle("SPACE").setView(scrollDialogView(root))
-                .setPositiveButton("CLOSE", null).show();
-    }
-
-    private void showTapeDialog() {
-        LinearLayout root = dialogRoot();
-        addSlider(root, "WOW %", 100, tapeWow, v -> {
-            tapeWow = v;
-            NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_TAPE_WOW, v).apply();
-        });
-        addSlider(root, "FLUTTER %", 100, tapeFlutter, v -> {
-            tapeFlutter = v;
-            NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_TAPE_FLUTTER, v).apply();
-        });
-        addSlider(root, "DRIVE %", 100, tapeDrive, v -> {
-            tapeDrive = v;
-            NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_TAPE_DRIVE, v).apply();
-        });
-        new AlertDialog.Builder(this).setTitle("TAPE").setView(scrollDialogView(root))
-                .setPositiveButton("CLOSE", null).show();
-    }
-
-    private void applyDreamySettings() {
-        dreamMode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1, dreamMode));
-        dreamX = Math.max(0, Math.min(100, dreamX));
-        dreamY = Math.max(0, Math.min(100, dreamY));
-        dreamP3 = Math.max(0, Math.min(100, dreamP3));
-        dreamP4 = Math.max(0, Math.min(100, dreamP4));
-        dreamMix = Math.max(0, Math.min(100, dreamMix));
-
-        NativeEngine.setDreamyMode(dreamMode);
-        NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
-        NativeEngine.setDreamyExtraParameters(dreamP3, dreamP4);
-
-        // Existing performance XY / MIDI assignments continue to address P1/P2.
-        pianoView.controlChange(103, Math.max(0, Math.min(127, Math.round(dreamX * 1.27f))));
-        pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(dreamY * 1.27f))));
-    }
-
-    private void persistDreamySettings() {
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putInt(KEY_DREAM_MODE, dreamMode)
-                .putInt(KEY_DREAM_X, dreamX)
-                .putInt(KEY_DREAM_Y, dreamY)
-                .putInt(KEY_DREAM_P3, dreamP3)
-                .putInt(KEY_DREAM_P4, dreamP4)
-                .putInt(KEY_DREAM_MIX, dreamMix)
-                .apply();
-    }
-
-    private void showDreamyDialog() {
-        LinearLayout root = dialogRoot();
-
-        TextView modeLabel = new TextView(this);
-        modeLabel.setText("MODE");
-        modeLabel.setTextSize(16f);
-        root.addView(modeLabel);
-
-        Spinner modeSpinner = new Spinner(this);
-        modeSpinner.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, DREAM_MODE_NAMES));
-        modeSpinner.setSelection(dreamMode);
-        root.addView(modeSpinner);
-
-        TextView description = new TextView(this);
-        description.setTextSize(13f);
-        description.setPadding(0, 6, 0, 12);
-        root.addView(description);
-
-        final GraphicParameterControl[] controls = new GraphicParameterControl[5];
-        for (int i=0; i<5; i++) {
-            final int index = i;
-            GraphicParameterControl control = new GraphicParameterControl(this);
-            control.configure(index < 4 ? DREAM_PARAM_NAMES[dreamMode][index] : "MIX",
-                    100,
-                    new int[]{dreamX,dreamY,dreamP3,dreamP4,dreamMix}[index],
-                    index % 4,
-                    v -> {
-                        if (index == 0) dreamX = v;
-                        else if (index == 1) dreamY = v;
-                        else if (index == 2) dreamP3 = v;
-                        else if (index == 3) dreamP4 = v;
-                        else dreamMix = v;
-                        applyDreamySettings();
-                        persistDreamySettings();
-                    });
-            controls[i] = control;
-
-            int h = Math.round(102f * getResources().getDisplayMetrics().density);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, h);
-            int gap = Math.round(4f * getResources().getDisplayMetrics().density);
-            lp.setMargins(0, gap, 0, gap);
-            root.addView(control, lp);
-        }
-
-        final Runnable refresh = () -> {
-            int[] values = new int[]{dreamX, dreamY, dreamP3, dreamP4, dreamMix};
-            for (int i=0; i<5; i++) {
-                String name = i < 4 ? DREAM_PARAM_NAMES[dreamMode][i] : "MIX";
-                controls[i].setLabel(name);
-                controls[i].setValue(values[i]);
-                boolean visible = !(dreamMode == 0 && (i == 2 || i == 3));
-                controls[i].setVisibility(visible ? View.VISIBLE : View.GONE);
-            }
-            description.setText(DREAM_MODE_DESCRIPTIONS[dreamMode] +
-                    "\nP1/P2 remain mapped to Dreamy X/Y (MIDI CC103/104)." +
-                    "\nDrag the graphics vertically to change values.");
-        };
-
-        Button defaults = new Button(this);
-        defaults.setText("MODE DEFAULT");
-        defaults.setOnClickListener(v -> {
-            int[] d = DREAM_DEFAULTS[dreamMode];
-            dreamX = d[0];
-            dreamY = d[1];
-            dreamP3 = d[2];
-            dreamP4 = d[3];
-            dreamMix = d[4];
-            refresh.run();
-            applyDreamySettings();
-            persistDreamySettings();
-        });
-        root.addView(defaults);
-
-        modeSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view,
-                                                 int position, long id) {
-                dreamMode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1, position));
-                refresh.run();
-                applyDreamySettings();
-                persistDreamySettings();
-            }
-            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
-        });
-
-        refresh.run();
-
-        new AlertDialog.Builder(this)
-                .setTitle("DREAMY / TEXTURE MODES")
-                .setView(scrollDialogView(root))
-                .setPositiveButton("CLOSE", null)
-                .show();
-    }
-
-    private int audioBufferSelection(float value) {
-        int best = 0;
-        float bestDiff = Float.MAX_VALUE;
-        for (int i=0; i<AUDIO_BUFFER_VALUES.length; i++) {
-            float d = Math.abs(AUDIO_BUFFER_VALUES[i] - value);
-            if (d < bestDiff) { bestDiff = d; best = i; }
-        }
-        return best;
-    }
-
-    private String audioBufferStats(int lastResult) {
-        int fpb = NativeEngine.audioFramesPerBurst();
-        int frames = NativeEngine.audioBufferSizeFrames();
-        int capacity = NativeEngine.audioBufferCapacityFrames();
-        int xruns = NativeEngine.audioXRunCount();
-        String actual = fpb > 0
-                ? String.format(java.util.Locale.US, "%.2f", frames / (float) fpb)
-                : "N/A";
-        String result = lastResult < 0 ? "\nRequest result: " + lastResult : "";
-        return "Frames per burst: " + fpb +
-                "\nActual buffer: " + frames + " frames" +
-                "\nActual bursts: " + actual +
-                "\nCapacity: " + capacity + " frames" +
-                "\nXRuns: " + Math.max(0, xruns) + result;
-    }
-
-    private void showConfigDialog() {
-        LinearLayout root = dialogRoot();
-
-        TextView audioLabel = new TextView(this);
-        audioLabel.setText("AUDIO BUFFER");
-        audioLabel.setTextSize(16f);
-        root.addView(audioLabel);
-
-        Spinner audioSpinner = new Spinner(this);
-        audioSpinner.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, AUDIO_BUFFER_LABELS));
-        final float originalAudioBuffer = audioBufferBursts;
-        final int[] lastAudioResult = { 0 };
-        audioSpinner.setSelection(audioBufferSelection(audioBufferBursts));
-        root.addView(audioSpinner);
-
-        TextView audioStats = new TextView(this);
-        audioStats.setTextSize(13.5f);
-        audioStats.setPadding(0, 0, 0, 14);
-        audioStats.setText(audioBufferStats(0));
-        root.addView(audioStats);
-
-        audioSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view,
-                                                 int position, long id) {
-                float requested = AUDIO_BUFFER_VALUES[Math.max(0,
-                        Math.min(AUDIO_BUFFER_VALUES.length - 1, position))];
-                lastAudioResult[0] = NativeEngine.setAudioBufferBursts(requested);
-                audioStats.setText(audioBufferStats(lastAudioResult[0]));
-            }
-            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
-        });
-
-        TextView instrumentLabel = new TextView(this);
-        instrumentLabel.setText("INSTRUMENT");
-        instrumentLabel.setTextSize(16f);
-        root.addView(instrumentLabel);
-
-        Spinner instrumentSpinner = new Spinner(this);
-        instrumentSpinner.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, mixerPartNames()));
-        instrumentSpinner.setSelection(instrumentMode);
-        root.addView(instrumentSpinner);
-
-        TextView midiLabel = new TextView(this);
-        midiLabel.setText("MIDI CHANNEL FOR SELECTED INSTRUMENT");
-        midiLabel.setTextSize(16f);
-        root.addView(midiLabel);
-
-        Spinner channelSpinner = new Spinner(this);
-        String[] channels = new String[17];
-        channels[0] = "OFF";
-        for (int i=1;i<=16;i++) channels[i] = "CH " + i;
-        channelSpinner.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, channels));
-        channelSpinner.setSelection(partMidiChannels[instrumentMode]);
-        root.addView(channelSpinner);
-
-        instrumentSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-                int part = Math.max(0, Math.min(15, position));
-                channelSpinner.setSelection(partMidiChannels[part]);
-            }
-            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
-        });
-
-        TextView routingHelp = new TextView(this);
-        routingHelp.setText("Default routing: physical parts CH1-8, sample banks CH9-16. Same CH = layer. OFF = no external MIDI.");
-        routingHelp.setTextSize(13f);
-        root.addView(routingHelp);
-
-        CheckBox sustain = new CheckBox(this);
-        sustain.setText("Manual SUSTAIN");
-        sustain.setChecked(manualSustain);
-        root.addView(sustain);
-
-        TextView presetLabel = new TextView(this);
-        presetLabel.setText("\nPRESET");
-        presetLabel.setTextSize(16f);
-        root.addView(presetLabel);
-
-        Spinner presetSpinner = new Spinner(this);
-        String[] presetSlots = new String[PRESET_SLOTS];
-        for (int i=0; i<PRESET_SLOTS; i++) presetSlots[i] = "SLOT " + (i + 1);
-        presetSpinner.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, presetSlots));
-        root.addView(presetSpinner);
-
-        LinearLayout presetButtons = new LinearLayout(this);
-        presetButtons.setOrientation(LinearLayout.HORIZONTAL);
-        Button savePreset = new Button(this);
-        savePreset.setText("PRESET SAVE");
-        Button loadPreset = new Button(this);
-        loadPreset.setText("PRESET LOAD");
-        presetButtons.addView(savePreset, new LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        presetButtons.addView(loadPreset, new LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        root.addView(presetButtons);
-
-        savePreset.setOnClickListener(v -> {
-            int slot = presetSpinner.getSelectedItemPosition();
-            savePreset(slot);
-            Toast.makeText(this, "PRESET " + (slot + 1) + " SAVED", Toast.LENGTH_SHORT).show();
-        });
-        loadPreset.setOnClickListener(v -> {
-            int slot = presetSpinner.getSelectedItemPosition();
-            if (loadPreset(slot)) {
-                instrumentSpinner.setSelection(instrumentMode);
-                channelSpinner.setSelection(partMidiChannels[instrumentMode]);
-                sustain.setChecked(manualSustain);
-                Toast.makeText(this, "PRESET " + (slot + 1) + " LOADED", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "PRESET " + (slot + 1) + " EMPTY", Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        TextView cc = new TextView(this);
-        cc.setText("\nMIDI CC\n" +
-                "1 Modulation / 7 Volume / 10 Control 1 / 11 Control 2\n" +
-                "64 Sustain / 74 Control 3\n" +
-                "20 Boost / 21 Space Mode / 22 Space Mix / 23 Space Decay\n" +
-                "24 Tape On-Off / 25 Wow / 26 Flutter / 27 Drive\n" +
-                "28 Dreamy On-Off / 103 Dreamy P1 / 104 Dreamy P2 / 105 Dreamy Mix\n" +
-                "106 Dreamy P3 / 107 Dreamy P4 / 108 Dreamy Mode");
-        cc.setTextSize(14f);
-        root.addView(cc);
-
-        final AlertDialog[] holder = new AlertDialog[1];
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("CONFIG").setView(scrollDialogView(root))
-                .setPositiveButton("APPLY", (d, which) -> {
-                    int ai = Math.max(0, Math.min(AUDIO_BUFFER_VALUES.length - 1,
-                            audioSpinner.getSelectedItemPosition()));
-                    audioBufferBursts = AUDIO_BUFFER_VALUES[ai];
-                    NativeEngine.setAudioBufferBursts(audioBufferBursts);
-
-                    int selectedPart = Math.max(0, Math.min(15,
-                            instrumentSpinner.getSelectedItemPosition()));
-                    int newChannel = channelSpinner.getSelectedItemPosition();
-                    if (newChannel != partMidiChannels[selectedPart]) {
-                        NativeEngine.controlChangePart(selectedPart, 123, 0);
-                    }
-                    partMidiChannels[selectedPart] = newChannel;
-                    if (midiController != null) midiController.setPartChannels(partMidiChannels);
-
-                    applyInstrument(selectedPart);
-                    manualSustain = sustain.isChecked();
-                    int sus = manualSustain ? 127 : 0;
-                    NativeEngine.controlChange(64, sus);
-                    pianoView.controlChange(64, sus);
-
-                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                            .putFloat(KEY_AUDIO_BUFFER_BURSTS, audioBufferBursts)
-                            .putInt(KEY_PART_MIDI_PREFIX + selectedPart, partMidiChannels[selectedPart])
-                            .putBoolean(KEY_MANUAL_SUSTAIN, manualSustain).apply();
-                })
-                .setNegativeButton("CANCEL", (d, which) -> {
-                    NativeEngine.setAudioBufferBursts(originalAudioBuffer);
-                }).create();
-        holder[0] = dialog;
-
-        final Runnable refreshStats = new Runnable() {
-            @Override public void run() {
-                AlertDialog current = holder[0];
-                if (current == null || !current.isShowing()) return;
-                audioStats.setText(audioBufferStats(lastAudioResult[0]));
-                audioStats.postDelayed(this, 500L);
-            }
-        };
-        dialog.setOnShowListener(d -> audioStats.post(refreshStats));
-        dialog.setOnCancelListener(d -> NativeEngine.setAudioBufferBursts(originalAudioBuffer));
-        dialog.show();
-    }
-
-    private String[] modelControlNames() {
-        switch (instrumentMode) {
-            case 1: return new String[]{"EMBOUCHURE", "BREATH", "JET COLOR", "VIBRATO"};
-            case 2: return new String[]{"REED PRESSURE", "BREATH", "BRIGHTNESS", "VIBRATO"};
-            case 3: return new String[]{"HAMMER SOFTNESS", "STRIKE", "TONE", "MODULATION"};
-            case 4: return new String[]{"REED PRESSURE", "BELLOWS", "MUSETTE", "TREMOLO"};
-            case 5: return new String[]{"MALLET HARDNESS", "STRIKE", "TONE", "MODULATION"};
-            case 6: return new String[]{"STRING DAMP", "PLUCK FORCE", "PLUCK POSITION", "VIBRATO"};
-            case 7: return new String[]{"KICK TUNE", "HIHAT TUNE", "SNARE TUNE", "DECAY"};
-            default: return new String[]{"BOW PRESSURE", "BOW SPEED", "BOW POSITION", "VIBRATO"};
-        }
-    }
-
-    private String modelDescription() {
-        switch (instrumentMode) {
-            case 1: return "Jet / bore waveguide + stable standing-wave core";
-            case 2: return "Nonlinear single reed + two-section bore waveguide";
-            case 3: return "Nonlinear felt contact + stiff-string modal resonators";
-            case 4: return "Self-excited free reeds + pressure/airflow coupling";
-            case 5: return "Mallet contact + inharmonic bar modal resonators";
-            case 6: return "Fractional-delay pizzicato string + double-bass body / bridge modes";
-            case 7: return "C4 Kick / C#4 Hi-hat / D4 Snare\nIndependent modal tuning: +/-12 semitones";
-            case 8: return "EPBANK1 sample engine / 8 velocity layers / 3 RR / sustain + release";
-            default: return "4 independent bowed-string voices / shared violin body";
-        }
-    }
-
-    private void applyInstrument(int mode) {
-        mode = Math.max(0, Math.min(15, mode));
-        if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
-        if (pianoView != null) pianoView.clearForegroundForInstrumentSwitch();
-
-        instrumentMode = mode;
-        NativeEngine.setInstrument(instrumentMode);
-
-        if (epBackground != null) epBackground.setVisibility(instrumentMode >= 8 ? View.VISIBLE : View.GONE);
-        if (videoLayer != null) {
-            videoLayer.setVisibility(instrumentMode >= 8 ? View.GONE : View.VISIBLE);
-            if (instrumentMode < 8) videoLayer.setInstrument(instrumentMode);
-        }
-        if (performanceXYView != null) performanceXYView.setInstrumentMode(instrumentMode);
-        if (pianoView != null) {
-            pianoView.setInstrumentName(
-                    instrumentNameFor(instrumentMode),
-                    instrumentButtonFor(instrumentMode));
-            pianoView.setInstrumentMidiChannel(partMidiChannels[instrumentMode]);
-            pianoView.setSampleMode(instrumentMode >= 8);
-            pianoView.controlChange(7, partMixerVolume[instrumentMode]);
-            if (instrumentMode >= 8) pianoView.setBankStatus(sampleBankStatus(instrumentMode - 8));
-        }
-        if (drumEditorView != null) {
-            drumEditorView.setValues(drumParameters);
-            drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
-            drumEditorView.setDrumsVisible(instrumentMode == 7);
-        }
-
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putInt(KEY_INSTRUMENT, instrumentMode).apply();
-    }
-
-    @Override public void onRecorderRecord() {
-        NativeEngine.recorderToggleRecording();
-        pianoView.invalidate();
-    }
-
-    @Override public void onRecorderClear() {
-        NativeEngine.recorderClear();
-        pianoView.invalidate();
-    }
-
-    @Override public void onRecorderRandom() {
-        NativeEngine.recorderToggleRandom();
-        pianoView.invalidate();
-    }
-
-    @Override public void onRecorderClock() {
-        NativeEngine.recorderToggleClock();
-        pianoView.invalidate();
-    }
-
-    @Override public void onRecorderBpm(int bpm) {
-        NativeEngine.recorderSetBpm(bpm);
-        pianoView.invalidate();
-    }
-
-    @Override public void onRecorderTile(int slot) {
-        if (NativeEngine.recorderIsRecording()
-                && slot != NativeEngine.recorderRecordingSlot()
-                && NativeEngine.recorderValidSamples(slot) == 0) {
-            NativeEngine.recorderRecordSlot(slot);
-        } else {
-            NativeEngine.recorderPlaySlot(slot);
-        }
-        pianoView.invalidate();
-    }
-
-    @Override public void onChooseBank() {
-        if (instrumentMode >= 8) {
-            showSampleBankDialog(instrumentMode - 8);
-            return;
-        }
-
-        if (instrumentMode == 7) {
-            if (drumEditorView != null) {
-                drumEditorView.setValues(drumParameters);
-                drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
-                drumEditorView.setDrumsVisible(true);
-            }
-            return;
-        }
-
-        if (soundDesignView != null) {
-            pianoView.setRecorderOpen(false);
-            if (mixerView != null) mixerView.setVisibility(View.GONE);
-            soundDesignView.setEditorState(
-                    instrumentMode,
-                    INSTRUMENT_NAMES[instrumentMode],
-                    modelDescription(),
-                    modelControlNames(),
-                    new int[]{bowPressure, bowSpeed, bowPosition, vibratoDepth},
-                    attackMs,
-                    decayMs,
-                    sustainPct,
-                    releaseMs,
-                    partBoostDb[instrumentMode],
-                    partDistortion[instrumentMode],
-                    feltReverbMix,
-                    feltReverbDecay,
-                    instrumentMode == 3);
-            soundDesignView.setVisibility(View.VISIBLE);
-            soundDesignView.bringToFront();
-        }
-    }
-
-    @Override public void onSoundDesignClose() {
-        if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
-        hideSystemUI();
-    }
-
-    @Override public void onSoundDesignModelParameterChanged(int index, int value) {
-        value = Math.max(0, Math.min(127, value));
-        if (index == 0) {
-            bowPressure = value;
-            NativeEngine.controlChange(10, value);
-            pianoView.controlChange(10, value);
-        } else if (index == 1) {
-            bowSpeed = value;
-            NativeEngine.controlChange(11, value);
-            pianoView.controlChange(11, value);
-        } else if (index == 2) {
-            bowPosition = value;
-            NativeEngine.controlChange(74, value);
-            pianoView.controlChange(74, value);
-        } else if (index == 3) {
-            vibratoDepth = value;
-            NativeEngine.controlChange(1, value);
-            pianoView.controlChange(1, value);
-        }
-    }
-
-    @Override public void onSoundDesignAdsrChanged(int attack, int decay, int sustain, int release) {
-        attackMs = Math.max(0, Math.min(2000, attack));
-        decayMs = Math.max(0, Math.min(2000, decay));
-        sustainPct = Math.max(0, Math.min(100, sustain));
-        releaseMs = Math.max(0, Math.min(3000, release));
-        NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putInt(KEY_ATTACK_MS, attackMs)
-                .putInt(KEY_DECAY_MS, decayMs)
-                .putInt(KEY_SUSTAIN_PCT, sustainPct)
-                .putInt(KEY_RELEASE_MS, releaseMs)
-                .apply();
-    }
-
-    @Override public void onSoundDesignFxChanged(int boost, int dist, int revMix, int revDecay) {
-        if (instrumentMode < 0 || instrumentMode >= partBoostDb.length) return;
-
-        partBoostDb[instrumentMode] = Math.max(0, Math.min(18, boost));
-        partDistortion[instrumentMode] = Math.max(0, Math.min(127, dist));
-        NativeEngine.setPartFx(instrumentMode,
-                partBoostDb[instrumentMode], partDistortion[instrumentMode]);
-
-        android.content.SharedPreferences.Editor e =
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                        .putInt(KEY_PART_BOOST_PREFIX + instrumentMode, partBoostDb[instrumentMode])
-                        .putInt(KEY_PART_DIST_PREFIX + instrumentMode, partDistortion[instrumentMode]);
-
-        if (instrumentMode == 3) {
-            feltReverbMix = Math.max(0, Math.min(100, revMix));
-            feltReverbDecay = Math.max(0, Math.min(100, revDecay));
-            NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
-            e.putInt(KEY_FELT_REVERB_MIX, feltReverbMix)
-                    .putInt(KEY_FELT_REVERB_DECAY, feltReverbDecay);
-        }
-        e.apply();
-    }
-
-    @Override public void onDrumParameterChanged(int parameter, int value) {
-        if (parameter < 0 || parameter >= drumParameters.length) return;
-        value = Math.max(0, Math.min(127, value));
-        drumParameters[parameter] = value;
-        NativeEngine.setDrumParameter(parameter, value);
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putInt(KEY_DRUM_PARAM_PREFIX + parameter, value).apply();
-    }
-
-    @Override public void onPerformanceXY(boolean active, int part, int x, int y) {
-        NativeEngine.setPerformanceXY(active, part, x, y);
-    }
-
-    @Override public void onDrumFxChanged(int boostDb, int distortion) {
-        drumBoostDb = Math.max(0, Math.min(18, boostDb));
-        drumDistortion = Math.max(0, Math.min(127, distortion));
-        partBoostDb[7] = drumBoostDb;
-        partDistortion[7] = drumDistortion;
-        NativeEngine.setDrumFx(drumBoostDb, drumDistortion);
-        NativeEngine.setPartFx(7, drumBoostDb, drumDistortion);
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putInt(KEY_DRUM_BOOST_DB, drumBoostDb)
-                .putInt(KEY_DRUM_DISTORTION, drumDistortion)
-                .putInt(KEY_PART_BOOST_PREFIX + 7, drumBoostDb)
-                .putInt(KEY_PART_DIST_PREFIX + 7, drumDistortion)
-                .apply();
-    }
-
-
-    private void savePreset(int slot) {
-        if (slot < 0 || slot >= PRESET_SLOTS) return;
-        String p = "slot_" + slot + "_";
-        android.content.SharedPreferences.Editor e =
-                getSharedPreferences(PRESET_PREFS, MODE_PRIVATE).edit();
-
-        e.putBoolean(p + "valid", true)
-                .putInt(p + "instrument", instrumentMode)
-                .putBoolean(p + "manual_sustain", manualSustain)
-                .putInt(p + "boost_db", boostDb)
-                .putInt(p + "space_mode", spaceMode)
-                .putInt(p + "space_mix", spaceMix)
-                .putInt(p + "space_decay", spaceDecay)
-                .putBoolean(p + "tape", tape)
-                .putInt(p + "tape_wow", tapeWow)
-                .putInt(p + "tape_flutter", tapeFlutter)
-                .putInt(p + "tape_drive", tapeDrive)
-                .putBoolean(p + "dreamy", dreamy)
-                .putInt(p + "dream_x", dreamX)
-                .putInt(p + "dream_y", dreamY)
-                .putInt(p + "dream_p3", dreamP3)
-                .putInt(p + "dream_p4", dreamP4)
-                .putInt(p + "dream_mode", dreamMode)
-                .putInt(p + "dream_mix", dreamMix)
-                .putInt(p + "control1", bowPressure)
-                .putInt(p + "control2", bowSpeed)
-                .putInt(p + "control3", bowPosition)
-                .putInt(p + "mod", vibratoDepth)
-                .putInt(p + "attack", attackMs)
-                .putInt(p + "decay", decayMs)
-                .putInt(p + "sustain", sustainPct)
-                .putInt(p + "release", releaseMs)
-                .putInt(p + "drum_boost", partBoostDb[7])
-                .putInt(p + "drum_dist", partDistortion[7])
-                .putInt(p + "felt_reverb_mix", feltReverbMix)
-                .putInt(p + "felt_reverb_decay", feltReverbDecay);
-        for (int i=0; i<partMidiChannels.length; i++) {
-            e.putInt(p + "midi_" + i, partMidiChannels[i]);
-            e.putInt(p + "part_boost_" + i, partBoostDb[i]);
-            e.putInt(p + "part_dist_" + i, partDistortion[i]);
-        }
-        for (int i=0; i<drumParameters.length; i++) {
-            e.putInt(p + "drum_" + i, drumParameters[i]);
-        }
-        e.apply();
-    }
-
-    private boolean loadPreset(int slot) {
-        if (slot < 0 || slot >= PRESET_SLOTS) return false;
-        String p = "slot_" + slot + "_";
-        android.content.SharedPreferences sp = getSharedPreferences(PRESET_PREFS, MODE_PRIVATE);
-        if (!sp.getBoolean(p + "valid", false)) return false;
-
-        instrumentMode = Math.max(0, Math.min(15, sp.getInt(p + "instrument", instrumentMode)));
-        manualSustain = sp.getBoolean(p + "manual_sustain", manualSustain);
-        boostDb = Math.max(0, Math.min(6, sp.getInt(p + "boost_db", boostDb)));
-        boosterStep = Math.min(3, Math.round(boostDb / 2f));
-        spaceMode = Math.max(0, Math.min(3, sp.getInt(p + "space_mode", spaceMode)));
-        spaceMix = Math.max(0, Math.min(100, sp.getInt(p + "space_mix", spaceMix)));
-        spaceDecay = Math.max(0, Math.min(100, sp.getInt(p + "space_decay", spaceDecay)));
-        tape = sp.getBoolean(p + "tape", tape);
-        tapeWow = Math.max(0, Math.min(100, sp.getInt(p + "tape_wow", tapeWow)));
-        tapeFlutter = Math.max(0, Math.min(100, sp.getInt(p + "tape_flutter", tapeFlutter)));
-        tapeDrive = Math.max(0, Math.min(100, sp.getInt(p + "tape_drive", tapeDrive)));
-        dreamy = sp.getBoolean(p + "dreamy", dreamy);
-        dreamX = Math.max(0, Math.min(100, sp.getInt(p + "dream_x", dreamX)));
-        dreamY = Math.max(0, Math.min(100, sp.getInt(p + "dream_y", dreamY)));
-        dreamP3 = Math.max(0, Math.min(100, sp.getInt(p + "dream_p3", dreamP3)));
-        dreamP4 = Math.max(0, Math.min(100, sp.getInt(p + "dream_p4", dreamP4)));
-        dreamMode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1,
-                sp.getInt(p + "dream_mode", dreamMode)));
-        dreamMix = Math.max(0, Math.min(100, sp.getInt(p + "dream_mix", dreamMix)));
-        bowPressure = Math.max(0, Math.min(127, sp.getInt(p + "control1", bowPressure)));
-        bowSpeed = Math.max(0, Math.min(127, sp.getInt(p + "control2", bowSpeed)));
-        bowPosition = Math.max(0, Math.min(127, sp.getInt(p + "control3", bowPosition)));
-        vibratoDepth = Math.max(0, Math.min(127, sp.getInt(p + "mod", vibratoDepth)));
-        attackMs = Math.max(0, Math.min(5000, sp.getInt(p + "attack", attackMs)));
-        decayMs = Math.max(0, Math.min(5000, sp.getInt(p + "decay", decayMs)));
-        sustainPct = Math.max(0, Math.min(100, sp.getInt(p + "sustain", sustainPct)));
-        releaseMs = Math.max(0, Math.min(5000, sp.getInt(p + "release", releaseMs)));
-        drumBoostDb = Math.max(0, Math.min(18, sp.getInt(p + "drum_boost", drumBoostDb)));
-        drumDistortion = Math.max(0, Math.min(127, sp.getInt(p + "drum_dist", drumDistortion)));
-        feltReverbMix = Math.max(0, Math.min(100,
-                sp.getInt(p + "felt_reverb_mix", feltReverbMix)));
-        feltReverbDecay = Math.max(0, Math.min(100,
-                sp.getInt(p + "felt_reverb_decay", feltReverbDecay)));
-
-        for (int i=0; i<partMidiChannels.length; i++) {
-            partMidiChannels[i] = Math.max(0, Math.min(16,
-                    sp.getInt(p + "midi_" + i, partMidiChannels[i])));
-            int boostFallback = (i == 7) ? drumBoostDb : partBoostDb[i];
-            int distFallback = (i == 7) ? drumDistortion : partDistortion[i];
-            partBoostDb[i] = Math.max(0, Math.min(18,
-                    sp.getInt(p + "part_boost_" + i, boostFallback)));
-            partDistortion[i] = Math.max(0, Math.min(127,
-                    sp.getInt(p + "part_dist_" + i, distFallback)));
-        }
-        drumBoostDb = partBoostDb[7];
-        drumDistortion = partDistortion[7];
-        for (int i=0; i<drumParameters.length; i++) {
-            drumParameters[i] = Math.max(0, Math.min(127, sp.getInt(p + "drum_" + i, drumParameters[i])));
-        }
-
-        if (midiController != null) midiController.setPartChannels(partMidiChannels);
-        applyInstrument(instrumentMode);
-
-        NativeEngine.setBoostDb(boostDb);
-        NativeEngine.setSpaceMode(spaceMode);
-        NativeEngine.setSpaceParameters(spaceMix, spaceDecay);
-        NativeEngine.setTape(tape);
-        NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
-        NativeEngine.setDreamy(dreamy);
-        NativeEngine.setDreamyMode(dreamMode);
-        NativeEngine.setDreamyParameters(dreamX, dreamY, dreamMix);
-        NativeEngine.setDreamyExtraParameters(dreamP3, dreamP4);
-        for (int i=0; i<drumParameters.length; i++) NativeEngine.setDrumParameter(i, drumParameters[i]);
-        for (int part=0; part<partBoostDb.length; part++) {
-            NativeEngine.setPartFx(part, partBoostDb[part], partDistortion[part]);
-        }
-        NativeEngine.setDrumFx(partBoostDb[7], partDistortion[7]);
-        NativeEngine.setFeltReverb(feltReverbMix, feltReverbDecay);
-
-        if (instrumentMode < 7) {
-            NativeEngine.controlChange(10, bowPressure);
-            NativeEngine.controlChange(11, bowSpeed);
-            NativeEngine.controlChange(74, bowPosition);
-            NativeEngine.controlChange(1, vibratoDepth);
-            NativeEngine.setAdsr(attackMs, decayMs, sustainPct, releaseMs);
-        }
-        NativeEngine.controlChange(64, manualSustain ? 127 : 0);
-
-        pianoView.setBoostDb(boostDb);
-        pianoView.setSpaceMode(spaceMode);
-        pianoView.setTape(tape);
-        pianoView.setDreamy(dreamy);
-        pianoView.controlChange(10, bowPressure);
-        pianoView.controlChange(11, bowSpeed);
-        pianoView.controlChange(74, bowPosition);
-        pianoView.controlChange(1, vibratoDepth);
-        pianoView.controlChange(64, manualSustain ? 127 : 0);
-        pianoView.controlChange(103, Math.max(0, Math.min(127, Math.round(dreamX * 1.27f))));
-        pianoView.controlChange(104, Math.max(0, Math.min(127, Math.round(dreamY * 1.27f))));
-        if (drumEditorView != null) {
-            drumEditorView.setValues(drumParameters);
-            drumEditorView.setDrumFx(partBoostDb[7], partDistortion[7]);
-        }
-
-        persistLoadedPresetAsCurrent();
-        return true;
-    }
-
-    private void persistLoadedPresetAsCurrent() {
-        android.content.SharedPreferences.Editor e = getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putInt(KEY_INSTRUMENT, instrumentMode)
-                .putBoolean(KEY_MANUAL_SUSTAIN, manualSustain)
-                .putInt(KEY_BOOST_DB, boostDb)
-                .putInt(KEY_BOOST, boosterStep)
-                .putInt(KEY_SPACE, spaceMode)
-                .putInt(KEY_SPACE_MIX, spaceMix)
-                .putInt(KEY_SPACE_DECAY, spaceDecay)
-                .putBoolean(KEY_TAPE, tape)
-                .putInt(KEY_TAPE_WOW, tapeWow)
-                .putInt(KEY_TAPE_FLUTTER, tapeFlutter)
-                .putInt(KEY_TAPE_DRIVE, tapeDrive)
-                .putBoolean(KEY_DREAMY, dreamy)
-                .putInt(KEY_DREAM_X, dreamX)
-                .putInt(KEY_DREAM_Y, dreamY)
-                .putInt(KEY_DREAM_MIX, dreamMix)
-                .putInt(KEY_ATTACK_MS, attackMs)
-                .putInt(KEY_DECAY_MS, decayMs)
-                .putInt(KEY_SUSTAIN_PCT, sustainPct)
-                .putInt(KEY_RELEASE_MS, releaseMs)
-                .putInt(KEY_DRUM_BOOST_DB, partBoostDb[7])
-                .putInt(KEY_DRUM_DISTORTION, partDistortion[7])
-                .putInt(KEY_FELT_REVERB_MIX, feltReverbMix)
-                .putInt(KEY_FELT_REVERB_DECAY, feltReverbDecay);
-        for (int i=0; i<partMidiChannels.length; i++) {
-            e.putInt(KEY_PART_MIDI_PREFIX + i, partMidiChannels[i]);
-            e.putInt(KEY_PART_BOOST_PREFIX + i, partBoostDb[i]);
-            e.putInt(KEY_PART_DIST_PREFIX + i, partDistortion[i]);
-        }
-        for (int i=0; i<drumParameters.length; i++) e.putInt(KEY_DRUM_PARAM_PREFIX + i, drumParameters[i]);
-        e.apply();
-    }
-
-    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != PICK_BANK || resultCode != RESULT_OK || data == null) return;
-        Uri uri = data.getData();
-        if (uri == null) return;
-        try {
-            final int flags = data.getFlags() &
-                    (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            getContentResolver().takePersistableUriPermission(uri, flags & Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        } catch (SecurityException ignored) {
-        }
-        final int slot = Math.max(0, Math.min(7, pendingBankSlot));
-        android.content.SharedPreferences.Editor bankEdit =
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                        .putString(KEY_BANK_URI_PREFIX + slot, uri.toString());
-        if (slot == 0) bankEdit.putString(KEY_BANK_URI, uri.toString());
-        bankEdit.apply();
-        loadBankUri(slot, uri);
-    }
-
-    @Override protected void onResume() {
-        super.onResume();
-        if (videoLayer != null) videoLayer.resumeFromLifecycle();
-    }
-
-    private void panicAllParts() {
-        for (int part=0; part<partMidiChannels.length; part++) NativeEngine.controlChangePart(part, 123, 0);
-    }
-
-    @Override protected void onPause() {
-        if (performanceXYView != null) performanceXYView.cancelEffect();
-        if (pianoView != null) pianoView.panicAuditionKeyboard();
-        if (videoLayer != null) videoLayer.pauseForLifecycle();
-        panicAllParts();
-        super.onPause();
-    }
-
+    @Override protected void onResume() { super.onResume(); scanAndConnect(); }
     @Override protected void onDestroy() {
-        if (midiController != null) midiController.stop();
-        if (videoLayer != null) videoLayer.release();
-        panicAllParts();
-        NativeEngine.stop();
+        running.set(false);
+        try { unregisterReceiver(usbReceiver); } catch (Exception ignored) {}
+        closeUsb();
         super.onDestroy();
     }
 
-    @Override public void onNoteOn(int part, int note, int velocity) {
-        if (part != instrumentMode) return;
-        runOnUiThread(() -> pianoView.noteOn(note, velocity));
+    private void buildSteps() {
+        steps.clear();
+        for (KeyDef k: KEYS) steps.add(new Step("PRESS: " + k.label, k.code, false));
+        steps.add(new Step("DIAL / JOG: press JOG, then rotate CLOCKWISE several clicks", null, true));
+        steps.add(new Step("DIAL / JOG: rotate COUNTER-CLOCKWISE several clicks", null, true));
+        steps.add(new Step("DIAL / SCRL: press SCRL, then rotate CLOCKWISE", null, true));
+        steps.add(new Step("DIAL / SCRL: rotate COUNTER-CLOCKWISE", null, true));
+        steps.add(new Step("DIAL / SHTL: press SHTL, move from center CLOCKWISE, then return center", null, true));
+        steps.add(new Step("DIAL / SHTL: move from center COUNTER-CLOCKWISE, then return center", null, true));
     }
 
-    @Override public void onNoteOff(int part, int note, int velocity) {
-        if (part != instrumentMode) return;
-        runOnUiThread(() -> pianoView.noteOff(note));
+    private TextView tv(int sp, int color) {
+        TextView v=new TextView(this); v.setTextSize(sp); v.setTextColor(color); v.setPadding(16,8,16,8); return v;
+    }
+    private void buildUi() {
+        LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(14,14,14,14); root.setBackgroundColor(Color.rgb(16,16,16));
+        ScrollView sv=new ScrollView(this); LinearLayout body=new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); sv.addView(body);
+        TextView title=tv(20,Color.WHITE); title.setText("SPEED EDITOR PROBE / EP-SAMPLE"); body.addView(title);
+        statusView=tv(14,Color.LTGRAY); body.addView(statusView);
+        progressView=tv(13,Color.GRAY); body.addView(progressView);
+        stepView=tv(24,Color.WHITE); stepView.setMinHeight(140); body.addView(stepView);
+        lastView=tv(12,Color.LTGRAY); lastView.setMovementMethod(new ScrollingMovementMethod()); lastView.setMinHeight(170); body.addView(lastView);
+        LinearLayout row1=new LinearLayout(this); row1.setOrientation(LinearLayout.HORIZONTAL);
+        backButton=new Button(this); backButton.setText("BACK"); backButton.setOnClickListener(v->backStep()); row1.addView(backButton,new LinearLayout.LayoutParams(0,-2,1));
+        nextButton=new Button(this); nextButton.setText("NEXT"); nextButton.setOnClickListener(v->manualNext()); row1.addView(nextButton,new LinearLayout.LayoutParams(0,-2,1));
+        skipButton=new Button(this); skipButton.setText("SKIP"); skipButton.setOnClickListener(v->skipStep()); row1.addView(skipButton,new LinearLayout.LayoutParams(0,-2,1));
+        body.addView(row1);
+        LinearLayout row2=new LinearLayout(this); row2.setOrientation(LinearLayout.HORIZONTAL);
+        exportButton=new Button(this); exportButton.setText("EXPORT TXT"); exportButton.setOnClickListener(v->exportTxt()); row2.addView(exportButton,new LinearLayout.LayoutParams(0,-2,1));
+        restartButton=new Button(this); restartButton.setText("RESTART TEST"); restartButton.setOnClickListener(v->resetSession()); row2.addView(restartButton,new LinearLayout.LayoutParams(0,-2,1));
+        body.addView(row2);
+        TextView note=tv(12,Color.GRAY); note.setText("Connect Speed Editor by USB-C. Every HID report is recorded even when it does not match the requested control. When finished, export the TXT and attach it to ChatGPT."); body.addView(note);
+        root.addView(sv,new LinearLayout.LayoutParams(-1,0,1)); setContentView(root);
     }
 
-    @Override public void onPolyPressure(int part, int note, int value) {
-        if (part != instrumentMode) return;
-        runOnUiThread(() -> pianoView.polyPressure(note, value));
-    }
-
-    @Override public void onChannelPressure(int part, int value) {
-        if (part != instrumentMode) return;
-        runOnUiThread(() -> pianoView.setChannelPressure(value));
-    }
-
-    @Override public void onControlChange(int part, int cc, int value) {
-        runOnUiThread(() -> {
-            final boolean selectedPart = part == instrumentMode;
-
-            if (cc == 7 && part >= 0 && part < partMixerVolume.length) {
-                partMixerVolume[part] = Math.max(0, Math.min(127, value));
-                if (mixerView != null) mixerView.setPartVolume(part, partMixerVolume[part]);
+    private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {
+            String a=i.getAction();
+            if (ACTION_USB_PERMISSION.equals(a)) {
+                UsbDevice d = i.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                boolean ok = i.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED,false);
+                appendMeta("USB_PERMISSION result="+ok+" device="+describeDevice(d));
+                if(ok && d!=null) openUsb(d); else setStatus("USB permission denied. Reconnect or reopen app.");
+            } else if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(a)) scanAndConnect();
+            else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(a)) {
+                UsbDevice d=i.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                appendMeta("USB_DETACHED "+describeDevice(d));
+                if(device!=null && d!=null && device.getDeviceId()==d.getDeviceId()) { closeUsb(); setStatus("Speed Editor disconnected."); }
             }
+        }
+    };
 
-            if (selectedPart) {
-                pianoView.controlChange(cc, value);
-                if (instrumentMode == 7) {
-                    if (cc == 10) drumParameters[0] = value;
-                    else if (cc == 11) drumParameters[4] = value;
-                    else if (cc == 74) drumParameters[8] = value;
-                    else if (cc == 1) {
-                        drumParameters[1] = value;
-                        drumParameters[5] = value;
-                        drumParameters[9] = value;
-                    } else if (cc == 64) manualSustain = value >= 64;
-                    if (drumEditorView != null) drumEditorView.setValues(drumParameters);
-                } else if (instrumentMode < 7) {
-                    if (cc == 1) {
-                        vibratoDepth = value;
-                        if (soundDesignView != null) soundDesignView.setModelValue(3, value);
-                    } else if (cc == 10) {
-                        bowPressure = value;
-                        if (soundDesignView != null) soundDesignView.setModelValue(0, value);
-                    } else if (cc == 11) {
-                        bowSpeed = value;
-                        if (soundDesignView != null) soundDesignView.setModelValue(1, value);
-                    } else if (cc == 74) {
-                        bowPosition = value;
-                        if (soundDesignView != null) soundDesignView.setModelValue(2, value);
-                    } else if (cc == 64) manualSustain = value >= 64;
-                } else if (instrumentMode >= 8 && cc == 64) {
-                    manualSustain = value >= 64;
+    private void scanAndConnect() {
+        if (connection != null) return;
+        for(UsbDevice d: usbManager.getDeviceList().values()) {
+            appendMeta("USB_SEEN "+describeDevice(d));
+            if(d.getVendorId()==USB_VID && d.getProductId()==USB_PID) {
+                device=d;
+                if(usbManager.hasPermission(d)) openUsb(d); else requestUsbPermission(d);
+                return;
+            }
+        }
+        setStatus("Waiting for DaVinci Resolve Speed Editor USB (VID 1EDB / PID DA0E)...");
+    }
+
+    private void requestUsbPermission(UsbDevice d) {
+        int flags=PendingIntent.FLAG_UPDATE_CURRENT;
+        if(Build.VERSION.SDK_INT>=31) flags|=PendingIntent.FLAG_MUTABLE;
+        PendingIntent pi=PendingIntent.getBroadcast(this,0,new Intent(ACTION_USB_PERMISSION).setPackage(getPackageName()),flags);
+        appendMeta("USB_PERMISSION requested");
+        usbManager.requestPermission(d,pi);
+        setStatus("Approve the Android USB permission dialog.");
+    }
+
+    private synchronized void openUsb(UsbDevice d) {
+        if(connection!=null) return;
+        UsbDeviceConnection c=usbManager.openDevice(d);
+        if(c==null){ setStatus("openDevice() failed"); appendMeta("ERROR openDevice failed"); return; }
+        UsbInterface best=null; UsbEndpoint in=null;
+        appendMeta("OPEN "+describeDevice(d));
+        for(int i=0;i<d.getInterfaceCount();i++) {
+            UsbInterface it=d.getInterface(i);
+            appendMeta(String.format(Locale.US,"IFACE index=%d id=%d class=%d subclass=%d protocol=%d endpoints=%d",i,it.getId(),it.getInterfaceClass(),it.getInterfaceSubclass(),it.getInterfaceProtocol(),it.getEndpointCount()));
+            for(int e=0;e<it.getEndpointCount();e++) {
+                UsbEndpoint ep=it.getEndpoint(e);
+                appendMeta(String.format(Locale.US,"ENDPOINT iface=%d n=%d addr=0x%02X dir=%s type=%d maxPacket=%d interval=%d",it.getId(),e,ep.getAddress(),ep.getDirection()==UsbConstants.USB_DIR_IN?"IN":"OUT",ep.getType(),ep.getMaxPacketSize(),ep.getInterval()));
+                if(ep.getDirection()==UsbConstants.USB_DIR_IN && ep.getType()==UsbConstants.USB_ENDPOINT_XFER_INT && in==null) { best=it; in=ep; }
+            }
+        }
+        if(best==null || in==null){ c.close(); setStatus("No interrupt-IN HID endpoint found. Export TXT."); appendMeta("ERROR no interrupt IN endpoint"); return; }
+        if(!c.claimInterface(best,true)){ c.close(); setStatus("claimInterface() failed. Export TXT."); appendMeta("ERROR claimInterface failed id="+best.getId()); return; }
+        connection=c; hidInterface=best; inEndpoint=in; device=d;
+        setStatus("USB connected. Authenticating Speed Editor...");
+        new Thread(() -> {
+            boolean ok=authenticate();
+            if(!ok){ setStatus("Authentication failed. Raw descriptor data is still exportable."); return; }
+            setStatus("AUTH OK. Follow the requested control below.");
+            startReader();
+        },"SpeedEditorAuth").start();
+    }
+
+    private boolean authenticate() {
+        try {
+            byte[] x=new byte[10]; x[0]=6;
+            if(setFeature(new byte[]{6,0,0,0,0,0,0,0,0,0})<0) throw new Exception("reset SET_FEATURE failed");
+            byte[] ch=getFeature();
+            if(ch==null || ch[0]!=6 || ch[1]!=0) throw new Exception("challenge header="+hex(ch));
+            long challenge=le64(ch,2); appendMeta(String.format(Locale.US,"AUTH challenge=0x%016X",challenge));
+            if(setFeature(new byte[]{6,1,0,0,0,0,0,0,0,0})<0) throw new Exception("app challenge failed");
+            byte[] respKbd=getFeature();
+            if(respKbd==null || respKbd[0]!=6 || respKbd[1]!=2) throw new Exception("kbd response header="+hex(respKbd));
+            long response=bmdAuth(challenge);
+            byte[] out=new byte[10]; out[0]=6; out[1]=3; putLe64(out,2,response);
+            if(setFeature(out)<0) throw new Exception("response SET_FEATURE failed");
+            byte[] st=getFeature();
+            if(st==null || st[0]!=6 || st[1]!=4) throw new Exception("status header="+hex(st));
+            authTimeoutSec=(st[2]&255)|((st[3]&255)<<8); authAtMs=SystemClock.elapsedRealtime();
+            appendMeta("AUTH OK timeoutSec="+authTimeoutSec+" status="+hex(st));
+            return true;
+        } catch(Exception ex) { appendMeta("AUTH ERROR "+ex); return false; }
+    }
+    private int setFeature(byte[] b) { return connection.controlTransfer(0x21,0x09,0x0306,hidInterface.getId(),b,b.length,1200); }
+    private byte[] getFeature() {
+        byte[] b=new byte[10]; b[0]=6;
+        int n=connection.controlTransfer(0xA1,0x01,0x0306,hidInterface.getId(),b,b.length,1200);
+        appendMeta("AUTH GET n="+n+" data="+hex(b));
+        return n>0?b:null;
+    }
+
+    private void startReader() {
+        if(running.getAndSet(true)) return;
+        readerThread=new Thread(() -> {
+            UsbRequest req=new UsbRequest();
+            if(!req.initialize(connection,inEndpoint)){ appendMeta("ERROR UsbRequest.initialize=false"); setStatus("UsbRequest initialization failed."); running.set(false); return; }
+            int cap=Math.max(64,inEndpoint.getMaxPacketSize());
+            ByteBuffer buf=ByteBuffer.allocateDirect(cap);
+            try {
+                while(running.get() && connection!=null) {
+                    if(authTimeoutSec>30 && SystemClock.elapsedRealtime()-authAtMs > (authTimeoutSec-20L)*1000L) {
+                        appendMeta("AUTH refresh"); authenticate();
+                    }
+                    buf.clear();
+                    if(!req.queue(buf,cap)) { appendMeta("ERROR UsbRequest.queue=false"); break; }
+                    UsbRequest done=connection.requestWait();
+                    if(done==null) { appendMeta("ERROR requestWait=null"); break; }
+                    int n=buf.position();
+                    if(n<=0) n=Math.min(cap,64);
+                    byte[] data=new byte[n]; buf.rewind(); buf.get(data,0,n);
+                    int actual=expectedReportLength(data);
+                    if(actual>0 && actual<data.length) data=Arrays.copyOf(data,actual);
+                    handleReport(data);
                 }
-            }
+            } catch(Throwable t) { appendMeta("READER ERROR "+t); }
+            try{req.close();}catch(Exception ignored){}
+            running.set(false);
+        },"SpeedEditorReader"); readerThread.start();
+    }
 
-            // Shared FX bus controls are reflected in the UI regardless of
-            // which assigned part generated them.
-            if (cc == 20) { boostDb = Math.round(value * 6f / 127f); pianoView.setBoostDb(boostDb); }
-            else if (cc == 21) { spaceMode = Math.round(value * 3f / 127f); pianoView.setSpaceMode(spaceMode); }
-            else if (cc == 22) spaceMix = Math.round(value * 100f / 127f);
-            else if (cc == 23) spaceDecay = Math.round(value * 100f / 127f);
-            else if (cc == 24) { tape = value >= 64; pianoView.setTape(tape); }
-            else if (cc == 25) tapeWow = Math.round(value * 100f / 127f);
-            else if (cc == 26) tapeFlutter = Math.round(value * 100f / 127f);
-            else if (cc == 27) tapeDrive = Math.round(value * 100f / 127f);
-            else if (cc == 28) { dreamy = value >= 64; pianoView.setDreamy(dreamy); }
-            else if (cc == 103) dreamX = Math.round(value * 100f / 127f);
-            else if (cc == 104) dreamY = Math.round(value * 100f / 127f);
-            else if (cc == 105) dreamMix = Math.round(value * 100f / 127f);
-            else if (cc == 106) dreamP3 = Math.round(value * 100f / 127f);
-            else if (cc == 107) dreamP4 = Math.round(value * 100f / 127f);
-            else if (cc == 108) dreamMode = Math.max(0, Math.min(DREAM_MODE_NAMES.length - 1,
-                    Math.round(value * (DREAM_MODE_NAMES.length - 1) / 127f)));
+    private int expectedReportLength(byte[] d) {
+        if(d==null || d.length==0) return 0;
+        switch(d[0]&255){ case 3:return 7; case 4:return 13; case 7:return 3; default:return 0; }
+    }
+
+    private void handleReport(byte[] d) {
+        long t=SystemClock.elapsedRealtime();
+        if(d==null || d.length==0) return;
+        int id=d[0]&255;
+        String parsed="";
+        if(id==4 && d.length>=13) {
+            Set<Integer> held=new LinkedHashSet<>();
+            for(int i=0;i<6;i++){ int p=1+i*2; int k=(d[p]&255)|((d[p+1]&255)<<8); if(k!=0) held.add(k); }
+            parsed="KEYS "+keySetText(held);
+            Set<Integer> newly=new LinkedHashSet<>(held); newly.removeAll(lastHeld);
+            for(Integer k:newly) onKeyPressed(k);
+            lastHeld=held;
+        } else if(id==3 && d.length>=7) {
+            int mode=d[1]&255;
+            int value=ByteBuffer.wrap(d,2,4).order(ByteOrder.LITTLE_ENDIAN).getInt();
+            parsed="DIAL mode="+mode+" value="+value+" unknown="+(d[6]&255);
+            onDialEvent(mode,value);
+        } else if(id==7 && d.length>=3) {
+            parsed="BATTERY charging="+(d[1]&255)+" level="+(d[2]&255);
+        } else parsed="UNKNOWN reportId="+id;
+        appendRaw(t,d,parsed);
+        String p=parsed+"\nRAW "+hex(d);
+        runOnUiThread(()-> lastView.setText(p));
+    }
+
+    private void onKeyPressed(int code) {
+        Step s=currentStep();
+        if(s==null) return;
+        if(s.expectedKey!=null && s.expectedKey==code) {
+            completeCurrent("PASS","key=0x"+String.format(Locale.US,"%02X",code)+" "+keyLabel(code));
+            runOnUiThread(this::refreshStepUi);
+        }
+    }
+    private void onDialEvent(int mode,int value) {
+        Step s=currentStep();
+        if(s!=null && s.dial) {
+            dialEventsThisStep++;
+            runOnUiThread(() -> { nextButton.setEnabled(dialEventsThisStep>0); progressView.setText(progressText()+"  dialReports="+dialEventsThisStep); });
+        }
+    }
+
+    private synchronized Step currentStep(){ return stepIndex>=0 && stepIndex<steps.size()?steps.get(stepIndex):null; }
+    private synchronized void completeCurrent(String result,String detail) {
+        if(stepIndex>=steps.size()) return;
+        StepResult r=new StepResult(); r.index=stepIndex+1; r.prompt=steps.get(stepIndex).prompt; r.result=result; r.elapsedMs=SystemClock.elapsedRealtime()-stepStartMs; r.detail=detail;
+        results.add(r); appendMeta("STEP "+r.index+" "+result+" "+r.prompt+" "+detail+" elapsedMs="+r.elapsedMs);
+        stepIndex++; stepStartMs=SystemClock.elapsedRealtime(); dialEventsThisStep=0;
+        if(stepIndex>=steps.size()) { appendMeta("GUIDED TEST COMPLETE"); setStatus("TEST COMPLETE. Export TXT and attach it to ChatGPT."); }
+    }
+    private void manualNext(){ Step s=currentStep(); if(s!=null && s.dial && dialEventsThisStep>0){ completeCurrent("PASS","dialReports="+dialEventsThisStep); refreshStepUi(); } }
+    private void skipStep(){ if(currentStep()!=null){ completeCurrent("SKIP","user skipped"); refreshStepUi(); } }
+    private void backStep(){
+        synchronized(this){ if(stepIndex<=0)return; stepIndex--; if(!results.isEmpty() && results.get(results.size()-1).index==stepIndex+1) results.remove(results.size()-1); stepStartMs=SystemClock.elapsedRealtime(); dialEventsThisStep=0; }
+        appendMeta("STEP BACK to="+(stepIndex+1)); refreshStepUi();
+    }
+    private void resetSession(){
+        synchronized(this){ stepIndex=0; results.clear(); stepStartMs=SystemClock.elapsedRealtime(); dialEventsThisStep=0; lastHeld.clear(); }
+        synchronized(logLock){ rawLog.setLength(0); }
+        appendMeta("SESSION START app=0.1-probe sdk="+Build.VERSION.SDK_INT+" model="+Build.MANUFACTURER+" "+Build.MODEL+" androidId="+Settings.Secure.getString(getContentResolver(),Settings.Secure.ANDROID_ID));
+        refreshStepUi();
+    }
+    private String progressText(){ return stepIndex>=steps.size()?"49/49 COMPLETE":String.format(Locale.US,"%d / %d",stepIndex+1,steps.size()); }
+    private void refreshStepUi(){
+        runOnUiThread(()->{
+            Step s=currentStep(); progressView.setText(progressText());
+            stepView.setText(s==null?"ALL CONTROLS RECORDED\nEXPORT TXT":s.prompt);
+            nextButton.setEnabled(s!=null && s.dial && dialEventsThisStep>0);
+            backButton.setEnabled(stepIndex>0); skipButton.setEnabled(s!=null); exportButton.setEnabled(true);
         });
     }
 
-    @Override public void onPitchBend(int part, int value14) {
-        if (part != instrumentMode) return;
-        runOnUiThread(() -> pianoView.setPitchBend(value14));
+    private String buildReport() {
+        StringBuilder o=new StringBuilder(256*1024);
+        o.append("SPEED_EDITOR_PROBE_REPORT v0.1\n");
+        o.append("Generated: ").append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z",Locale.US).format(new Date())).append('\n');
+        o.append(String.format(Locale.US,"Expected device: VID=0x%04X PID=0x%04X\n",USB_VID,USB_PID));
+        o.append("Android: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append(" SDK ").append(Build.VERSION.SDK_INT).append('\n');
+        o.append("Auth timeout sec: ").append(authTimeoutSec).append("\n\n");
+        o.append("=== GUIDED RESULTS ===\n");
+        for(StepResult r:results) o.append(String.format(Locale.US,"%02d\t%s\t%dms\t%s\t%s\n",r.index,r.result,r.elapsedMs,r.prompt,r.detail));
+        if(stepIndex<steps.size()) o.append("INCOMPLETE currentStep=").append(stepIndex+1).append(" / ").append(steps.size()).append('\n');
+        o.append("\n=== EXPECTED KEY MAP ===\n");
+        for(KeyDef k:KEYS) o.append(String.format(Locale.US,"0x%02X\t%s\n",k.code,k.label));
+        o.append("\n=== RAW / META LOG ===\n");
+        synchronized(logLock){o.append(rawLog);}
+        return o.toString();
     }
 
-    @Override public void onConnectionCountChanged(int count) {
-        runOnUiThread(() -> pianoView.setMidiConnections(count));
+    private void exportTxt(){
+        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("text/plain");
+        String fn="SpeedEditorProbe_"+new SimpleDateFormat("yyyyMMdd_HHmmss",Locale.US).format(new Date())+".txt"; i.putExtra(Intent.EXTRA_TITLE,fn);
+        startActivityForResult(i,REQ_EXPORT);
+    }
+    @Override protected void onActivityResult(int req,int res,Intent data){
+        super.onActivityResult(req,res,data);
+        if(req==REQ_EXPORT && res==RESULT_OK && data!=null && data.getData()!=null){
+            Uri u=data.getData(); try(OutputStream os=getContentResolver().openOutputStream(u)){ os.write(buildReport().getBytes(java.nio.charset.StandardCharsets.UTF_8)); os.flush(); setStatus("TXT exported. Attach that file to ChatGPT."); appendMeta("EXPORT OK uri="+u); }
+            catch(Exception e){ setStatus("Export failed: "+e); appendMeta("EXPORT ERROR "+e); }
+        }
     }
 
+    private void closeUsb(){ running.set(false); UsbDeviceConnection c=connection; connection=null; if(c!=null){ try{ if(hidInterface!=null)c.releaseInterface(hidInterface);}catch(Exception ignored){} try{c.close();}catch(Exception ignored){} } hidInterface=null; inEndpoint=null; }
+    private void setStatus(String s){ runOnUiThread(()->statusView.setText(s)); }
+    private void appendMeta(String s){ synchronized(logLock){ rawLog.append(String.format(Locale.US,"%d\tMETA\t%s\n",SystemClock.elapsedRealtime(),s)); } }
+    private void appendRaw(long t,byte[] d,String parsed){ synchronized(logLock){ rawLog.append(t).append("\tRAW\t").append(hex(d)).append("\t").append(parsed).append('\n'); } }
+    private static String describeDevice(UsbDevice d){ if(d==null)return"null"; return String.format(Locale.US,"name=%s id=%d vid=0x%04X pid=0x%04X class=%d subclass=%d protocol=%d interfaces=%d",d.getDeviceName(),d.getDeviceId(),d.getVendorId(),d.getProductId(),d.getDeviceClass(),d.getDeviceSubclass(),d.getDeviceProtocol(),d.getInterfaceCount()); }
+    private static String hex(byte[] b){ if(b==null)return"null"; StringBuilder s=new StringBuilder(); for(byte x:b)s.append(String.format(Locale.US,"%02X",x&255)); return s.toString(); }
+    private static String keySetText(Set<Integer> ks){ StringBuilder s=new StringBuilder("["); boolean f=true; for(int k:ks){if(!f)s.append(", "); f=false; s.append(String.format(Locale.US,"0x%02X:%s",k,keyLabel(k)));} return s.append(']').toString(); }
+    private static String keyLabel(int c){ for(KeyDef k:KEYS)if(k.code==c)return k.label; return "UNKNOWN"; }
+    private static long le64(byte[] b,int off){ long v=0; for(int i=0;i<8;i++)v|=((long)b[off+i]&255L)<<(8*i); return v; }
+    private static void putLe64(byte[] b,int off,long v){ for(int i=0;i<8;i++)b[off+i]=(byte)(v>>>(8*i)); }
+    private static long rol8(long v){ return (v<<56)|(v>>>8); }
+    private static long bmdAuth(long challenge){
+        final long[] even={0x3ae1206f97c10bc8L,0x2a9ab32bebf244c6L,0x20a6f8b8df9adf0aL,0xaf80ece52cfc1719L,0xec2ee2f7414fd151L,0xb055adfd73344a15L,0xa63d2e3059001187L,0x751bf623f42e0ddeL};
+        final long[] odd={0x3e22b34f502e7fdeL,0x24656b981875ab1cL,0xa17f3456df7bf8c3L,0x6df72e1941aef698L,0x72226f011e66ab94L,0x3831a3c606296b42L,0xfd7ff81881332c89L,0x61a3f6474ff236c6L};
+        final long mask=0xa79a63f585d37bf0L; int n=(int)(challenge&7L); long v=challenge; for(int i=0;i<n;i++)v=rol8(v); long k;
+        if((v&1L)==((0x78L>>>n)&1L)) k=even[n]; else {v^=rol8(v); k=odd[n];} return v^(rol8(v)&mask)^k;
+    }
 }
