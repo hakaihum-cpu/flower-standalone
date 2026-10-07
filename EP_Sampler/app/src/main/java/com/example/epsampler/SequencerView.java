@@ -621,6 +621,51 @@ final class SequencerView extends View {
         },30L);
     }
 
+    private void collectEraseAt(float x, float y) {
+        if (!eraserMode) return;
+        float uu = u();
+        for (int i=0; i<noteData.length/4; i++) {
+            RectF r = noteRectForIndex(i,uu);
+            if (r != null && r.contains(x,y)) pendingEraseIndices.add(i);
+        }
+    }
+
+    private void eraseAlongSegment(float x0, float y0, float x1, float y1) {
+        if (!eraserMode) return;
+        float dx = x1-x0;
+        float dy = y1-y0;
+        float distance = (float)Math.sqrt(dx*dx+dy*dy);
+        int samples = Math.max(1,(int)Math.ceil(distance / Math.max(4f,8f*u())));
+        for (int i=0;i<=samples;i++) {
+            float t = i/(float)samples;
+            collectEraseAt(x0+dx*t,y0+dy*t);
+        }
+    }
+
+    private void commitEraseGesture() {
+        if (pendingEraseIndices.isEmpty()) {
+            invalidate();
+            return;
+        }
+
+        java.util.ArrayList<Integer> indices =
+                new java.util.ArrayList<>(pendingEraseIndices);
+        java.util.Collections.sort(indices,java.util.Collections.reverseOrder());
+
+        // Delete highest indexes first. Each native delete compacts the fixed
+        // note array, so descending order preserves the identity of all
+        // remaining indexes selected during this gesture.
+        for (int index : indices) {
+            NativeEngine.sequencerDeleteNote(selectedTrack,index);
+        }
+
+        pendingEraseIndices.clear();
+        postDelayed(() -> {
+            refreshState(true);
+            invalidate();
+        },35L);
+    }
+
     private int[] chordIntervals() {
         switch (chordType) {
             case 1: return new int[]{0,3,7};
