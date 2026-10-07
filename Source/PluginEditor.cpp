@@ -166,7 +166,7 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
         holder->getMuteInputValue().setValue (false);
    #endif
 
-    startTimerHz (30);
+    startTimerHz (visualTimerHz);
 }
 
 RealtimeChordFxAudioProcessorEditor::~RealtimeChordFxAudioProcessorEditor() { stopTimer(); }
@@ -375,20 +375,43 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         if (eurekaVisualCooldown > 0)
             --eurekaVisualCooldown;
 
+        // The four exact user-supplied MP4 clips are materialized into one
+        // contiguous CRF1 bank at 24 fps. The UI timer stays at 30 Hz because
+        // Motion REC is defined in 30 Hz steps, so advance video with a small
+        // integer cadence accumulator instead of changing the editor timer.
+        eurekaVideoCadence += eurekaVideoFps;
+        while (eurekaVideoCadence >= visualTimerHz)
+        {
+            eurekaVideoCadence -= visualTimerHz;
+            eurekaVideoFrameInClip =
+                (eurekaVideoFrameInClip + 1)
+                % eurekaVideoFramesPerClip;
+        }
+
         const bool attack =
             activity > 0.006f
             && activity > eurekaVisualPreviousActivity * 1.28f + 0.0015f;
 
         if (activity > 0.009f
-            && (attack || eurekaVisualCooldown <= 0))
+            && attack
+            && eurekaVisualCooldown <= 0)
         {
-            eurekaFrameIndex =
-                (eurekaFrameIndex + 1)
-                % eurekaFrames.getFrameCount();
-            eurekaVisualCooldown = 4; // ~133 ms
+            eurekaVideoClip =
+                nextVisualFrame (eurekaVideoClipCount, eurekaVideoClip);
+            eurekaVideoFrameInClip =
+                nextVisualFrame (
+                    eurekaVideoFramesPerClip,
+                    eurekaVideoFrameInClip);
+            eurekaVideoCadence = 0;
+            eurekaVisualCooldown = 6; // ~200 ms input-event debounce
         }
 
-        if (eurekaFrameIndex != loadedEurekaFrame)
+        const int eurekaFrameIndex =
+            eurekaVideoClip * eurekaVideoFramesPerClip
+            + eurekaVideoFrameInClip;
+
+        if (eurekaFrameIndex != loadedEurekaFrame
+            && eurekaFrameIndex < eurekaFrames.getFrameCount())
         {
             currentEurekaFrame =
                 eurekaFrames.getFrame (eurekaFrameIndex);
@@ -604,9 +627,24 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
 
     if (currentEurekaFrame.isValid())
     {
+        const float sourceWidth =
+            (float) currentEurekaFrame.getWidth();
+        const float sourceHeight =
+            (float) currentEurekaFrame.getHeight();
+        const float scale = juce::jmin (
+            design / juce::jmax (1.0f, sourceWidth),
+            design / juce::jmax (1.0f, sourceHeight));
+        const float videoWidth = sourceWidth * scale;
+        const float videoHeight = sourceHeight * scale;
+        const juce::Rectangle<float> videoBounds (
+            (design - videoWidth) * 0.5f,
+            (design - videoHeight) * 0.5f,
+            videoWidth,
+            videoHeight);
+
         g.drawImage (
             currentEurekaFrame,
-            juce::Rectangle<float> (0.0f, 0.0f, design, design),
+            videoBounds,
             juce::RectanglePlacement::stretchToFit);
     }
 

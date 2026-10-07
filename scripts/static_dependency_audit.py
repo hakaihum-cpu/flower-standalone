@@ -52,6 +52,10 @@ required = [
     "Resources/classroom_frames.pack",
     "Resources/classroom_frames_manifest.csv",
     "Resources/eureka_frames.pack",
+    "Resources/eureka_video_sources/clip_01.mp4",
+    "Resources/eureka_video_sources/clip_02.mp4",
+    "Resources/eureka_video_sources/clip_03.mp4",
+    "Resources/eureka_video_sources/clip_04.mp4",
     "Resources/effects_app_icon.jpg",
     "Resources/effects_app_icon.b64",
     "PROJECT_CONTRACT.md", "CURRENT_OPERATION_STATE.json", "BUILD_HISTORY.csv", "THIRD_PARTY_NOTICES.md",
@@ -102,21 +106,39 @@ if sha != "1e888dbed69e259c52d2cb2bd192faa5c7f29dcf76eafcda9fdb2a2d03f2d658":
 if pack[:4] != b"CRF1":
     fail("frame pack magic mismatch")
 
-eureka_chunks = sorted((R / "Resources/eureka_frame_chunks").glob("*.b64"))
-if len(eureka_chunks) != 18:
-    fail(f"expected 18 EUREKA source chunks, got {len(eureka_chunks)}")
+eureka_sources = [
+    ("clip_01.mp4", 627188, "a48afddd2550d532502efa0b5f10f982d946fea0b83be208a70fa5e7e7f0626a"),
+    ("clip_02.mp4", 749450, "5e307f8889b732256a8a6c0ca091a7838e8be9c1e65e9e4cfbf430f770fe3110"),
+    ("clip_03.mp4", 655365, "3caaf1eb4f34becccafd44202d07e27a6f2b2656480a42185c236af1aff7510a"),
+    ("clip_04.mp4", 694071, "3178cc26ac3edb7787cd6219cc5db73108b3442cfefe4acb32cc35af2adeca29"),
+]
+for name, expected_size, expected_sha in eureka_sources:
+    data = (R / "Resources/eureka_video_sources" / name).read_bytes()
+    if len(data) != expected_size:
+        fail(f"EUREKA source {name} size mismatch: {len(data)}")
+    sha = hashlib.sha256(data).hexdigest()
+    if sha != expected_sha:
+        fail(f"EUREKA source {name} sha256 mismatch: {sha}")
+    if len(data) < 12 or data[4:8] != b"ftyp":
+        fail(f"EUREKA source {name} is not MP4")
 
 eureka_pack = (R / "Resources/eureka_frames.pack").read_bytes()
-if len(eureka_pack) != 1534459:
-    fail(f"EUREKA frame pack size mismatch: {len(eureka_pack)}")
-eureka_sha = hashlib.sha256(eureka_pack).hexdigest()
-if eureka_sha != "2f83c3ef9997926452c20fcdfade60011d930d76fbebb05e291e51db4867e986":
-    fail(f"EUREKA frame pack sha256 mismatch: {eureka_sha}")
 if eureka_pack[:4] != b"CRF1":
     fail("EUREKA frame pack magic mismatch")
 eureka_count = int.from_bytes(eureka_pack[4:8], "little")
-if eureka_count != 140:
+if eureka_count != 768:
     fail(f"EUREKA frame count mismatch: {eureka_count}")
+table_end = 8 + eureka_count * 12
+if table_end > len(eureka_pack):
+    fail("EUREKA frame table exceeds pack size")
+for index in range(eureka_count):
+    pos = 8 + index * 12
+    offset = int.from_bytes(eureka_pack[pos:pos + 8], "little")
+    size = int.from_bytes(eureka_pack[pos + 8:pos + 12], "little")
+    if size <= 0 or offset < table_end or offset + size > len(eureka_pack):
+        fail(f"EUREKA frame {index} has invalid bounds")
+    if eureka_pack[offset:offset + 2] != b"\xff\xd8":
+        fail(f"EUREKA frame {index} is not JPEG")
 
 icon = (R / "Resources/effects_app_icon.jpg").read_bytes()
 if len(icon) != 27540:
@@ -345,7 +367,13 @@ for need in [
     "currentEurekaFrame",
     "loadedEurekaFrame",
     "eurekaFrames.getFrameCount()",
-    "eurekaFrameIndex",
+    "eurekaVideoClipCount = 4",
+    "eurekaVideoFramesPerClip = 192",
+    "eurekaVideoFps = 24",
+    "eurekaVideoClip",
+    "eurekaVideoFrameInClip",
+    "eurekaVideoCadence",
+    "visualTimerHz = 30",
     "nextVisualFrame",
     "chordVisualCooldown",
     "eurekaVisualCooldown",
@@ -655,6 +683,8 @@ for need in [
     "run_build:", "default: false",
     "Verify authoritative operation context",
     "python3 scripts/verify_operation_context.py --ci",
+    "Ensure ffmpeg for EUREKA video materialization",
+    "ffmpeg -version",
     "Materialize exact supplied frame pack",
     "no_output_timeout: 30m",
     "CMAKE_BUILD_PARALLEL_LEVEL=2",
@@ -697,7 +727,7 @@ for need in [
     if need not in renderers and need not in dreamy:
         fail(f"noise-hardening contract missing: {need}")
 
-print("[PASS] exact 300-frame visual bank SHA/size verified")
+print("[PASS] exact 300-frame classroom bank and 4 EUREKA MP4 sources verified")
 print("[PASS] product source isolated; synth/cross-project tokens absent")
 print("[PASS] Android input/JNI/startup contract verified")
 print("[PASS] JUCER module set matches proven FLOWER Golden")

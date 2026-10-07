@@ -2,6 +2,10 @@
 from pathlib import Path
 import base64
 import hashlib
+import shutil
+import struct
+import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -11,12 +15,19 @@ CLASSROOM_OUT = ROOT / 'Resources' / 'classroom_frames.pack'
 CLASSROOM_SHA256 = '1e888dbed69e259c52d2cb2bd192faa5c7f29dcf76eafcda9fdb2a2d03f2d658'
 CLASSROOM_SIZE = 4464088
 
-# User-supplied EUREKA ZIP: 301.jpg .. 440.jpg, packed without re-encoding.
-EUREKA_CHUNK_DIR = ROOT / 'Resources' / 'eureka_frame_chunks'
+# Exact user-supplied EUREKA video sources. These remain the source of truth;
+# CI extracts display-only JPEG frames and packs them into CRF1 for the JUCE UI.
+EUREKA_SOURCE_DIR = ROOT / 'Resources' / 'eureka_video_sources'
 EUREKA_OUT = ROOT / 'Resources' / 'eureka_frames.pack'
-EUREKA_SHA256 = '2f83c3ef9997926452c20fcdfade60011d930d76fbebb05e291e51db4867e986'
-EUREKA_SIZE = 1534459
-EUREKA_COUNT = 140
+EUREKA_SOURCES = [
+    ('clip_01.mp4', 627188, 'a48afddd2550d532502efa0b5f10f982d946fea0b83be208a70fa5e7e7f0626a'),
+    ('clip_02.mp4', 749450, '5e307f8889b732256a8a6c0ca091a7838e8be9c1e65e9e4cfbf430f770fe3110'),
+    ('clip_03.mp4', 655365, '3caaf1eb4f34becccafd44202d07e27a6f2b2656480a42185c236af1aff7510a'),
+    ('clip_04.mp4', 694071, '3178cc26ac3edb7787cd6219cc5db73108b3442cfefe4acb32cc35af2adeca29'),
+]
+EUREKA_FPS = 24
+EUREKA_FRAMES_PER_CLIP = 192
+EUREKA_COUNT = len(EUREKA_SOURCES) * EUREKA_FRAMES_PER_CLIP
 
 # User-selected launcher artwork.
 ICON_B64 = ROOT / 'Resources' / 'effects_app_icon.b64'
@@ -57,20 +68,73 @@ if classroom_sha != CLASSROOM_SHA256:
 validate_crf1(classroom, 300, 'classroom frame pack')
 CLASSROOM_OUT.write_bytes(classroom)
 
-eureka_parts = sorted(EUREKA_CHUNK_DIR.glob('*.b64'))
-if len(eureka_parts) != 18:
+ffmpeg = shutil.which('ffmpeg')
+if ffmpeg is None:
+    raise SystemExit('[FAIL] ffmpeg is required to materialize EUREKA video frames')
+
+for name, expected_size, expected_sha in EUREKA_SOURCES:
+    source = EUREKA_SOURCE_DIR / name
+    if not source.is_file():
+        raise SystemExit(f'[FAIL] missing EUREKA video source: {source}')
+    data = source.read_bytes()
+    if len(data) != expected_size:
+        raise SystemExit(
+            f'[FAIL] EUREKA source {name} size {len(data)} != {expected_size}')
+    sha = hashlib.sha256(data).hexdigest()
+    if sha != expected_sha:
+        raise SystemExit(
+            f'[FAIL] EUREKA source {name} sha256 {sha} != {expected_sha}')
+    if len(data) < 12 or data[4:8] != b'ftyp':
+        raise SystemExit(f'[FAIL] EUREKA source {name} is not an MP4 file')
+
+frame_payloads = []
+with tempfile.TemporaryDirectory(prefix='eureka-video-frames-') as tmp:
+    tmp_root = Path(tmp)
+    for clip_index, (name, _, _) in enumerate(EUREKA_SOURCES):
+        clip_dir = tmp_root / f'clip_{clip_index + 1:02d}'
+        clip_dir.mkdir()
+        pattern = clip_dir / '%04d.jpg'
+        command = [
+            ffmpeg, '-hide_banner', '-loglevel', 'error', '-y',
+            '-i', str(EUREKA_SOURCE_DIR / name),
+            '-vf', f'fps={EUREKA_FPS}',
+            '-q:v', '8',
+            str(pattern),
+        ]
+        subprocess.run(command, check=True)
+        frame_files = sorted(clip_dir.glob('*.jpg'))
+        if len(frame_files) != EUREKA_FRAMES_PER_CLIP:
+            raise SystemExit(
+                f'[FAIL] EUREKA {name} extracted {len(frame_files)} frames '
+                f'!= {EUREKA_FRAMES_PER_CLIP}')
+        for frame in frame_files:
+            payload = frame.read_bytes()
+            if not payload.startswith(b'\xff\xd8'):
+                raise SystemExit(
+                    f'[FAIL] EUREKA extracted frame is not JPEG: {frame}')
+            frame_payloads.append(payload)
+
+if len(frame_payloads) != EUREKA_COUNT:
     raise SystemExit(
-        f'[FAIL] expected 18 EUREKA frame chunks, got {len(eureka_parts)}')
-eureka = decode_chunks(eureka_parts)
-if len(eureka) != EUREKA_SIZE:
-    raise SystemExit(
-        f'[FAIL] reconstructed EUREKA pack size {len(eureka)} != {EUREKA_SIZE}')
-eureka_sha = hashlib.sha256(eureka).hexdigest()
-if eureka_sha != EUREKA_SHA256:
-    raise SystemExit(
-        f'[FAIL] reconstructed EUREKA pack sha256 {eureka_sha} != {EUREKA_SHA256}')
-validate_crf1(eureka, EUREKA_COUNT, 'EUREKA frame pack')
+        f'[FAIL] EUREKA total extracted frames {len(frame_payloads)} '
+        f'!= {EUREKA_COUNT}')
+
+table_size = 8 + EUREKA_COUNT * 12
+offset = table_size
+table = bytearray()
+for payload in frame_payloads:
+    table.extend(struct.pack('<QI', offset, len(payload)))
+    offset += len(payload)
+
+eureka = (
+    b'CRF1'
+    + struct.pack('<I', EUREKA_COUNT)
+    + bytes(table)
+    + b''.join(frame_payloads)
+)
+validate_crf1(eureka, EUREKA_COUNT, 'EUREKA video frame pack')
 EUREKA_OUT.write_bytes(eureka)
+eureka_sha = hashlib.sha256(eureka).hexdigest()
 
 icon_encoded = ''.join(ICON_B64.read_text(encoding='ascii').split())
 icon = base64.b64decode(icon_encoded, validate=True)
@@ -88,6 +152,8 @@ ICON_OUT.write_bytes(icon)
 print(
     f'[PASS] classroom pack: {len(classroom)} bytes sha256={classroom_sha}')
 print(
-    f'[PASS] EUREKA pack: {len(eureka)} bytes / {EUREKA_COUNT} frames sha256={eureka_sha}')
+    f'[PASS] EUREKA video pack: {len(eureka)} bytes / '
+    f'{len(EUREKA_SOURCES)} clips / {EUREKA_COUNT} frames / '
+    f'{EUREKA_FPS} fps sha256={eureka_sha}')
 print(
     f'[PASS] launcher icon: {len(icon)} bytes sha256={icon_sha}')

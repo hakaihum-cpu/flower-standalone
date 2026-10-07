@@ -19,6 +19,16 @@ jobs:
             python3 scripts/verify_operation_context.py --ci
 
       - run:
+          name: Ensure ffmpeg for EUREKA video materialization
+          command: |
+            set -euo pipefail
+            if ! command -v ffmpeg >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y ffmpeg
+            fi
+            ffmpeg -version | head -n 1
+
+      - run:
           name: Materialize exact supplied frame pack
           command: |
             python3 scripts/materialize_frame_pack.py
