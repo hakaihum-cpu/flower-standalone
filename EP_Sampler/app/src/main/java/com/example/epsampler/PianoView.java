@@ -30,6 +30,7 @@ public final class PianoView extends View {
         void onEditEffect(int effect);
         void onOpenConfig();
         void onOpenMixer();
+        void onOpenSequencer();
         void onRecorderRecord();
         void onRecorderClear();
         void onRecorderRandom();
@@ -388,15 +389,15 @@ public final class PianoView extends View {
                 instrumentButtonLabel,
                 "CONFIG",
                 keyOverlayVisible ? "KEY CLOSE" : "KEY",
-                "MIXER"
+                "MIXER",
+                "SEQ"
         };
         float gap = 4f*u;
         float bx0 = pad;
         float by0 = 72f*u;
         float bh = 30f*u;
-        float bw = (getWidth() - pad*2f - gap*8f) / 9f;
-        text.setTextSize(11.2f*u);
-        for (int i=0;i<9;i++) {
+        float bw = (getWidth() - pad*2f - gap*9f) / 10f;
+        for (int i=0;i<10;i++) {
             float l = bx0 + i*(bw+gap);
             float rr = l + bw;
             boolean active = (i==0 && boostDb>0) || (i==1 && spaceMode>0) ||
@@ -405,6 +406,9 @@ public final class PianoView extends View {
             paint.setColor(active ? Color.argb(120, 238, 229, 207) : Color.argb(72, 238, 229, 207));
             c.drawRoundRect(new RectF(l, by0, rr, by0+bh), 6f*u, 6f*u, paint);
             text.setColor(active ? Color.rgb(24,24,22) : Color.argb(235,244,237,224));
+            text.setTextSize(10.4f*u);
+            while (text.measureText(labels[i]) > bw-5f*u && text.getTextSize() > 7.4f*u)
+                text.setTextSize(text.getTextSize()-0.45f*u);
             float tw = text.measureText(labels[i]);
             c.drawText(labels[i], l + (bw-tw)*0.5f, by0 + 20f*u, text);
         }
@@ -748,8 +752,8 @@ public final class PianoView extends View {
         float by0 = 72f*u;
         float bh = 30f*u;
         if (y < by0 || y > by0 + bh) return -1;
-        float bw = (getWidth() - pad*2f - gap*8f) / 9f;
-        for (int i=0;i<9;i++) {
+        float bw = (getWidth() - pad*2f - gap*9f) / 10f;
+        for (int i=0;i<10;i++) {
             float l = pad + i*(bw+gap);
             if (x >= l && x <= l+bw) return i;
         }
@@ -872,6 +876,7 @@ public final class PianoView extends View {
         else if (index==6) actionListener.onOpenConfig();
         else if (index==7) toggleAuditionKeyboard();
         else if (index==8) actionListener.onOpenMixer();
+        else if (index==9) actionListener.onOpenSequencer();
         return true;
     }
 
