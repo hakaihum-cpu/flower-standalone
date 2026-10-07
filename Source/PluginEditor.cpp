@@ -831,15 +831,23 @@ void FlowerStandaloneAudioProcessorEditor::refreshAudioBufferStatus()
         juce::AudioDeviceManager::AudioDeviceSetup setup;
         holder->deviceManager.getAudioDeviceSetup (setup);
 
-        if (audioDefaultBufferFrames <= 0)
-            audioDefaultBufferFrames = juce::jmax (1, setup.bufferSize);
+        auto* device = holder->deviceManager.getCurrentAudioDevice();
+        const int currentFrames = device != nullptr
+            ? device->getCurrentBufferSizeSamples()
+            : setup.bufferSize;
+        const double currentRate = device != nullptr
+            ? device->getCurrentSampleRate()
+            : setup.sampleRate;
+
+        if (audioDefaultBufferFrames < 0)
+            audioDefaultBufferFrames = currentFrames;
 
         audioFramesPerBurst = getAndroidOutputFramesPerBuffer();
-        if (audioFramesPerBurst <= 0)
-            audioFramesPerBurst = audioDefaultBufferFrames;
+        if (audioFramesPerBurst <= 0 && currentFrames > 0)
+            audioFramesPerBurst = currentFrames;
 
-        audioActualBufferFrames = setup.bufferSize;
-        audioActualSampleRate = setup.sampleRate;
+        audioActualBufferFrames = currentFrames;
+        audioActualSampleRate = currentRate;
     }
 #endif
 }
@@ -891,7 +899,13 @@ bool FlowerStandaloneAudioProcessorEditor::applyAudioBufferMode (int mode)
     int targetFrames = audioDefaultBufferFrames;
     if (mode > 0)
     {
-        const int base = juce::jmax (1, audioFramesPerBurst);
+        const int base = audioFramesPerBurst;
+        if (base <= 0)
+        {
+            audioBufferError = "BUFFER REQUEST: base burst unavailable";
+            return false;
+        }
+
         targetFrames = juce::jmax (
             1, juce::roundToInt (
                 static_cast<float> (base) * audioBufferBursts[mode]));
