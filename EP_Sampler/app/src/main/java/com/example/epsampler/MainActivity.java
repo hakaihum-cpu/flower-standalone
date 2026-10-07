@@ -24,12 +24,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * The HID key/report mapping and the mutual-authentication algorithm are based on
  * Sylvain Munaut's Apache-2.0-licensed blackmagic-misc/bmd.py implementation.
- * This app is a clean Android/UsbHost implementation intended only to discover
- * the actual reports produced by the user's hardware before EP-SAMPLE mapping.
+ * This app is a clean Android/UsbHost implementation that validates the
+ * already-known Speed Editor protocol on Android before EP-SAMPLE integration.
+ * It is intentionally not a blind HID discovery/calibration workflow.
  */
 public class MainActivity extends Activity {
     private static final int USB_VID = 0x1edb;
     private static final int USB_PID = 0xda0e;
+
+    // Known Search Dial mode mapping from speed-editor-demo.py.
+    private static final int KEY_SHTL = 0x1c;
+    private static final int KEY_JOG  = 0x1d;
+    private static final int KEY_SCRL = 0x1e;
+    private static final int JOG_ABSOLUTE_CONTINUOUS = 1;
+    private static final int JOG_RELATIVE_2 = 2;
+    private static final int JOG_ABSOLUTE_DEADZERO = 3;
+
     private static final String ACTION_USB_PERMISSION = "com.example.epmodel.speededitorprobe.USB_PERMISSION";
     private static final int REQ_EXPORT = 701;
 
@@ -131,21 +141,21 @@ public class MainActivity extends Activity {
     private void buildUi() {
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(14,14,14,14); root.setBackgroundColor(Color.rgb(16,16,16));
         ScrollView sv=new ScrollView(this); LinearLayout body=new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); sv.addView(body);
-        TextView title=tv(20,Color.WHITE); title.setText("SPEED EDITOR PROBE / EP-SAMPLE"); body.addView(title);
+        TextView title=tv(20,Color.WHITE); title.setText("SPEED EDITOR HID CHECK / EP-SAMPLE"); body.addView(title);
         statusView=tv(14,Color.LTGRAY); body.addView(statusView);
         progressView=tv(13,Color.GRAY); body.addView(progressView);
         stepView=tv(24,Color.WHITE); stepView.setMinHeight(140); body.addView(stepView);
         lastView=tv(12,Color.LTGRAY); lastView.setMovementMethod(new ScrollingMovementMethod()); lastView.setMinHeight(170); body.addView(lastView);
         LinearLayout row1=new LinearLayout(this); row1.setOrientation(LinearLayout.HORIZONTAL);
-        backButton=new Button(this); backButton.setText("BACK"); backButton.setOnClickListener(v->backStep()); row1.addView(backButton,new LinearLayout.LayoutParams(0,-2,1));
-        nextButton=new Button(this); nextButton.setText("NEXT"); nextButton.setOnClickListener(v->manualNext()); row1.addView(nextButton,new LinearLayout.LayoutParams(0,-2,1));
-        skipButton=new Button(this); skipButton.setText("SKIP"); skipButton.setOnClickListener(v->skipStep()); row1.addView(skipButton,new LinearLayout.LayoutParams(0,-2,1));
+        backButton=new Button(this); backButton.setText("SHTL MODE"); backButton.setOnClickListener(v->selectJogMode(KEY_SHTL)); row1.addView(backButton,new LinearLayout.LayoutParams(0,-2,1));
+        nextButton=new Button(this); nextButton.setText("JOG MODE"); nextButton.setOnClickListener(v->selectJogMode(KEY_JOG)); row1.addView(nextButton,new LinearLayout.LayoutParams(0,-2,1));
+        skipButton=new Button(this); skipButton.setText("SCRL MODE"); skipButton.setOnClickListener(v->selectJogMode(KEY_SCRL)); row1.addView(skipButton,new LinearLayout.LayoutParams(0,-2,1));
         body.addView(row1);
         LinearLayout row2=new LinearLayout(this); row2.setOrientation(LinearLayout.HORIZONTAL);
         exportButton=new Button(this); exportButton.setText("EXPORT TXT"); exportButton.setOnClickListener(v->exportTxt()); row2.addView(exportButton,new LinearLayout.LayoutParams(0,-2,1));
-        restartButton=new Button(this); restartButton.setText("RESTART TEST"); restartButton.setOnClickListener(v->resetSession()); row2.addView(restartButton,new LinearLayout.LayoutParams(0,-2,1));
+        restartButton=new Button(this); restartButton.setText("CLEAR LOG"); restartButton.setOnClickListener(v->resetSession()); row2.addView(restartButton,new LinearLayout.LayoutParams(0,-2,1));
         body.addView(row2);
-        TextView note=tv(12,Color.GRAY); note.setText("Connect Speed Editor by USB-C. Every HID report is recorded even when it does not match the requested control. When finished, export the TXT and attach it to ChatGPT."); body.addView(note);
+        TextView note=tv(12,Color.GRAY); note.setText("Known HID protocol is already loaded. After AUTH OK, press any representative keys: their known names/codes appear live. Release SHTL/JOG/SCRL or use the mode buttons above, then turn the Search Dial. Export TXT only if a mismatch appears or after a short representative check."); body.addView(note);
         root.addView(sv,new LinearLayout.LayoutParams(-1,0,1)); setContentView(root);
     }
 
@@ -210,7 +220,8 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             boolean ok=authenticate();
             if(!ok){ setStatus("Authentication failed. Raw descriptor data is still exportable."); return; }
-            setStatus("AUTH OK. Follow the requested control below.");
+            setStatus("AUTH OK. Known HID map loaded; no full calibration is required.");
+            selectJogMode(KEY_SHTL);
             startReader();
         },"SpeedEditorAuth").start();
     }
@@ -241,6 +252,43 @@ public class MainActivity extends Activity {
         int n=connection.controlTransfer(0xA1,0x01,0x0306,hidInterface.getId(),b,b.length,1200);
         appendMeta("AUTH GET n="+n+" data="+hex(b));
         return n>0?b:null;
+    }
+
+    private void selectJogMode(int key) {
+        if(connection==null || hidInterface==null) return;
+        final int mode;
+        final int ledBits;
+        final String label;
+        if(key==KEY_SHTL) {
+            mode=JOG_RELATIVE_2; ledBits=(1<<1); label="SHTL / RELATIVE_2";
+        } else if(key==KEY_JOG) {
+            mode=JOG_ABSOLUTE_CONTINUOUS; ledBits=(1<<0); label="JOG / ABSOLUTE_CONTINUOUS";
+        } else if(key==KEY_SCRL) {
+            mode=JOG_ABSOLUTE_DEADZERO; ledBits=(1<<2); label="SCRL / ABSOLUTE_DEADZERO";
+        } else return;
+
+        boolean ledOk=writeOutputReport(new byte[]{4,(byte)ledBits});
+        boolean modeOk=writeOutputReport(new byte[]{3,(byte)mode,0,0,0,0,(byte)0xff});
+        appendMeta("SET_JOG "+label+" ledOk="+ledOk+" modeOk="+modeOk);
+        runOnUiThread(() -> lastView.setText("MODE SELECTED: "+label+"\nLED write="+ledOk+" / MODE write="+modeOk));
+    }
+
+    private boolean writeOutputReport(byte[] report) {
+        if(connection==null || hidInterface==null || report==null || report.length==0) return false;
+        int reportId=report[0]&255;
+        int n=connection.controlTransfer(0x21,0x09,0x0200|reportId,hidInterface.getId(),report,report.length,1000);
+        appendMeta("OUT SET_REPORT id="+reportId+" n="+n+" data="+hex(report));
+        return n==report.length;
+    }
+
+    private static String jogModeName(int mode) {
+        switch(mode) {
+            case 0: return "RELATIVE_0";
+            case 1: return "ABSOLUTE_CONTINUOUS";
+            case 2: return "RELATIVE_2";
+            case 3: return "ABSOLUTE_DEADZERO";
+            default: return "UNKNOWN_MODE";
+        }
     }
 
     private void startReader() {
@@ -288,6 +336,10 @@ public class MainActivity extends Activity {
             parsed="KEYS "+keySetText(held);
             Set<Integer> newly=new LinkedHashSet<>(held); newly.removeAll(lastHeld);
             for(Integer k:newly) onKeyPressed(k);
+            Set<Integer> released=new LinkedHashSet<>(lastHeld); released.removeAll(held);
+            for(Integer k:released) {
+                if(k==KEY_SHTL || k==KEY_JOG || k==KEY_SCRL) selectJogMode(k);
+            }
             lastHeld=held;
         } else if(id==3 && d.length>=7) {
             int mode=d[1]&255;
@@ -303,19 +355,17 @@ public class MainActivity extends Activity {
     }
 
     private void onKeyPressed(int code) {
-        Step s=currentStep();
-        if(s==null) return;
-        if(s.expectedKey!=null && s.expectedKey==code) {
-            completeCurrent("PASS","key=0x"+String.format(Locale.US,"%02X",code)+" "+keyLabel(code));
-            runOnUiThread(this::refreshStepUi);
-        }
+        String name=keyLabel(code);
+        appendMeta("KNOWN_KEY_DOWN code=0x"+String.format(Locale.US,"%02X",code)+" name="+name);
+        runOnUiThread(() -> stepView.setText((name.equals("UNKNOWN")?"UNKNOWN KEY":"KEY: "+name)+"\n0x"+String.format(Locale.US,"%02X",code)));
     }
     private void onDialEvent(int mode,int value) {
-        Step s=currentStep();
-        if(s!=null && s.dial) {
-            dialEventsThisStep++;
-            runOnUiThread(() -> { nextButton.setEnabled(dialEventsThisStep>0); progressView.setText(progressText()+"  dialReports="+dialEventsThisStep); });
-        }
+        dialEventsThisStep++;
+        runOnUiThread(() -> {
+            String modeName=jogModeName(mode);
+            stepView.setText("SEARCH DIAL\n"+modeName+" ("+mode+")  value="+value);
+            progressView.setText(progressText()+"  dialReports="+dialEventsThisStep);
+        });
     }
 
     private synchronized Step currentStep(){ return stepIndex>=0 && stepIndex<steps.size()?steps.get(stepIndex):null; }
@@ -335,29 +385,29 @@ public class MainActivity extends Activity {
     private void resetSession(){
         synchronized(this){ stepIndex=0; results.clear(); stepStartMs=SystemClock.elapsedRealtime(); dialEventsThisStep=0; lastHeld.clear(); }
         synchronized(logLock){ rawLog.setLength(0); }
-        appendMeta("SESSION START app=0.1-probe sdk="+Build.VERSION.SDK_INT+" model="+Build.MANUFACTURER+" "+Build.MODEL+" androidId="+Settings.Secure.getString(getContentResolver(),Settings.Secure.ANDROID_ID));
+        appendMeta("SESSION START app=0.2-known-hid sdk="+Build.VERSION.SDK_INT+" model="+Build.MANUFACTURER+" "+Build.MODEL+" androidId="+Settings.Secure.getString(getContentResolver(),Settings.Secure.ANDROID_ID));
         refreshStepUi();
     }
-    private String progressText(){ return stepIndex>=steps.size()?"49/49 COMPLETE":String.format(Locale.US,"%d / %d",stepIndex+1,steps.size()); }
+    private String progressText(){ return "KNOWN MAP: 43 KEYS / REPORTS 3,4,7"; }
     private void refreshStepUi(){
         runOnUiThread(()->{
-            Step s=currentStep(); progressView.setText(progressText());
-            stepView.setText(s==null?"ALL CONTROLS RECORDED\nEXPORT TXT":s.prompt);
-            nextButton.setEnabled(s!=null && s.dial && dialEventsThisStep>0);
-            backButton.setEnabled(stepIndex>0); skipButton.setEnabled(s!=null); exportButton.setEnabled(true);
+            progressView.setText(progressText());
+            stepView.setText("PRESS ANY SPEED EDITOR KEY\nor turn Search Dial after selecting a mode");
+            nextButton.setEnabled(true);
+            backButton.setEnabled(true); skipButton.setEnabled(true); exportButton.setEnabled(true);
         });
     }
 
     private String buildReport() {
         StringBuilder o=new StringBuilder(256*1024);
-        o.append("SPEED_EDITOR_PROBE_REPORT v0.1\n");
+        o.append("SPEED_EDITOR_KNOWN_HID_CHECK v0.2\n");
         o.append("Generated: ").append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z",Locale.US).format(new Date())).append('\n');
         o.append(String.format(Locale.US,"Expected device: VID=0x%04X PID=0x%04X\n",USB_VID,USB_PID));
         o.append("Android: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append(" SDK ").append(Build.VERSION.SDK_INT).append('\n');
         o.append("Auth timeout sec: ").append(authTimeoutSec).append("\n\n");
-        o.append("=== GUIDED RESULTS ===\n");
-        for(StepResult r:results) o.append(String.format(Locale.US,"%02d\t%s\t%dms\t%s\t%s\n",r.index,r.result,r.elapsedMs,r.prompt,r.detail));
-        if(stepIndex<steps.size()) o.append("INCOMPLETE currentStep=").append(stepIndex+1).append(" / ").append(steps.size()).append('\n');
+        o.append("=== VALIDATION MODE ===\n");
+        o.append("No 49-step calibration is required. Known mappings are decoded live.\n");
+        o.append("Expected dial mapping: SHTL=2 RELATIVE_2, JOG=1 ABSOLUTE_CONTINUOUS, SCRL=3 ABSOLUTE_DEADZERO\n");
         o.append("\n=== EXPECTED KEY MAP ===\n");
         for(KeyDef k:KEYS) o.append(String.format(Locale.US,"0x%02X\t%s\n",k.code,k.label));
         o.append("\n=== RAW / META LOG ===\n");
