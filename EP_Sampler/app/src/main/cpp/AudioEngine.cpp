@@ -524,6 +524,9 @@ void AudioEngine::sequencerSetGridNote(int track,int step,int note,int velocityO
 void AudioEngine::sequencerSetNoteDuration(int track,int noteIndex,int durationTick){
     push({Event::SEQ_SET_DURATION,track,noteIndex,durationTick,0});
 }
+void AudioEngine::sequencerDeleteNote(int track,int noteIndex){
+    push({Event::SEQ_DELETE_NOTE,track,noteIndex,0,0});
+}
 
 int AudioEngine::sequencerTrackPart(int track) const {
     track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
@@ -1185,6 +1188,29 @@ void AudioEngine::seqSetNoteDurationInternal(
             std::memory_order_relaxed);
 }
 
+void AudioEngine::seqDeleteNoteInternal(int track, int noteIndex) {
+    track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
+    const int count = std::clamp(
+            seqNoteCount_[track].load(std::memory_order_acquire),
+            0, SEQ_MAX_NOTES_PER_TRACK);
+    if (noteIndex < 0 || noteIndex >= count) return;
+    for (int j=noteIndex; j<count-1; ++j) {
+        seqNotes_[track][j].startTick.store(
+                seqNotes_[track][j+1].startTick.load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
+        seqNotes_[track][j].durationTick.store(
+                seqNotes_[track][j+1].durationTick.load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
+        seqNotes_[track][j].note.store(
+                seqNotes_[track][j+1].note.load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
+        seqNotes_[track][j].velocity.store(
+                seqNotes_[track][j+1].velocity.load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
+    }
+    seqNoteCount_[track].store(count-1,std::memory_order_release);
+}
+
 void AudioEngine::seqToggleGridNoteInternal(
         int track, int step, int note, int velocity) {
     track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
@@ -1564,6 +1590,9 @@ void AudioEngine::handle(const Event& e) {
             break;
         case Event::SEQ_SET_DURATION:
             seqSetNoteDurationInternal(e.a,e.b,e.c);
+            break;
+        case Event::SEQ_DELETE_NOTE:
+            seqDeleteNoteInternal(e.a,e.b);
             break;
 
         case Event::PERFORMANCE_XY: {
