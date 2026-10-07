@@ -518,6 +518,12 @@ void AudioEngine::sequencerClearTrack(int track){ push({Event::SEQ_CLEAR_TRACK,t
 void AudioEngine::sequencerToggleGridNote(int track,int step,int note,int velocity){
     push({Event::SEQ_TOGGLE_GRID,track,step,note,velocity});
 }
+void AudioEngine::sequencerSetGridNote(int track,int step,int note,int velocityOrZero){
+    push({Event::SEQ_SET_GRID,track,step,note,velocityOrZero});
+}
+void AudioEngine::sequencerSetNoteDuration(int track,int noteIndex,int durationTick){
+    push({Event::SEQ_SET_DURATION,track,noteIndex,durationTick,0});
+}
 
 int AudioEngine::sequencerTrackPart(int track) const {
     track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
@@ -1118,6 +1124,67 @@ void AudioEngine::seqClearTrackInternal(int track) {
     }
 }
 
+void AudioEngine::seqSetGridNoteInternal(
+        int track, int step, int note, int velocityOrZero) {
+    track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
+    step = std::clamp(step,0,SEQ_BARS*16-1);
+    note = std::clamp(note,0,127);
+    constexpr int stepTicks = SEQ_PPQN / 4;
+    const int startTick = step * stepTicks;
+
+    int count = std::clamp(
+            seqNoteCount_[track].load(std::memory_order_relaxed),
+            0, SEQ_MAX_NOTES_PER_TRACK);
+    int found = -1;
+    for (int i=0; i<count; ++i) {
+        auto& n = seqNotes_[track][i];
+        if (n.startTick.load(std::memory_order_relaxed) == startTick &&
+                n.note.load(std::memory_order_relaxed) == note) {
+            found = i;
+            break;
+        }
+    }
+
+    if (velocityOrZero <= 0) {
+        if (found < 0) return;
+        for (int j=found; j<count-1; ++j) {
+            seqNotes_[track][j].startTick.store(
+                    seqNotes_[track][j+1].startTick.load(std::memory_order_relaxed),
+                    std::memory_order_relaxed);
+            seqNotes_[track][j].durationTick.store(
+                    seqNotes_[track][j+1].durationTick.load(std::memory_order_relaxed),
+                    std::memory_order_relaxed);
+            seqNotes_[track][j].note.store(
+                    seqNotes_[track][j+1].note.load(std::memory_order_relaxed),
+                    std::memory_order_relaxed);
+            seqNotes_[track][j].velocity.store(
+                    seqNotes_[track][j+1].velocity.load(std::memory_order_relaxed),
+                    std::memory_order_relaxed);
+        }
+        seqNoteCount_[track].store(count-1,std::memory_order_release);
+        return;
+    }
+
+    const int velocity = std::clamp(velocityOrZero,1,127);
+    if (found >= 0) {
+        seqNotes_[track][found].velocity.store(velocity,std::memory_order_relaxed);
+        return;
+    }
+    seqAddRecordedNote(track,startTick,stepTicks,note,velocity);
+}
+
+void AudioEngine::seqSetNoteDurationInternal(
+        int track, int noteIndex, int durationTick) {
+    track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
+    const int count = std::clamp(
+            seqNoteCount_[track].load(std::memory_order_acquire),
+            0, SEQ_MAX_NOTES_PER_TRACK);
+    if (noteIndex < 0 || noteIndex >= count) return;
+    seqNotes_[track][noteIndex].durationTick.store(
+            std::clamp(durationTick,1,SEQ_LOOP_TICKS-1),
+            std::memory_order_relaxed);
+}
+
 void AudioEngine::seqToggleGridNoteInternal(
         int track, int step, int note, int velocity) {
     track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
@@ -1491,6 +1558,12 @@ void AudioEngine::handle(const Event& e) {
             break;
         case Event::SEQ_TOGGLE_GRID:
             seqToggleGridNoteInternal(e.a,e.b,e.c,e.d);
+            break;
+        case Event::SEQ_SET_GRID:
+            seqSetGridNoteInternal(e.a,e.b,e.c,e.d);
+            break;
+        case Event::SEQ_SET_DURATION:
+            seqSetNoteDurationInternal(e.a,e.b,e.c);
             break;
 
         case Event::PERFORMANCE_XY: {
