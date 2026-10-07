@@ -230,9 +230,6 @@ for need in [
     '"PANEL"',
     '"CLOSE"',
     '"REVERB / HALL"',
-    '"MOTION ARM"',
-    'u8"● MOTION REC"',
-    '"MOTION PLAY"',
 ]:
     if need not in editor:
         fail(f"HAZE UI contract missing: {need}")
@@ -314,6 +311,7 @@ for need in [
     if need not in core_test:
         fail(f"CHORDBOT regression test missing: {need}")
 
+editor_header = (R / "Source/PluginEditor.h").read_text()
 for need in [
     "BinaryData::eureka_frames_pack",
     "eurekaFrames",
@@ -327,19 +325,49 @@ for need in [
     "processor.getInputPeakRaw()",
     "processor.getInputRmsRaw()",
     "eurekaPanelVisible",
-    "eurekaMotionSteps = 90",
+    "eurekaXYTouchDown",
+    "updateEurekaXYPoint",
+    "ParamID::hazeRepeat",
+    "ParamID::hazeTime",
+    "ParamID::hazeReverb",
+]:
+    if need not in editor and need not in editor_header:
+        fail(f"EUREKA frame/XY contract missing: {need}")
+
+for removed in [
+    "eurekaMotionSteps",
     "eurekaMotionArmed",
     "eurekaMotionRecording",
     "eurekaMotionPlaying",
     "updateEurekaMotionPoint",
-    "ParamID::hazeMix",
-    "ParamID::hazeAmount",
+    "DRAG TO RECORD 3 SEC",
+    "TAP IMAGE TO ARM MOTION",
 ]:
-    if need not in editor and need not in (R / "Source/PluginEditor.h").read_text():
-        fail(f"EUREKA frame/motion contract missing: {need}")
+    if removed in editor or removed in editor_header:
+        fail(f"obsolete EUREKA Motion REC remains: {removed}")
 
 if "isKeyCurrentlyDown" in editor:
     fail("Android Motion REC must not rely on JUCE Android isKeyCurrentlyDown()")
+
+processor_controls = (R / "Source/PluginProcessor.cpp").read_text()
+processor_header = (R / "Source/PluginProcessor.h").read_text()
+parameter_ids = (R / "Source/ParameterIDs.h").read_text()
+for need in [
+    "ParamID::wet",
+    "ParamID::boostDb",
+    "saveUserPreset",
+    "loadUserPreset",
+    "wetDryScratch",
+    "decibelsToGain",
+]:
+    if need not in src and need not in processor_controls and need not in processor_header:
+        fail(f"WET/BOOST/SAVE-LOAD contract missing: {need}")
+for need in [
+    'const char* wet = "wet"',
+    'const char* boostDb = "boostDb"',
+]:
+    if need not in parameter_ids:
+        fail(f"WET/BOOST parameter id missing: {need}")
 for need in [
     "#include <juce_core/native/juce_JNIHelpers_android.h>",
     "getAndroidPhysicalInputNames",
