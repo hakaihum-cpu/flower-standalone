@@ -15,6 +15,12 @@ AudioEngine::AudioEngine() {
     for (auto& active : epActiveBank_) active.store(0, std::memory_order_relaxed);
     for (auto& pending : epPendingBank_) pending.store(-1, std::memory_order_relaxed);
     for (auto& meter : partMeterQ_) meter.store(0, std::memory_order_relaxed);
+    for (int track=0; track<SEQ_TRACK_COUNT; ++track) {
+        seqNoteCount_[track].store(0, std::memory_order_relaxed);
+        seqTrackPart_[track].store(track, std::memory_order_relaxed);
+    }
+    seqRecordStartTick_.fill(-1);
+    seqRecordVelocity_.fill(0);
 }
 
 AudioEngine::~AudioEngine() { stop(); }
@@ -499,6 +505,40 @@ void AudioEngine::setFeltReverb(int mix,int decay){
 }
 void AudioEngine::setPerformanceXY(bool active,int part,int x,int y){
     push({Event::PERFORMANCE_XY,active?1:0,part,x,y});
+}
+
+void AudioEngine::sequencerPlay(){ push({Event::SEQ_PLAY,0,0,0,0}); }
+void AudioEngine::sequencerStop(){ push({Event::SEQ_STOP,0,0,0,0}); }
+void AudioEngine::sequencerToggleRecord(){ push({Event::SEQ_RECORD,0,0,0,0}); }
+void AudioEngine::sequencerSetClick(bool enabled){ push({Event::SEQ_CLICK,enabled?1:0,0,0,0}); }
+void AudioEngine::sequencerSetBpm(int bpm){ push({Event::SEQ_BPM,bpm,0,0,0}); }
+void AudioEngine::sequencerSetSelectedTrack(int track){ push({Event::SEQ_SELECT_TRACK,track,0,0,0}); }
+void AudioEngine::sequencerSetTrackPart(int track,int part){ push({Event::SEQ_ASSIGN_PART,track,part,0,0}); }
+void AudioEngine::sequencerClearTrack(int track){ push({Event::SEQ_CLEAR_TRACK,track,0,0,0}); }
+void AudioEngine::sequencerToggleGridNote(int track,int step,int note,int velocity){
+    push({Event::SEQ_TOGGLE_GRID,track,step,note,velocity});
+}
+
+int AudioEngine::sequencerTrackPart(int track) const {
+    track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
+    return std::clamp(seqTrackPart_[track].load(std::memory_order_relaxed),0,PART_COUNT-1);
+}
+
+std::vector<int> AudioEngine::sequencerNotes(int track) const {
+    track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
+    const int count = std::clamp(
+            seqNoteCount_[track].load(std::memory_order_acquire),
+            0, SEQ_MAX_NOTES_PER_TRACK);
+    std::vector<int> out;
+    out.reserve(size_t(count) * 4u);
+    for (int i=0; i<count; ++i) {
+        const auto& n = seqNotes_[track][i];
+        out.push_back(n.startTick.load(std::memory_order_relaxed));
+        out.push_back(n.durationTick.load(std::memory_order_relaxed));
+        out.push_back(n.note.load(std::memory_order_relaxed));
+        out.push_back(n.velocity.load(std::memory_order_relaxed));
+    }
+    return out;
 }
 
 int AudioEngine::setAudioBufferBursts(float bursts) {
