@@ -230,12 +230,21 @@ for need in [
     '"PANEL"',
     '"CLOSE"',
     '"REVERB / HALL"',
-    '"MOTION ARM"',
-    'u8"● MOTION REC"',
-    '"MOTION PLAY"',
+    '"XY STUTTER"',
+    '"UP-RIGHT REVERB"',
 ]:
     if need not in editor:
         fail(f"HAZE UI contract missing: {need}")
+
+for removed in [
+    '"MOTION ARM"',
+    'u8"● MOTION REC"',
+]:
+    haze_start = editor.find("void RealtimeChordFxAudioProcessorEditor::paintHaze")
+    haze_end = editor.find("void RealtimeChordFxAudioProcessorEditor::paintChordBot", haze_start)
+    haze_screen = editor[haze_start:haze_end]
+    if removed in haze_screen:
+        fail(f"obsolete EUREKA record UI still present: {removed}")
 
 processor = (R / "Source/PluginProcessor.cpp").read_text()
 for need in [
