@@ -6,6 +6,8 @@
 
 #if JUCE_ANDROID
  #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+ #include <jni.h>
+ #include <juce_core/native/juce_JNIHelpers_android.h>
 #endif
 
 #include <cmath>
@@ -28,6 +30,87 @@ constexpr const char* scaleNames[]
 {
     "MINOR PENT", "NATURAL MINOR", "MAJOR", "DORIAN", "RANDOM"
 };
+
+constexpr const char* audioBufferNames[]
+{
+    "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST",
+    "1.5 BURSTS", "2 BURSTS", "3 BURSTS", "4 BURSTS",
+    "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS"
+};
+
+constexpr float audioBufferBursts[]
+{
+    0.0f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f,
+    3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f
+};
+
+#if JUCE_ANDROID
+int getAndroidOutputFramesPerBuffer()
+{
+    auto* env = juce::getEnv();
+    if (env == nullptr)
+        return 0;
+
+    const auto context = juce::getAppContext();
+    if (context == nullptr)
+        return 0;
+
+    jclass contextClass = env->GetObjectClass (context.get());
+    if (contextClass == nullptr)
+        return 0;
+
+    jmethodID getSystemService = env->GetMethodID (
+        contextClass, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
+    if (getSystemService == nullptr)
+    {
+        env->DeleteLocalRef (contextClass);
+        return 0;
+    }
+
+    jstring audioService = env->NewStringUTF ("audio");
+    jobject audioManager = env->CallObjectMethod (
+        context.get(), getSystemService, audioService);
+    env->DeleteLocalRef (audioService);
+    env->DeleteLocalRef (contextClass);
+    if (audioManager == nullptr)
+        return 0;
+
+    jclass audioManagerClass = env->FindClass ("android/media/AudioManager");
+    jmethodID getProperty = audioManagerClass != nullptr
+        ? env->GetMethodID (
+            audioManagerClass, "getProperty",
+            "(Ljava/lang/String;)Ljava/lang/String;")
+        : nullptr;
+
+    int frames = 0;
+    if (getProperty != nullptr)
+    {
+        jstring key = env->NewStringUTF (
+            "android.media.property.OUTPUT_FRAMES_PER_BUFFER");
+        jstring value = static_cast<jstring> (
+            env->CallObjectMethod (audioManager, getProperty, key));
+        env->DeleteLocalRef (key);
+
+        if (value != nullptr)
+        {
+            const char* chars = env->GetStringUTFChars (value, nullptr);
+            if (chars != nullptr)
+            {
+                frames = juce::String::fromUTF8 (chars).getIntValue();
+                env->ReleaseStringUTFChars (value, chars);
+            }
+            env->DeleteLocalRef (value);
+        }
+    }
+
+    if (audioManagerClass != nullptr)
+        env->DeleteLocalRef (audioManagerClass);
+    env->DeleteLocalRef (audioManager);
+    return juce::jmax (0, frames);
+}
+#else
+int getAndroidOutputFramesPerBuffer() { return 0; }
+#endif
 
 }
 
@@ -54,6 +137,10 @@ PerformancePadComponent::PerformancePadComponent()
             bytes + FlowerFrameData::offsets[index],
             FlowerFrameData::sizes[index]);
     }
+
+    videoFrames.load (
+        BinaryData::flower_video_frames_pack,
+        BinaryData::flower_video_frames_packSize);
 }
 
 int PerformancePadComponent::getPatternIndex() const noexcept
@@ -132,7 +219,8 @@ void PerformancePadComponent::setBpmDisplay (float bpm, bool visible)
 void PerformancePadComponent::updateVisualTimer()
 {
     const bool animated =
-        arpIndicatorOn || delayIndicatorOn || yEffectIndicatorOn;
+        arpIndicatorOn || delayIndicatorOn || yEffectIndicatorOn
+        || videoFrames.getFrameCount() > 0;
 
     if (animated)
     {
@@ -145,11 +233,47 @@ void PerformancePadComponent::updateVisualTimer()
     }
 }
 
+void PerformancePadComponent::chooseNextMixedVisual()
+{
+    const int videoCount = videoFrames.getFrameCount();
+    const int totalCount = tileCount + videoCount;
+    if (totalCount <= 0)
+        return;
+
+    visualRandomState ^= visualRandomState << 13;
+    visualRandomState ^= visualRandomState >> 17;
+    visualRandomState ^= visualRandomState << 5;
+
+    int next = static_cast<int> (
+        visualRandomState % static_cast<uint32_t> (totalCount));
+
+    if (totalCount > 1 && next == currentMixedVisual)
+        next = (next + 1) % totalCount;
+
+    currentMixedVisual = next;
+    if (currentMixedVisual >= tileCount)
+        currentVideoFrame =
+            videoFrames.getFrame (currentMixedVisual - tileCount);
+    else
+        currentVideoFrame = {};
+}
+
 void PerformancePadComponent::timerCallback()
 {
     visualPhase += 1.0f / 30.0f;
     if (visualPhase > 1024.0f)
         visualPhase = std::fmod (visualPhase, 1024.0f);
+
+    if (active || held || physicalPointerVisible)
+    {
+        if (visualCooldown > 0)
+            --visualCooldown;
+        else
+        {
+            chooseNextMixedVisual();
+            visualCooldown = 4;
+        }
+    }
 
     repaint();
 }
@@ -170,7 +294,14 @@ void PerformancePadComponent::paint (juce::Graphics& g)
 
     jassert (visualTileIndex >= 0 && visualTileIndex < tileCount);
 
-    const auto& frame = frameImages[static_cast<size_t> (visualTileIndex)];
+    juce::Image frame =
+        frameImages[static_cast<size_t> (visualTileIndex)];
+
+    if (currentMixedVisual >= 0 && currentMixedVisual < tileCount)
+        frame = frameImages[static_cast<size_t> (currentMixedVisual)];
+    else if (currentMixedVisual >= tileCount && currentVideoFrame.isValid())
+        frame = currentVideoFrame;
+
     if (! frame.isValid())
     {
         g.setColour (juce::Colours::white);
@@ -418,6 +549,9 @@ void PerformancePadComponent::paint (juce::Graphics& g)
 void PerformancePadComponent::mouseDown (const juce::MouseEvent& e)
 {
     physicalPointerVisible = false;
+    chooseNextMixedVisual();
+    visualCooldown = 4;
+    repaint();
 
     if (onTouchStarted)
         onTouchStarted();
