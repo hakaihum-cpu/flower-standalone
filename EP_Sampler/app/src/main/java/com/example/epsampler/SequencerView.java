@@ -47,6 +47,28 @@ final class SequencerView extends View {
     private long lastPollMs = 0L;
     private int downTarget = -1;
 
+    private static final String[] CHORD_NAMES =
+            new String[]{"MAJ","MIN","7","m7","SUS2","SUS4"};
+    private boolean chordMode = false;
+    private int chordType = 0;
+
+    private float touchDownX = 0f;
+    private float touchDownY = 0f;
+    private boolean touchMoved = false;
+    private int pressedNoteIndex = -1;
+    private boolean resizeMode = false;
+    private int resizeNoteIndex = -1;
+    private int resizeStartTick = 0;
+    private int resizeNote = 60;
+    private int resizeOriginalDuration = STEP_TICKS;
+    private int resizePreviewDuration = STEP_TICKS;
+
+    private final Runnable noteLongPress = () -> {
+        if (pressedNoteIndex >= 0 && !recording) {
+            beginResize(pressedNoteIndex);
+        }
+    };
+
     SequencerView(Context context) {
         super(context);
         setBackgroundColor(Color.rgb(8,8,8));
@@ -106,6 +128,7 @@ final class SequencerView extends View {
         drawTarget(c,u);
         drawPianoRoll(c,u);
         drawFooter(c,u);
+        if (resizeMode) drawResizeOverlay(c,u);
 
         postInvalidateDelayed(50L);
     }
