@@ -156,6 +156,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private DrumSampleMixerView drumSampleMixerView;
     private MixerView mixerView;
     private SoundDesignView soundDesignView;
+    private SequencerView sequencerView;
     private MidiController midiController;
     private volatile boolean dreamy = false;
     private volatile boolean audioRescanInProgress = false;
@@ -261,6 +262,12 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         mixerView.setListener(this);
         soundDesignView = new SoundDesignView(this);
         soundDesignView.setListener(this);
+        sequencerView = new SequencerView(this);
+        sequencerView.setPartNames(mixerPartNames());
+        sequencerView.setListener(() -> {
+            sequencerView.setVisibility(View.GONE);
+            hideSystemUI();
+        });
 
         FrameLayout root = new FrameLayout(this);
         root.addView(epBackground, new FrameLayout.LayoutParams(
@@ -289,6 +296,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         root.addView(soundDesignView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+        root.addView(sequencerView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
 
         epBackground.setZ(0f);
         videoLayer.setZ(1f);
@@ -298,6 +308,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         drumSampleMixerView.setZ(35f);
         mixerView.setZ(40f);
         soundDesignView.setZ(50f);
+        sequencerView.setZ(60f);
         setContentView(root);
 
         boosterStep = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_BOOST, 0);
@@ -712,6 +723,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         pianoView.setRecorderOpen(false);
         if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
         if (drumSampleMixerView != null) drumSampleMixerView.setVisibility(View.GONE);
+        if (sequencerView != null) sequencerView.setVisibility(View.GONE);
         mixerView.setPartNames(mixerPartNames());
         mixerView.setMixerState(partMixerVolume, partMixerPan, partMixerMute);
         mixerView.setVisibility(View.VISIBLE);
@@ -721,6 +733,16 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     @Override public void onMixerClose() {
         mixerView.setVisibility(View.GONE);
         hideSystemUI();
+    }
+
+    @Override public void onOpenSequencer() {
+        pianoView.setRecorderOpen(false);
+        if (mixerView != null) mixerView.setVisibility(View.GONE);
+        if (soundDesignView != null) soundDesignView.setVisibility(View.GONE);
+        if (drumEditorView != null) drumEditorView.setDrumsVisible(false);
+        if (drumSampleMixerView != null) drumSampleMixerView.setVisibility(View.GONE);
+        sequencerView.setPartNames(mixerPartNames());
+        sequencerView.open();
     }
 
     @Override public void onMixerChanged(int part, int volume, int pan, boolean muted) {
@@ -1677,6 +1699,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         if (performanceXYView != null) performanceXYView.cancelEffect();
         if (pianoView != null) pianoView.panicAuditionKeyboard();
         if (videoLayer != null) videoLayer.pauseForLifecycle();
+        NativeEngine.sequencerStop();
         panicAllParts();
         super.onPause();
     }
