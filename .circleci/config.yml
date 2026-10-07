@@ -14,6 +14,11 @@ jobs:
       - checkout
 
       - run:
+          name: Materialize supplied EFFECTS video frame pack
+          command: |
+            python3 scripts/materialize_flower_video_pack.py
+
+      - run:
           name: Static dependency audit
           command: |
             python3 scripts/static_dependency_audit.py
@@ -69,7 +74,7 @@ jobs:
             "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
               "platforms;android-35" \
               "build-tools;35.0.0" \
-              "ndk;26.1.10909125"
+              "ndk;28.1.13356709"
 
       - run:
           name: Generate Android Studio project
@@ -77,6 +82,9 @@ jobs:
             set -euo pipefail
             "$PROJUCER" --resave FLOWER_Standalone.jucer
             test -d Builds/Android
+            echo "[diagnostic] generated NDK references:"
+            grep -R "28.1.13356709\|26.1.10909125" Builds/Android -n --include='*.gradle' --include='*.properties' || true
+            test -d "$ANDROID_HOME/ndk/28.1.13356709"
             python3 scripts/patch_android_native_parallelism.py Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOL_COMPILE:STRING=compile' Builds/Android/app/build.gradle
@@ -104,7 +112,7 @@ jobs:
           no_output_timeout: 30m
           command: |
             set -u
-            export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
+            export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.1.13356709"
             export CMAKE_BUILD_PARALLEL_LEVEL=2
             export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=2"
             mkdir -p android-artifact
