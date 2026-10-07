@@ -33,6 +33,8 @@ final class MidiController {
     private final List<MidiOutputPort> ports = new ArrayList<>();
     private int pendingOpens = 0;
     private int scanGeneration = 0;
+    private final java.util.HashMap<Integer,Integer> deviceGeneration =
+            new java.util.HashMap<>();
 
     // 0 = OFF, 1..16 = MIDI channel. Sixteen parts default one-to-one to CH1..16.
     private final int[] partChannels = new int[]{
@@ -96,15 +98,26 @@ final class MidiController {
             try { d.close(); } catch (IOException ignored) { }
         }
         devices.clear();
+        deviceGeneration.clear();
         listener.onConnectionCountChanged(0);
     }
 
     private void open(MidiDeviceInfo info, int generation) {
-        if (midiManager == null) return;
+        if (midiManager == null || info == null) return;
+        final int deviceId = info.getId();
+        Integer tracked = deviceGeneration.get(deviceId);
+        if (tracked != null && tracked == generation) return;
+        deviceGeneration.put(deviceId, generation);
+
         pendingOpens++;
         midiManager.openDevice(info, device -> {
             pendingOpens--;
-            if (device == null) return;
+            if (device == null) {
+                Integer current = deviceGeneration.get(deviceId);
+                if (current != null && current == generation)
+                    deviceGeneration.remove(deviceId);
+                return;
+            }
             if (generation != scanGeneration) {
                 try { device.close(); } catch (IOException ignored) { }
                 return;
