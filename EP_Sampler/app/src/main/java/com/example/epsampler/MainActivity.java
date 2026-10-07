@@ -997,6 +997,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         String result = lastResult < 0 ? "\nRequest result: " + lastResult : "";
         return "Actual output: " + actualAudioOutputLabel(deviceId) +
                 "\nDevice ID: " + deviceId +
+                "\nRequested mode: LOW_LATENCY / EXCLUSIVE" +
                 "\nPerformance: " + NativeEngine.audioPerformanceModeName() +
                 "\nSharing: " + NativeEngine.audioSharingModeName() +
                 "\nSample rate: " + sampleRate + " Hz" +
@@ -1156,7 +1157,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                     int oi = Math.max(0, Math.min(outputChoices.size() - 1,
                             outputSpinner.getSelectedItemPosition()));
                     AudioOutputChoice selectedOutput = outputChoices.get(oi);
-                    if (!selectedOutput.key.equals(audioOutputKey)) {
+                    boolean routeMismatch = selectedOutput.deviceId > 0 &&
+                            NativeEngine.audioDeviceId() != selectedOutput.deviceId;
+                    if (!selectedOutput.key.equals(audioOutputKey) || routeMismatch) {
                         int outputResult = NativeEngine.setAudioOutputDevice(selectedOutput.deviceId);
                         if (outputResult >= 0) {
                             audioOutputKey = selectedOutput.key;
