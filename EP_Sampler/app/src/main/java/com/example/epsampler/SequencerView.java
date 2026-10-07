@@ -51,6 +51,11 @@ final class SequencerView extends View {
             new String[]{"MAJ","MIN","7","m7","SUS2","SUS4"};
     private boolean chordMode = false;
     private int chordType = 0;
+    private boolean eraserMode = false;
+    private final java.util.HashSet<Integer> pendingEraseIndices =
+            new java.util.HashSet<>();
+    private float eraseLastX = 0f;
+    private float eraseLastY = 0f;
 
     private float touchDownX = 0f;
     private float touchDownY = 0f;
@@ -306,6 +311,7 @@ final class SequencerView extends View {
         float tw = text.measureText(bars);
         c.drawText(bars,p.centerX()-tw/2f,p.centerY()+4f*u,text);
         drawButton(c,pagePlusRect(u),"PAGE +",false,u);
+        drawButton(c,eraserRect(u),eraserMode ? "ERASER ON" : "ERASER",eraserMode,u);
 
         drawButton(c,octMinusRect(u),"OCT −",false,u);
         RectF o = octRect(u);
@@ -643,6 +649,13 @@ final class SequencerView extends View {
             lowNote = Math.max(0,lowNote-12);
         } else if (target == 43) {
             lowNote = Math.min(104,lowNote+12);
+        } else if (target == 44) {
+            eraserMode = !eraserMode;
+            pendingEraseIndices.clear();
+            removeCallbacks(noteLongPress);
+            resizeMode = false;
+            resizeNoteIndex = -1;
+            pressedNoteIndex = -1;
         } else if (target == 90) {
             setVisibility(GONE);
             if (listener != null) listener.onSequencerClose();
@@ -727,6 +740,7 @@ final class SequencerView extends View {
         if (pagePlusRect(u).contains(x,y)) return 41;
         if (octMinusRect(u).contains(x,y)) return 42;
         if (octPlusRect(u).contains(x,y)) return 43;
+        if (eraserRect(u).contains(x,y)) return 44;
         return -1;
     }
 
@@ -745,12 +759,13 @@ final class SequencerView extends View {
     private RectF chordTypeRect(float u){ return new RectF(526f*u,194f*u,606f*u,226f*u); }
     private RectF clearRect(float u){ return new RectF(614f*u,194f*u,696f*u,226f*u); }
     private RectF rollRect(float u){ return new RectF(12f*u,242f*u,708f*u,630f*u); }
-    private RectF pageMinusRect(float u){ return new RectF(12f*u,642f*u,100f*u,704f*u); }
-    private RectF pageRect(float u){ return new RectF(106f*u,642f*u,210f*u,704f*u); }
-    private RectF pagePlusRect(float u){ return new RectF(216f*u,642f*u,304f*u,704f*u); }
-    private RectF octMinusRect(float u){ return new RectF(330f*u,642f*u,418f*u,704f*u); }
-    private RectF octRect(float u){ return new RectF(424f*u,642f*u,608f*u,704f*u); }
-    private RectF octPlusRect(float u){ return new RectF(614f*u,642f*u,702f*u,704f*u); }
+    private RectF pageMinusRect(float u){ return new RectF(12f*u,642f*u,82f*u,704f*u); }
+    private RectF pageRect(float u){ return new RectF(88f*u,642f*u,178f*u,704f*u); }
+    private RectF pagePlusRect(float u){ return new RectF(184f*u,642f*u,254f*u,704f*u); }
+    private RectF eraserRect(float u){ return new RectF(264f*u,642f*u,360f*u,704f*u); }
+    private RectF octMinusRect(float u){ return new RectF(370f*u,642f*u,440f*u,704f*u); }
+    private RectF octRect(float u){ return new RectF(446f*u,642f*u,626f*u,704f*u); }
+    private RectF octPlusRect(float u){ return new RectF(632f*u,642f*u,702f*u,704f*u); }
 
     private static boolean isBlack(int note) {
         int pc = Math.floorMod(note,12);
