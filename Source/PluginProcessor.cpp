@@ -832,6 +832,14 @@ int FlowerStandaloneAudioProcessor::getConfiguredMidiChannel() const noexcept
             apvts.getRawParameterValue (ParamIDs::performanceMidiChannelConfig)->load()));
 }
 
+int FlowerStandaloneAudioProcessor::getAudioBufferMode() const noexcept
+{
+    return juce::jlimit (
+        0, 11,
+        juce::roundToInt (
+            apvts.getRawParameterValue (ParamIDs::audioBufferMode)->load()));
+}
+
 void FlowerStandaloneAudioProcessor::setConfiguredRoot (int noteClass)
 {
     noteClass = juce::jlimit (0, 11, noteClass);
@@ -876,6 +884,15 @@ void FlowerStandaloneAudioProcessor::setConfiguredMidiChannel (int channel)
     if (auto* parameter = apvts.getParameter (ParamIDs::performanceMidiChannelConfig))
         parameter->setValueNotifyingHost (
             parameter->convertTo0to1 (static_cast<float> (channel)));
+}
+
+void FlowerStandaloneAudioProcessor::setAudioBufferMode (int mode)
+{
+    mode = juce::jlimit (0, 11, mode);
+
+    if (auto* parameter = apvts.getParameter (ParamIDs::audioBufferMode))
+        parameter->setValueNotifyingHost (
+            parameter->convertTo0to1 (static_cast<float> (mode)));
 }
 
 void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC (juce::MidiBuffer& midi)
@@ -2397,6 +2414,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout FlowerStandaloneAudioProcess
     parameters.push_back (std::make_unique<juce::AudioParameterInt> (
         juce::ParameterID { ParamIDs::performanceMidiChannelConfig, 1 },
         "MIDI Channel", 1, 16, 1));
+    parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParamIDs::audioBufferMode, 1 },
+        "Audio Buffer",
+        juce::StringArray { "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST",
+                            "1.5 BURSTS", "2 BURSTS", "3 BURSTS", "4 BURSTS",
+                            "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS" },
+        0));
 
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamIDs::flowerEnabled, 1 }, "Flower On", false));
