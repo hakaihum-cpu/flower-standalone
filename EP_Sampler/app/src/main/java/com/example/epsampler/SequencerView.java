@@ -164,7 +164,7 @@ final class SequencerView extends View {
         RectF area = new RectF(12f*u,188f*u,getWidth()-12f*u,232f*u);
         drawPanel(c,area,false,u);
 
-        text.setTextColor(Color.rgb(241,238,229));
+        text.setColor(Color.rgb(241,238,229));
         text.setTextSize(11f*u);
         c.drawText("T" + (selectedTrack+1) + " TARGET", 22f*u, 215f*u, text);
 
