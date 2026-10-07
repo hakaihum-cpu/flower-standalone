@@ -435,6 +435,178 @@ final class SequencerView extends View {
         return true;
     }
 
+    private void beginResize(int noteIndex) {
+        int base = noteIndex * 4;
+        if (base < 0 || base + 3 >= noteData.length) return;
+        resizeMode = true;
+        resizeNoteIndex = noteIndex;
+        resizeStartTick = noteData[base];
+        resizeOriginalDuration = Math.max(1,noteData[base+1]);
+        resizePreviewDuration = resizeOriginalDuration;
+        resizeNote = noteData[base+2];
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        invalidate();
+    }
+
+    private void updateResizeFromX(float x) {
+        if (!resizeMode) return;
+        int originalSteps = Math.max(1,
+                Math.round(resizeOriginalDuration / (float)STEP_TICKS));
+        int deltaSteps = Math.round((x - touchDownX) / (30f*u()));
+        int maxSteps = LOOP_TICKS / STEP_TICKS - 1;
+        int steps = clamp(originalSteps + deltaSteps,1,maxSteps);
+        resizePreviewDuration = steps * STEP_TICKS;
+        invalidate();
+    }
+
+    private void drawResizeOverlay(Canvas c, float u) {
+        RectF roll = rollRect(u);
+        float top = touchDownY > roll.centerY()
+                ? roll.top + 18f*u
+                : roll.bottom - 130f*u;
+        RectF box = new RectF(52f*u,top,668f*u,top+112f*u);
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.argb(220,5,5,5));
+        c.drawRoundRect(box,9f*u,9f*u,paint);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(Math.max(1f,1.5f*u));
+        paint.setColor(Color.argb(185,241,238,229));
+        c.drawRoundRect(box,9f*u,9f*u,paint);
+        paint.setStyle(Paint.Style.FILL);
+
+        int durationSteps = Math.max(1,
+                Math.round(resizePreviewDuration / (float)STEP_TICKS));
+        int windowStart = Math.max(0,durationSteps-16);
+        String title = noteName(resizeNote) + "  LENGTH " + durationSteps + "/16";
+        text.setColor(Color.rgb(241,238,229));
+        text.setTextSize(13f*u);
+        c.drawText(title,box.left+12f*u,box.top+24f*u,text);
+        text.setTextSize(9.5f*u);
+        text.setColor(Color.argb(155,241,238,229));
+        c.drawText(windowStart > 0 ? "← EARLIER     DRAG END" : "START     DRAG END",
+                box.left+12f*u,box.top+42f*u,text);
+
+        float left = box.left+12f*u;
+        float right = box.right-12f*u;
+        float gridTop = box.top+54f*u;
+        float gridBottom = box.bottom-14f*u;
+        float cell = (right-left)/16f;
+
+        for (int i=0;i<16;i++) {
+            int stepNumber = windowStart + i + 1;
+            if (stepNumber <= durationSteps) {
+                paint.setColor(Color.argb(105,238,229,207));
+                c.drawRect(left+i*cell+1f*u,gridTop+1f*u,
+                        left+(i+1)*cell-1f*u,gridBottom-1f*u,paint);
+            }
+            paint.setColor(Color.argb(i%4==3 ? 125 : 58,241,238,229));
+            c.drawRect(left+(i+1)*cell,gridTop,
+                    left+(i+1)*cell+Math.max(1f,u),gridBottom,paint);
+        }
+        paint.setColor(Color.argb(90,241,238,229));
+        c.drawRect(left,gridTop,right,gridTop+Math.max(1f,u),paint);
+        c.drawRect(left,gridBottom-Math.max(1f,u),right,gridBottom,paint);
+
+        float endX = left + (durationSteps-windowStart)*cell;
+        endX = Math.max(left,Math.min(right,endX));
+        paint.setColor(Color.rgb(241,238,229));
+        c.drawRect(endX-2f*u,gridTop-4f*u,endX+2f*u,gridBottom+4f*u,paint);
+    }
+
+    private RectF noteRectForIndex(int noteIndex, float u) {
+        int base = noteIndex*4;
+        if (base < 0 || base+3 >= noteData.length) return null;
+
+        RectF roll = rollRect(u);
+        float keyW = 58f*u;
+        float gridLeft = roll.left+keyW;
+        float gridW = roll.width()-keyW;
+        float rowH = roll.height()/VISIBLE_NOTES;
+        int highNote = lowNote+VISIBLE_NOTES-1;
+
+        int start = noteData[base];
+        int dur = Math.max(1,noteData[base+1]);
+        int note = noteData[base+2];
+        if (note < lowNote || note > highNote) return null;
+
+        int pageStartTick = page*2*TICKS_PER_BAR;
+        int pageEndTick = pageStartTick+2*TICKS_PER_BAR;
+        int visualStart = start;
+        int visualEnd = start+dur;
+        if (visualEnd > LOOP_TICKS) {
+            if (pageStartTick == 0) {
+                visualStart = 0;
+                visualEnd -= LOOP_TICKS;
+            } else if (start >= pageStartTick && start < pageEndTick) {
+                visualEnd = pageEndTick;
+            }
+        }
+        if (visualEnd <= pageStartTick || visualStart >= pageEndTick) return null;
+
+        float x0 = gridLeft +
+                (Math.max(visualStart,pageStartTick)-pageStartTick) /
+                (float)(2*TICKS_PER_BAR)*gridW;
+        float x1 = gridLeft +
+                (Math.min(visualEnd,pageEndTick)-pageStartTick) /
+                (float)(2*TICKS_PER_BAR)*gridW;
+        int row = highNote-note;
+        float y0 = roll.top+row*rowH+1.5f*u;
+        float y1 = y0+rowH-3f*u;
+        x1 = Math.max(x0+12f*u,x1);
+        return new RectF(x0-3f*u,y0-2f*u,x1+3f*u,y1+2f*u);
+    }
+
+    private int findNoteAt(float x, float y) {
+        float u = u();
+        for (int i=noteData.length/4-1; i>=0; i--) {
+            RectF r = noteRectForIndex(i,u);
+            if (r != null && r.contains(x,y)) return i;
+        }
+        return -1;
+    }
+
+    private void removeExistingNote(int noteIndex) {
+        NativeEngine.sequencerDeleteNote(selectedTrack,noteIndex);
+        postDelayed(() -> {
+            refreshState(true);
+            invalidate();
+        },30L);
+    }
+
+    private int[] chordIntervals() {
+        switch (chordType) {
+            case 1: return new int[]{0,3,7};
+            case 2: return new int[]{0,4,7,10};
+            case 3: return new int[]{0,3,7,10};
+            case 4: return new int[]{0,2,7};
+            case 5: return new int[]{0,5,7};
+            default: return new int[]{0,4,7};
+        }
+    }
+
+    private boolean noteExistsAtStep(int step, int note) {
+        int tick = step*STEP_TICKS;
+        for (int i=0; i+3<noteData.length; i+=4) {
+            if (noteData[i] == tick && noteData[i+2] == note) return true;
+        }
+        return false;
+    }
+
+    private void auditionNotes(int[] notes, int count) {
+        if (playing || count <= 0) return;
+        final int part = trackParts[selectedTrack];
+        final int[] preview = java.util.Arrays.copyOf(notes,count);
+        for (int note : preview) {
+            NativeEngine.noteOnPart(part,note,96);
+        }
+        postDelayed(() -> {
+            for (int note : preview) {
+                NativeEngine.noteOffPart(part,note,0);
+            }
+        },180L);
+    }
+
     private void activateTarget(int target) {
         if (target == 1) {
             NativeEngine.sequencerPlay();
