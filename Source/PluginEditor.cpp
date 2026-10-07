@@ -798,8 +798,9 @@ void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
 
     g.setFont (juce::FontOptions (12.0f));
     g.setColour (juce::Colours::white.withAlpha (0.60f));
-    g.drawText ("TOP-LEFT = ROOT",
-                250, 24, 140, 24, juce::Justification::centredLeft);
+    g.drawFittedText ("TOP-LEFT = THEORY ROOT",
+                      250, 24, 140, 24,
+                      juce::Justification::centredLeft, 1);
 
     g.setColour (juce::Colours::white.withAlpha (
         chordBotEditMode ? 0.98f : 0.74f));
