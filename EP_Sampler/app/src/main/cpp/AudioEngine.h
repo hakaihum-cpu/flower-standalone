@@ -72,6 +72,31 @@ public:
     void controlChangePart(int part, int cc, int value);
     void pitchBendPart(int part, int value14);
 
+    // 8-track / 8-bar MIDI sequencer trial. Playback is driven from the
+    // audio callback; UI only edits/queries musical event data.
+    static constexpr int SEQ_TRACK_COUNT = 8;
+    static constexpr int SEQ_BARS = 8;
+    static constexpr int SEQ_PPQN = 96;
+    static constexpr int SEQ_TICKS_PER_BAR = SEQ_PPQN * 4;
+    static constexpr int SEQ_LOOP_TICKS = SEQ_TICKS_PER_BAR * SEQ_BARS;
+    void sequencerPlay();
+    void sequencerStop();
+    void sequencerToggleRecord();
+    void sequencerSetClick(bool enabled);
+    void sequencerSetBpm(int bpm);
+    void sequencerSetSelectedTrack(int track);
+    void sequencerSetTrackPart(int track, int part);
+    void sequencerClearTrack(int track);
+    void sequencerToggleGridNote(int track, int step, int note, int velocity);
+    bool sequencerPlaying() const { return seqPlaying_.load(std::memory_order_relaxed); }
+    bool sequencerRecording() const { return seqRecording_.load(std::memory_order_relaxed); }
+    bool sequencerClick() const { return seqClick_.load(std::memory_order_relaxed); }
+    int sequencerBpm() const { return seqBpm_.load(std::memory_order_relaxed); }
+    int sequencerSelectedTrack() const { return seqSelectedTrack_.load(std::memory_order_relaxed); }
+    int sequencerPlayheadTick() const { return seqCurrentTick_.load(std::memory_order_relaxed); }
+    int sequencerTrackPart(int track) const;
+    std::vector<int> sequencerNotes(int track) const;
+
     void recorderToggleRecording();
     void recorderToggleRandom();
     void recorderClear();
@@ -104,7 +129,9 @@ private:
             TAPE, TAPE_PARAMS, DREAMY_PARAMS, DREAMY_MODE, DREAMY_EXTRA, ADSR, INSTRUMENT,
             PART_NOTE_ON, PART_NOTE_OFF, PART_POLY_AT, PART_CH_AT, PART_CC, PART_PITCH,
             DRUM_PARAM, DRUM_FX, PART_FX, PART_MIXER, DRUM_SAMPLE_MIXER,
-            FELT_REVERB, PERFORMANCE_XY
+            FELT_REVERB, PERFORMANCE_XY,
+            SEQ_PLAY, SEQ_STOP, SEQ_RECORD, SEQ_CLICK, SEQ_BPM,
+            SEQ_SELECT_TRACK, SEQ_ASSIGN_PART, SEQ_CLEAR_TRACK, SEQ_TOGGLE_GRID
         } type;
         int a=0,b=0,c=0,d=0;
     };
@@ -195,6 +222,41 @@ private:
     int stutterWrite_=0;
     int stutterCaptureEnd_=0;
     double stutterPhase_=0.0;
+
+    // Trial MIDI sequencer. Fixed storage avoids allocation in the audio callback.
+    struct SeqNote {
+        std::atomic<int> startTick{0};
+        std::atomic<int> durationTick{24};
+        std::atomic<int> note{60};
+        std::atomic<int> velocity{100};
+    };
+    static constexpr int SEQ_MAX_NOTES_PER_TRACK = 512;
+    std::array<std::array<SeqNote,SEQ_MAX_NOTES_PER_TRACK>,SEQ_TRACK_COUNT> seqNotes_{};
+    std::array<std::atomic<int>,SEQ_TRACK_COUNT> seqNoteCount_{};
+    std::array<std::atomic<int>,SEQ_TRACK_COUNT> seqTrackPart_{};
+    std::atomic<bool> seqPlaying_{false};
+    std::atomic<bool> seqRecording_{false};
+    std::atomic<bool> seqClick_{false};
+    std::atomic<int> seqBpm_{120};
+    std::atomic<int> seqSelectedTrack_{0};
+    std::atomic<int> seqCurrentTick_{0};
+    double seqTickPhase_=0.0;
+    int seqLastProcessedTick_=-1;
+    std::array<int,128> seqRecordStartTick_{};
+    std::array<int,128> seqRecordVelocity_{};
+    double seqClickPhase_=0.0;
+    float seqClickEnvelope_=0.0f;
+    float seqClickFrequency_=1200.0f;
+
+    void seqProcessTick(int tick);
+    void seqRenderClick(float& left, float& right);
+    void seqRecordNoteOn(int part, int note, int velocity);
+    void seqRecordNoteOff(int part, int note);
+    void seqFinishPendingRecordedNotes();
+    void seqAddRecordedNote(int track, int startTick, int durationTick, int note, int velocity);
+    void seqToggleGridNoteInternal(int track, int step, int note, int velocity);
+    void seqClearTrackInternal(int track);
+    void seqStopSoundingNotes();
 
     // Eight SAMPLE banks share one 64-voice pool. Each voice snapshots the
     // active double-buffer bank index at NoteOn so no mmap changes underneath it.
