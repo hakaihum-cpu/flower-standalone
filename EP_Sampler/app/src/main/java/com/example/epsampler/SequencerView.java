@@ -52,6 +52,7 @@ final class SequencerView extends View {
     private boolean chordMode = false;
     private int chordType = 0;
     private boolean eraserMode = false;
+    private boolean eraserGestureActive = false;
     private final java.util.HashSet<Integer> pendingEraseIndices =
             new java.util.HashSet<>();
     private float eraseLastX = 0f;
@@ -281,10 +282,21 @@ final class SequencerView extends View {
             float y1 = y0 + rowH - 3f*u;
             x1 = Math.max(x0+2.5f*u,x1);
 
-            int alpha = 120 + Math.round(vel / 127f * 115f);
+            boolean pendingErase = pendingEraseIndices.contains(i/4);
+            int alpha = pendingErase
+                    ? 42
+                    : 120 + Math.round(vel / 127f * 115f);
+            RectF noteRect = new RectF(x0+1f*u,y0,x1-1f*u,y1);
             paint.setColor(Color.argb(alpha,238,229,207));
-            c.drawRoundRect(new RectF(x0+1f*u,y0,x1-1f*u,y1),
-                    2.5f*u,2.5f*u,paint);
+            c.drawRoundRect(noteRect,2.5f*u,2.5f*u,paint);
+            if (pendingErase) {
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(Math.max(1f,1.2f*u));
+                paint.setColor(Color.argb(165,241,238,229));
+                c.drawLine(noteRect.left,noteRect.top,noteRect.right,noteRect.bottom,paint);
+                c.drawLine(noteRect.left,noteRect.bottom,noteRect.right,noteRect.top,paint);
+                paint.setStyle(Paint.Style.FILL);
+            }
         }
 
         if (playing && playheadTick >= pageStartTick && playheadTick < pageEndTick) {
@@ -363,6 +375,15 @@ final class SequencerView extends View {
 
             RectF roll = rollRect(u());
             if (roll.contains(touchDownX,touchDownY)) {
+                if (eraserMode) {
+                    eraserGestureActive = true;
+                    pendingEraseIndices.clear();
+                    eraseLastX = touchDownX;
+                    eraseLastY = touchDownY;
+                    collectEraseAt(touchDownX,touchDownY);
+                    invalidate();
+                    return true;
+                }
                 pressedNoteIndex = findNoteAt(touchDownX,touchDownY);
                 if (pressedNoteIndex >= 0 && !recording) {
                     postDelayed(noteLongPress, 460L);
@@ -373,6 +394,13 @@ final class SequencerView extends View {
         }
 
         if (action == MotionEvent.ACTION_MOVE) {
+            if (eraserGestureActive) {
+                eraseAlongSegment(eraseLastX,eraseLastY,e.getX(),e.getY());
+                eraseLastX = e.getX();
+                eraseLastY = e.getY();
+                invalidate();
+                return true;
+            }
             if (resizeMode) {
                 updateResizeFromX(e.getX());
                 return true;
@@ -392,11 +420,24 @@ final class SequencerView extends View {
             pressedNoteIndex = -1;
             resizeMode = false;
             resizeNoteIndex = -1;
+            eraserGestureActive = false;
+            pendingEraseIndices.clear();
+            invalidate();
             return true;
         }
 
         if (action != MotionEvent.ACTION_UP) return true;
         removeCallbacks(noteLongPress);
+
+        if (eraserGestureActive) {
+            eraseAlongSegment(eraseLastX,eraseLastY,e.getX(),e.getY());
+            commitEraseGesture();
+            eraserGestureActive = false;
+            pressedNoteIndex = -1;
+            downTarget = -1;
+            performClick();
+            return true;
+        }
 
         if (resizeMode) {
             NativeEngine.sequencerSetNoteDuration(
