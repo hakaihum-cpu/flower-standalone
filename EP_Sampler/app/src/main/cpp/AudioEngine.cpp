@@ -272,25 +272,72 @@ void AudioEngine::processDrumSamples(float& left, float& right) {
     }
 }
 
-bool AudioEngine::start() {
-    if (stream_) return true;
+aaudio_result_t AudioEngine::openOutputStream(
+        int deviceId, int requestedRate, AAudioStream** outStream) {
+    if (!outStream) return AAUDIO_ERROR_INVALID_STATE;
+    *outStream = nullptr;
 
-    AAudioStreamBuilder* b=nullptr;
-    if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) return false;
+    AAudioStreamBuilder* b = nullptr;
+    aaudio_result_t r = AAudio_createStreamBuilder(&b);
+    if (r != AAUDIO_OK || !b) {
+        return r != AAUDIO_OK ? r : AAUDIO_ERROR_INVALID_STATE;
+    }
+
     AAudioStreamBuilder_setDirection(b, AAUDIO_DIRECTION_OUTPUT);
     AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT);
     AAudioStreamBuilder_setChannelCount(b, 2);
+    if (requestedRate > 1000) {
+        AAudioStreamBuilder_setSampleRate(b, requestedRate);
+    }
     AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
     AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_EXCLUSIVE);
+    if (deviceId != AAUDIO_UNSPECIFIED) {
+        AAudioStreamBuilder_setDeviceId(b, deviceId);
+    }
     AAudioStreamBuilder_setDataCallback(b, dataCallback, this);
     AAudioStreamBuilder_setErrorCallback(b, errorCallback, this);
 
-    aaudio_result_t r = AAudioStreamBuilder_openStream(b, &stream_);
+    r = AAudioStreamBuilder_openStream(b, outStream);
     if (r != AAUDIO_OK) {
         AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_SHARED);
-        r = AAudioStreamBuilder_openStream(b, &stream_);
+        r = AAudioStreamBuilder_openStream(b, outStream);
     }
     AAudioStreamBuilder_delete(b);
+
+    if (r != AAUDIO_OK || !*outStream) {
+        *outStream = nullptr;
+        return r != AAUDIO_OK ? r : AAUDIO_ERROR_INVALID_STATE;
+    }
+
+    if (deviceId != AAUDIO_UNSPECIFIED &&
+        AAudioStream_getDeviceId(*outStream) != deviceId) {
+        AAudioStream_close(*outStream);
+        *outStream = nullptr;
+        return AAUDIO_ERROR_UNAVAILABLE;
+    }
+
+    if (requestedRate > 1000 &&
+        AAudioStream_getSampleRate(*outStream) != requestedRate) {
+        AAudioStream_close(*outStream);
+        *outStream = nullptr;
+        return AAUDIO_ERROR_UNAVAILABLE;
+    }
+
+    return AAUDIO_OK;
+}
+
+bool AudioEngine::start() {
+    if (stream_) return true;
+
+    aaudio_result_t r = openOutputStream(
+            preferredOutputDeviceId_, 0, &stream_);
+    if ((r != AAUDIO_OK || !stream_) &&
+        preferredOutputDeviceId_ != AAUDIO_UNSPECIFIED) {
+        // A saved removable device may be absent at startup. Keep startup
+        // behavior safe by falling back to Android's current default route.
+        preferredOutputDeviceId_ = AAUDIO_UNSPECIFIED;
+        r = openOutputStream(preferredOutputDeviceId_, 0, &stream_);
+    }
 
     if (r != AAUDIO_OK || !stream_) {
         stream_ = nullptr;
@@ -370,7 +417,7 @@ void AudioEngine::stop() {
 
 bool AudioEngine::restartAudioPreservingState() {
     // Explicit device rescan path: reopen only the AAudio stream. DSP objects,
-    // SampleBank mappings and IntegratedRecorder buffers stay untouched.
+    // sequencer state, SampleBank mappings and Recorder buffers stay untouched.
     const int requestedRate = sampleRate_ > 1000 ? sampleRate_ : 48000;
     const float previousBursts = requestedBufferBursts_;
 
@@ -380,39 +427,22 @@ bool AudioEngine::restartAudioPreservingState() {
         stream_ = nullptr;
     }
 
-    AAudioStreamBuilder* b = nullptr;
-    if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) return false;
-    AAudioStreamBuilder_setDirection(b, AAUDIO_DIRECTION_OUTPUT);
-    AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT);
-    AAudioStreamBuilder_setChannelCount(b, 2);
-    AAudioStreamBuilder_setSampleRate(b, requestedRate);
-    AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
-    AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_EXCLUSIVE);
-    AAudioStreamBuilder_setDataCallback(b, dataCallback, this);
-    AAudioStreamBuilder_setErrorCallback(b, errorCallback, this);
-
-    aaudio_result_t r = AAudioStreamBuilder_openStream(b, &stream_);
-    if (r != AAUDIO_OK) {
-        AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_SHARED);
-        r = AAudioStreamBuilder_openStream(b, &stream_);
+    aaudio_result_t r = openOutputStream(
+            preferredOutputDeviceId_, requestedRate, &stream_);
+    if ((r != AAUDIO_OK || !stream_) &&
+        preferredOutputDeviceId_ != AAUDIO_UNSPECIFIED) {
+        // The selected removable output may have disappeared during a rescan.
+        preferredOutputDeviceId_ = AAUDIO_UNSPECIFIED;
+        r = openOutputStream(
+                preferredOutputDeviceId_, requestedRate, &stream_);
     }
-    AAudioStreamBuilder_delete(b);
 
     if (r != AAUDIO_OK || !stream_) {
         stream_ = nullptr;
         return false;
     }
 
-    const int reopenedRate = AAudioStream_getSampleRate(stream_);
-    if (reopenedRate != requestedRate) {
-        // Re-preparing the whole DSP graph here would destroy recorder content.
-        // Fail safely instead; the caller can retry after the device route settles.
-        AAudioStream_close(stream_);
-        stream_ = nullptr;
-        return false;
-    }
-
-    sampleRate_ = reopenedRate;
+    sampleRate_ = AAudioStream_getSampleRate(stream_);
     defaultBufferSizeFrames_ = AAudioStream_getBufferSizeInFrames(stream_);
 
     if (AAudioStream_requestStart(stream_) != AAUDIO_OK) {
@@ -548,6 +578,101 @@ std::vector<int> AudioEngine::sequencerNotes(int track) const {
         out.push_back(n.velocity.load(std::memory_order_relaxed));
     }
     return out;
+}
+
+int AudioEngine::setAudioOutputDevice(int deviceId) {
+    const int requestedDevice = deviceId > 0 ? deviceId : AAUDIO_UNSPECIFIED;
+
+    if (!stream_) {
+        preferredOutputDeviceId_ = requestedDevice;
+        return AAUDIO_OK;
+    }
+
+    const int previousDevice = preferredOutputDeviceId_;
+    const int previousRate = sampleRate_;
+    const float previousBursts = requestedBufferBursts_;
+
+    AAudioStream_requestStop(stream_);
+    AAudioStream_close(stream_);
+    stream_ = nullptr;
+
+    AAudioStream* candidate = nullptr;
+    aaudio_result_t result = openOutputStream(
+            requestedDevice, previousRate, &candidate);
+
+    if (result == AAUDIO_OK && candidate) {
+        stream_ = candidate;
+        preferredOutputDeviceId_ = requestedDevice;
+        sampleRate_ = AAudioStream_getSampleRate(stream_);
+        defaultBufferSizeFrames_ = AAudioStream_getBufferSizeInFrames(stream_);
+
+        if (AAudioStream_requestStart(stream_) == AAUDIO_OK) {
+            requestedBufferBursts_ = 0.0f;
+            if (previousBursts > 0.0f) {
+                setAudioBufferBursts(previousBursts);
+            }
+            return AAudioStream_getDeviceId(stream_);
+        }
+
+        AAudioStream_close(stream_);
+        stream_ = nullptr;
+        result = AAUDIO_ERROR_INVALID_STATE;
+    }
+
+    // A failed route change must not destroy the working sequencer/audio state.
+    AAudioStream* restored = nullptr;
+    aaudio_result_t restore = openOutputStream(
+            previousDevice, previousRate, &restored);
+    if (restore != AAUDIO_OK || !restored) {
+        // If the old removable device disappeared, try Android default once.
+        restore = openOutputStream(
+                AAUDIO_UNSPECIFIED, previousRate, &restored);
+        if (restore == AAUDIO_OK && restored) {
+            preferredOutputDeviceId_ = AAUDIO_UNSPECIFIED;
+        }
+    } else {
+        preferredOutputDeviceId_ = previousDevice;
+    }
+
+    if (restore == AAUDIO_OK && restored) {
+        stream_ = restored;
+        sampleRate_ = AAudioStream_getSampleRate(stream_);
+        defaultBufferSizeFrames_ = AAudioStream_getBufferSizeInFrames(stream_);
+        if (AAudioStream_requestStart(stream_) == AAUDIO_OK) {
+            requestedBufferBursts_ = 0.0f;
+            if (previousBursts > 0.0f) {
+                setAudioBufferBursts(previousBursts);
+            }
+        } else {
+            AAudioStream_close(stream_);
+            stream_ = nullptr;
+        }
+    }
+
+    return result < 0 ? result : AAUDIO_ERROR_UNAVAILABLE;
+}
+
+int AudioEngine::audioDeviceId() const {
+    return stream_ ? AAudioStream_getDeviceId(stream_) : AAUDIO_UNSPECIFIED;
+}
+
+std::string AudioEngine::audioPerformanceModeName() const {
+    if (!stream_) return "CLOSED";
+    switch (AAudioStream_getPerformanceMode(stream_)) {
+        case AAUDIO_PERFORMANCE_MODE_LOW_LATENCY: return "LOW_LATENCY";
+        case AAUDIO_PERFORMANCE_MODE_POWER_SAVING: return "POWER_SAVING";
+        case AAUDIO_PERFORMANCE_MODE_NONE: return "NONE";
+        default: return "OTHER";
+    }
+}
+
+std::string AudioEngine::audioSharingModeName() const {
+    if (!stream_) return "CLOSED";
+    switch (AAudioStream_getSharingMode(stream_)) {
+        case AAUDIO_SHARING_MODE_EXCLUSIVE: return "EXCLUSIVE";
+        case AAUDIO_SHARING_MODE_SHARED: return "SHARED";
+        default: return "OTHER";
+    }
 }
 
 int AudioEngine::setAudioBufferBursts(float bursts) {
