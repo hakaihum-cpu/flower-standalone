@@ -26,7 +26,7 @@ jobs:
               sudo apt-get update
               sudo apt-get install -y ffmpeg
             fi
-            ffmpeg -version | head -n 1
+            ffmpeg -version
 
       - run:
           name: Materialize exact supplied frame pack
