@@ -395,51 +395,6 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         }
 
         eurekaVisualPreviousActivity = activity;
-
-        auto setNorm = [this] (const char* id, float value)
-        {
-            if (auto* parameter = processor.state().getParameter (id))
-                parameter->setValueNotifyingHost (
-                    juce::jlimit (0.0f, 1.0f, value));
-        };
-
-        if (eurekaMotionRecording)
-        {
-            const float mix =
-                juce::jlimit (0.0f, 1.0f, eurekaMotionTouchX);
-            const float haze =
-                juce::jlimit (0.0f, 1.0f, 1.0f - eurekaMotionTouchY);
-
-            setNorm (ParamID::hazeMix, mix);
-            setNorm (ParamID::hazeAmount, haze);
-
-            if (eurekaMotionRecordIndex < eurekaMotionSteps)
-            {
-                eurekaMotionMix[(size_t) eurekaMotionRecordIndex] = mix;
-                eurekaMotionHaze[(size_t) eurekaMotionRecordIndex] = haze;
-                ++eurekaMotionRecordIndex;
-            }
-
-            if (eurekaMotionRecordIndex >= eurekaMotionSteps)
-            {
-                eurekaMotionRecording = false;
-                eurekaMotionTouchDown = false;
-                eurekaMotionPlaying = true;
-                eurekaMotionPlaybackIndex = 0;
-            }
-        }
-        else if (eurekaMotionPlaying)
-        {
-            setNorm (
-                ParamID::hazeMix,
-                eurekaMotionMix[(size_t) eurekaMotionPlaybackIndex]);
-            setNorm (
-                ParamID::hazeAmount,
-                eurekaMotionHaze[(size_t) eurekaMotionPlaybackIndex]);
-
-            eurekaMotionPlaybackIndex =
-                (eurekaMotionPlaybackIndex + 1) % eurekaMotionSteps;
-        }
     }
 
     repaint();
@@ -450,7 +405,48 @@ void RealtimeChordFxAudioProcessorEditor::paint (juce::Graphics& g)
     g.fillAll (juce::Colours::black);
     juce::Graphics::ScopedSaveState save (g);
     g.addTransform (juce::AffineTransform::scale ((float) getWidth() / design, (float) getHeight() / design));
-    if (midiControlConfigVisible) paintMidiControlConfig (g); else if (configVisible) paintConfig (g); else paintMain (g);
+    if (midiControlConfigVisible)
+        paintMidiControlConfig (g);
+    else if (configVisible)
+        paintConfig (g);
+    else
+    {
+        paintMain (g);
+        paintGlobalControls (g);
+    }
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g)
+{
+    const float boostDb = juce::jlimit (
+        0.0f, 14.0f,
+        processor.state().getRawParameterValue (ParamID::boostDb)->load());
+
+    const juce::Rectangle<float> boostBounds (390.0f, 16.0f, 76.0f, 38.0f);
+    g.setColour (juce::Colours::black.withAlpha (0.50f));
+    g.fillRoundedRectangle (boostBounds, 6.0f);
+    g.setColour (juce::Colours::white.withAlpha (boostDb > 0.01f ? 0.96f : 0.62f));
+    g.drawRoundedRectangle (boostBounds, 6.0f, boostDb > 0.01f ? 1.8f : 1.0f);
+    g.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
+    g.drawFittedText (
+        boostDb > 0.01f ? "BOOST +" + juce::String (boostDb, 1)
+                        : "BOOST",
+        boostBounds.toNearestInt(), juce::Justification::centred, 1);
+
+    if (l1Latched || r1Latched)
+    {
+        const float wet = juce::jlimit (
+            0.0f, 1.0f,
+            processor.state().getRawParameterValue (ParamID::wet)->load());
+        const juce::Rectangle<float> wetBounds (250.0f, 76.0f, 220.0f, 52.0f);
+        g.setColour (juce::Colours::black.withAlpha (0.80f));
+        g.fillRoundedRectangle (wetBounds, 8.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.94f));
+        g.drawRoundedRectangle (wetBounds, 8.0f, 1.2f);
+        g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
+        g.drawText ("WET " + juce::String (juce::roundToInt (wet * 100.0f)) + "%",
+                    wetBounds, juce::Justification::centred);
+    }
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
@@ -615,25 +611,6 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
     g.setGradientFill (topShade);
     g.fillRect (0.0f, 0.0f, 720.0f, 145.0f);
 
-    if (eurekaMotionArmed || eurekaMotionRecording)
-    {
-        g.setColour (juce::Colour (0xfff23a36));
-        g.drawRect (
-            juce::Rectangle<float> (8.0f, 8.0f, 704.0f, 704.0f), 3.0f);
-        g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
-        g.drawText (
-            eurekaMotionRecording ? juce::String::fromUTF8 (u8"● MOTION REC")
-                                  : "MOTION ARM",
-            24, 54, 170, 24, juce::Justification::centredLeft);
-    }
-    else if (eurekaMotionPlaying)
-    {
-        g.setColour (juce::Colours::white.withAlpha (0.82f));
-        g.setFont (juce::FontOptions (13.0f).withStyle ("Bold"));
-        g.drawText ("MOTION PLAY", 24, 54, 150, 24,
-                    juce::Justification::centredLeft);
-    }
-
     g.setColour (juce::Colours::white.withAlpha (0.96f));
     g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
     g.drawText ("EUREKA", 28, 18, 180, 34,
@@ -652,12 +629,16 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
 
     if (! eurekaPanelVisible)
     {
+        const float stutter =
+            processor.state().getRawParameterValue (ParamID::hazeRepeat)->load();
+        const float hall =
+            processor.state().getRawParameterValue (ParamID::hazeReverb)->load();
+
         g.setFont (juce::FontOptions (11.0f));
-        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.setColour (juce::Colours::white.withAlpha (0.72f));
         g.drawText (
-            eurekaMotionArmed
-                ? "DRAG TO RECORD 3 SEC  ·  X=MIX  Y=HAZE"
-                : "TAP IMAGE TO ARM MOTION",
+            "XY STUTTER " + juce::String (juce::roundToInt (stutter * 100.0f))
+            + "%   REVERB " + juce::String (juce::roundToInt (hall * 100.0f)) + "%",
             30, 674, 660, 20, juce::Justification::centred);
         return;
     }
@@ -792,7 +773,7 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
     g.setFont (juce::FontOptions (10.5f));
     g.setColour (juce::Colours::white.withAlpha (0.58f));
     g.drawText (
-        "BYPASS keeps recording. LOCK stops record heads. Motion: X=MIX / Y=HAZE.",
+        "BYPASS keeps recording. LOCK stops record heads. XY controls STUTTER and REVERB.",
         30, 658, 660, 20, juce::Justification::centred);
 }
 
@@ -991,7 +972,17 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setFont (juce::FontOptions (20.0f));
     g.drawText ("CONFIG", 34, 26, 180, 32, juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (13.0f));
+    g.drawText ("SAVE", 370, 30, 72, 24, juce::Justification::centred);
+    g.drawText ("LOAD", 458, 30, 72, 24, juce::Justification::centred);
     g.drawText ("CLOSE", 620, 30, 70, 24, juce::Justification::centredRight);
+
+    if (globalPresetMessage.isNotEmpty())
+    {
+        g.setFont (juce::FontOptions (10.5f));
+        g.setColour (juce::Colours::white.withAlpha (0.58f));
+        g.drawText (globalPresetMessage, 344, 58, 214, 18,
+                    juce::Justification::centred);
+    }
 
     g.setFont (juce::FontOptions (13.0f));
     g.setColour (juce::Colours::white.withAlpha (0.62f));
@@ -1187,7 +1178,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics
     g.setFont (juce::FontOptions (11.5f));
     g.setColour (juce::Colours::white.withAlpha (0.52f));
     g.drawText ("CHORD OUT sends the generated ChordPlan notes to the selected MIDI OUT.", 54, 570, 620, 20, juce::Justification::centredLeft);
-    g.drawText ("L1: REC -> PLAY    R1: CLEAR    96 motion ticks / bar", 54, 592, 610, 20, juce::Justification::centredLeft);
+    g.drawText ("L1: WET -5%    R1: WET +5%    96 motion ticks / bar", 54, 592, 610, 20, juce::Justification::centredLeft);
     g.drawText ("X 0..127 / Y 0..127. CLOCK uses 24 PPQN.", 54, 614, 610, 20, juce::Justification::centredLeft);
     if (midiPresetMessage.isNotEmpty())
         g.drawText (midiPresetMessage, 54, 650, 560, 22, juce::Justification::centredLeft);
