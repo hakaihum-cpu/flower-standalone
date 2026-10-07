@@ -1086,6 +1086,201 @@ int AudioEngine::activeVoicesPart(int part) const {
     return n;
 }
 
+void AudioEngine::seqAddRecordedNote(
+        int track, int startTick, int durationTick, int note, int velocity) {
+    track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
+    note = std::clamp(note,0,127);
+    velocity = std::clamp(velocity,1,127);
+    startTick = ((startTick % SEQ_LOOP_TICKS) + SEQ_LOOP_TICKS) % SEQ_LOOP_TICKS;
+    durationTick = std::clamp(durationTick,1,SEQ_LOOP_TICKS-1);
+
+    int count = std::clamp(
+            seqNoteCount_[track].load(std::memory_order_relaxed),
+            0, SEQ_MAX_NOTES_PER_TRACK);
+    if (count >= SEQ_MAX_NOTES_PER_TRACK) return;
+
+    auto& n = seqNotes_[track][count];
+    n.startTick.store(startTick,std::memory_order_relaxed);
+    n.durationTick.store(durationTick,std::memory_order_relaxed);
+    n.note.store(note,std::memory_order_relaxed);
+    n.velocity.store(velocity,std::memory_order_relaxed);
+    seqNoteCount_[track].store(count+1,std::memory_order_release);
+}
+
+void AudioEngine::seqClearTrackInternal(int track) {
+    track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
+    const int part = sequencerTrackPart(track);
+    allNotesOffPart(part);
+    seqNoteCount_[track].store(0,std::memory_order_release);
+    if (track == seqSelectedTrack_.load(std::memory_order_relaxed)) {
+        seqRecordStartTick_.fill(-1);
+        seqRecordVelocity_.fill(0);
+    }
+}
+
+void AudioEngine::seqToggleGridNoteInternal(
+        int track, int step, int note, int velocity) {
+    track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
+    step = std::clamp(step,0,SEQ_BARS*16-1);
+    note = std::clamp(note,0,127);
+    velocity = std::clamp(velocity,1,127);
+    constexpr int stepTicks = SEQ_PPQN / 4;
+    const int startTick = step * stepTicks;
+
+    int count = std::clamp(
+            seqNoteCount_[track].load(std::memory_order_relaxed),
+            0, SEQ_MAX_NOTES_PER_TRACK);
+    for (int i=0; i<count; ++i) {
+        auto& n = seqNotes_[track][i];
+        if (n.startTick.load(std::memory_order_relaxed) == startTick &&
+                n.note.load(std::memory_order_relaxed) == note) {
+            for (int j=i; j<count-1; ++j) {
+                seqNotes_[track][j].startTick.store(
+                        seqNotes_[track][j+1].startTick.load(std::memory_order_relaxed),
+                        std::memory_order_relaxed);
+                seqNotes_[track][j].durationTick.store(
+                        seqNotes_[track][j+1].durationTick.load(std::memory_order_relaxed),
+                        std::memory_order_relaxed);
+                seqNotes_[track][j].note.store(
+                        seqNotes_[track][j+1].note.load(std::memory_order_relaxed),
+                        std::memory_order_relaxed);
+                seqNotes_[track][j].velocity.store(
+                        seqNotes_[track][j+1].velocity.load(std::memory_order_relaxed),
+                        std::memory_order_relaxed);
+            }
+            seqNoteCount_[track].store(count-1,std::memory_order_release);
+            return;
+        }
+    }
+
+    seqAddRecordedNote(track,startTick,stepTicks,note,velocity);
+}
+
+void AudioEngine::seqRecordNoteOn(int part, int note, int velocity) {
+    if (!seqRecording_.load(std::memory_order_relaxed) ||
+            !seqPlaying_.load(std::memory_order_relaxed)) return;
+    const int track = std::clamp(
+            seqSelectedTrack_.load(std::memory_order_relaxed),
+            0, SEQ_TRACK_COUNT-1);
+    if (sequencerTrackPart(track) != std::clamp(part,0,PART_COUNT-1)) return;
+    if (note < 0 || note > 127 || velocity <= 0) return;
+
+    int tick = int(std::floor(seqTickPhase_));
+    tick = std::clamp(tick,0,SEQ_LOOP_TICKS-1);
+    seqCurrentTick_.store(tick,std::memory_order_relaxed);
+    seqRecordStartTick_[note] = tick;
+    seqRecordVelocity_[note] = std::clamp(velocity,1,127);
+}
+
+void AudioEngine::seqRecordNoteOff(int part, int note) {
+    if (!seqRecording_.load(std::memory_order_relaxed)) return;
+    const int track = std::clamp(
+            seqSelectedTrack_.load(std::memory_order_relaxed),
+            0, SEQ_TRACK_COUNT-1);
+    if (sequencerTrackPart(track) != std::clamp(part,0,PART_COUNT-1)) return;
+    if (note < 0 || note > 127 || seqRecordStartTick_[note] < 0) return;
+
+    int tick = int(std::floor(seqTickPhase_));
+    tick = std::clamp(tick,0,SEQ_LOOP_TICKS-1);
+    const int start = seqRecordStartTick_[note];
+    int duration = tick - start;
+    if (duration <= 0) duration += SEQ_LOOP_TICKS;
+    seqAddRecordedNote(track,start,duration,note,seqRecordVelocity_[note]);
+    seqRecordStartTick_[note] = -1;
+    seqRecordVelocity_[note] = 0;
+}
+
+void AudioEngine::seqFinishPendingRecordedNotes() {
+    const int track = std::clamp(
+            seqSelectedTrack_.load(std::memory_order_relaxed),
+            0, SEQ_TRACK_COUNT-1);
+    int tick = int(std::floor(seqTickPhase_));
+    tick = std::clamp(tick,0,SEQ_LOOP_TICKS-1);
+    for (int note=0; note<128; ++note) {
+        const int start = seqRecordStartTick_[note];
+        if (start < 0) continue;
+        int duration = tick - start;
+        if (duration <= 0) duration += SEQ_LOOP_TICKS;
+        seqAddRecordedNote(track,start,duration,note,
+                std::max(1,seqRecordVelocity_[note]));
+        seqRecordStartTick_[note] = -1;
+        seqRecordVelocity_[note] = 0;
+    }
+}
+
+void AudioEngine::seqStopSoundingNotes() {
+    std::array<bool,PART_COUNT> stopped{};
+    for (int track=0; track<SEQ_TRACK_COUNT; ++track) {
+        const int part = sequencerTrackPart(track);
+        if (!stopped[part]) {
+            allNotesOffPart(part);
+            stopped[part] = true;
+        }
+    }
+}
+
+void AudioEngine::seqProcessTick(int tick) {
+    tick = std::clamp(tick,0,SEQ_LOOP_TICKS-1);
+
+    // NoteOff first so a retrigger on the same tick starts cleanly.
+    for (int track=0; track<SEQ_TRACK_COUNT; ++track) {
+        const int part = sequencerTrackPart(track);
+        const int count = std::clamp(
+                seqNoteCount_[track].load(std::memory_order_acquire),
+                0, SEQ_MAX_NOTES_PER_TRACK);
+        for (int i=0; i<count; ++i) {
+            const auto& n = seqNotes_[track][i];
+            const int start = n.startTick.load(std::memory_order_relaxed);
+            const int duration = std::clamp(
+                    n.durationTick.load(std::memory_order_relaxed),
+                    1, SEQ_LOOP_TICKS-1);
+            const int end = (start + duration) % SEQ_LOOP_TICKS;
+            if (end == tick) {
+                handlePartNoteOff(part,
+                        std::clamp(n.note.load(std::memory_order_relaxed),0,127));
+            }
+        }
+    }
+
+    for (int track=0; track<SEQ_TRACK_COUNT; ++track) {
+        const int part = sequencerTrackPart(track);
+        const int count = std::clamp(
+                seqNoteCount_[track].load(std::memory_order_acquire),
+                0, SEQ_MAX_NOTES_PER_TRACK);
+        for (int i=0; i<count; ++i) {
+            const auto& n = seqNotes_[track][i];
+            if (n.startTick.load(std::memory_order_relaxed) == tick) {
+                handlePartNoteOn(
+                        part,
+                        std::clamp(n.note.load(std::memory_order_relaxed),0,127),
+                        std::clamp(n.velocity.load(std::memory_order_relaxed),1,127));
+            }
+        }
+    }
+
+    if (seqClick_.load(std::memory_order_relaxed) && tick % SEQ_PPQN == 0) {
+        const bool accent = tick % SEQ_TICKS_PER_BAR == 0;
+        seqClickEnvelope_ = accent ? 0.22f : 0.14f;
+        seqClickFrequency_ = accent ? 1600.0f : 1050.0f;
+        seqClickPhase_ = 0.0;
+    }
+}
+
+void AudioEngine::seqRenderClick(float& left, float& right) {
+    if (seqClickEnvelope_ <= 0.00005f) {
+        seqClickEnvelope_ = 0.0f;
+        return;
+    }
+    const float sample = float(std::sin(seqClickPhase_)) * seqClickEnvelope_;
+    seqClickPhase_ += 6.283185307179586 * double(seqClickFrequency_) /
+            double(std::max(1,sampleRate_));
+    if (seqClickPhase_ >= 6.283185307179586)
+        seqClickPhase_ -= 6.283185307179586;
+    seqClickEnvelope_ *= 0.992f;
+    left += sample;
+    right += sample;
+}
+
 void AudioEngine::handle(const Event& e) {
     switch(e.type) {
         case Event::NOTE_ON:
