@@ -383,8 +383,7 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             && (attack || eurekaVisualCooldown <= 0))
         {
             eurekaFrameIndex =
-                (eurekaFrameIndex + 1)
-                % eurekaFrames.getFrameCount();
+                nextVisualFrame (eurekaFrames.getFrameCount(), loadedEurekaFrame);
             eurekaVisualCooldown = 4; // ~133 ms
         }
 
