@@ -1123,7 +1123,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     }
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colours::white.withAlpha (0.42f));
-    g.drawText ("MODE: CHORD-A / CHORD-B / DREAMY / EUREKA / CHORDBOT", 54, 681, 590, 18, juce::Justification::centredLeft);
+    g.drawText ("MODE: CHORD-A / CHORD-B / DREAMY / EUREKA / CHORD BOT", 54, 681, 590, 18, juce::Justification::centredLeft);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
@@ -1396,7 +1396,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             else if (effect == 1)
                 setChoiceActual (ParamID::effectMode, 2);      // DREAMY -> EUREKA
             else if (effect == 2)
-                setChoiceActual (ParamID::effectMode, 3);      // EUREKA -> CHORDBOT
+                setChoiceActual (ParamID::effectMode, 3);      // EUREKA -> CHORD BOT
             else
             {
                 setChoiceActual (ParamID::effectMode, 0);      // CHORD BOT -> A
