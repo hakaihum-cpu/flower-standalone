@@ -1610,7 +1610,6 @@ bool RealtimeChordFxAudioProcessor::loadUserPreset()
 
     restored.setProperty ("userPresetXml", stored, nullptr);
     apvts.replaceState (restored);
-    loadChordBotLayout();
     notifyMidiControllerConfigChanged();
     chordAHoldRefreshRequested.store (true, std::memory_order_release);
     return true;
