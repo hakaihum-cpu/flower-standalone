@@ -71,6 +71,67 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_channe
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_controlChangePart(JNIEnv*,jclass,jint part,jint c,jint v){AudioEngine::instance().controlChangePart(part,c,v);}
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_pitchBendPart(JNIEnv*,jclass,jint part,jint v){AudioEngine::instance().pitchBendPart(part,v);}
 
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerPlay(JNIEnv*,jclass){
+    AudioEngine::instance().sequencerPlay();
+}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerStop(JNIEnv*,jclass){
+    AudioEngine::instance().sequencerStop();
+}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerToggleRecord(JNIEnv*,jclass){
+    AudioEngine::instance().sequencerToggleRecord();
+}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerSetClick(JNIEnv*,jclass,jboolean on){
+    AudioEngine::instance().sequencerSetClick(on == JNI_TRUE);
+}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerSetBpm(JNIEnv*,jclass,jint bpm){
+    AudioEngine::instance().sequencerSetBpm(bpm);
+}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerSetSelectedTrack(JNIEnv*,jclass,jint track){
+    AudioEngine::instance().sequencerSetSelectedTrack(track);
+}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerSetTrackPart(JNIEnv*,jclass,jint track,jint part){
+    AudioEngine::instance().sequencerSetTrackPart(track,part);
+}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerClearTrack(JNIEnv*,jclass,jint track){
+    AudioEngine::instance().sequencerClearTrack(track);
+}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerToggleGridNote(
+        JNIEnv*,jclass,jint track,jint step,jint note,jint velocity){
+    AudioEngine::instance().sequencerToggleGridNote(track,step,note,velocity);
+}
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_sequencerIsPlaying(JNIEnv*,jclass){
+    return AudioEngine::instance().sequencerPlaying() ? JNI_TRUE : JNI_FALSE;
+}
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_sequencerIsRecording(JNIEnv*,jclass){
+    return AudioEngine::instance().sequencerRecording() ? JNI_TRUE : JNI_FALSE;
+}
+extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_sequencerIsClickOn(JNIEnv*,jclass){
+    return AudioEngine::instance().sequencerClick() ? JNI_TRUE : JNI_FALSE;
+}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_sequencerBpm(JNIEnv*,jclass){
+    return AudioEngine::instance().sequencerBpm();
+}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_sequencerSelectedTrack(JNIEnv*,jclass){
+    return AudioEngine::instance().sequencerSelectedTrack();
+}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_sequencerPlayheadTick(JNIEnv*,jclass){
+    return AudioEngine::instance().sequencerPlayheadTick();
+}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_sequencerTrackPart(JNIEnv*,jclass,jint track){
+    return AudioEngine::instance().sequencerTrackPart(track);
+}
+extern "C" JNIEXPORT jintArray JNICALL Java_com_example_epsampler_NativeEngine_sequencerNotes(
+        JNIEnv* env,jclass,jint track){
+    const auto values = AudioEngine::instance().sequencerNotes(track);
+    jintArray out = env->NewIntArray(static_cast<jsize>(values.size()));
+    if (!out) return nullptr;
+    if (!values.empty()) {
+        env->SetIntArrayRegion(out,0,static_cast<jsize>(values.size()),
+                reinterpret_cast<const jint*>(values.data()));
+    }
+    return out;
+}
+
 extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_setDrumParameter(JNIEnv*,jclass,jint parameter,jint value){AudioEngine::instance().setDrumParameter(parameter,value);}
 
 extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_loadDrumSample(
