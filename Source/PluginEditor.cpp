@@ -692,9 +692,9 @@ void PerformancePadComponent::notify()
 
 juce::Rectangle<int> ConfigScreenComponent::getRowBounds (int row) const
 {
-    constexpr int rowStep = 65;
-    constexpr int firstY = 155;
-    return { 72, firstY + row * rowStep, 576, 54 };
+    constexpr int rowStep = 58;
+    constexpr int firstY = 154;
+    return { 72, firstY + row * rowStep, 576, 48 };
 }
 
 juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
@@ -706,21 +706,25 @@ void ConfigScreenComponent::setValues (int newRootKey,
                                        int newScale,
                                        bool newEffectsEnabled,
                                        bool newYEffectDreamy,
-                                       int newMidiChannel)
+                                       int newMidiChannel,
+                                       int newAudioBufferMode,
+                                       const juce::String& newAudioStatus)
 {
     rootKey = juce::jlimit (0, 11, newRootKey);
     scaleIndex = juce::jlimit (0, 4, newScale);
     effectsEnabled = newEffectsEnabled;
     yEffectDreamy = newYEffectDreamy;
     midiChannel = juce::jlimit (1, 16, newMidiChannel);
+    audioBufferMode = juce::jlimit (0, 11, newAudioBufferMode);
+    audioStatus = newAudioStatus;
     repaint();
 }
 
 void ConfigScreenComponent::moveSelection (int delta)
 {
-    selectedRow = (selectedRow + delta) % 6;
+    selectedRow = (selectedRow + delta) % 7;
     if (selectedRow < 0)
-        selectedRow += 6;
+        selectedRow += 7;
     repaint();
 }
 
@@ -767,6 +771,15 @@ void ConfigScreenComponent::adjustSelected (int delta)
         if (onMidiChannelChanged)
             onMidiChannelChanged (midiChannel);
     }
+    else if (selectedRow == 5)
+    {
+        audioBufferMode = (audioBufferMode + delta) % 12;
+        if (audioBufferMode < 0)
+            audioBufferMode += 12;
+
+        if (onAudioBufferChanged)
+            onAudioBufferChanged (audioBufferMode);
+    }
     else if (onCarnivalRequested)
     {
         onCarnivalRequested();
@@ -777,7 +790,7 @@ void ConfigScreenComponent::adjustSelected (int delta)
 
 void ConfigScreenComponent::activateSelected()
 {
-    if (selectedRow == 5)
+    if (selectedRow == 6)
     {
         if (onCarnivalRequested)
             onCarnivalRequested();
@@ -814,6 +827,11 @@ void ConfigScreenComponent::notifyCurrentRow()
         if (onMidiChannelChanged)
             onMidiChannelChanged (midiChannel);
     }
+    else if (selectedRow == 5)
+    {
+        if (onAudioBufferChanged)
+            onAudioBufferChanged (audioBufferMode);
+    }
 }
 
 void ConfigScreenComponent::paint (juce::Graphics& g)
@@ -838,7 +856,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
                 72, 124, 576, 28,
                 juce::Justification::centredLeft);
 
-    for (int row = 0; row < 6; ++row)
+    for (int row = 0; row < 7; ++row)
     {
         const auto bounds = getRowBounds (row);
         const bool selected = row == selectedRow;
@@ -881,6 +899,11 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
             label = "MIDI CHANNEL";
             value = juce::String (midiChannel);
         }
+        else if (row == 5)
+        {
+            label = "AUDIO BUFFER";
+            value = audioBufferNames[audioBufferMode];
+        }
         else
         {
             label = "CARNIVAL";
@@ -903,11 +926,15 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
     g.drawText ("CLOSE", closeBounds, juce::Justification::centred);
 
     g.setColour (juce::Colour (0xff77705f));
-    g.setFont (juce::FontOptions (14.0f));
+    g.setFont (juce::FontOptions (13.0f));
+    juce::String footer = audioStatus.isNotEmpty()
+        ? audioStatus
+        : "AUDIO: waiting for Android output buffer information";
+    footer += "\nY EFFECT: GRANULAR / DREAMY.  CARNIVAL: drum machine mode.";
     g.drawFittedText (
-        "Y EFFECT: GRANULAR / DREAMY.  CARNIVAL: drum machine mode.",
-        72, 552, 420, 52,
-        juce::Justification::topLeft, 2);
+        footer,
+        72, 556, 420, 70,
+        juce::Justification::topLeft, 4);
 }
 
 void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
@@ -931,7 +958,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    for (int row = 0; row < 6; ++row)
+    for (int row = 0; row < 7; ++row)
     {
         const auto bounds = getRowBounds (row);
         if (! bounds.contains (designPoint))
@@ -939,7 +966,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
 
         selectedRow = row;
 
-        if (row == 2 || row == 3 || row == 5)
+        if (row == 2 || row == 3 || row == 6)
         {
             activateSelected();
         }
