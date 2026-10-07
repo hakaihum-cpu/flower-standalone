@@ -11,12 +11,12 @@ CLASSROOM_OUT = ROOT / 'Resources' / 'classroom_frames.pack'
 CLASSROOM_SHA256 = '1e888dbed69e259c52d2cb2bd192faa5c7f29dcf76eafcda9fdb2a2d03f2d658'
 CLASSROOM_SIZE = 4464088
 
-# User-supplied EUREKA videos: four 8-second MP4 sources sampled into a 144-frame CRF1 visual bank.
+# User-supplied EUREKA ZIP: 301.jpg .. 440.jpg, packed without re-encoding.
 EUREKA_CHUNK_DIR = ROOT / 'Resources' / 'eureka_frame_chunks'
 EUREKA_OUT = ROOT / 'Resources' / 'eureka_frames.pack'
-EUREKA_SHA256 = 'b1148971db921fdd3f024b11b1cf1e19243d65f01a7bc13c30ff6fbe8c3ef676'
-EUREKA_SIZE = 1681132
-EUREKA_COUNT = 144
+EUREKA_SHA256 = '2f83c3ef9997926452c20fcdfade60011d930d76fbebb05e291e51db4867e986'
+EUREKA_SIZE = 1534459
+EUREKA_COUNT = 140
 
 # User-selected launcher artwork.
 ICON_B64 = ROOT / 'Resources' / 'effects_app_icon.b64'
