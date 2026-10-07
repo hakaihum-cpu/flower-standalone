@@ -88,6 +88,8 @@ public:
     void sequencerSetTrackPart(int track, int part);
     void sequencerClearTrack(int track);
     void sequencerToggleGridNote(int track, int step, int note, int velocity);
+    void sequencerSetGridNote(int track, int step, int note, int velocityOrZero);
+    void sequencerSetNoteDuration(int track, int noteIndex, int durationTick);
     bool sequencerPlaying() const { return seqPlaying_.load(std::memory_order_relaxed); }
     bool sequencerRecording() const { return seqRecording_.load(std::memory_order_relaxed); }
     bool sequencerClick() const { return seqClick_.load(std::memory_order_relaxed); }
@@ -131,7 +133,8 @@ private:
             DRUM_PARAM, DRUM_FX, PART_FX, PART_MIXER, DRUM_SAMPLE_MIXER,
             FELT_REVERB, PERFORMANCE_XY,
             SEQ_PLAY, SEQ_STOP, SEQ_RECORD, SEQ_CLICK, SEQ_BPM,
-            SEQ_SELECT_TRACK, SEQ_ASSIGN_PART, SEQ_CLEAR_TRACK, SEQ_TOGGLE_GRID
+            SEQ_SELECT_TRACK, SEQ_ASSIGN_PART, SEQ_CLEAR_TRACK, SEQ_TOGGLE_GRID,
+            SEQ_SET_GRID, SEQ_SET_DURATION
         } type;
         int a=0,b=0,c=0,d=0;
     };
@@ -255,6 +258,8 @@ private:
     void seqFinishPendingRecordedNotes();
     void seqAddRecordedNote(int track, int startTick, int durationTick, int note, int velocity);
     void seqToggleGridNoteInternal(int track, int step, int note, int velocity);
+    void seqSetGridNoteInternal(int track, int step, int note, int velocityOrZero);
+    void seqSetNoteDurationInternal(int track, int noteIndex, int durationTick);
     void seqClearTrackInternal(int track);
     void seqStopSoundingNotes();
 
