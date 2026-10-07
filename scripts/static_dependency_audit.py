@@ -197,7 +197,7 @@ for required_visual_ui in [
     "frameImages[index]",
     "visualTileIndex = row * tileColumns + column",
     "frameImages[static_cast<size_t> (visualTileIndex)]",
-    "0, 0, frame.getWidth(), frame.getHeight()",
+    "0, 0, frame->getWidth(), frame->getHeight()",
     "highResamplingQuality",
     "physicalPointerVisible",
     "tileCount = tileColumns * tileRows",
