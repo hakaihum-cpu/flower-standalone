@@ -45,6 +45,8 @@ final class SequencerView extends View {
     private final int[] trackParts = new int[]{0,1,2,3,4,5,6,7};
     private int[] noteData = new int[0];
     private long lastPollMs = 0L;
+    private long lastVisualTimingPollMs = 0L;
+    private float visualLatencyTicks = 0f;
     private int downTarget = -1;
 
     private static final String[] CHORD_NAMES =
@@ -110,7 +112,6 @@ final class SequencerView extends View {
         lastPollMs = now;
         selectedTrack = clamp(NativeEngine.sequencerSelectedTrack(),0,TRACKS-1);
         bpm = clamp(NativeEngine.sequencerBpm(),40,240);
-        playheadTick = clamp(NativeEngine.sequencerPlayheadTick(),0,LOOP_TICKS-1);
         playing = NativeEngine.sequencerIsPlaying();
         recording = NativeEngine.sequencerIsRecording();
         click = NativeEngine.sequencerIsClickOn();
@@ -121,10 +122,34 @@ final class SequencerView extends View {
         noteData = notes == null ? new int[0] : notes;
     }
 
+    private void refreshVisualPlayhead() {
+        if (!playing) {
+            playheadTick = clamp(NativeEngine.sequencerPlayheadTick(),0,LOOP_TICKS-1);
+            return;
+        }
+
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - lastVisualTimingPollMs >= 250L) {
+            lastVisualTimingPollMs = now;
+            int sampleRate = Math.max(1, NativeEngine.audioSampleRate());
+            int bufferFrames = Math.max(0, NativeEngine.audioBufferSizeFrames());
+            visualLatencyTicks = (float)bufferFrames
+                    * (float)bpm * (float)PPQN
+                    / ((float)sampleRate * 60f);
+        }
+
+        float rawTick = NativeEngine.sequencerPlayheadTick();
+        float visualTick = rawTick - visualLatencyTicks;
+        while (visualTick < 0f) visualTick += LOOP_TICKS;
+        while (visualTick >= LOOP_TICKS) visualTick -= LOOP_TICKS;
+        playheadTick = clamp(Math.round(visualTick),0,LOOP_TICKS-1);
+    }
+
     @Override protected void onDraw(Canvas c) {
         super.onDraw(c);
         if (getVisibility() != VISIBLE) return;
         refreshState(false);
+        refreshVisualPlayhead();
 
         final float u = u();
         c.drawColor(Color.rgb(8,8,8));
@@ -136,7 +161,8 @@ final class SequencerView extends View {
         drawFooter(c,u);
         if (resizeMode) drawResizeOverlay(c,u);
 
-        postInvalidateDelayed(50L);
+        if (playing) postInvalidateOnAnimation();
+        else postInvalidateDelayed(80L);
     }
 
     private void drawHeader(Canvas c, float u) {
