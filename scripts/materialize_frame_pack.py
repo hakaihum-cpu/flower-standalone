@@ -11,12 +11,12 @@ CLASSROOM_OUT = ROOT / 'Resources' / 'classroom_frames.pack'
 CLASSROOM_SHA256 = '1e888dbed69e259c52d2cb2bd192faa5c7f29dcf76eafcda9fdb2a2d03f2d658'
 CLASSROOM_SIZE = 4464088
 
-# User-supplied EUREKA ZIP: 301.jpg .. 440.jpg, packed without re-encoding.
+# User-supplied EUREKA videos: four 8-second MP4 sources sampled to 36 JPEG frames each (144 total).
 EUREKA_CHUNK_DIR = ROOT / 'Resources' / 'eureka_frame_chunks'
 EUREKA_OUT = ROOT / 'Resources' / 'eureka_frames.pack'
-EUREKA_SHA256 = '2f83c3ef9997926452c20fcdfade60011d930d76fbebb05e291e51db4867e986'
-EUREKA_SIZE = 1534459
-EUREKA_COUNT = 140
+EUREKA_SHA256 = '827b5aa6a339927cb909a5ffe1b129513d946911cc78ea96d34aa110e6cd1883'
+EUREKA_SIZE = 1872671
+EUREKA_COUNT = 144
 
 # User-selected launcher artwork.
 ICON_B64 = ROOT / 'Resources' / 'effects_app_icon.b64'
@@ -58,9 +58,9 @@ validate_crf1(classroom, 300, 'classroom frame pack')
 CLASSROOM_OUT.write_bytes(classroom)
 
 eureka_parts = sorted(EUREKA_CHUNK_DIR.glob('*.b64'))
-if len(eureka_parts) != 18:
+if len(eureka_parts) != 21:
     raise SystemExit(
-        f'[FAIL] expected 18 EUREKA frame chunks, got {len(eureka_parts)}')
+        f'[FAIL] expected 21 EUREKA frame chunks, got {len(eureka_parts)}')
 eureka = decode_chunks(eureka_parts)
 if len(eureka) != EUREKA_SIZE:
     raise SystemExit(
