@@ -343,31 +343,90 @@ final class SequencerView extends View {
     @Override public boolean onTouchEvent(MotionEvent e) {
         if (getVisibility() != VISIBLE) return false;
         int action = e.getActionMasked();
+
         if (action == MotionEvent.ACTION_DOWN) {
-            downTarget = targetAt(e.getX(),e.getY());
-            return downTarget >= 0 || rollRect(u()).contains(e.getX(),e.getY());
+            touchDownX = e.getX();
+            touchDownY = e.getY();
+            touchMoved = false;
+            resizeMode = false;
+            resizeNoteIndex = -1;
+            downTarget = targetAt(touchDownX,touchDownY);
+            pressedNoteIndex = -1;
+
+            if (downTarget >= 0) return true;
+
+            RectF roll = rollRect(u());
+            if (roll.contains(touchDownX,touchDownY)) {
+                pressedNoteIndex = findNoteAt(touchDownX,touchDownY);
+                if (pressedNoteIndex >= 0 && !recording) {
+                    postDelayed(noteLongPress, 460L);
+                }
+                return true;
+            }
+            return false;
         }
-        if (action == MotionEvent.ACTION_CANCEL) {
-            downTarget = -1;
+
+        if (action == MotionEvent.ACTION_MOVE) {
+            if (resizeMode) {
+                updateResizeFromX(e.getX());
+                return true;
+            }
+            float dx = e.getX() - touchDownX;
+            float dy = e.getY() - touchDownY;
+            if (dx*dx + dy*dy > (12f*u())*(12f*u())) {
+                touchMoved = true;
+                removeCallbacks(noteLongPress);
+            }
             return true;
         }
+
+        if (action == MotionEvent.ACTION_CANCEL) {
+            removeCallbacks(noteLongPress);
+            downTarget = -1;
+            pressedNoteIndex = -1;
+            resizeMode = false;
+            resizeNoteIndex = -1;
+            return true;
+        }
+
         if (action != MotionEvent.ACTION_UP) return true;
+        removeCallbacks(noteLongPress);
+
+        if (resizeMode) {
+            NativeEngine.sequencerSetNoteDuration(
+                    selectedTrack, resizeNoteIndex, resizePreviewDuration);
+            resizeMode = false;
+            resizeNoteIndex = -1;
+            pressedNoteIndex = -1;
+            refreshState(true);
+            invalidate();
+            performClick();
+            return true;
+        }
 
         int target = targetAt(e.getX(),e.getY());
         if (target >= 0 && target == downTarget) {
             activateTarget(target);
             downTarget = -1;
+            pressedNoteIndex = -1;
             performClick();
             return true;
         }
 
         RectF roll = rollRect(u());
-        if (downTarget < 0 && roll.contains(e.getX(),e.getY())) {
-            toggleGridAt(e.getX(),e.getY());
+        if (downTarget < 0 && !touchMoved && roll.contains(e.getX(),e.getY())) {
+            if (pressedNoteIndex >= 0) {
+                removeExistingNote(pressedNoteIndex);
+            } else {
+                toggleGridAt(e.getX(),e.getY());
+            }
+            pressedNoteIndex = -1;
             performClick();
             return true;
         }
+
         downTarget = -1;
+        pressedNoteIndex = -1;
         return true;
     }
 
