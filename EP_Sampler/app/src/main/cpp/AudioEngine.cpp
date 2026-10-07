@@ -1150,6 +1150,11 @@ void AudioEngine::seqSetGridNoteInternal(
 
     if (velocityOrZero <= 0) {
         if (found < 0) return;
+        if (seqPlaying_.load(std::memory_order_relaxed)) {
+            handlePartNoteOff(
+                    sequencerTrackPart(track),
+                    seqNotes_[track][found].note.load(std::memory_order_relaxed));
+        }
         for (int j=found; j<count-1; ++j) {
             seqNotes_[track][j].startTick.store(
                     seqNotes_[track][j+1].startTick.load(std::memory_order_relaxed),
@@ -1183,6 +1188,11 @@ void AudioEngine::seqSetNoteDurationInternal(
             seqNoteCount_[track].load(std::memory_order_acquire),
             0, SEQ_MAX_NOTES_PER_TRACK);
     if (noteIndex < 0 || noteIndex >= count) return;
+    if (seqPlaying_.load(std::memory_order_relaxed)) {
+        handlePartNoteOff(
+                sequencerTrackPart(track),
+                seqNotes_[track][noteIndex].note.load(std::memory_order_relaxed));
+    }
     seqNotes_[track][noteIndex].durationTick.store(
             std::clamp(durationTick,1,SEQ_LOOP_TICKS-1),
             std::memory_order_relaxed);
@@ -1194,6 +1204,11 @@ void AudioEngine::seqDeleteNoteInternal(int track, int noteIndex) {
             seqNoteCount_[track].load(std::memory_order_acquire),
             0, SEQ_MAX_NOTES_PER_TRACK);
     if (noteIndex < 0 || noteIndex >= count) return;
+    if (seqPlaying_.load(std::memory_order_relaxed)) {
+        handlePartNoteOff(
+                sequencerTrackPart(track),
+                seqNotes_[track][noteIndex].note.load(std::memory_order_relaxed));
+    }
     for (int j=noteIndex; j<count-1; ++j) {
         seqNotes_[track][j].startTick.store(
                 seqNotes_[track][j+1].startTick.load(std::memory_order_relaxed),
