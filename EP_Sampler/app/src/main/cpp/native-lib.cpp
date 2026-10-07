@@ -99,6 +99,14 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequen
         JNIEnv*,jclass,jint track,jint step,jint note,jint velocity){
     AudioEngine::instance().sequencerToggleGridNote(track,step,note,velocity);
 }
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerSetGridNote(
+        JNIEnv*,jclass,jint track,jint step,jint note,jint velocityOrZero){
+    AudioEngine::instance().sequencerSetGridNote(track,step,note,velocityOrZero);
+}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerSetNoteDuration(
+        JNIEnv*,jclass,jint track,jint noteIndex,jint durationTick){
+    AudioEngine::instance().sequencerSetNoteDuration(track,noteIndex,durationTick);
+}
 extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_sequencerIsPlaying(JNIEnv*,jclass){
     return AudioEngine::instance().sequencerPlaying() ? JNI_TRUE : JNI_FALSE;
 }
