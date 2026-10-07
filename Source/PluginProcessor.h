@@ -59,6 +59,9 @@ public:
     bool saveMidiControllerPreset (int slot);
     bool loadMidiControllerPreset (int slot);
     bool hasMidiControllerPreset (int slot) const;
+    bool saveUserPreset();
+    bool loadUserPreset();
+    bool hasUserPreset() const;
     void toggleMotionRecord() noexcept { motionCommand.store (1, std::memory_order_release); }
     void clearMotion() noexcept { motionCommand.store (2, std::memory_order_release); }
     int getMotionState() const noexcept { return motionState.load (std::memory_order_relaxed); }
@@ -120,6 +123,7 @@ private:
     std::atomic<bool> hazeClearRequested { false };
     std::atomic<bool> hazeShuffleRequested { false };
     juce::Reverb chordReverb;
+    juce::AudioBuffer<float> wetDryScratch;
 
     double currentSampleRate = 48000.0;
     std::atomic<bool> running { false };
