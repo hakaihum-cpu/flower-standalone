@@ -107,6 +107,10 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequen
         JNIEnv*,jclass,jint track,jint noteIndex,jint durationTick){
     AudioEngine::instance().sequencerSetNoteDuration(track,noteIndex,durationTick);
 }
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerDeleteNote(
+        JNIEnv*,jclass,jint track,jint noteIndex){
+    AudioEngine::instance().sequencerDeleteNote(track,noteIndex);
+}
 extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_sequencerIsPlaying(JNIEnv*,jclass){
     return AudioEngine::instance().sequencerPlaying() ? JNI_TRUE : JNI_FALSE;
 }
