@@ -276,6 +276,9 @@ if "juce::KeyPress::F14Key" not in config_block or "configScreen.activateSelecte
 if "juce::KeyPress::F13Key" in config_block:
     fail("CONFIG confirm must not remain on A/F13")
 
+if "processor.getDefaultEffectsEnabled());" in editor_text:
+    fail("legacy 3-argument ConfigScreenComponent::setValues call remains")
+
 for required_android_startup in [
     "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
     "juce::StandalonePluginHolder::getInstance()",
