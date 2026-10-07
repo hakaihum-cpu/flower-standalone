@@ -639,7 +639,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         applyOutputSafety (buffer, outputActive);
     }
 
-    // Global WET. CHORDBOT is MIDI-only, so its audio path is left untouched.
+    // Global WET. MIDI-only mode 3 keeps its audio path untouched.
     if (effectMode != 3)
     {
         const float wet = juce::jlimit (
