@@ -86,6 +86,7 @@ public:
     bool getDefaultEffectsEnabled() const noexcept;
     bool getConfiguredYEffectDreamy() const noexcept;
     int getConfiguredMidiChannel() const noexcept;
+    int getAudioBufferMode() const noexcept;
     float getPerformanceX() const noexcept { return performanceX.load (std::memory_order_relaxed); }
     float getPerformanceY() const noexcept { return performanceY.load (std::memory_order_relaxed); }
     float getPerformanceBpm() const noexcept { return performanceBpm.load (std::memory_order_relaxed); }
@@ -98,6 +99,7 @@ public:
     void setDefaultEffectsEnabled (bool enabled);
     void setConfiguredYEffectDreamy (bool enabled);
     void setConfiguredMidiChannel (int channel);
+    void setAudioBufferMode (int mode);
 
     void setCarnivalEnabled (bool enabled) noexcept;
     bool isCarnivalEnabled() const noexcept
