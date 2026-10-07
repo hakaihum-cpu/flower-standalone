@@ -129,6 +129,11 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     }
     chordReverb.reset();
 
+    wetDryScratch.setSize (
+        juce::jmax (2, getTotalNumOutputChannels()),
+        juce::jmax (1, block), false, true, false);
+    wetDryScratch.clear();
+
     inputPeakRaw.store (0.0f, std::memory_order_relaxed);
     inputRmsRaw.store (0.0f, std::memory_order_relaxed);
     inputNonZeroRatio.store (0.0f, std::memory_order_relaxed);
@@ -412,6 +417,16 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     const int n = buffer.getNumSamples();
     const int availableInputChannels =
         juce::jmax (1, juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels()));
+
+    if (wetDryScratch.getNumChannels() < buffer.getNumChannels()
+        || wetDryScratch.getNumSamples() < n)
+    {
+        wetDryScratch.setSize (
+            buffer.getNumChannels(), n, true, true, false);
+    }
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        wetDryScratch.copyFrom (ch, 0, buffer, ch, 0, n);
+
     const bool midiClockMode =
         apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
     const int effectMode = juce::jlimit (0, 3, juce::roundToInt (
@@ -622,6 +637,34 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             running.load (std::memory_order_relaxed)
             && (effectMode == 1 || (haveChord && chordMidiGateOpen));
         applyOutputSafety (buffer, outputActive);
+    }
+
+    // Global WET. CHORDBOT is MIDI-only, so its audio path is left untouched.
+    if (effectMode != 3)
+    {
+        const float wet = juce::jlimit (
+            0.0f, 1.0f,
+            apvts.getRawParameterValue (ParamID::wet)->load());
+
+        if (wet < 0.9999f)
+        {
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            {
+                auto* out = buffer.getWritePointer (ch);
+                const auto* dry = wetDryScratch.getReadPointer (ch);
+                for (int i = 0; i < n; ++i)
+                    out[i] = dry[i] + (out[i] - dry[i]) * wet;
+            }
+        }
+
+        const float boostDb = juce::jlimit (
+            0.0f, 14.0f,
+            apvts.getRawParameterValue (ParamID::boostDb)->load());
+        if (boostDb > 0.001f)
+        {
+            buffer.applyGain (juce::Decibels::decibelsToGain (boostDb));
+            softProtectBuffer (buffer);
+        }
     }
 }
 
@@ -1537,6 +1580,48 @@ bool RealtimeChordFxAudioProcessor::hasMidiControllerPreset (int slot) const
         && apvts.state.getProperty ("midiControllerPreset" + juce::String (slot)).toString().isNotEmpty();
 }
 
+bool RealtimeChordFxAudioProcessor::saveUserPreset()
+{
+    auto snapshot = apvts.copyState();
+    snapshot.removeProperty ("userPresetXml", nullptr);
+
+    if (auto xml = snapshot.createXml())
+    {
+        apvts.state.setProperty ("userPresetXml", xml->toString(), nullptr);
+        return true;
+    }
+
+    return false;
+}
+
+bool RealtimeChordFxAudioProcessor::loadUserPreset()
+{
+    const auto stored = apvts.state.getProperty ("userPresetXml").toString();
+    if (stored.isEmpty())
+        return false;
+
+    auto xml = juce::XmlDocument::parse (stored);
+    if (xml == nullptr || ! xml->hasTagName (apvts.state.getType()))
+        return false;
+
+    auto restored = juce::ValueTree::fromXml (*xml);
+    if (! restored.isValid())
+        return false;
+
+    restored.setProperty ("userPresetXml", stored, nullptr);
+    apvts.replaceState (restored);
+    loadChordBotLayout();
+    notifyMidiControllerConfigChanged();
+    chordAHoldRefreshRequested.store (true, std::memory_order_release);
+    return true;
+}
+
+bool RealtimeChordFxAudioProcessor::hasUserPreset() const
+{
+    return apvts.state.hasProperty ("userPresetXml")
+        && apvts.state.getProperty ("userPresetXml").toString().isNotEmpty();
+}
+
 juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcessor::createParameterLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout p;
@@ -1550,6 +1635,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::length, "LENGTH", 0.0f, 1.0f, 0.70f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hold, "HOLD", 0.0f, 1.0f, 0.0f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::effect, "EFFECT", 0.0f, 1.0f, 0.0f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::wet, "WET", 0.0f, 1.0f, 1.0f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (
+        ParamID::boostDb, "BOOST",
+        juce::NormalisableRange<float> (0.0f, 14.0f, 0.5f), 0.0f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeMix, "HAZE MIX", 0.0f, 1.0f, 0.55f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeTime, "HAZE TIME", 0.0f, 1.0f, 0.50f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeAmount, "HAZE AMOUNT", 0.0f, 1.0f, 0.50f));
