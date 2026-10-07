@@ -84,6 +84,7 @@ public final class NativeEngine {
     public static native void sequencerToggleGridNote(int track, int step, int note, int velocity);
     public static native void sequencerSetGridNote(int track, int step, int note, int velocityOrZero);
     public static native void sequencerSetNoteDuration(int track, int noteIndex, int durationTick);
+    public static native void sequencerDeleteNote(int track, int noteIndex);
     public static native boolean sequencerIsPlaying();
     public static native boolean sequencerIsRecording();
     public static native boolean sequencerIsClickOn();
