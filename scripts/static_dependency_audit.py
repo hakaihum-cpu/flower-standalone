@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,10 +20,13 @@ REQUIRED = [
     "Source/PluginEditor.h",
     "Source/PluginEditor.cpp",
     "Source/FlowerFrameData.h",
+    "Source/FramePack.h",
+    "Source/FramePack.cpp",
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_juce_android_gamepad_keys.py",
+    "scripts/materialize_flower_video_pack.py",
 ]
 
 FORBIDDEN_SOURCE_TOKENS = [
@@ -91,7 +95,9 @@ for required_ref in [
     "Source/SynthVoice.cpp",
     "Source/RetroLookAndFeel.cpp",
     "Source/PluginProcessor.cpp",
+    "Source/FramePack.cpp",
     "Source/PluginEditor.cpp",
+    "Resources/flower_video_frames.pack",
 ]:
     if required_ref not in jucer_text:
         fail(f"JUCER reference missing: {required_ref}")
@@ -111,9 +117,14 @@ for required_ci in [
     "ActiveProcessorCount=2",
     "--max-workers=2",
     "native-job-pools.txt",
+    "ndk;28.1.13356709",
+    'ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.1.13356709"',
 ]:
     if required_ci not in circle:
-        fail(f"CircleCI native parallelism control missing: {required_ci}")
+        fail(f"CircleCI build contract missing: {required_ci}")
+
+if '"ndk;26.1.10909125"' in circle:
+    fail("stale CircleCI NDK 26.1 install reference reintroduced")
 
 patcher = (ROOT / "scripts/patch_android_native_parallelism.py").read_text(encoding="utf-8")
 for required_patcher in [
@@ -161,6 +172,14 @@ for forbidden_old_visual in [
 
 frame_data_text = (ROOT / "Source/FlowerFrameData.h").read_text(encoding="utf-8")
 
+video_pack = (ROOT / "Resources/flower_video_frames.pack").read_bytes()
+if len(video_pack) != 1872671:
+    fail(f"FLOWER video frame pack size mismatch: {len(video_pack)}")
+if hashlib.sha256(video_pack).hexdigest() != "827b5aa6a339927cb909a5ffe1b129513d946911cc78ea96d34aa110e6cd1883":
+    fail("FLOWER video frame pack sha256 mismatch")
+if video_pack[:4] != b"CRF1" or int.from_bytes(video_pack[4:8], "little") != 144:
+    fail("FLOWER video frame pack contract mismatch")
+
 for required_frame_data in [
     "frameCount = 100",
     "decodedPayloadSize = 1138410",
@@ -189,6 +208,12 @@ for required_visual_ui in [
     "tileCount = tileColumns * tileRows",
     "static_assert (tileCount == 100",
     "onTapStopRequested",
+    '#include "FramePack.h"',
+    "BinaryData::flower_video_frames_pack",
+    "videoFrames.getFrameCount()",
+    "chooseNextMixedVisual",
+    "visualCooldown = 4",
+    "currentMixedVisual",
 ]:
     if required_visual_ui not in editor_text and required_visual_ui not in editor_header:
         fail(f"XY direct-frame visual contract missing: {required_visual_ui}")
@@ -230,10 +255,31 @@ for required_xy_ui in [
     "toggleArp",
     "toggleDelay",
     "toggleGranular",
+    "onAudioBufferChanged",
+    "getAndroidOutputFramesPerBuffer",
+    "android.media.property.OUTPUT_FRAMES_PER_BUFFER",
+    "setAudioDeviceSetup",
+    "audioBufferBursts",
+    "makeAudioBufferStatus",
 ]:
     if required_xy_ui not in editor_text and required_xy_ui not in editor_header:
         fail(f"XY fullscreen/physical-key contract missing: {required_xy_ui}")
 
+
+for required_current_ui in [
+    "CarnivalScreenComponent",
+    "onCarnivalRequested",
+    'label = "Y EFFECT"',
+    'label = "MIDI CHANNEL"',
+    'label = "CARNIVAL"',
+    'label = "AUDIO BUFFER"',
+    'activeEffects.add ("DELAY")',
+    'activeEffects.add (dreamyIndicatorMode ? "DRM" : "GRN")',
+    'activeEffects.add ("ARP")',
+    '"BPM"',
+]:
+    if required_current_ui not in editor_text and required_current_ui not in editor_header:
+        fail(f"current Flower UI/CARNIVAL contract missing: {required_current_ui}")
 
 key_pressed_start = editor_text.find("bool FlowerStandaloneAudioProcessorEditor::keyPressed")
 config_block_start = editor_text.find("if (configVisible)", key_pressed_start)
@@ -246,6 +292,40 @@ if "juce::KeyPress::F14Key" not in config_block or "configScreen.activateSelecte
     fail("CONFIG confirm must be B/F14")
 if "juce::KeyPress::F13Key" in config_block:
     fail("CONFIG confirm must not remain on A/F13")
+
+def count_call_args(text: str, token: str) -> list[int]:
+    counts = []
+    pos = 0
+    while True:
+        pos = text.find(token, pos)
+        if pos < 0:
+            break
+        start = text.find("(", pos + len(token))
+        if start < 0:
+            fail(f"malformed call: {token}")
+        depth = 0
+        commas = 0
+        end = -1
+        for i in range(start, len(text)):
+            ch = text[i]
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+            elif ch == "," and depth == 1:
+                commas += 1
+        if end < 0:
+            fail(f"unterminated call: {token}")
+        counts.append(commas + 1)
+        pos = end + 1
+    return counts
+
+set_values_arg_counts = count_call_args(editor_text, "configScreen.setValues")
+if not set_values_arg_counts or any(count != 7 for count in set_values_arg_counts):
+    fail(f"ConfigScreenComponent::setValues call arity mismatch: {set_values_arg_counts}")
 
 for required_android_startup in [
     "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
@@ -312,6 +392,8 @@ print("[PASS] Flower XY standalone static dependency audit")
 print("[PASS] obsolete contact-sheet resource excluded from generated target")
 print("[PASS] Android fullscreen editor follows actual logical bounds (physical panel no longer clipped)")
 print("[PASS] exact 100 user-cut JPEG frame bank embedded")
+print("[PASS] EFFECTS four-video bank retained as 144 sampled JPEG frames")
+print("[PASS] still/video mixed random visual cadence present (~133 ms)")
 print("[PASS] runtime does not use the old contact sheet")
 print("[PASS] selected pre-cut JPEG is loaded as an independent frame")
 print("[PASS] source frame is drawn in full with no coordinate crop")
@@ -325,5 +407,8 @@ print("[PASS] X looper transport REC->STOP->OVERDUB and long-clear contract pres
 print("[PASS] L/R BPM hold-repeat contract present (max 200 BPM)")
 print("[PASS] Android physical-key down/up bridge patch present")
 print("[PASS] Android standalone startup safeguards present")
+print("[PASS] current CARNIVAL/Y EFFECT/MIDI/effect legend/BPM UI retained")
+print("[PASS] Android output-buffer burst control/status contract present")
+print("[PASS] all CONFIG setValues call sites use the 7-argument current signature")
 print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
 print("[PASS] CircleCI native parallelism controls present")
