@@ -1295,7 +1295,8 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
         scaleIndex = static_cast<int> (ch - '1');
         processor.setConfiguredScale (scaleIndex);
         configScreen.setValues (rootClass, scaleIndex,
-                                processor.getDefaultEffectsEnabled());
+                                processor.getDefaultEffectsEnabled(),
+                                audioBufferMode, makeAudioBufferStatus());
         return true;
     }
 
