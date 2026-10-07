@@ -1601,7 +1601,8 @@ bool RealtimeChordFxAudioProcessor::loadUserPreset()
         return false;
 
     auto xml = juce::XmlDocument::parse (stored);
-    if (xml == nullptr || ! xml->hasTagName (apvts.state.getType()))
+    if (xml == nullptr
+        || ! xml->hasTagName (apvts.state.getType().toString()))
         return false;
 
     auto restored = juce::ValueTree::fromXml (*xml);
