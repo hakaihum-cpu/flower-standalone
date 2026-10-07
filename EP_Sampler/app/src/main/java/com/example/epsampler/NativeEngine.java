@@ -64,6 +64,7 @@ public final class NativeEngine {
     public static native int audioBufferSizeFrames();
     public static native int audioBufferCapacityFrames();
     public static native int audioXRunCount();
+    public static native int audioSampleRate();
     public static native float partMeter(int part);
     public static native boolean loadDrumSample(int slot, byte[] wavBytes);
     public static native void noteOnPart(int part, int note, int velocity);
