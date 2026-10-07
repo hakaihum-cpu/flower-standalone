@@ -1555,6 +1555,17 @@ void AudioEngine::render(float* out,int32_t frames) {
     std::array<float,PART_COUNT> callbackPeak{};
 
     for (int32_t i=0; i<frames; ++i) {
+        if (seqPlaying_.load(std::memory_order_relaxed)) {
+            const int tick = std::clamp(
+                    int(std::floor(seqTickPhase_)),
+                    0, SEQ_LOOP_TICKS-1);
+            if (tick != seqLastProcessedTick_) {
+                seqProcessTick(tick);
+                seqLastProcessedTick_ = tick;
+                seqCurrentTick_.store(tick,std::memory_order_relaxed);
+            }
+        }
+
         float mixL = 0.0f;
         float mixR = 0.0f;
         int activeParts = 0;
@@ -1666,8 +1677,23 @@ void AudioEngine::render(float* out,int32_t frames) {
         float mixedL = baseL;
         float mixedR = baseR;
         recorder_.process(baseL, baseR, mixedL, mixedR);
+
+        // Monitoring click is deliberately after IntegratedRecorder, so click
+        // does not contaminate recorder slots or instrument FX.
+        seqRenderClick(mixedL,mixedR);
+
         out[i*2] = std::clamp(mixedL, -1.0f, 1.0f);
         out[i*2+1] = std::clamp(mixedR, -1.0f, 1.0f);
+
+        if (seqPlaying_.load(std::memory_order_relaxed)) {
+            const double ticksPerSample =
+                    double(seqBpm_.load(std::memory_order_relaxed)) *
+                    double(SEQ_PPQN) /
+                    (double(std::max(1,sampleRate_)) * 60.0);
+            seqTickPhase_ += ticksPerSample;
+            while (seqTickPhase_ >= double(SEQ_LOOP_TICKS))
+                seqTickPhase_ -= double(SEQ_LOOP_TICKS);
+        }
     }
 
     // Real per-part peak meters. Hold short transients and decay smoothly.
