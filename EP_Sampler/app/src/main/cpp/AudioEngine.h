@@ -56,6 +56,11 @@ public:
     void setPartMixer(int part, int volume, int pan, bool muted);
     void setFeltReverb(int mix, int decay);
     void setPerformanceXY(bool active, int part, int x, int y);
+    int setAudioOutputDevice(int deviceId);
+    int audioDeviceId() const;
+    int audioSampleRate() const;
+    std::string audioPerformanceModeName() const;
+    std::string audioSharingModeName() const;
     int setAudioBufferBursts(float bursts);
     int audioFramesPerBurst() const;
     int audioBufferSizeFrames() const;
@@ -225,9 +230,12 @@ private:
     mutable std::array<std::mutex,SAMPLE_BANK_COUNT> epBankLoadMutex_{};
 
     AAudioStream* stream_=nullptr;
+    int preferredOutputDeviceId_=AAUDIO_UNSPECIFIED;
     int sampleRate_=48000;
     int defaultBufferSizeFrames_=0;
     float requestedBufferBursts_=0.0f;
+
+    aaudio_result_t openOutputStream(int deviceId, AAudioStream** outStream);
 
     const SampleBank& epBankForVoice(const EpVoice& v) const;
     const SampleBank& epActiveBank(int slot) const;

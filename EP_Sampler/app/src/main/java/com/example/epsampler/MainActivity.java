@@ -3,6 +3,8 @@ package com.example.epsampler;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
@@ -25,6 +27,8 @@ import android.widget.Toast;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 
 public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener, PerformanceXYView.Listener, MixerView.Listener, SoundDesignView.Listener {
@@ -68,6 +72,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_FELT_REVERB_MIX = "felt_reverb_mix";
     private static final String KEY_FELT_REVERB_DECAY = "felt_reverb_decay";
     private static final String KEY_AUDIO_BUFFER_BURSTS = "audio_buffer_bursts";
+    private static final String KEY_AUDIO_OUTPUT = "audio_output";
     private static final String KEY_MIX_VOL_PREFIX = "mix_vol_";
     private static final String KEY_MIX_PAN_PREFIX = "mix_pan_";
     private static final String KEY_MIX_MUTE_PREFIX = "mix_mute_";
@@ -196,6 +201,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int feltReverbMix = 28;
     private int feltReverbDecay = 58;
     private float audioBufferBursts = 0f;
+    private String audioOutputKey = "DEFAULT";
     private final int[] partMixerVolume = new int[]{
             112,112,112,112,112,112,112,112,
             127,127,127,127,127,127,127,127
@@ -322,6 +328,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         feltReverbDecay = Math.max(0, Math.min(100,
                 drumPrefs.getInt(KEY_FELT_REVERB_DECAY, 58)));
         audioBufferBursts = drumPrefs.getFloat(KEY_AUDIO_BUFFER_BURSTS, 0f);
+        audioOutputKey = drumPrefs.getString(KEY_AUDIO_OUTPUT, "DEFAULT");
+        if (audioOutputKey == null || audioOutputKey.isEmpty()) audioOutputKey = "DEFAULT";
         for (int i=0; i<drumParameters.length; i++) {
             int fallback = drumParameters[i];
             if (i == 0) fallback = drumPrefs.getInt(KEY_DRUM_KICK_TUNE, fallback);
@@ -352,6 +360,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         if (instrumentMode < 8) videoLayer.setInstrument(instrumentMode);
 
         loadDrumSampleAssets();
+        NativeEngine.setAudioOutputDevice(resolveAudioOutputDeviceId(audioOutputKey));
         NativeEngine.start();
         loadExistingBanks();
         NativeEngine.setAudioBufferBursts(audioBufferBursts);
@@ -892,6 +901,79 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 .show();
     }
 
+    private static final class AudioOutputChoice {
+        final int deviceId;
+        final String key;
+        final String label;
+
+        AudioOutputChoice(int deviceId, String key, String label) {
+            this.deviceId = deviceId;
+            this.key = key;
+            this.label = label;
+        }
+    }
+
+    private String audioDeviceTypeName(int type) {
+        switch (type) {
+            case AudioDeviceInfo.TYPE_BUILTIN_SPEAKER: return "SPEAKER";
+            case AudioDeviceInfo.TYPE_WIRED_HEADSET: return "WIRED HEADSET";
+            case AudioDeviceInfo.TYPE_WIRED_HEADPHONES: return "WIRED HEADPHONES";
+            case AudioDeviceInfo.TYPE_BLUETOOTH_A2DP: return "BLUETOOTH";
+            case AudioDeviceInfo.TYPE_USB_DEVICE: return "USB";
+            case AudioDeviceInfo.TYPE_USB_ACCESSORY: return "USB ACCESSORY";
+            case AudioDeviceInfo.TYPE_USB_HEADSET: return "USB HEADSET";
+            case AudioDeviceInfo.TYPE_HDMI: return "HDMI";
+            default: return "TYPE " + type;
+        }
+    }
+
+    private String audioOutputDeviceKey(AudioDeviceInfo info) {
+        String product = info.getProductName() == null ? "" : info.getProductName().toString();
+        String address = info.getAddress() == null ? "" : info.getAddress();
+        return info.getType() + "|" + product + "|" + address;
+    }
+
+    private List<AudioOutputChoice> audioOutputChoices() {
+        List<AudioOutputChoice> result = new ArrayList<>();
+        result.add(new AudioOutputChoice(0, "DEFAULT", "ANDROID DEFAULT"));
+
+        AudioManager manager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (manager == null) return result;
+
+        for (AudioDeviceInfo info : manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+            if (info == null || !info.isSink()) continue;
+            String product = info.getProductName() == null
+                    ? "AUDIO DEVICE" : info.getProductName().toString();
+            String label = product + " / " + audioDeviceTypeName(info.getType());
+            result.add(new AudioOutputChoice(
+                    info.getId(), audioOutputDeviceKey(info), label));
+        }
+        return result;
+    }
+
+    private int audioOutputSelection(List<AudioOutputChoice> choices, String key) {
+        if (key == null) return 0;
+        for (int i=0; i<choices.size(); i++) {
+            if (key.equals(choices.get(i).key)) return i;
+        }
+        return 0;
+    }
+
+    private int resolveAudioOutputDeviceId(String key) {
+        if (key == null || "DEFAULT".equals(key)) return 0;
+        List<AudioOutputChoice> choices = audioOutputChoices();
+        int index = audioOutputSelection(choices, key);
+        return index > 0 ? choices.get(index).deviceId : 0;
+    }
+
+    private String actualAudioOutputLabel(int deviceId) {
+        if (deviceId <= 0) return "ANDROID DEFAULT";
+        for (AudioOutputChoice choice : audioOutputChoices()) {
+            if (choice.deviceId == deviceId) return choice.label;
+        }
+        return "DEVICE ID " + deviceId;
+    }
+
     private int audioBufferSelection(float value) {
         int best = 0;
         float bestDiff = Float.MAX_VALUE;
@@ -903,6 +985,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     private String audioBufferStats(int lastResult) {
+        int deviceId = NativeEngine.audioDeviceId();
+        int sampleRate = NativeEngine.audioSampleRate();
         int fpb = NativeEngine.audioFramesPerBurst();
         int frames = NativeEngine.audioBufferSizeFrames();
         int capacity = NativeEngine.audioBufferCapacityFrames();
@@ -911,7 +995,12 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 ? String.format(java.util.Locale.US, "%.2f", frames / (float) fpb)
                 : "N/A";
         String result = lastResult < 0 ? "\nRequest result: " + lastResult : "";
-        return "Frames per burst: " + fpb +
+        return "Actual output: " + actualAudioOutputLabel(deviceId) +
+                "\nDevice ID: " + deviceId +
+                "\nPerformance: " + NativeEngine.audioPerformanceModeName() +
+                "\nSharing: " + NativeEngine.audioSharingModeName() +
+                "\nSample rate: " + sampleRate + " Hz" +
+                "\nFrames per burst: " + fpb +
                 "\nActual buffer: " + frames + " frames" +
                 "\nActual bursts: " + actual +
                 "\nCapacity: " + capacity + " frames" +
@@ -920,6 +1009,21 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
     private void showConfigDialog() {
         LinearLayout root = dialogRoot();
+
+        TextView outputLabel = new TextView(this);
+        outputLabel.setText("AUDIO OUTPUT");
+        outputLabel.setTextSize(16f);
+        root.addView(outputLabel);
+
+        final List<AudioOutputChoice> outputChoices = audioOutputChoices();
+        String[] outputLabels = new String[outputChoices.size()];
+        for (int i=0; i<outputChoices.size(); i++) outputLabels[i] = outputChoices.get(i).label;
+
+        Spinner outputSpinner = new Spinner(this);
+        outputSpinner.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, outputLabels));
+        outputSpinner.setSelection(audioOutputSelection(outputChoices, audioOutputKey));
+        root.addView(outputSpinner);
 
         TextView audioLabel = new TextView(this);
         audioLabel.setText("AUDIO BUFFER");
@@ -1049,6 +1153,20 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         final AlertDialog[] holder = new AlertDialog[1];
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("CONFIG").setView(scrollDialogView(root))
                 .setPositiveButton("APPLY", (d, which) -> {
+                    int oi = Math.max(0, Math.min(outputChoices.size() - 1,
+                            outputSpinner.getSelectedItemPosition()));
+                    AudioOutputChoice selectedOutput = outputChoices.get(oi);
+                    if (!selectedOutput.key.equals(audioOutputKey)) {
+                        int outputResult = NativeEngine.setAudioOutputDevice(selectedOutput.deviceId);
+                        if (outputResult >= 0) {
+                            audioOutputKey = selectedOutput.key;
+                        } else {
+                            Toast.makeText(this,
+                                    "AUDIO OUTPUT CHANGE FAILED (" + outputResult + ")",
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    }
+
                     int ai = Math.max(0, Math.min(AUDIO_BUFFER_VALUES.length - 1,
                             audioSpinner.getSelectedItemPosition()));
                     audioBufferBursts = AUDIO_BUFFER_VALUES[ai];
@@ -1071,6 +1189,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                             .putFloat(KEY_AUDIO_BUFFER_BURSTS, audioBufferBursts)
+                            .putString(KEY_AUDIO_OUTPUT, audioOutputKey)
                             .putInt(KEY_PART_MIDI_PREFIX + selectedPart, partMidiChannels[selectedPart])
                             .putBoolean(KEY_MANUAL_SUSTAIN, manualSustain).apply();
                 })

@@ -57,6 +57,11 @@ public final class NativeEngine {
     public static native void setPartMixer(int part, int volume, int pan, boolean muted);
     public static native void setFeltReverb(int mix, int decay);
     public static native void setPerformanceXY(boolean active, int part, int x, int y);
+    public static native int setAudioOutputDevice(int deviceId);
+    public static native int audioDeviceId();
+    public static native int audioSampleRate();
+    public static native String audioPerformanceModeName();
+    public static native String audioSharingModeName();
     public static native int setAudioBufferBursts(float bursts);
     public static native int audioFramesPerBurst();
     public static native int audioBufferSizeFrames();

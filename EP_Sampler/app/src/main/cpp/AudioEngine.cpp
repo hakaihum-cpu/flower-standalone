@@ -242,25 +242,57 @@ void AudioEngine::processDrumSamples(float& left, float& right) {
     }
 }
 
-bool AudioEngine::start() {
-    if (stream_) return true;
+aaudio_result_t AudioEngine::openOutputStream(int deviceId, AAudioStream** outStream) {
+    if (!outStream) return AAUDIO_ERROR_NULL;
+    *outStream = nullptr;
 
-    AAudioStreamBuilder* b=nullptr;
-    if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) return false;
+    AAudioStreamBuilder* b = nullptr;
+    aaudio_result_t r = AAudio_createStreamBuilder(&b);
+    if (r != AAUDIO_OK || !b) return r != AAUDIO_OK ? r : AAUDIO_ERROR_INTERNAL;
+
     AAudioStreamBuilder_setDirection(b, AAUDIO_DIRECTION_OUTPUT);
     AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT);
     AAudioStreamBuilder_setChannelCount(b, 2);
     AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
     AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_EXCLUSIVE);
+    if (deviceId != AAUDIO_UNSPECIFIED) {
+        AAudioStreamBuilder_setDeviceId(b, deviceId);
+    }
     AAudioStreamBuilder_setDataCallback(b, dataCallback, this);
     AAudioStreamBuilder_setErrorCallback(b, errorCallback, this);
 
-    aaudio_result_t r = AAudioStreamBuilder_openStream(b, &stream_);
+    r = AAudioStreamBuilder_openStream(b, outStream);
     if (r != AAUDIO_OK) {
         AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_SHARED);
-        r = AAudioStreamBuilder_openStream(b, &stream_);
+        r = AAudioStreamBuilder_openStream(b, outStream);
     }
     AAudioStreamBuilder_delete(b);
+
+    if (r != AAUDIO_OK || !*outStream) {
+        *outStream = nullptr;
+        return r != AAUDIO_OK ? r : AAUDIO_ERROR_INTERNAL;
+    }
+
+    if (deviceId != AAUDIO_UNSPECIFIED &&
+        AAudioStream_getDeviceId(*outStream) != deviceId) {
+        AAudioStream_close(*outStream);
+        *outStream = nullptr;
+        return AAUDIO_ERROR_UNAVAILABLE;
+    }
+    return AAUDIO_OK;
+}
+
+bool AudioEngine::start() {
+    if (stream_) return true;
+
+    aaudio_result_t r = openOutputStream(preferredOutputDeviceId_, &stream_);
+    if ((r != AAUDIO_OK || !stream_) &&
+        preferredOutputDeviceId_ != AAUDIO_UNSPECIFIED) {
+        // A persisted removable device may no longer be present. Keep the app
+        // audible by falling back to Android's current primary output.
+        preferredOutputDeviceId_ = AAUDIO_UNSPECIFIED;
+        r = openOutputStream(preferredOutputDeviceId_, &stream_);
+    }
 
     if (r != AAUDIO_OK || !stream_) {
         stream_ = nullptr;
@@ -412,6 +444,108 @@ void AudioEngine::setFeltReverb(int mix,int decay){
 }
 void AudioEngine::setPerformanceXY(bool active,int part,int x,int y){
     push({Event::PERFORMANCE_XY,active?1:0,part,x,y});
+}
+
+int AudioEngine::setAudioOutputDevice(int deviceId) {
+    const int requestedDevice = deviceId > 0 ? deviceId : AAUDIO_UNSPECIFIED;
+    if (!stream_) {
+        preferredOutputDeviceId_ = requestedDevice;
+        return AAUDIO_OK;
+    }
+
+    const int previousDevice = preferredOutputDeviceId_;
+    const int previousRate = sampleRate_;
+    const float previousBursts = requestedBufferBursts_;
+
+    AAudioStream_requestStop(stream_);
+    AAudioStream_close(stream_);
+    stream_ = nullptr;
+
+    AAudioStream* candidate = nullptr;
+    aaudio_result_t result = openOutputStream(requestedDevice, &candidate);
+    if (result == AAUDIO_OK && candidate) {
+        const int candidateRate = AAudioStream_getSampleRate(candidate);
+        if (candidateRate == previousRate) {
+            stream_ = candidate;
+            preferredOutputDeviceId_ = requestedDevice;
+            sampleRate_ = candidateRate;
+            defaultBufferSizeFrames_ = AAudioStream_getBufferSizeInFrames(stream_);
+            requestedBufferBursts_ = previousBursts;
+
+            if (previousBursts > 0.0f) {
+                const int fpb = AAudioStream_getFramesPerBurst(stream_);
+                if (fpb > 0) {
+                    const int target = std::max(
+                            1, int(std::lround(float(fpb) * previousBursts)));
+                    AAudioStream_setBufferSizeInFrames(stream_, target);
+                }
+            }
+
+            result = AAudioStream_requestStart(stream_);
+            if (result == AAUDIO_OK) return AAudioStream_getDeviceId(stream_);
+
+            AAudioStream_close(stream_);
+            stream_ = nullptr;
+        } else {
+            AAudioStream_close(candidate);
+            candidate = nullptr;
+            result = AAUDIO_ERROR_INVALID_RATE;
+        }
+    }
+
+    // Restore the previous route if the requested device cannot be opened
+    // without changing the engine sample rate. DSP/Recorder state is preserved.
+    AAudioStream* restored = nullptr;
+    const aaudio_result_t restoreOpen = openOutputStream(previousDevice, &restored);
+    if (restoreOpen == AAUDIO_OK && restored &&
+        AAudioStream_getSampleRate(restored) == previousRate) {
+        stream_ = restored;
+        preferredOutputDeviceId_ = previousDevice;
+        sampleRate_ = previousRate;
+        defaultBufferSizeFrames_ = AAudioStream_getBufferSizeInFrames(stream_);
+        requestedBufferBursts_ = previousBursts;
+
+        if (previousBursts > 0.0f) {
+            const int fpb = AAudioStream_getFramesPerBurst(stream_);
+            if (fpb > 0) {
+                const int target = std::max(
+                        1, int(std::lround(float(fpb) * previousBursts)));
+                AAudioStream_setBufferSizeInFrames(stream_, target);
+            }
+        }
+        AAudioStream_requestStart(stream_);
+    } else if (restored) {
+        AAudioStream_close(restored);
+    }
+
+    return result < 0 ? result : AAUDIO_ERROR_UNAVAILABLE;
+}
+
+int AudioEngine::audioDeviceId() const {
+    return stream_ ? AAudioStream_getDeviceId(stream_) : AAUDIO_UNSPECIFIED;
+}
+
+int AudioEngine::audioSampleRate() const {
+    return stream_ ? AAudioStream_getSampleRate(stream_) : 0;
+}
+
+std::string AudioEngine::audioPerformanceModeName() const {
+    if (!stream_) return "CLOSED";
+    switch (AAudioStream_getPerformanceMode(stream_)) {
+        case AAUDIO_PERFORMANCE_MODE_LOW_LATENCY: return "LOW_LATENCY";
+        case AAUDIO_PERFORMANCE_MODE_POWER_SAVING: return "POWER_SAVING";
+        case AAUDIO_PERFORMANCE_MODE_NONE: return "NONE";
+        default: return "OTHER";
+    }
+}
+
+std::string AudioEngine::audioSharingModeName() const {
+    if (!stream_) return "CLOSED";
+    switch (AAudioStream_getSharingMode(stream_)) {
+        case AAUDIO_SHARING_MODE_EXCLUSIVE: return "EXCLUSIVE";
+        case AAUDIO_SHARING_MODE_SHARED: return "SHARED";
+        default: return "OTHER";
+    }
 }
 
 int AudioEngine::setAudioBufferBursts(float bursts) {
