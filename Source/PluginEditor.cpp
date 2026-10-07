@@ -2135,11 +2135,16 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     granularEnabled = delayEnabled;
     yEffectDreamy = processor.getConfiguredYEffectDreamy();
     midiChannel = processor.getConfiguredMidiChannel();
+    audioBufferMode = processor.getAudioBufferMode();
+    refreshAudioBufferStatus();
+    if (audioBufferMode != 0)
+        applyAudioBufferMode (audioBufferMode);
 
     performancePad.setEffectState (
         arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
     configScreen.setValues (
-        rootClass, scaleIndex, delayEnabled, yEffectDreamy, midiChannel);
+        rootClass, scaleIndex, delayEnabled, yEffectDreamy, midiChannel,
+        audioBufferMode, makeAudioBufferStatus());
 
     performancePad.onPadChanged =
         [this] (float x, float y, float speed, float horizontalDirection, bool active)
@@ -2207,6 +2212,27 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
         {
             midiChannel = juce::jlimit (1, 16, channel);
             processor.setConfiguredMidiChannel (midiChannel);
+        };
+
+    configScreen.onAudioBufferChanged =
+        [this] (int mode)
+        {
+            const int previous = audioBufferMode;
+            if (applyAudioBufferMode (mode))
+            {
+                audioBufferMode = mode;
+                processor.setAudioBufferMode (audioBufferMode);
+            }
+            else
+            {
+                applyAudioBufferMode (previous);
+            }
+
+            configScreen.setValues (
+                rootClass, scaleIndex,
+                processor.getDefaultEffectsEnabled(),
+                yEffectDreamy, midiChannel,
+                audioBufferMode, makeAudioBufferStatus());
         };
 
     configScreen.onCarnivalRequested =
@@ -2300,8 +2326,8 @@ void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
     configScreen.setValues (
         rootClass, scaleIndex,
         processor.getDefaultEffectsEnabled(),
-        yEffectDreamy,
-        midiChannel);
+        yEffectDreamy, midiChannel,
+        audioBufferMode, makeAudioBufferStatus());
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
@@ -2323,8 +2349,8 @@ void FlowerStandaloneAudioProcessorEditor::cycleScale (int delta)
     configScreen.setValues (
         rootClass, scaleIndex,
         processor.getDefaultEffectsEnabled(),
-        yEffectDreamy,
-        midiChannel);
+        yEffectDreamy, midiChannel,
+        audioBufferMode, makeAudioBufferStatus());
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleHold()
@@ -2358,6 +2384,135 @@ void FlowerStandaloneAudioProcessorEditor::toggleGranular()
         arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
 }
 
+void FlowerStandaloneAudioProcessorEditor::refreshAudioBufferStatus()
+{
+#if JUCE_ANDROID
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+    {
+        juce::AudioDeviceManager::AudioDeviceSetup setup;
+        holder->deviceManager.getAudioDeviceSetup (setup);
+
+        auto* device = holder->deviceManager.getCurrentAudioDevice();
+        const int currentFrames = device != nullptr
+            ? device->getCurrentBufferSizeSamples()
+            : setup.bufferSize;
+        const double currentRate = device != nullptr
+            ? device->getCurrentSampleRate()
+            : setup.sampleRate;
+
+        if (audioDefaultBufferFrames < 0)
+            audioDefaultBufferFrames = currentFrames;
+
+        audioFramesPerBurst = getAndroidOutputFramesPerBuffer();
+        if (audioFramesPerBurst <= 0 && currentFrames > 0)
+            audioFramesPerBurst = currentFrames;
+
+        audioActualBufferFrames = currentFrames;
+        audioActualSampleRate = currentRate;
+    }
+#endif
+}
+
+juce::String FlowerStandaloneAudioProcessorEditor::makeAudioBufferStatus() const
+{
+    if (audioActualBufferFrames <= 0 || audioActualSampleRate <= 0.0)
+        return "AUDIO: output buffer information unavailable"
+             + (audioBufferError.isNotEmpty()
+                    ? "\n" + audioBufferError
+                    : juce::String());
+
+    const double ms =
+        1000.0 * static_cast<double> (audioActualBufferFrames)
+        / audioActualSampleRate;
+    const double bursts = audioFramesPerBurst > 0
+        ? static_cast<double> (audioActualBufferFrames)
+            / static_cast<double> (audioFramesPerBurst)
+        : 0.0;
+
+    juce::String result =
+        "AUDIO: " + juce::String (audioActualBufferFrames)
+        + " frames / " + juce::String (ms, 2) + " ms"
+        + "\nBASE BURST: " + juce::String (audioFramesPerBurst)
+        + " frames / ACTUAL: " + juce::String (bursts, 2) + " bursts";
+
+    if (audioBufferError.isNotEmpty())
+        result += "\n" + audioBufferError;
+
+    return result;
+}
+
+bool FlowerStandaloneAudioProcessorEditor::applyAudioBufferMode (int mode)
+{
+#if JUCE_ANDROID
+    auto* holder = juce::StandalonePluginHolder::getInstance();
+    if (holder == nullptr)
+    {
+        audioBufferError = "Buffer request failed: standalone holder unavailable";
+        return false;
+    }
+
+    mode = juce::jlimit (0, 11, mode);
+    refreshAudioBufferStatus();
+
+    juce::AudioDeviceManager::AudioDeviceSetup setup;
+    holder->deviceManager.getAudioDeviceSetup (setup);
+
+    int targetFrames = audioDefaultBufferFrames;
+    if (mode > 0)
+    {
+        const int base = audioFramesPerBurst;
+        if (base <= 0)
+        {
+            audioBufferError = "BUFFER REQUEST: base burst unavailable";
+            return false;
+        }
+
+        targetFrames = juce::jmax (
+            1, juce::roundToInt (
+                static_cast<float> (base) * audioBufferBursts[mode]));
+
+        if (auto* device = holder->deviceManager.getCurrentAudioDevice())
+        {
+            const auto available = device->getAvailableBufferSizes();
+            if (! available.isEmpty())
+            {
+                int nearest = available[0];
+                int nearestDistance = std::abs (nearest - targetFrames);
+                for (const int candidate : available)
+                {
+                    const int distance = std::abs (candidate - targetFrames);
+                    if (distance < nearestDistance)
+                    {
+                        nearest = candidate;
+                        nearestDistance = distance;
+                    }
+                }
+                targetFrames = nearest;
+            }
+        }
+    }
+
+    setup.bufferSize = targetFrames;
+    const auto error =
+        holder->deviceManager.setAudioDeviceSetup (setup, true);
+
+    if (error.isNotEmpty())
+    {
+        audioBufferError = "BUFFER REQUEST: " + error;
+        refreshAudioBufferStatus();
+        return false;
+    }
+
+    audioBufferError.clear();
+    refreshAudioBufferStatus();
+    return true;
+#else
+    juce::ignoreUnused (mode);
+    audioBufferError = "AUDIO BUFFER is Android-only";
+    return false;
+#endif
+}
+
 void FlowerStandaloneAudioProcessorEditor::toggleConfig()
 {
     configVisible = ! configVisible;
@@ -2371,12 +2526,15 @@ void FlowerStandaloneAudioProcessorEditor::toggleConfig()
         if (bpmAdjustActive)
             endBpmAdjust();
 
+        refreshAudioBufferStatus();
         configScreen.setValues (
             rootClass,
             scaleIndex,
             processor.getDefaultEffectsEnabled(),
             yEffectDreamy,
-        midiChannel);
+            midiChannel,
+            audioBufferMode,
+            makeAudioBufferStatus());
 
         // SELECT-opened CONFIG must use the exact same fullscreen bounds as
         // the performance surface. The CONFIG UI itself is authored in a
@@ -2753,8 +2911,8 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
         configScreen.setValues (
             rootClass, scaleIndex,
             processor.getDefaultEffectsEnabled(),
-            yEffectDreamy,
-        midiChannel);
+            yEffectDreamy, midiChannel,
+            audioBufferMode, makeAudioBufferStatus());
         return true;
     }
 
