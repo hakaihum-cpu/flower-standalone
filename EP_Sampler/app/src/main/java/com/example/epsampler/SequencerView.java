@@ -194,13 +194,15 @@ final class SequencerView extends View {
         drawButton(c, partMinusRect(u), "−", false, u);
         RectF nameRect = partNameRect(u);
         drawPanel(c,nameRect,true,u);
-        text.setTextSize(11.5f*u);
+        text.setTextSize(10.8f*u);
         text.setColor(Color.rgb(20,20,19));
-        String name = shortName(partNames[trackParts[selectedTrack]],18);
+        String name = shortName(partNames[trackParts[selectedTrack]],14);
         float tw = text.measureText(name);
         c.drawText(name,nameRect.centerX()-tw/2f,nameRect.centerY()+4f*u,text);
         drawButton(c, partPlusRect(u), "+", false, u);
-        drawButton(c, clearRect(u), "CLEAR T" + (selectedTrack+1), false, u);
+        drawButton(c, chordRect(u), chordMode ? "CHORD ON" : "CHORD", chordMode, u);
+        drawButton(c, chordTypeRect(u), CHORD_NAMES[chordType], chordMode, u);
+        drawButton(c, clearRect(u), "CLEAR", false, u);
     }
 
     private void drawPianoRoll(Canvas c, float u) {
@@ -397,6 +399,11 @@ final class SequencerView extends View {
             NativeEngine.sequencerSetTrackPart(selectedTrack,part);
         } else if (target == 32) {
             NativeEngine.sequencerClearTrack(selectedTrack);
+        } else if (target == 33) {
+            chordMode = !chordMode;
+        } else if (target == 34) {
+            chordType = (chordType + 1) % CHORD_NAMES.length;
+            chordMode = true;
         } else if (target == 40) {
             page = Math.max(0,page-1);
         } else if (target == 41) {
@@ -453,6 +460,8 @@ final class SequencerView extends View {
         if (partMinusRect(u).contains(x,y)) return 30;
         if (partPlusRect(u).contains(x,y)) return 31;
         if (clearRect(u).contains(x,y)) return 32;
+        if (chordRect(u).contains(x,y)) return 33;
+        if (chordTypeRect(u).contains(x,y)) return 34;
         if (pageMinusRect(u).contains(x,y)) return 40;
         if (pagePlusRect(u).contains(x,y)) return 41;
         if (octMinusRect(u).contains(x,y)) return 42;
@@ -468,10 +477,12 @@ final class SequencerView extends View {
     private RectF bpmMinusRect(float u){ return new RectF(374f*u,65f*u,422f*u,111f*u); }
     private RectF bpmRect(float u){ return new RectF(428f*u,65f*u,570f*u,111f*u); }
     private RectF bpmPlusRect(float u){ return new RectF(576f*u,65f*u,624f*u,111f*u); }
-    private RectF partMinusRect(float u){ return new RectF(132f*u,194f*u,176f*u,226f*u); }
-    private RectF partNameRect(float u){ return new RectF(182f*u,194f*u,456f*u,226f*u); }
-    private RectF partPlusRect(float u){ return new RectF(462f*u,194f*u,506f*u,226f*u); }
-    private RectF clearRect(float u){ return new RectF(514f*u,194f*u,696f*u,226f*u); }
+    private RectF partMinusRect(float u){ return new RectF(116f*u,194f*u,156f*u,226f*u); }
+    private RectF partNameRect(float u){ return new RectF(162f*u,194f*u,386f*u,226f*u); }
+    private RectF partPlusRect(float u){ return new RectF(392f*u,194f*u,432f*u,226f*u); }
+    private RectF chordRect(float u){ return new RectF(440f*u,194f*u,520f*u,226f*u); }
+    private RectF chordTypeRect(float u){ return new RectF(526f*u,194f*u,606f*u,226f*u); }
+    private RectF clearRect(float u){ return new RectF(614f*u,194f*u,696f*u,226f*u); }
     private RectF rollRect(float u){ return new RectF(12f*u,242f*u,708f*u,630f*u); }
     private RectF pageMinusRect(float u){ return new RectF(12f*u,642f*u,100f*u,704f*u); }
     private RectF pageRect(float u){ return new RectF(106f*u,642f*u,210f*u,704f*u); }
