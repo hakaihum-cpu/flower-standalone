@@ -1284,9 +1284,11 @@ void AudioEngine::seqRenderClick(float& left, float& right) {
 void AudioEngine::handle(const Event& e) {
     switch(e.type) {
         case Event::NOTE_ON:
+            seqRecordNoteOn(selectedInstrument_, e.a, e.b);
             handlePartNoteOn(selectedInstrument_, e.a, e.b);
             break;
         case Event::NOTE_OFF:
+            seqRecordNoteOff(selectedInstrument_, e.a);
             handlePartNoteOff(selectedInstrument_, e.a);
             break;
         case Event::POLY_AT:
@@ -1303,9 +1305,11 @@ void AudioEngine::handle(const Event& e) {
             break;
 
         case Event::PART_NOTE_ON:
+            seqRecordNoteOn(e.a, e.b, e.c);
             handlePartNoteOn(e.a, e.b, e.c);
             break;
         case Event::PART_NOTE_OFF:
+            seqRecordNoteOff(e.a, e.b);
             handlePartNoteOff(e.a, e.b);
             break;
         case Event::PART_POLY_AT:
@@ -1414,6 +1418,81 @@ void AudioEngine::handle(const Event& e) {
             feltPianoReverb_.setMode(feltReverbMix_ > 0 ? SpaceEffect::HALL : SpaceEffect::NONE);
             feltPianoReverb_.setParameters(feltReverbMix_ / 100.0f, feltReverbDecay_ / 100.0f);
             break;
+        case Event::SEQ_PLAY:
+            if (!seqPlaying_.load(std::memory_order_relaxed)) {
+                seqTickPhase_ = 0.0;
+                seqLastProcessedTick_ = -1;
+                seqCurrentTick_.store(0,std::memory_order_relaxed);
+                seqPlaying_.store(true,std::memory_order_relaxed);
+            }
+            break;
+        case Event::SEQ_STOP:
+            if (seqRecording_.load(std::memory_order_relaxed))
+                seqFinishPendingRecordedNotes();
+            seqRecording_.store(false,std::memory_order_relaxed);
+            seqPlaying_.store(false,std::memory_order_relaxed);
+            seqStopSoundingNotes();
+            seqTickPhase_ = 0.0;
+            seqLastProcessedTick_ = -1;
+            seqCurrentTick_.store(0,std::memory_order_relaxed);
+            seqClickEnvelope_ = 0.0f;
+            break;
+        case Event::SEQ_RECORD: {
+            const bool next = !seqRecording_.load(std::memory_order_relaxed);
+            if (next) {
+                seqRecordStartTick_.fill(-1);
+                seqRecordVelocity_.fill(0);
+                if (!seqPlaying_.load(std::memory_order_relaxed)) {
+                    seqTickPhase_ = 0.0;
+                    seqLastProcessedTick_ = -1;
+                    seqCurrentTick_.store(0,std::memory_order_relaxed);
+                    seqPlaying_.store(true,std::memory_order_relaxed);
+                }
+                seqRecording_.store(true,std::memory_order_relaxed);
+            } else {
+                seqFinishPendingRecordedNotes();
+                seqRecording_.store(false,std::memory_order_relaxed);
+            }
+            break;
+        }
+        case Event::SEQ_CLICK:
+            seqClick_.store(e.a != 0,std::memory_order_relaxed);
+            if (e.a == 0) seqClickEnvelope_ = 0.0f;
+            break;
+        case Event::SEQ_BPM:
+            seqBpm_.store(std::clamp(e.a,40,240),std::memory_order_relaxed);
+            break;
+        case Event::SEQ_SELECT_TRACK:
+            if (seqRecording_.load(std::memory_order_relaxed)) {
+                seqFinishPendingRecordedNotes();
+                seqRecording_.store(false,std::memory_order_relaxed);
+            }
+            seqSelectedTrack_.store(
+                    std::clamp(e.a,0,SEQ_TRACK_COUNT-1),
+                    std::memory_order_relaxed);
+            seqRecordStartTick_.fill(-1);
+            seqRecordVelocity_.fill(0);
+            break;
+        case Event::SEQ_ASSIGN_PART: {
+            const int track = std::clamp(e.a,0,SEQ_TRACK_COUNT-1);
+            const int oldPart = sequencerTrackPart(track);
+            const int newPart = std::clamp(e.b,0,PART_COUNT-1);
+            if (track == seqSelectedTrack_.load(std::memory_order_relaxed) &&
+                    seqRecording_.load(std::memory_order_relaxed)) {
+                seqFinishPendingRecordedNotes();
+                seqRecording_.store(false,std::memory_order_relaxed);
+            }
+            if (oldPart != newPart) allNotesOffPart(oldPart);
+            seqTrackPart_[track].store(newPart,std::memory_order_relaxed);
+            break;
+        }
+        case Event::SEQ_CLEAR_TRACK:
+            seqClearTrackInternal(e.a);
+            break;
+        case Event::SEQ_TOGGLE_GRID:
+            seqToggleGridNoteInternal(e.a,e.b,e.c,e.d);
+            break;
+
         case Event::PERFORMANCE_XY: {
             const bool wasActive = performanceXYActive_;
             const int oldPart = performanceXYPart_;
