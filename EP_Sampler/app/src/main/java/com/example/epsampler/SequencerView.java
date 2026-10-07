@@ -652,6 +652,8 @@ final class SequencerView extends View {
     }
 
     private void toggleGridAt(float x, float y) {
+        refreshState(true);
+
         float u = u();
         RectF roll = rollRect(u);
         float keyW = 58f*u;
@@ -663,11 +665,39 @@ final class SequencerView extends View {
         int col = clamp((int)((x-gridLeft)/stepW),0,STEPS_PER_PAGE-1);
         float rowH = roll.height()/VISIBLE_NOTES;
         int row = clamp((int)((y-roll.top)/rowH),0,VISIBLE_NOTES-1);
-        int note = lowNote + (VISIBLE_NOTES-1-row);
+        int root = lowNote + (VISIBLE_NOTES-1-row);
         int globalStep = page*STEPS_PER_PAGE+col;
-        NativeEngine.sequencerToggleGridNote(selectedTrack,globalStep,note,100);
-        refreshState(true);
-        invalidate();
+
+        if (!chordMode) {
+            boolean exists = noteExistsAtStep(globalStep,root);
+            NativeEngine.sequencerSetGridNote(
+                    selectedTrack,globalStep,root,exists ? 0 : 100);
+            if (!exists) auditionNotes(new int[]{root},1);
+        } else {
+            int[] intervals = chordIntervals();
+            int[] notes = new int[intervals.length];
+            int count = 0;
+            boolean allPresent = true;
+            for (int interval : intervals) {
+                int note = root + interval;
+                if (note > 127) continue;
+                notes[count++] = note;
+                if (!noteExistsAtStep(globalStep,note)) allPresent = false;
+            }
+            if (count == 0) return;
+
+            int value = allPresent ? 0 : 100;
+            for (int i=0;i<count;i++) {
+                NativeEngine.sequencerSetGridNote(
+                        selectedTrack,globalStep,notes[i],value);
+            }
+            if (!allPresent) auditionNotes(notes,count);
+        }
+
+        postDelayed(() -> {
+            refreshState(true);
+            invalidate();
+        },30L);
     }
 
     private int targetAt(float x, float y) {
