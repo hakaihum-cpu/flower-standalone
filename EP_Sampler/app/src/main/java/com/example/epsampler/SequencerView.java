@@ -804,7 +804,9 @@ final class SequencerView extends View {
     }
 
     private void activateTarget(int target) {
-        if (target == 100) { viewMode = 0; return; }\n        if (target == 101) { viewMode = 1; return; }\n        if (target == 102) { viewMode = 2; return; }
+        if (target == 100) { viewMode = 0; return; }
+        if (target == 101) { viewMode = 1; return; }
+        if (target == 102) { viewMode = 2; return; }
         if (target == 110) {
             loopBars = loopBars==1?2:loopBars==2?4:loopBars==4?8:1;
             page=Math.min(page,Math.max(0,(loopBars-1)/2));
@@ -827,7 +829,8 @@ final class SequencerView extends View {
             int k=target-160, tr=k/2; boolean rev=(k%2)==0;
             if(rev) sendRev[tr]=(sendRev[tr]+16)%128; else sendDelay[tr]=(sendDelay[tr]+16)%128;
             NativeEngine.sequencerSetTrackSend(tr,sendRev[tr],sendDelay[tr]); return;
-        }\n        if (target == 1) {
+        }
+        if (target == 1) {
             NativeEngine.sequencerPlay();
         } else if (target == 2) {
             NativeEngine.sequencerStop();
@@ -928,7 +931,8 @@ final class SequencerView extends View {
 
     private int targetAt(float x, float y) {
         float u = u();
-        if (closeRect(u).contains(x,y)) return 90;\n        if (rollTabRect(u).contains(x,y)) return 100;
+        if (closeRect(u).contains(x,y)) return 90;
+        if (rollTabRect(u).contains(x,y)) return 100;
         if (arrTabRect(u).contains(x,y)) return 101;
         if (mixTabRect(u).contains(x,y)) return 102;
         if (viewMode==1) {
