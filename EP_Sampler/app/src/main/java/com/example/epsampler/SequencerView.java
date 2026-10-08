@@ -378,6 +378,60 @@ final class SequencerView extends View {
         drawButton(c,octPlusRect(u),"OCT +",false,u);
     }
 
+
+    private void drawViewTabs(Canvas c,float u) {
+        drawButton(c,rollTabRect(u),"ROLL",viewMode==0,u);
+        drawButton(c,arrTabRect(u),"ARRANGE",viewMode==1,u);
+        drawButton(c,mixTabRect(u),"MIX",viewMode==2,u);
+    }
+
+    private void drawArrange(Canvas c,float u) {
+        float top=72f*u,left=12f*u,labelW=116f*u,right=getWidth()-12f*u,rowH=72f*u;
+        for(int t=0;t<TRACKS;t++){
+            float y=top+t*rowH;
+            RectF label=new RectF(left,y,left+labelW-6f*u,y+rowH-6f*u);
+            drawPanel(c,label,t==selectedTrack,u);
+            text.setTextSize(10.5f*u); text.setColor(t==selectedTrack?Color.rgb(20,20,19):Color.rgb(241,238,229));
+            c.drawText("T"+(t+1)+" "+shortName(partNames[trackParts[t]],9),label.left+7f*u,label.centerY()+4f*u,text);
+            RectF lane=new RectF(left+labelW,y,right,y+rowH-6f*u); drawPanel(c,lane,false,u);
+            int[] data=NativeEngine.sequencerNotes(t);
+            if(data!=null) for(int i=0;i+3<data.length;i+=4){
+                if(data[i]>=loopTicks()) continue;
+                float x0=lane.left+data[i]/(float)loopTicks()*lane.width();
+                float x1=lane.left+Math.min(loopTicks(),data[i]+Math.max(1,data[i+1]))/(float)loopTicks()*lane.width();
+                paint.setColor(Color.argb(155,238,229,207));
+                c.drawRoundRect(new RectF(x0+1f*u,lane.top+9f*u,Math.max(x0+4f*u,x1-1f*u),lane.bottom-9f*u),3f*u,3f*u,paint);
+            }
+            for(int b=1;b<loopBars;b++){float x=lane.left+lane.width()*b/loopBars;paint.setColor(Color.argb(65,241,238,229));c.drawRect(x,lane.top,x+1f,lane.bottom,paint);}
+        }
+        drawButton(c,new RectF(12f*u,656f*u,126f*u,704f*u),"BARS "+loopBars,false,u);
+        drawButton(c,new RectF(134f*u,656f*u,258f*u,704f*u),euclid?"EUCLID ON":"EUCLID",euclid,u);
+        drawButton(c,new RectF(266f*u,656f*u,390f*u,704f*u),noteName(euclidRoot),euclid,u);
+        drawButton(c,new RectF(398f*u,656f*u,522f*u,704f*u),SCALE_NAMES[euclidScale],euclid,u);
+        drawButton(c,new RectF(530f*u,656f*u,708f*u,704f*u),"P"+euclidPulses+"/"+euclidSteps,euclid,u);
+    }
+
+    private void drawSequenceMixer(Canvas c,float u) {
+        float top=72f*u,rowH=72f*u;
+        for(int t=0;t<TRACKS;t++){
+            float y=top+t*rowH;
+            RectF row=new RectF(12f*u,y,708f*u,y+rowH-6f*u); drawPanel(c,row,t==selectedTrack,u);
+            text.setTextSize(10.5f*u); text.setColor(t==selectedTrack?Color.rgb(20,20,19):Color.rgb(241,238,229));
+            c.drawText("T"+(t+1)+" "+shortName(partNames[trackParts[t]],9),22f*u,y+25f*u,text);
+            text.setTextSize(9f*u); c.drawText("VOL/PAN",22f*u,y+48f*u,text);
+            text.setTextSize(10f*u); c.drawText("REV "+sendRev[t],250f*u,y+25f*u,text); c.drawText("DLY "+sendDelay[t],430f*u,y+25f*u,text);
+            drawBar(c,250f*u,y+39f*u,140f*u,sendRev[t]/127f,u);
+            drawBar(c,430f*u,y+39f*u,140f*u,sendDelay[t]/127f,u);
+        }
+        text.setColor(Color.argb(160,241,238,229));text.setTextSize(10f*u);
+        c.drawText("OP-1 STYLE  •  TAP REV / DLY",12f*u,700f*u,text);
+    }
+
+    private void drawBar(Canvas c,float x,float y,float w,float v,float u){
+        paint.setColor(Color.argb(55,241,238,229));c.drawRect(x,y,x+w,y+8f*u,paint);
+        paint.setColor(Color.rgb(238,229,207));c.drawRect(x,y,x+w*Math.max(0f,Math.min(1f,v)),y+8f*u,paint);
+    }
+
     private void drawButton(Canvas c, RectF r, String label, boolean active, float u) {
         drawPanel(c,r,active,u);
         text.setTextSize(10.5f*u);
