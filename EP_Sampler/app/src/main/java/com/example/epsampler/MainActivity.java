@@ -73,6 +73,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private static final String KEY_FELT_REVERB_DECAY = "felt_reverb_decay";
     private static final String KEY_AUDIO_BUFFER_BURSTS = "audio_buffer_bursts";
     private static final String KEY_AUDIO_OUTPUT = "audio_output";
+    private static final String KEY_EP_DSP_ENABLED = "epiano_dsp_enabled";
+    private static final String KEY_EP_RESONANCE = "epiano_resonance";
+    private static final String KEY_EP_DRIVE = "epiano_drive";
+    private static final String KEY_EP_TREMOLO = "epiano_tremolo";
     private static final String KEY_MIX_VOL_PREFIX = "mix_vol_";
     private static final String KEY_MIX_PAN_PREFIX = "mix_pan_";
     private static final String KEY_MIX_MUTE_PREFIX = "mix_mute_";
@@ -177,7 +181,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
     };
     private final String[] sampleBankNames = new String[]{
-            "EP-SAMPLE","SAMPLE 2","SAMPLE 3","SAMPLE 4",
+            "E.PIANO","SAMPLE 2","SAMPLE 3","SAMPLE 4",
             "SAMPLE 5","SAMPLE 6","SAMPLE 7","SAMPLE 8"
     };
     private int pendingBankSlot = 0;
@@ -190,7 +194,11 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private int decayMs = 120;
     private int sustainPct = 90;
     private int releaseMs = 300;
-    private int instrumentMode = 0;
+    private int instrumentMode = 8;
+    private boolean epDspEnabled = true;
+    private int epResonance = 15;
+    private int epDrive = 12;
+    private int epTremolo = 0;
     private final int[] drumParameters = new int[]{
             64, 58, 46, 38,
             64, 43, 74, 56,
@@ -338,7 +346,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             sampleBankNames[slot] = sanitizeBankName(
                     getSharedPreferences(PREFS, MODE_PRIVATE)
                             .getString(KEY_BANK_NAME_PREFIX + slot,
-                                    slot == 0 ? "EP-SAMPLE" : "SAMPLE " + (slot + 1)),
+                                    slot == 0 ? "E.PIANO" : "SAMPLE " + (slot + 1)),
                     slot);
         }
         for (int i=0; i<partMidiChannels.length; i++) {
@@ -370,7 +378,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         sustainPct = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SUSTAIN_PCT, 90);
         releaseMs = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_RELEASE_MS, 300);
         instrumentMode = Math.max(0, Math.min(15,
-                getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_INSTRUMENT, 0)));
+                getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_INSTRUMENT, 8)));
         android.content.SharedPreferences drumPrefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         drumBoostDb = Math.max(0, Math.min(18, drumPrefs.getInt(KEY_DRUM_BOOST_DB, 6)));
         drumDistortion = Math.max(0, Math.min(127, drumPrefs.getInt(KEY_DRUM_DISTORTION, 0)));
@@ -389,6 +397,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         feltReverbDecay = Math.max(0, Math.min(100,
                 drumPrefs.getInt(KEY_FELT_REVERB_DECAY, 58)));
         audioBufferBursts = drumPrefs.getFloat(KEY_AUDIO_BUFFER_BURSTS, 0f);
+        epDspEnabled = drumPrefs.getBoolean(KEY_EP_DSP_ENABLED, true);
+        epResonance = Math.max(0, Math.min(100, drumPrefs.getInt(KEY_EP_RESONANCE, 15)));
+        epDrive = Math.max(0, Math.min(100, drumPrefs.getInt(KEY_EP_DRIVE, 12)));
+        epTremolo = Math.max(0, Math.min(100, drumPrefs.getInt(KEY_EP_TREMOLO, 0)));
         audioOutputKey = drumPrefs.getString(KEY_AUDIO_OUTPUT, "DEFAULT");
         if (audioOutputKey == null || audioOutputKey.isEmpty()) audioOutputKey = "DEFAULT";
         for (int i=0; i<drumParameters.length; i++) {
@@ -425,6 +437,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         loadDrumSampleAssets();
         NativeEngine.setAudioOutputDevice(resolveAudioOutputDeviceId(audioOutputKey));
         NativeEngine.start();
+        NativeEngine.controlChangePart(8, 80, epDspEnabled ? 127 : 0);
+        NativeEngine.controlChangePart(8, 81, Math.round(epResonance * 1.27f));
+        NativeEngine.controlChangePart(8, 82, Math.round(epDrive * 1.27f));
+        NativeEngine.controlChangePart(8, 83, Math.round(epTremolo * 1.27f));
         loadExistingBanks();
         NativeEngine.setAudioBufferBursts(audioBufferBursts);
         NativeEngine.setBoosterStep(boosterStep);
@@ -508,7 +524,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     }
 
     private String sanitizeBankName(String value, int slot) {
-        String fallback = slot == 0 ? "EP-SAMPLE" : "SAMPLE " + (slot + 1);
+        String fallback = slot == 0 ? "E.PIANO" : "SAMPLE " + (slot + 1);
         if (value == null) return fallback;
         String clean = value.trim().replaceAll("[\\r\\n\\t]+", " ");
         if (clean.isEmpty()) return fallback;
@@ -1083,6 +1099,49 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
     private void showConfigDialog() {
         LinearLayout root = dialogRoot();
+
+        TextView epLabel = new TextView(this);
+        epLabel.setText("E.PIANO HYBRID DSP");
+        epLabel.setTextSize(16f);
+        root.addView(epLabel);
+
+        CheckBox epEnabled = new CheckBox(this);
+        epEnabled.setText("HYBRID DSP");
+        epEnabled.setChecked(epDspEnabled);
+        epEnabled.setOnCheckedChangeListener((button, enabled) -> {
+            epDspEnabled = enabled;
+            NativeEngine.controlChangePart(8, 80, enabled ? 127 : 0);
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putBoolean(KEY_EP_DSP_ENABLED, enabled).apply();
+        });
+        root.addView(epEnabled);
+
+        addSlider(root, "RESONANCE", 100, epResonance, value -> {
+            epResonance = value;
+            NativeEngine.controlChangePart(8, 81, Math.round(value * 1.27f));
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putInt(KEY_EP_RESONANCE, value).apply();
+        });
+        addSlider(root, "PREAMP", 100, epDrive, value -> {
+            epDrive = value;
+            NativeEngine.controlChangePart(8, 82, Math.round(value * 1.27f));
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putInt(KEY_EP_DRIVE, value).apply();
+        });
+        addSlider(root, "TREMOLO", 100, epTremolo, value -> {
+            epTremolo = value;
+            NativeEngine.controlChangePart(8, 83, Math.round(value * 1.27f));
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putInt(KEY_EP_TREMOLO, value).apply();
+        });
+        TextView epBudget = new TextView(this);
+        epBudget.setText("DSP CALLBACK: " + NativeEngine.dspLoadPercent() +
+                "% / PEAK: " + NativeEngine.dspPeakPercent() +
+                "% / XRUNS: " + Math.max(0, NativeEngine.audioXRunCount()) +
+                "\nGoal: sustained 65-70%, peaks <=80% (not guaranteed)");
+        epBudget.setTextSize(13f);
+        root.addView(epBudget);
+
 
         TextView outputLabel = new TextView(this);
         outputLabel.setText("AUDIO OUTPUT");
