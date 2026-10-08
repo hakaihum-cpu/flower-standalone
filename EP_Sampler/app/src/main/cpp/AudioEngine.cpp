@@ -6,6 +6,7 @@
 #include <utility>
 #include <thread>
 #include <chrono>
+#include <ctime>
 
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,"EPViolin",__VA_ARGS__)
 
@@ -387,6 +388,7 @@ bool AudioEngine::start() {
         }
     }
 
+    epianoDsp_.prepare(sampleRate_);
     dreamy_.prepare(sampleRate_);
     dreamy_.setMode(dreamyMode_);
     dreamy_.setXY(cc103_/127.f, cc104_/127.f);
@@ -771,6 +773,8 @@ void AudioEngine::epBeginVoice(int slot, int note, int velocity) {
     pick->targetBodyVelocity = float(pick->velocity)
             + (127.0f - pick->velocity) * (at / 127.0f);
 
+    if (slot == 0) epianoDsp_.noteOn(note, velocity);
+
     for (int i = 0; i < 8; ++i) {
         pick->sus[i] = bank.find(uint8_t(note), uint8_t(EP_VELS[i]), rr, SampleBank::SUSTAIN);
         pick->rel[i] = bank.find(uint8_t(note), uint8_t(EP_VELS[i]), rr, SampleBank::RELEASE);
@@ -1042,6 +1046,10 @@ void AudioEngine::handlePartControlChange(int part, int cc, int value) {
     } else if (cc == 120 || cc == 123) {
         allNotesOffPart(part);
     }
+
+    // E.PIANO hybrid DSP is local to EPBANK slot 0 and MIDI part 8.
+    // UI and MIDI use CC80 on/off, 81 resonance, 82 preamp, 83 tremolo.
+    if (part == 8 && cc >= 80 && cc <= 83) epianoDsp_.control(cc, value);
 
     // Effects remain a shared mix bus, so these CCs are intentionally global
     // regardless of which assigned MIDI part sends them.
@@ -1878,7 +1886,10 @@ void AudioEngine::render(float* out,int32_t frames) {
 
             // A silent SAMPLE part has no local stateful FX. Skip it completely
             // unless its momentary XY delay is still active.
-            if (part >= 8 && voices == 0 && !xyActiveForPart) continue;
+            if (part >= 8 && voices == 0 && !xyActiveForPart &&
+                    !(part == 8 && epianoDsp_.hasTail())) continue;
+
+            if (part == 8) epianoDsp_.process(partL, partR);
 
             const float boost = partBoostGain[part];
             const float distAmount = partDistAmount[part];
@@ -2005,7 +2016,21 @@ void AudioEngine::render(float* out,int32_t frames) {
 aaudio_data_callback_result_t AudioEngine::dataCallback(
         AAudioStream*, void* user, void* audio, int32_t n) {
     auto* self = reinterpret_cast<AudioEngine*>(user);
+    // Real callback processing budget, not Android-wide CPU utilisation.
+    struct timespec before{}, after{};
+    clock_gettime(CLOCK_MONOTONIC, &before);
     self->render(reinterpret_cast<float*>(audio), n);
+    clock_gettime(CLOCK_MONOTONIC, &after);
+    if (n > 0 && self->sampleRate_ > 0) {
+        const int64_t elapsedNs =
+                (int64_t(after.tv_sec) - int64_t(before.tv_sec)) * 1000000000LL +
+                (int64_t(after.tv_nsec) - int64_t(before.tv_nsec));
+        const double budgetNs = double(n) * 1.0e9 / double(self->sampleRate_);
+        const int pct = std::clamp(int(std::lround(100.0 * elapsedNs / budgetNs)), 0, 999);
+        self->dspLoadPercent_.store(pct, std::memory_order_relaxed);
+        const int peak = self->dspPeakPercent_.load(std::memory_order_relaxed);
+        if (pct > peak) self->dspPeakPercent_.store(pct, std::memory_order_relaxed);
+    }
     return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
 
