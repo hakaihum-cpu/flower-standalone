@@ -126,6 +126,7 @@ final class SequencerView extends View {
         playing = NativeEngine.sequencerIsPlaying();
         recording = NativeEngine.sequencerIsRecording();
         click = NativeEngine.sequencerIsClickOn();
+        loopBars = clamp(NativeEngine.sequencerLoopBars(),1,8);
         for (int i=0; i<TRACKS; i++) {
             trackParts[i] = clamp(NativeEngine.sequencerTrackPart(i),0,15);
         }
@@ -172,6 +173,10 @@ final class SequencerView extends View {
         drawFooter(c,u);
         if (resizeMode) drawResizeOverlay(c,u);
 
+        if (playing && euclid) {
+            if (lastLoopTick >= 0 && playheadTick < lastLoopTick) generateEuclid();
+            lastLoopTick = playheadTick;
+        } else if (!playing) lastLoopTick=-1;
         if (playing) postInvalidateOnAnimation();
         else postInvalidateDelayed(80L);
     }
@@ -737,7 +742,22 @@ final class SequencerView extends View {
     }
 
     private void activateTarget(int target) {
-        if (target == 100) { viewMode = 0; return; }\n        if (target == 101) { viewMode = 1; return; }\n        if (target == 102) { viewMode = 2; return; }\n        if (target == 1) {
+        if (target == 100) { viewMode = 0; return; }\n        if (target == 101) { viewMode = 1; return; }\n        if (target == 102) { viewMode = 2; return; }
+        if (target == 110) {
+            loopBars = loopBars==1?2:loopBars==2?4:loopBars==4?8:1;
+            page=Math.min(page,Math.max(0,(loopBars-1)/2));
+            NativeEngine.sequencerSetLoopBars(loopBars); return;
+        }
+        if (target == 111) { euclid=!euclid; if(euclid) generateEuclid(); return; }
+        if (target == 112) { euclidRoot = euclidRoot>=71?48:euclidRoot+1; if(euclid) generateEuclid(); return; }
+        if (target == 113) { euclidScale=(euclidScale+1)%SCALE_NAMES.length; if(euclid) generateEuclid(); return; }
+        if (target == 114) { euclidPulses=euclidPulses>=euclidSteps?1:euclidPulses+1; if(euclid) generateEuclid(); return; }
+        if (target >= 120 && target < 128) { NativeEngine.sequencerSetSelectedTrack(target-120); return; }
+        if (target >= 140 && target < 156) {
+            int k=target-140, tr=k/2; boolean rev=(k%2)==0;
+            if(rev) sendRev[tr]=(sendRev[tr]+16)%128; else sendDelay[tr]=(sendDelay[tr]+16)%128;
+            NativeEngine.sequencerSetTrackSend(tr,sendRev[tr],sendDelay[tr]); return;
+        }\n        if (target == 1) {
             NativeEngine.sequencerPlay();
         } else if (target == 2) {
             NativeEngine.sequencerStop();
@@ -838,7 +858,27 @@ final class SequencerView extends View {
 
     private int targetAt(float x, float y) {
         float u = u();
-        if (closeRect(u).contains(x,y)) return 90;\n        if (rollTabRect(u).contains(x,y)) return 100;\n        if (arrTabRect(u).contains(x,y)) return 101;\n        if (mixTabRect(u).contains(x,y)) return 102;
+        if (closeRect(u).contains(x,y)) return 90;\n        if (rollTabRect(u).contains(x,y)) return 100;
+        if (arrTabRect(u).contains(x,y)) return 101;
+        if (mixTabRect(u).contains(x,y)) return 102;
+        if (viewMode==1) {
+            if (new RectF(12f*u,656f*u,126f*u,704f*u).contains(x,y)) return 110;
+            if (new RectF(134f*u,656f*u,258f*u,704f*u).contains(x,y)) return 111;
+            if (new RectF(266f*u,656f*u,390f*u,704f*u).contains(x,y)) return 112;
+            if (new RectF(398f*u,656f*u,522f*u,704f*u).contains(x,y)) return 113;
+            if (new RectF(530f*u,656f*u,708f*u,704f*u).contains(x,y)) return 114;
+            float top=72f*u,rowH=72f*u;
+            for(int t=0;t<TRACKS;t++) if(new RectF(12f*u,top+t*rowH,708f*u,top+(t+1)*rowH-6f*u).contains(x,y)) return 120+t;
+        }
+        if (viewMode==2) {
+            float top=72f*u,rowH=72f*u;
+            for(int t=0;t<TRACKS;t++){
+                float yy=top+t*rowH;
+                if(new RectF(240f*u,yy,410f*u,yy+rowH-6f*u).contains(x,y)) return 140+t*2;
+                if(new RectF(420f*u,yy,590f*u,yy+rowH-6f*u).contains(x,y)) return 141+t*2;
+                if(new RectF(12f*u,yy,230f*u,yy+rowH-6f*u).contains(x,y)) return 120+t;
+            }
+        }
         if (playRect(u).contains(x,y)) return 1;
         if (stopRect(u).contains(x,y)) return 2;
         if (recRect(u).contains(x,y)) return 3;
