@@ -61,7 +61,7 @@ final class SequencerView extends View {
     private int downTarget = -1;
 
     private static final String[] CHORD_NAMES =
-            new String[]{"MAJ","MIN","7","m7","SUS2","SUS4"};
+            new String[]{"MAJ","MIN","MAJ7","7","m7","SUS2","SUS4"};
     private boolean chordMode = false;
     private int chordType = 0;
     private boolean eraserMode = false;
@@ -167,10 +167,10 @@ final class SequencerView extends View {
         c.drawColor(Color.rgb(8,8,8));
         drawHeader(c,u);
         drawTransport(c,u);
-        drawTracks(c,u);
-        drawTarget(c,u);
-        drawPianoRoll(c,u);
-        drawFooter(c,u);
+        drawViewTabs(c,u);
+        if(viewMode==0){ drawTracks(c,u); drawTarget(c,u); drawPianoRoll(c,u); drawFooter(c,u); }
+        else if(viewMode==1) drawArrange(c,u);
+        else drawSequenceMixer(c,u);
         if (resizeMode) drawResizeOverlay(c,u);
 
         if (playing && euclid) {
@@ -536,8 +536,13 @@ final class SequencerView extends View {
         }
 
         if (resizeMode) {
-            NativeEngine.sequencerSetNoteDuration(
-                    selectedTrack, resizeNoteIndex, resizePreviewDuration);
+            int base=resizeNoteIndex*4;
+            int chordStart=(base+1<noteData.length)?noteData[base]:-1;
+            int chordDuration=(base+1<noteData.length)?noteData[base+1]:-1;
+            for(int i=0;i+3<noteData.length;i+=4){
+                if(noteData[i]==chordStart && noteData[i+1]==chordDuration)
+                    NativeEngine.sequencerSetNoteDuration(selectedTrack,i/4,resizePreviewDuration);
+            }
             resizeMode = false;
             resizeNoteIndex = -1;
             pressedNoteIndex = -1;
@@ -765,10 +770,11 @@ final class SequencerView extends View {
     private int[] chordIntervals() {
         switch (chordType) {
             case 1: return new int[]{0,3,7};
-            case 2: return new int[]{0,4,7,10};
-            case 3: return new int[]{0,3,7,10};
-            case 4: return new int[]{0,2,7};
-            case 5: return new int[]{0,5,7};
+            case 2: return new int[]{0,4,7,11};
+            case 3: return new int[]{0,4,7,10};
+            case 4: return new int[]{0,3,7,10};
+            case 5: return new int[]{0,2,7};
+            case 6: return new int[]{0,5,7};
             default: return new int[]{0,4,7};
         }
     }
