@@ -96,6 +96,9 @@ public:
     void sequencerSetGridNote(int track, int step, int note, int velocityOrZero);
     void sequencerSetNoteDuration(int track, int noteIndex, int durationTick);
     void sequencerDeleteNote(int track, int noteIndex);
+    void sequencerSetLoopBars(int bars);
+    int sequencerLoopBars() const { return seqLoopBars_.load(std::memory_order_relaxed); }
+    void sequencerSetTrackSend(int track, int reverb, int delay);
     bool sequencerPlaying() const { return seqPlaying_.load(std::memory_order_relaxed); }
     bool sequencerRecording() const { return seqRecording_.load(std::memory_order_relaxed); }
     bool sequencerClick() const { return seqClick_.load(std::memory_order_relaxed); }
@@ -140,7 +143,7 @@ private:
             FELT_REVERB, PERFORMANCE_XY,
             SEQ_PLAY, SEQ_STOP, SEQ_RECORD, SEQ_CLICK, SEQ_BPM,
             SEQ_SELECT_TRACK, SEQ_ASSIGN_PART, SEQ_CLEAR_TRACK, SEQ_TOGGLE_GRID,
-            SEQ_SET_GRID, SEQ_SET_DURATION, SEQ_DELETE_NOTE
+            SEQ_SET_GRID, SEQ_SET_DURATION, SEQ_DELETE_NOTE, SEQ_LOOP_BARS, SEQ_TRACK_SEND
         } type;
         int a=0,b=0,c=0,d=0;
     };
@@ -249,6 +252,13 @@ private:
     std::atomic<int> seqBpm_{120};
     std::atomic<int> seqSelectedTrack_{0};
     std::atomic<int> seqCurrentTick_{0};
+    std::atomic<int> seqLoopBars_{2};
+    std::array<int,SEQ_TRACK_COUNT> seqSendReverb_{{0,0,0,0,0,0,0,0}};
+    std::array<int,SEQ_TRACK_COUNT> seqSendDelay_{{0,0,0,0,0,0,0,0}};
+    SpaceEffect seqSendReverbFx_;
+    std::vector<float> seqSendDelayL_;
+    std::vector<float> seqSendDelayR_;
+    int seqSendDelayWrite_=0;
     double seqTickPhase_=0.0;
     int seqLastProcessedTick_=-1;
     std::array<int,128> seqRecordStartTick_{};
