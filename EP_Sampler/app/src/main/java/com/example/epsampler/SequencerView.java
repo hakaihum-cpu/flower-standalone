@@ -823,8 +823,8 @@ final class SequencerView extends View {
             int tr=target-136; mixPan[tr]=(mixPan[tr]+16)%128;
             NativeEngine.setPartMixer(trackParts[tr],mixVol[tr],mixPan[tr],false); return;
         }
-        if (target >= 140 && target < 156) {
-            int k=target-140, tr=k/2; boolean rev=(k%2)==0;
+        if (target >= 160 && target < 176) {
+            int k=target-160, tr=k/2; boolean rev=(k%2)==0;
             if(rev) sendRev[tr]=(sendRev[tr]+16)%128; else sendDelay[tr]=(sendDelay[tr]+16)%128;
             NativeEngine.sequencerSetTrackSend(tr,sendRev[tr],sendDelay[tr]); return;
         }\n        if (target == 1) {
@@ -946,8 +946,8 @@ final class SequencerView extends View {
                 float yy=top+t*rowH;
                 if(new RectF(12f*u,yy,130f*u,yy+rowH-6f*u).contains(x,y)) return 128+t;
                 if(new RectF(132f*u,yy,230f*u,yy+rowH-6f*u).contains(x,y)) return 136+t;
-                if(new RectF(240f*u,yy,410f*u,yy+rowH-6f*u).contains(x,y)) return 140+t*2;
-                if(new RectF(420f*u,yy,590f*u,yy+rowH-6f*u).contains(x,y)) return 141+t*2;
+                if(new RectF(240f*u,yy,410f*u,yy+rowH-6f*u).contains(x,y)) return 160+t*2;
+                if(new RectF(420f*u,yy,590f*u,yy+rowH-6f*u).contains(x,y)) return 161+t*2;
                 if(new RectF(12f*u,yy,230f*u,yy+rowH-6f*u).contains(x,y)) return 120+t;
             }
         }
