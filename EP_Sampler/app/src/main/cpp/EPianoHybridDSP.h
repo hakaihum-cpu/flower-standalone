@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 
 // E.PIANO prototype DSP. Audio-thread only: no memory allocations, locks, or I/O.
