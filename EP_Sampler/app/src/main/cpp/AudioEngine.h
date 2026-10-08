@@ -7,6 +7,7 @@
 #include <vector>
 #include <mutex>
 #include "SampleBank.h"
+#include "EPianoHybridDSP.h"
 #include "PhysicalViolin.h"
 #include "InstrumentModels.h"
 #include "DreamyEffect.h"
@@ -67,6 +68,8 @@ public:
     int audioBufferCapacityFrames() const;
     int audioXRunCount() const;
     int audioSampleRate() const { return sampleRate_; }
+    int dspLoadPercent() const { return dspLoadPercent_.load(std::memory_order_relaxed); }
+    int dspPeakPercent() const { return dspPeakPercent_.load(std::memory_order_relaxed); }
     float partMeter(int part) const;
     bool restartAudioPreservingState();
     bool loadDrumSample(int slot, const uint8_t* data, size_t size);
@@ -170,6 +173,9 @@ private:
     SpaceEffect feltPianoReverb_;
     TapeEffect tape_;
     IntegratedRecorder recorder_;
+    EPianoHybridDSP epianoDsp_;
+    std::atomic<int> dspLoadPercent_{0};
+    std::atomic<int> dspPeakPercent_{0};
 
     struct DrumSample {
         std::vector<float> left;
