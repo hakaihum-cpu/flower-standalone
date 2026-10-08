@@ -400,6 +400,12 @@ bool AudioEngine::start() {
     tape_.setParameters(tapeWow_, tapeFlutter_, tapeDrive_);
     dreamy_.setParameters(cc103_/127.f, cc104_/127.f, dreamyMix_);
     recorder_.prepare(sampleRate_);
+    seqSendReverbFx_.prepare(sampleRate_);
+    seqSendReverbFx_.setMode(SpaceEffect::HALL);
+    seqSendReverbFx_.setParameters(0.62f,0.68f);
+    seqSendDelayL_.assign(std::max(4096,sampleRate_*2),0.0f);
+    seqSendDelayR_.assign(std::max(4096,sampleRate_*2),0.0f);
+    seqSendDelayWrite_=0;
 
     if (AAudioStream_requestStart(stream_) != AAUDIO_OK) {
         stop();
@@ -1811,6 +1817,7 @@ void AudioEngine::render(float* out,int32_t frames) {
         float mixL = 0.0f;
         float mixR = 0.0f;
         int activeParts = 0;
+        float sendRevL=0.0f, sendRevR=0.0f, sendDlyL=0.0f, sendDlyR=0.0f;
 
         // Render the shared 64-voice sample pool once per frame, then route the
         // results to SAMPLE parts 8..15. This avoids scanning 64 voices eight times.
@@ -1893,6 +1900,18 @@ void AudioEngine::render(float* out,int32_t frames) {
                 if (pan < 0.0f) partR *= (1.0f + pan);
                 else if (pan > 0.0f) partL *= (1.0f - pan);
             }
+
+            int revSend=0, dlySend=0;
+            for(int track=0;track<SEQ_TRACK_COUNT;++track){
+                if(sequencerTrackPart(track)==part){
+                    revSend=std::max(revSend,seqSendReverb_[track]);
+                    dlySend=std::max(dlySend,seqSendDelay_[track]);
+                }
+            }
+            sendRevL += partL*(revSend/127.0f);
+            sendRevR += partR*(revSend/127.0f);
+            sendDlyL += partL*(dlySend/127.0f);
+            sendDlyR += partR*(dlySend/127.0f);
 
             const float partPeak = std::max(std::fabs(partL), std::fabs(partR));
             callbackPeak[part] = std::max(callbackPeak[part], partPeak);
