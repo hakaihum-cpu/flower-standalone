@@ -240,6 +240,14 @@ extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_audioS
         JNIEnv*, jclass) {
     return AudioEngine::instance().audioSampleRate();
 }
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_dspLoadPercent(
+        JNIEnv*, jclass) {
+    return AudioEngine::instance().dspLoadPercent();
+}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_dspPeakPercent(
+        JNIEnv*, jclass) {
+    return AudioEngine::instance().dspPeakPercent();
+}
 extern "C" JNIEXPORT jfloat JNICALL Java_com_example_epsampler_NativeEngine_partMeter(
         JNIEnv*, jclass, jint part) {
     return AudioEngine::instance().partMeter(part);
