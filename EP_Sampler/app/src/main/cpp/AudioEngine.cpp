@@ -563,6 +563,12 @@ void AudioEngine::sequencerSetNoteDuration(int track,int noteIndex,int durationT
 void AudioEngine::sequencerDeleteNote(int track,int noteIndex){
     push({Event::SEQ_DELETE_NOTE,track,noteIndex,0,0});
 }
+void AudioEngine::sequencerSetLoopBars(int bars){
+    push({Event::SEQ_LOOP_BARS,bars,0,0,0});
+}
+void AudioEngine::sequencerSetTrackSend(int track,int reverb,int delay){
+    push({Event::SEQ_TRACK_SEND,track,reverb,delay,0});
+}
 
 int AudioEngine::sequencerTrackPart(int track) const {
     track = std::clamp(track,0,SEQ_TRACK_COUNT-1);
@@ -1740,6 +1746,20 @@ void AudioEngine::handle(const Event& e) {
         case Event::SEQ_DELETE_NOTE:
             seqDeleteNoteInternal(e.a,e.b);
             break;
+        case Event::SEQ_LOOP_BARS: {
+            const int bars=e.a<=1?1:e.a<=2?2:e.a<=4?4:8;
+            seqLoopBars_.store(bars,std::memory_order_relaxed);
+            const int ticks=SEQ_TICKS_PER_BAR*bars;
+            if(seqTickPhase_>=ticks) seqTickPhase_=0.0;
+            seqCurrentTick_.store(std::min(seqCurrentTick_.load(),ticks-1),std::memory_order_relaxed);
+            break;
+        }
+        case Event::SEQ_TRACK_SEND: {
+            const int track=std::clamp(e.a,0,SEQ_TRACK_COUNT-1);
+            seqSendReverb_[track]=std::clamp(e.b,0,127);
+            seqSendDelay_[track]=std::clamp(e.c,0,127);
+            break;
+        }
 
         case Event::PERFORMANCE_XY: {
             const bool wasActive = performanceXYActive_;
@@ -1952,8 +1972,9 @@ void AudioEngine::render(float* out,int32_t frames) {
                     double(SEQ_PPQN) /
                     (double(std::max(1,sampleRate_)) * 60.0);
             seqTickPhase_ += ticksPerSample;
-            while (seqTickPhase_ >= double(SEQ_LOOP_TICKS))
-                seqTickPhase_ -= double(SEQ_LOOP_TICKS);
+            const int activeLoopTicks=SEQ_TICKS_PER_BAR*std::clamp(seqLoopBars_.load(std::memory_order_relaxed),1,SEQ_BARS);
+            while (seqTickPhase_ >= double(activeLoopTicks))
+                seqTickPhase_ -= double(activeLoopTicks);
         }
     }
 
