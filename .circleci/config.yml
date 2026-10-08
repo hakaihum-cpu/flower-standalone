@@ -21,6 +21,7 @@ jobs:
             test -f EP_Sampler/app/build.gradle
             test -f EP_Sampler/app/src/main/cpp/SampleBank.cpp
             test -f EP_Sampler/app/src/main/cpp/AudioEngine.cpp
+            test -f EP_Sampler/app/src/main/cpp/EPianoHybridDSP.h
             test -f EP_Sampler/app/src/main/java/com/example/epsampler/MainActivity.java
             grep -F "abiFilters 'arm64-v8a', 'armeabi-v7a'" EP_Sampler/app/build.gradle
             grep -F 'signingConfig signingConfigs.debug' EP_Sampler/app/build.gradle
@@ -62,7 +63,7 @@ jobs:
             - gradle-ep-sampler-v1-
 
       - run:
-          name: Build EP Sampler APK
+          name: Build E.PIANO hybrid APK
           no_output_timeout: 30m
           command: |
             set -u
@@ -122,15 +123,15 @@ jobs:
             git rev-parse HEAD | tee android-artifact/SOURCE_COMMIT.txt
             APK="$(find EP_Sampler/app/build/outputs/apk/release -type f -name '*.apk' | head -n 1 || true)"
             if [ -n "$APK" ]; then
-              cp "$APK" android-artifact/EP-Sampler-Android.apk
-              sha256sum android-artifact/EP-Sampler-Android.apk | tee android-artifact/SHA256.txt
+              cp "$APK" android-artifact/EPiano-Android.apk
+              sha256sum android-artifact/EPiano-Android.apk | tee android-artifact/SHA256.txt
             else
               echo "No release APK produced." | tee android-artifact/NO_APK.txt
             fi
 
       - store_artifacts:
-          path: android-artifact/EP-Sampler-Android.apk
-          destination: EP-Sampler-Android.apk
+          path: android-artifact/EPiano-Android.apk
+          destination: EPiano-Android.apk
 
       - store_artifacts:
           path: android-artifact
