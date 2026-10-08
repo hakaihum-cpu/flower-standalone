@@ -1941,9 +1941,19 @@ void AudioEngine::render(float* out,int32_t frames) {
             if (voices > 0 && !partMute_[part] && partVolume_[part] > 0) activeParts++;
         }
 
+        if(!seqSendDelayL_.empty()){
+            const int delaySamples=std::clamp(int(sampleRate_*60.0/std::max(40,seqBpm_.load())*0.5),1,int(seqSendDelayL_.size())-1);
+            int read=seqSendDelayWrite_-delaySamples; if(read<0) read+=int(seqSendDelayL_.size());
+            const float dl=seqSendDelayL_[read], dr=seqSendDelayR_[read];
+            seqSendDelayL_[seqSendDelayWrite_]=sendDlyL+dl*0.38f;
+            seqSendDelayR_[seqSendDelayWrite_]=sendDlyR+dr*0.38f;
+            seqSendDelayWrite_=(seqSendDelayWrite_+1)%int(seqSendDelayL_.size());
+            sendDlyL=dl; sendDlyR=dr;
+        }
+        seqSendReverbFx_.process(sendRevL,sendRevR);
         const float norm = activeParts > 1 ? 1.0f / std::sqrt(float(activeParts)) : 1.0f;
-        float l = mixL * norm;
-        float r = mixR * norm;
+        float l = mixL * norm + sendRevL*0.65f + sendDlyL*0.65f;
+        float r = mixR * norm + sendRevR*0.65f + sendDlyR*0.65f;
 
         dreamy_.process(l,r);
         tape_.process(l,r);
