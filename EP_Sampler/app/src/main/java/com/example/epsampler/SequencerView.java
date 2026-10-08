@@ -14,10 +14,10 @@ final class SequencerView extends View {
     }
 
     private static final int TRACKS = 8;
-    private static final int BARS = 8;
+    private static final int MAX_BARS = 8;
     private static final int PPQN = 96;
     private static final int TICKS_PER_BAR = PPQN * 4;
-    private static final int LOOP_TICKS = TICKS_PER_BAR * BARS;
+    private static final int MAX_LOOP_TICKS = TICKS_PER_BAR * MAX_BARS;
     private static final int STEPS_PER_BAR = 16;
     private static final int STEP_TICKS = PPQN / 4;
     private static final int STEPS_PER_PAGE = 32;
@@ -41,6 +41,17 @@ final class SequencerView extends View {
     private boolean recording = false;
     private boolean click = false;
     private int page = 0;
+    private int loopBars = 2;
+    private int viewMode = 0; // 0 ROLL, 1 ARRANGE, 2 MIXER
+    private boolean euclid = false;
+    private int euclidRoot = 60;
+    private int euclidScale = 0;
+    private int euclidPulses = 5;
+    private int euclidSteps = 16;
+    private int lastLoopTick = -1;
+    private final int[] sendRev = new int[TRACKS];
+    private final int[] sendDelay = new int[TRACKS];
+    private static final String[] SCALE_NAMES = {"MAJ","MIN","DOR","PENTA"};
     private int lowNote = 48; // C3
     private final int[] trackParts = new int[]{0,1,2,3,4,5,6,7};
     private int[] noteData = new int[0];
@@ -124,7 +135,7 @@ final class SequencerView extends View {
 
     private void refreshVisualPlayhead() {
         if (!playing) {
-            playheadTick = clamp(NativeEngine.sequencerPlayheadTick(),0,LOOP_TICKS-1);
+            playheadTick = clamp(NativeEngine.sequencerPlayheadTick(),0,loopTicks()-1);
             return;
         }
 
@@ -172,7 +183,7 @@ final class SequencerView extends View {
 
         text.setTextSize(10.5f*u);
         text.setColor(Color.argb(150,241,238,229));
-        c.drawText("8 TRACK  /  8 BAR  /  MIDI", 14f*u, 48f*u, text);
+        c.drawText("8 TRACK  /  " + loopBars + " BAR  /  MIDI", 14f*u, 48f*u, text);
 
         int bar = playheadTick / TICKS_PER_BAR + 1;
         int beat = (playheadTick % TICKS_PER_BAR) / PPQN + 1;
@@ -289,10 +300,10 @@ final class SequencerView extends View {
 
             int visualStart = start;
             int visualEnd = start + dur;
-            if (visualEnd > LOOP_TICKS) {
+            if (visualEnd > loopTicks()) {
                 if (pageStartTick == 0) {
                     visualStart = 0;
-                    visualEnd -= LOOP_TICKS;
+                    visualEnd -= loopTicks();
                 } else if (start >= pageStartTick && start < pageEndTick) {
                     visualEnd = pageEndTick;
                 }
@@ -526,7 +537,7 @@ final class SequencerView extends View {
         int originalSteps = Math.max(1,
                 Math.round(resizeOriginalDuration / (float)STEP_TICKS));
         int deltaSteps = Math.round((x - touchDownX) / (30f*u()));
-        int maxSteps = LOOP_TICKS / STEP_TICKS - 1;
+        int maxSteps = loopTicks() / STEP_TICKS - 1;
         int steps = clamp(originalSteps + deltaSteps,1,maxSteps);
         resizePreviewDuration = steps * STEP_TICKS;
         invalidate();
@@ -726,7 +737,7 @@ final class SequencerView extends View {
     }
 
     private void activateTarget(int target) {
-        if (target == 1) {
+        if (target == 100) { viewMode = 0; return; }\n        if (target == 101) { viewMode = 1; return; }\n        if (target == 102) { viewMode = 2; return; }\n        if (target == 1) {
             NativeEngine.sequencerPlay();
         } else if (target == 2) {
             NativeEngine.sequencerStop();
@@ -756,7 +767,7 @@ final class SequencerView extends View {
         } else if (target == 40) {
             page = Math.max(0,page-1);
         } else if (target == 41) {
-            page = Math.min(3,page+1);
+            page = Math.min(Math.max(0,(loopBars-1)/2),page+1);
         } else if (target == 42) {
             lowNote = Math.max(0,lowNote-12);
         } else if (target == 43) {
@@ -827,7 +838,7 @@ final class SequencerView extends View {
 
     private int targetAt(float x, float y) {
         float u = u();
-        if (closeRect(u).contains(x,y)) return 90;
+        if (closeRect(u).contains(x,y)) return 90;\n        if (rollTabRect(u).contains(x,y)) return 100;\n        if (arrTabRect(u).contains(x,y)) return 101;\n        if (mixTabRect(u).contains(x,y)) return 102;
         if (playRect(u).contains(x,y)) return 1;
         if (stopRect(u).contains(x,y)) return 2;
         if (recRect(u).contains(x,y)) return 3;
@@ -856,6 +867,10 @@ final class SequencerView extends View {
         return -1;
     }
 
+    private int loopTicks(){ return TICKS_PER_BAR * loopBars; }
+    private RectF rollTabRect(float u){ return new RectF(300f*u,10f*u,368f*u,45f*u); }
+    private RectF arrTabRect(float u){ return new RectF(374f*u,10f*u,454f*u,45f*u); }
+    private RectF mixTabRect(float u){ return new RectF(460f*u,10f*u,522f*u,45f*u); }
     private RectF closeRect(float u){ return new RectF(628f*u,10f*u,708f*u,45f*u); }
     private RectF playRect(float u){ return new RectF(12f*u,65f*u,88f*u,111f*u); }
     private RectF stopRect(float u){ return new RectF(94f*u,65f*u,170f*u,111f*u); }
