@@ -152,9 +152,9 @@ final class SequencerView extends View {
 
         float rawTick = NativeEngine.sequencerPlayheadTick();
         float visualTick = rawTick - visualLatencyTicks;
-        while (visualTick < 0f) visualTick += LOOP_TICKS;
-        while (visualTick >= LOOP_TICKS) visualTick -= LOOP_TICKS;
-        playheadTick = clamp(Math.round(visualTick),0,LOOP_TICKS-1);
+        while (visualTick < 0f) visualTick += loopTicks();
+        while (visualTick >= loopTicks()) visualTick -= loopTicks();
+        playheadTick = clamp(Math.round(visualTick),0,loopTicks()-1);
     }
 
     @Override protected void onDraw(Canvas c) {
@@ -623,10 +623,10 @@ final class SequencerView extends View {
         int pageEndTick = pageStartTick+2*TICKS_PER_BAR;
         int visualStart = start;
         int visualEnd = start+dur;
-        if (visualEnd > LOOP_TICKS) {
+        if (visualEnd > loopTicks()) {
             if (pageStartTick == 0) {
                 visualStart = 0;
-                visualEnd -= LOOP_TICKS;
+                visualEnd -= loopTicks();
             } else if (start >= pageStartTick && start < pageEndTick) {
                 visualEnd = pageEndTick;
             }
