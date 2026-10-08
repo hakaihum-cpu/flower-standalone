@@ -769,6 +769,29 @@ final class SequencerView extends View {
         },35L);
     }
 
+    private int[] scaleIntervals() {
+        switch (euclidScale) {
+            case 1: return new int[]{0,2,3,5,7,8,10};
+            case 2: return new int[]{0,2,3,5,7,9,10};
+            case 3: return new int[]{0,2,4,7,9};
+            default: return new int[]{0,2,4,5,7,9,11};
+        }
+    }
+
+    private void generateEuclid() {
+        NativeEngine.sequencerClearTrack(selectedTrack);
+        int[] scale = scaleIntervals();
+        java.util.Random random = new java.util.Random();
+        int totalSteps = Math.max(1,loopBars*STEPS_PER_BAR);
+        int pulses = Math.min(euclidPulses,totalSteps);
+        for (int step=0;step<totalSteps;step++) {
+            if ((step*pulses)%totalSteps >= pulses) continue;
+            int note = euclidRoot + scale[random.nextInt(scale.length)];
+            NativeEngine.sequencerSetGridNote(selectedTrack,step,note,100);
+        }
+        postDelayed(() -> { refreshState(true); invalidate(); },35L);
+    }
+
     private int[] chordIntervals() {
         switch (chordType) {
             case 1: return new int[]{0,3,7};
