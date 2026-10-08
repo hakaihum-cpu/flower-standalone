@@ -111,6 +111,15 @@ extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequen
         JNIEnv*,jclass,jint track,jint noteIndex){
     AudioEngine::instance().sequencerDeleteNote(track,noteIndex);
 }
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerSetLoopBars(JNIEnv*,jclass,jint bars){
+    AudioEngine::instance().sequencerSetLoopBars(bars);
+}
+extern "C" JNIEXPORT jint JNICALL Java_com_example_epsampler_NativeEngine_sequencerLoopBars(JNIEnv*,jclass){
+    return AudioEngine::instance().sequencerLoopBars();
+}
+extern "C" JNIEXPORT void JNICALL Java_com_example_epsampler_NativeEngine_sequencerSetTrackSend(JNIEnv*,jclass,jint track,jint reverb,jint delay){
+    AudioEngine::instance().sequencerSetTrackSend(track,reverb,delay);
+}
 extern "C" JNIEXPORT jboolean JNICALL Java_com_example_epsampler_NativeEngine_sequencerIsPlaying(JNIEnv*,jclass){
     return AudioEngine::instance().sequencerPlaying() ? JNI_TRUE : JNI_FALSE;
 }
