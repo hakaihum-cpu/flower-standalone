@@ -49,6 +49,8 @@ final class SequencerView extends View {
     private int euclidPulses = 5;
     private int euclidSteps = 16;
     private int lastLoopTick = -1;
+    private final int[] mixVol = new int[]{112,112,112,112,112,112,112,112};
+    private final int[] mixPan = new int[]{64,64,64,64,64,64,64,64};
     private final int[] sendRev = new int[TRACKS];
     private final int[] sendDelay = new int[TRACKS];
     private static final String[] SCALE_NAMES = {"MAJ","MIN","DOR","PENTA"};
@@ -418,7 +420,7 @@ final class SequencerView extends View {
             RectF row=new RectF(12f*u,y,708f*u,y+rowH-6f*u); drawPanel(c,row,t==selectedTrack,u);
             text.setTextSize(10.5f*u); text.setColor(t==selectedTrack?Color.rgb(20,20,19):Color.rgb(241,238,229));
             c.drawText("T"+(t+1)+" "+shortName(partNames[trackParts[t]],9),22f*u,y+25f*u,text);
-            text.setTextSize(9f*u); c.drawText("VOL/PAN",22f*u,y+48f*u,text);
+            text.setTextSize(9f*u); c.drawText("VOL "+mixVol[t]+"  PAN "+mixPan[t],22f*u,y+48f*u,text);
             text.setTextSize(10f*u); c.drawText("REV "+sendRev[t],250f*u,y+25f*u,text); c.drawText("DLY "+sendDelay[t],430f*u,y+25f*u,text);
             drawBar(c,250f*u,y+39f*u,140f*u,sendRev[t]/127f,u);
             drawBar(c,430f*u,y+39f*u,140f*u,sendDelay[t]/127f,u);
@@ -813,6 +815,14 @@ final class SequencerView extends View {
         if (target == 113) { euclidScale=(euclidScale+1)%SCALE_NAMES.length; if(euclid) generateEuclid(); return; }
         if (target == 114) { euclidPulses=euclidPulses>=euclidSteps?1:euclidPulses+1; if(euclid) generateEuclid(); return; }
         if (target >= 120 && target < 128) { NativeEngine.sequencerSetSelectedTrack(target-120); return; }
+        if (target >= 128 && target < 136) {
+            int tr=target-128; mixVol[tr]=(mixVol[tr]+16)%128;
+            NativeEngine.setPartMixer(trackParts[tr],mixVol[tr],mixPan[tr],false); return;
+        }
+        if (target >= 136 && target < 144) {
+            int tr=target-136; mixPan[tr]=(mixPan[tr]+16)%128;
+            NativeEngine.setPartMixer(trackParts[tr],mixVol[tr],mixPan[tr],false); return;
+        }
         if (target >= 140 && target < 156) {
             int k=target-140, tr=k/2; boolean rev=(k%2)==0;
             if(rev) sendRev[tr]=(sendRev[tr]+16)%128; else sendDelay[tr]=(sendDelay[tr]+16)%128;
@@ -934,6 +944,8 @@ final class SequencerView extends View {
             float top=72f*u,rowH=72f*u;
             for(int t=0;t<TRACKS;t++){
                 float yy=top+t*rowH;
+                if(new RectF(12f*u,yy,130f*u,yy+rowH-6f*u).contains(x,y)) return 128+t;
+                if(new RectF(132f*u,yy,230f*u,yy+rowH-6f*u).contains(x,y)) return 136+t;
                 if(new RectF(240f*u,yy,410f*u,yy+rowH-6f*u).contains(x,y)) return 140+t*2;
                 if(new RectF(420f*u,yy,590f*u,yy+rowH-6f*u).contains(x,y)) return 141+t*2;
                 if(new RectF(12f*u,yy,230f*u,yy+rowH-6f*u).contains(x,y)) return 120+t;
