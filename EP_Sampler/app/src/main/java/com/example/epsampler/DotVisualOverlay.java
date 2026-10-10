@@ -15,6 +15,24 @@ final class DotVisualOverlay extends View {
     private static final int W = 512, H = 384;
     private static final int[] BAYER = {0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5};
     private static final int[] PALETTE = {0xff100e08,0xff80671e,0xffffdb46,0xffffe57a};
+    static Bitmap makeDotBitmap(Bitmap original) {
+        int w=Math.max(1,Math.min(512,original.getWidth()));
+        int h=Math.max(1,Math.min(512,original.getHeight()));
+        Bitmap scaled=Bitmap.createScaledBitmap(original,w,h,false);
+        int[] input=new int[w*h], result=new int[w*h];
+        scaled.getPixels(input,0,w,0,0,w,h);
+        for(int y=0;y<h;y++) for(int x=0;x<w;x++) {
+            int i=y*w+x,c=input[i];
+            float l=(0.2126f*Color.red(c)+0.7152f*Color.green(c)+0.0722f*Color.blue(c))/255f;
+            float threshold=0.13f+0.63f*BAYER[(x&3)+((y&3)<<2)]/16f;
+            result[i]=PALETTE[l<threshold?0:l>0.88f?3:l>0.63f?2:1];
+        }
+        Bitmap out=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
+        out.setPixels(result,0,w,0,0,w,h);
+        if(scaled!=original) scaled.recycle();
+        return out;
+    }
+
     private final TextureView source;
     private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint uiPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
