@@ -1639,6 +1639,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterFloat> (
         ParamID::boostDb, "BOOST",
         juce::NormalisableRange<float> (0.0f, 14.0f, 0.5f), 0.0f));
+    p.add (std::make_unique<juce::AudioParameterChoice> (
+        ParamID::displayMode, "DISPLAY",
+        juce::StringArray { "MEDIA", "DOT" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeMix, "HAZE MIX", 0.0f, 1.0f, 0.55f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeTime, "HAZE TIME", 0.0f, 1.0f, 0.50f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeAmount, "HAZE AMOUNT", 0.0f, 1.0f, 0.50f));
