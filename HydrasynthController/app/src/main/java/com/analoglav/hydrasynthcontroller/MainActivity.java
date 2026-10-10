@@ -141,7 +141,7 @@ public final class MainActivity extends Activity {
     try {
       byte[] msg=NrpnEncoder.encode(channel,p.msb,p.lsb,p.encode(value));
       for(int i=0;i<msg.length;i+=3)txPort.send(msg,i,3);
-      view.status="TX SENT  CH"+channel+"  "+p.name;
+      view.status="PORT WRITE OK  CH"+channel+"  "+p.name+" / NO RX ACK";
     }catch(IOException|IllegalArgumentException ex){
       view.status="TX FAILED: "+ex.getClass().getSimpleName();
     }
@@ -167,7 +167,7 @@ public final class MainActivity extends Activity {
         try{
           byte[] m=NrpnEncoder.encode(channel,p.msb,p.lsb,p.encode(value));
           for(int j=0;j<m.length;j+=3)txPort.send(m,j,3);
-          if(last){view.status="APPLIED "+count+" FIELDS / SYNTH NOT ACKNOWLEDGED";view.invalidate();}
+          if(last){view.status="PORT WRITE OK "+count+" FIELDS / NO SYNTH ACK";view.invalidate();}
         }catch(IOException|IllegalArgumentException err){
           sendGeneration++;
           view.status="APPLY ABORTED: "+err.getClass().getSimpleName();view.invalidate();
@@ -176,6 +176,38 @@ public final class MainActivity extends Activity {
     }
   }
 
+
+  /** Explicit routing check. No patch data is changed by this test. */
+  private void sendDiagnosticNote(){
+    final MidiInputPort destination=txPort;
+    if(destination==null){
+      view.status="TEST: SELECT MIDI OUTPUT FIRST";view.invalidate();return;
+    }
+    final int midiCh=(channel-1)&15;
+    try{
+      destination.send(new byte[]{(byte)(0x90|midiCh),60,100},0,3);
+      view.status="TEST CH"+channel+": NOTE ON WRITTEN TO PORT";
+      view.invalidate();
+      main.postDelayed(()->{
+        try{
+          destination.send(new byte[]{(byte)(0x80|midiCh),60,0},0,3);
+          view.status="TEST NOTE OFF / NO HYDRASYNTH ACK";
+        }catch(IOException e){
+          view.status="TEST NOTE OFF PORT ERROR";
+        }
+        view.invalidate();
+      },220L);
+    }catch(IOException e){
+      view.status="TEST NOTE PORT ERROR";view.invalidate();
+    }
+  }
+
+  private boolean outputIsDigitakt(){
+    for(MidiDeviceInfo d:outs)
+      if(d.getId()==outId && name(d).toLowerCase(java.util.Locale.ROOT).contains("digitakt"))
+        return true;
+    return false;
+  }
   private void updateBluetoothPermission(){
     if(Build.VERSION.SDK_INT>=31 &&
        checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED)
@@ -281,7 +313,7 @@ public final class MainActivity extends Activity {
     private void drawHeader(Canvas c){
       text(c,"HYDRA / DOT",YELLOW,28,41,31);
       text(c,trim(patchName+(dirty?" *":""),25),LIGHT,30,71,21);
-      text(c,txPort==null?"MIDI OFF":"MIDI ON",txPort==null?DIM:LIGHT,575,42,20);
+      text(c,txPort==null?"PORT OFF":"PORT OPEN",txPort==null?DIM:LIGHT,559,42,20);
       text(c,draft.size()+" SET",DIM,593,70,16);
     }
     private void drawRouting(Canvas c){
@@ -399,8 +431,10 @@ public final class MainActivity extends Activity {
       drawConfigRow(c,"MIDI OUTPUT",deviceLabel(outs,outId),337);
       drawConfigRow(c,"MIDI INPUT",deviceLabel(ins,inId),410);
       drawConfigRow(c,"MIDI CHANNEL","CHANNEL "+channel,483);
-      tile(c,"REFRESH",43,563,635,41,true,false);
-      text(c,"Hydrasynth SYSTEM PARAM RX must be NRPN",DIM,43,616,16);
+      tile(c,"REFRESH",43,563,308,41,true,false);
+      tile(c,"TEST NOTE",364,563,314,41,txPort!=null,false);
+      text(c,outputIsDigitakt()?"DIGITAKT USB NOT AUTO-ROUTED TO DIN OUT":
+           "HYDRA: SET SYSTEM PARAM RX = NRPN",DIM,43,616,16);
       drawBottom(c);
     }
     private void drawConfigRow(Canvas c,String label,String value,int y){
@@ -529,7 +563,12 @@ public final class MainActivity extends Activity {
           if(y>=340&&y<391){chooseMidi(false);return true;}
           if(y>=414&&y<464){chooseMidi(true);return true;}
           if(y>=489&&y<540){chooseChannel();return true;}
-          if(y>=563&&y<611){updateBluetoothPermission();refresh();status="MIDI DEVICE LIST REFRESHED";invalidate();}
+          if(y>=563&&y<611){
+            if(x<359){
+              updateBluetoothPermission();refresh();status="MIDI DEVICE LIST REFRESHED";
+            } else sendDiagnosticNote();
+            invalidate();
+          }
           return true;
         }
         if(panelMode==2){
