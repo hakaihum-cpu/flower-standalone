@@ -25,6 +25,8 @@
       <FILE id="frm100" name="FlowerFrameData.h" compile="0" resource="0" file="Source/FlowerFrameData.h"/>
       <FILE id="frmpkh" name="FramePack.h" compile="0" resource="0" file="Source/FramePack.h"/>
       <FILE id="frmpkc" name="FramePack.cpp" compile="1" resource="0" file="Source/FramePack.cpp"/>
+      <FILE id="dotfnt" name="FlowerTechnicalFont.h" compile="0" resource="0" file="Source/FlowerTechnicalFont.h"/>
+      <FILE id="dotrnd" name="FlowerDotRenderer.h" compile="0" resource="0" file="Source/FlowerDotRenderer.h"/>
       <FILE id="edhdr1" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
       <FILE id="edcpp1" name="PluginEditor.cpp" compile="1" resource="0" file="Source/PluginEditor.cpp"/>
     </GROUP>
