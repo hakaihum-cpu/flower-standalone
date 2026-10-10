@@ -517,16 +517,33 @@ void RealtimeChordFxAudioProcessorEditor::paintBar (juce::Graphics& g,
                                                      float value,
                                                      const juce::String& text)
 {
-    g.setColour (juce::Colours::white.withAlpha (0.84f));
-    g.setFont (juce::FontOptions (13.0f));
+    g.setColour (uiColour (0.84f));
+    g.setFont (juce::FontOptions (13.0f).withStyle (
+        dotModeEnabled() ? "Bold" : "Regular"));
     g.drawText (label, r.removeFromTop (20.0f), juce::Justification::centredLeft);
     auto line = r.removeFromTop (20.0f).reduced (0.0f, 8.0f);
-    g.setColour (juce::Colours::white.withAlpha (0.30f));
+    g.setColour (uiColour (0.30f));
     g.fillRect (line.withHeight (1.0f));
-    g.setColour (juce::Colours::white.withAlpha (0.88f));
-    g.fillRect (line.withWidth (line.getWidth() * juce::jlimit (0.0f, 1.0f, value)).withHeight (2.0f));
-    g.fillEllipse (line.getX() + line.getWidth() * value - 3.0f, line.getCentreY() - 3.0f, 6.0f, 6.0f);
-    g.setFont (juce::FontOptions (13.0f));
+    g.setColour (uiColour (0.88f));
+    g.fillRect (line.withWidth (
+        line.getWidth() * juce::jlimit (0.0f, 1.0f, value))
+        .withHeight (dotModeEnabled() ? 4.0f : 2.0f));
+
+    if (dotModeEnabled())
+    {
+        g.fillRect (
+            line.getX() + line.getWidth() * value - 4.0f,
+            line.getCentreY() - 4.0f, 8.0f, 8.0f);
+    }
+    else
+    {
+        g.fillEllipse (
+            line.getX() + line.getWidth() * value - 3.0f,
+            line.getCentreY() - 3.0f, 6.0f, 6.0f);
+    }
+
+    g.setFont (juce::FontOptions (13.0f).withStyle (
+        dotModeEnabled() ? "Bold" : "Regular"));
     g.drawText (text, r, juce::Justification::centredLeft);
 }
 
@@ -642,6 +659,8 @@ void RealtimeChordFxAudioProcessorEditor::paint (juce::Graphics& g)
         paintMain (g);
         paintGlobalControls (g);
     }
+
+    paintDotUiFrame (g);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g)
@@ -658,7 +677,7 @@ void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g
     const juce::Rectangle<float> boostBounds (390.0f, 16.0f, 76.0f, 38.0f);
     g.setColour (juce::Colours::black.withAlpha (0.50f));
     g.fillRoundedRectangle (boostBounds, 6.0f);
-    g.setColour (juce::Colours::white.withAlpha (boostDb > 0.01f ? 0.96f : 0.62f));
+    g.setColour (uiColour (boostDb > 0.01f ? 0.96f : 0.62f));
     g.drawRoundedRectangle (boostBounds, 6.0f, boostDb > 0.01f ? 1.8f : 1.0f);
     g.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
     g.drawFittedText (
@@ -674,7 +693,7 @@ void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g
         const juce::Rectangle<float> wetBounds (250.0f, 76.0f, 220.0f, 52.0f);
         g.setColour (juce::Colours::black.withAlpha (0.80f));
         g.fillRoundedRectangle (wetBounds, 8.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.94f));
+        g.setColour (uiColour (0.94f));
         g.drawRoundedRectangle (wetBounds, 8.0f, 1.2f);
         g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
         g.drawText ("WET " + juce::String (juce::roundToInt (wet * 100.0f)) + "%",
@@ -704,7 +723,10 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
     if (effectMode == 0)
     {
         if (currentFrame.isValid())
-            g.drawImage (currentFrame, juce::Rectangle<float> (0, 0, design, design), juce::RectanglePlacement::stretchToFit);
+            paintMediaFrame (
+                g, currentFrame,
+                juce::Rectangle<float> (0, 0, design, design),
+                0, dotFrameRevision);
 
         // Exact CHORD visual restored from golden/chordfx-android-2026-10-02.
         juce::ColourGradient shade (juce::Colours::transparentBlack, 360.0f, 520.0f,
@@ -720,7 +742,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
             g.drawText (juce::String::fromUTF8 (u8"● REC"), 24, 20, 130, 28, juce::Justification::centredLeft);
         }
 
-        g.setColour (juce::Colours::white.withAlpha (0.88f));
+        g.setColour (uiColour (0.88f));
         g.setFont (juce::FontOptions (14.0f));
         g.drawText ("IN  " + noteText (processor.getDetectedMidi()) + "    CHORD  " + processor.getChordLabel(),
                     28, 578, 520, 28, juce::Justification::centredLeft);
@@ -758,8 +780,10 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
     }
 
     if (currentFrame.isValid())
-            g.drawImage (currentFrame, juce::Rectangle<float> (0, 0, design, design),
-                         juce::RectanglePlacement::stretchToFit);
+        paintMediaFrame (
+            g, currentFrame,
+            juce::Rectangle<float> (0, 0, design, design),
+            0, dotFrameRevision);
     
         juce::ColourGradient shade (juce::Colours::transparentBlack, 360.0f, 555.0f,
                                     juce::Colours::black.withAlpha (0.58f),
@@ -777,12 +801,12 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
         }
         else
         {
-            g.setColour (juce::Colours::white.withAlpha (0.74f));
+            g.setColour (uiColour (0.74f));
             g.setFont (juce::FontOptions (12.0f));
             g.drawText ("REC", 24, 20, 80, 28, juce::Justification::centredLeft);
         }
     
-        g.setColour (juce::Colours::white.withAlpha (0.88f));
+        g.setColour (uiColour (0.88f));
         g.setFont (juce::FontOptions (14.0f));
         g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
     
@@ -792,7 +816,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
         const int reverbSteps = juce::jlimit (0, 10, juce::roundToInt (reverbAmount * 10.0f));
 
         g.setFont (juce::FontOptions (11.5f));
-        g.setColour (juce::Colours::white.withAlpha (0.74f));
+        g.setColour (uiColour (0.74f));
         g.drawText ("REVERB", 28, 626, 90, 18, juce::Justification::centredLeft);
         for (int i = 0; i < 10; ++i)
         {
@@ -806,7 +830,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
                     248, 626, 52, 18, juce::Justification::centredRight);
 
         g.setFont (juce::FontOptions (12.0f));
-        g.setColour (juce::Colours::white.withAlpha (0.74f));
+        g.setColour (uiColour (0.74f));
         g.drawText ("X " + juce::String (processor.getMidiControllerX()).paddedLeft ('0', 3)
                     + "   Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
                     28, 660, 240, 22, juce::Justification::centredLeft);
@@ -819,7 +843,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
         if (motion != 0)
         {
             g.setColour (motion == 1 ? juce::Colour (0xfff23a36)
-                                     : juce::Colours::white.withAlpha (0.82f));
+                                     : uiColour (0.82f));
             g.drawText (motion == 1 ? "MOTION REC" : "MOTION PLAY",
                         430, 660, 170, 22, juce::Justification::centredLeft);
         }
@@ -832,10 +856,10 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
 
     if (currentEurekaFrame.isValid())
     {
-        g.drawImage (
-            currentEurekaFrame,
+        paintMediaFrame (
+            g, currentEurekaFrame,
             juce::Rectangle<float> (0.0f, 0.0f, design, design),
-            juce::RectanglePlacement::stretchToFit);
+            1, dotEurekaRevision);
     }
 
     juce::ColourGradient topShade (
@@ -844,17 +868,17 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
     g.setGradientFill (topShade);
     g.fillRect (0.0f, 0.0f, 720.0f, 145.0f);
 
-    g.setColour (juce::Colours::white.withAlpha (0.96f));
+    g.setColour (uiColour (0.96f));
     g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
     g.drawText ("EUREKA", 28, 18, 180, 34,
                 juce::Justification::centredLeft);
 
     g.setFont (juce::FontOptions (12.0f));
-    g.setColour (juce::Colours::white.withAlpha (0.72f));
+    g.setColour (uiColour (0.72f));
     g.drawText ("DUAL LOOP / GLITCH / LO-FI",
                 176, 24, 260, 24, juce::Justification::centredLeft);
 
-    g.setColour (juce::Colours::white.withAlpha (0.94f));
+    g.setColour (uiColour (0.94f));
     g.drawText (eurekaPanelVisible ? "CLOSE" : "PANEL",
                 490, 22, 78, 24, juce::Justification::centred);
     g.drawText ("CONFIG", 604, 22, 88, 24,
@@ -868,7 +892,7 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
             processor.state().getRawParameterValue (ParamID::hazeReverb)->load();
 
         g.setFont (juce::FontOptions (11.0f));
-        g.setColour (juce::Colours::white.withAlpha (0.72f));
+        g.setColour (uiColour (0.72f));
         g.drawText (
             "XY STUTTER " + juce::String (juce::roundToInt (stutter * 100.0f))
             + "%   REVERB " + juce::String (juce::roundToInt (hall * 100.0f)) + "%",
@@ -879,7 +903,7 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
     g.setColour (juce::Colours::black.withAlpha (0.76f));
     g.fillRoundedRectangle (
         juce::Rectangle<float> (18.0f, 72.0f, 684.0f, 612.0f), 12.0f);
-    g.setColour (juce::Colours::white.withAlpha (0.28f));
+    g.setColour (uiColour (0.28f));
     g.drawRoundedRectangle (
         juce::Rectangle<float> (18.0f, 72.0f, 684.0f, 612.0f), 12.0f, 1.0f);
 
@@ -985,26 +1009,26 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
         const bool emphasized =
             (i == 6 && og) || (i == 7 && lock) || (i == 8 && bypass);
 
-        g.setColour (juce::Colours::white.withAlpha (
+        g.setColour (uiColour (
             emphasized ? 0.18f : 0.06f));
         g.fillRoundedRectangle (r, 6.0f);
-        g.setColour (juce::Colours::white.withAlpha (
+        g.setColour (uiColour (
             emphasized ? 0.94f : 0.46f));
         g.drawRoundedRectangle (
             r, 6.0f, emphasized ? 2.0f : 1.0f);
 
         g.setFont (juce::FontOptions (10.0f));
-        g.setColour (juce::Colours::white.withAlpha (0.52f));
+        g.setColour (uiColour (0.52f));
         g.drawText (
             toggleNames[i], r.removeFromTop (19.0f),
             juce::Justification::centred);
         g.setFont (juce::FontOptions (13.0f).withStyle ("Bold"));
-        g.setColour (juce::Colours::white.withAlpha (0.90f));
+        g.setColour (uiColour (0.90f));
         g.drawText (values[i], r, juce::Justification::centred);
     }
 
     g.setFont (juce::FontOptions (10.5f));
-    g.setColour (juce::Colours::white.withAlpha (0.58f));
+    g.setColour (uiColour (0.58f));
     g.drawText (
         "BYPASS keeps recording. LOCK stops record heads. XY controls STUTTER and REVERB.",
         30, 658, 660, 20, juce::Justification::centred);
@@ -1019,21 +1043,21 @@ void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
 
     g.fillAll (juce::Colours::black);
 
-    g.setColour (juce::Colours::white.withAlpha (0.92f));
+    g.setColour (uiColour (0.92f));
     g.setFont (juce::FontOptions (19.0f).withStyle ("Bold"));
     g.drawText ("CHORDBOT", 28, 20, 220, 32,
                 juce::Justification::centredLeft);
 
     g.setFont (juce::FontOptions (12.0f));
-    g.setColour (juce::Colours::white.withAlpha (0.60f));
+    g.setColour (uiColour (0.60f));
     g.drawText ("TOP-LEFT = THEORY ROOT",
                 250, 24, 210, 24, juce::Justification::centredLeft);
 
-    g.setColour (juce::Colours::white.withAlpha (
+    g.setColour (uiColour (
         chordBotEditMode ? 0.98f : 0.74f));
     g.drawText (chordBotEditMode ? "DONE" : "EDIT",
                 500, 22, 72, 26, juce::Justification::centred);
-    g.setColour (juce::Colours::white.withAlpha (0.84f));
+    g.setColour (uiColour (0.84f));
     g.drawText ("CONFIG",
                 604, 22, 88, 26, juce::Justification::centredRight);
 
@@ -1048,11 +1072,11 @@ void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
 
         if (isActive)
         {
-            g.setColour (juce::Colours::white.withAlpha (0.16f));
+            g.setColour (uiColour (0.16f));
             g.fillRoundedRectangle (r, 8.0f);
         }
 
-        g.setColour (juce::Colours::white.withAlpha (
+        g.setColour (uiColour (
             isEditTarget ? 0.98f : 0.48f));
         g.drawRoundedRectangle (
             r.reduced (1.0f), 8.0f,
@@ -1061,7 +1085,7 @@ void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
         if (i == 0)
         {
             g.setFont (juce::FontOptions (10.5f).withStyle ("Bold"));
-            g.setColour (juce::Colours::white.withAlpha (0.58f));
+            g.setColour (uiColour (0.58f));
             g.drawText ("ROOT",
                         r.getX() + 12.0f, r.getY() + 10.0f,
                         70.0f, 20.0f, juce::Justification::centredLeft);
@@ -1072,7 +1096,7 @@ void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
         const int quality = juce::jlimit (
             0, 7, processor.getChordBotSlotQuality (i));
 
-        g.setColour (juce::Colours::white.withAlpha (0.94f));
+        g.setColour (uiColour (0.94f));
         g.setFont (juce::FontOptions (36.0f).withStyle ("Bold"));
         g.drawText (roots[root],
                     r.getX() + 12.0f, r.getY() + 64.0f,
@@ -1080,7 +1104,7 @@ void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
                     juce::Justification::centred);
 
         g.setFont (juce::FontOptions (16.0f));
-        g.setColour (juce::Colours::white.withAlpha (0.72f));
+        g.setColour (uiColour (0.72f));
         g.drawText (qualities[quality],
                     r.getX() + 12.0f, r.getY() + 119.0f,
                     r.getWidth() - 24.0f, 30.0f,
@@ -1092,23 +1116,23 @@ void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
         const juce::Rectangle<float> overlay (105.0f, 180.0f, 510.0f, 360.0f);
         g.setColour (juce::Colours::black.withAlpha (0.96f));
         g.fillRoundedRectangle (overlay, 12.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.76f));
+        g.setColour (uiColour (0.76f));
         g.drawRoundedRectangle (overlay, 12.0f, 1.5f);
 
-        g.setColour (juce::Colours::white.withAlpha (0.94f));
+        g.setColour (uiColour (0.94f));
         g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
         g.drawText ("EDIT PAD " + juce::String (chordBotEditSlot + 1),
                     140, 202, 440, 30, juce::Justification::centred);
 
         g.setFont (juce::FontOptions (13.0f));
-        g.setColour (juce::Colours::white.withAlpha (0.62f));
+        g.setColour (uiColour (0.62f));
         g.drawText ("ROOT", 145, 248, 100, 34,
                     juce::Justification::centredLeft);
         g.drawText ("CHORD", 145, 326, 100, 34,
                     juce::Justification::centredLeft);
 
         g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
-        g.setColour (juce::Colours::white.withAlpha (0.92f));
+        g.setColour (uiColour (0.92f));
         g.drawText ("<", 150, 282, 58, 44, juce::Justification::centred);
         g.drawText (roots[juce::jlimit (0, 11, chordBotEditRoot)],
                     225, 282, 270, 44, juce::Justification::centred);
@@ -1121,13 +1145,13 @@ void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
 
         g.setFont (juce::FontOptions (15.0f).withStyle ("Bold"));
         g.drawText ("SAVE", 180, 454, 160, 48, juce::Justification::centred);
-        g.setColour (juce::Colours::white.withAlpha (0.66f));
+        g.setColour (uiColour (0.66f));
         g.drawText ("CANCEL", 380, 454, 160, 48, juce::Justification::centred);
 
         if (chordBotEditSlot == 0)
         {
             g.setFont (juce::FontOptions (10.5f));
-            g.setColour (juce::Colours::white.withAlpha (0.50f));
+            g.setColour (uiColour (0.50f));
             g.drawText ("Saving ROOT re-generates the other 8 theory candidates.",
                         135, 510, 450, 18, juce::Justification::centred);
         }
@@ -1197,11 +1221,14 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioInput (int index)
 void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
 {
     if (currentFrame.isValid())
-        g.drawImage (currentFrame, juce::Rectangle<float> (0,0,design,design), juce::RectanglePlacement::stretchToFit);
+        paintMediaFrame (
+            g, currentFrame,
+            juce::Rectangle<float> (0, 0, design, design),
+            0, dotFrameRevision);
     g.setColour (juce::Colours::black.withAlpha (0.76f));
     g.fillAll();
 
-    g.setColour (juce::Colours::white.withAlpha (0.90f));
+    g.setColour (uiColour (0.90f));
     g.setFont (juce::FontOptions (20.0f));
     g.drawText ("CONFIG", 34, 26, 180, 32, juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (13.0f));
@@ -1212,13 +1239,13 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     if (globalPresetMessage.isNotEmpty())
     {
         g.setFont (juce::FontOptions (10.5f));
-        g.setColour (juce::Colours::white.withAlpha (0.58f));
+        g.setColour (uiColour (0.58f));
         g.drawText (globalPresetMessage, 344, 58, 214, 18,
                     juce::Justification::centred);
     }
 
     g.setFont (juce::FontOptions (13.0f));
-    g.setColour (juce::Colours::white.withAlpha (0.62f));
+    g.setColour (uiColour (0.62f));
     g.drawText ("AUDIO INPUT", 54, 94, 180, 24, juce::Justification::centredLeft);
 
     int y = 126;
@@ -1226,7 +1253,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     for (int i = 0; i < maxRows; ++i)
     {
         const bool selected = i == selectedAudioInput;
-        g.setColour (juce::Colours::white.withAlpha (selected ? 0.92f : 0.68f));
+        g.setColour (uiColour (selected ? 0.92f : 0.68f));
         g.setFont (juce::FontOptions (15.0f));
         g.drawText ((selected ? "●  " : "○  ") + audioInputs[(size_t)i].name,
                     64, y, 520, 34, juce::Justification::centredLeft);
@@ -1234,7 +1261,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     }
     if (audioInputs.empty())
     {
-        g.setColour (juce::Colours::white.withAlpha (0.55f));
+        g.setColour (uiColour (0.55f));
         g.drawText ("No selectable input reported by Android/JUCE", 64, y, 520, 34, juce::Justification::centredLeft);
     }
 
@@ -1245,10 +1272,10 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     for (const auto& name : physicalInputNames)
         if (name.containsIgnoreCase ("irig")) { irigDetected = true; irigPhysicalName = name; }
 
-    g.setColour (irigDetected ? juce::Colour (0xffb8d9bf) : juce::Colours::white.withAlpha (0.55f));
+    g.setColour (irigDetected ? juce::Colour (0xffb8d9bf) : uiColour (0.55f));
     g.drawText ("iRig Streamer  " + juce::String (irigDetected ? "DETECTED" : "NOT DETECTED"),
                 54, 350, 360, 26, juce::Justification::centredLeft);
-    g.setColour (juce::Colours::white.withAlpha (0.48f));
+    g.setColour (uiColour (0.48f));
     g.setFont (juce::FontOptions (11.5f));
     g.drawFittedText (irigPhysicalName.isNotEmpty() ? irigPhysicalName
                                                     : "Android physical-input name unavailable / no iRig found",
@@ -1261,11 +1288,11 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     const float level = juce::jlimit (0.0f, 1.0f, displayLevel * 3.0f);
     const float peakDb = rawPeak > 1.0e-8f ? juce::Decibels::gainToDecibels (rawPeak) : -160.0f;
     const float rmsDb = rawRms > 1.0e-8f ? juce::Decibels::gainToDecibels (rawRms) : -160.0f;
-    g.setColour (juce::Colours::white.withAlpha (0.25f));
+    g.setColour (uiColour (0.25f));
     g.fillRect (54.0f, 423.0f, 420.0f, 2.0f);
-    g.setColour (juce::Colours::white.withAlpha (0.86f));
+    g.setColour (uiColour (0.86f));
     g.fillRect (54.0f, 422.0f, 420.0f * level, 4.0f);
-    g.setColour (juce::Colours::white.withAlpha (0.58f));
+    g.setColour (uiColour (0.58f));
     g.drawText ("PEAK " + juce::String (peakDb, 1) + " dBFS   RMS " + juce::String (rmsDb, 1) + " dBFS",
                 478, 410, 210, 26, juce::Justification::centredRight);
 
@@ -1281,7 +1308,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
         const bool signalNearZero = peakDb < -100.0f;
 
         g.setFont (juce::FontOptions (10.5f));
-        g.setColour (juce::Colours::white.withAlpha (0.46f));
+        g.setColour (uiColour (0.46f));
         g.drawFittedText ("ROUTE IN: " + (route.inputDeviceName.isNotEmpty() ? route.inputDeviceName : juce::String ("NONE")),
                           54, 438, 600, 18, juce::Justification::centredLeft, 1);
         g.drawFittedText ("ROUTE OUT: " + (route.outputDeviceName.isNotEmpty() ? route.outputDeviceName : juce::String ("NONE")),
@@ -1303,7 +1330,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
         }
         if (lastAudioRouteError.isNotEmpty())
         {
-            g.setColour (juce::Colours::white.withAlpha (0.46f));
+            g.setColour (uiColour (0.46f));
             g.drawFittedText ("ERR " + lastAudioRouteError,
                               430, 492, 240, 18, juce::Justification::centredRight, 1);
         }
@@ -1317,7 +1344,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     const int clock = juce::roundToInt (processor.state().getRawParameterValue (ParamID::clockMode)->load());
     const int bpm = juce::roundToInt (processor.state().getRawParameterValue (ParamID::internalBpm)->load());
 
-    g.setColour (juce::Colours::white.withAlpha (0.78f));
+    g.setColour (uiColour (0.78f));
     g.setFont (juce::FontOptions (16.0f));
     g.drawText ("MODE", 54, 510, 220, 30, juce::Justification::centredLeft);
     const juce::String modeText =
@@ -1339,14 +1366,17 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
         g.drawText (juce::String (bpm), 450, 638, 180, 30, juce::Justification::centredRight);
     }
     g.setFont (juce::FontOptions (11.0f));
-    g.setColour (juce::Colours::white.withAlpha (0.42f));
+    g.setColour (uiColour (0.42f));
     g.drawText ("MODE: CHORD-A / CHORD-B / DREAMY / EUREKA / CHORDBOT", 54, 681, 590, 18, juce::Justification::centredLeft);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
 {
     if (currentFrame.isValid())
-        g.drawImage (currentFrame, juce::Rectangle<float> (0,0,design,design), juce::RectanglePlacement::stretchToFit);
+        paintMediaFrame (
+            g, currentFrame,
+            juce::Rectangle<float> (0, 0, design, design),
+            0, dotFrameRevision);
     g.setColour (juce::Colours::black.withAlpha (0.80f));
     g.fillAll();
 
@@ -1366,7 +1396,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics
     const int scale = juce::jlimit (0, 4, juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiScale)->load()));
     const int motionBars = juce::jlimit (1, 16, juce::roundToInt (processor.state().getRawParameterValue (ParamID::motionBars)->load()));
 
-    g.setColour (juce::Colours::white.withAlpha (0.92f));
+    g.setColour (uiColour (0.92f));
     g.setFont (juce::FontOptions (20.0f));
     g.drawText ("MIDI CONTROL", 34, 26, 240, 32, juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (13.0f));
@@ -1375,9 +1405,9 @@ void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics
     auto row = [&] (int yy, const juce::String& label, const juce::String& value)
     {
         g.setFont (juce::FontOptions (14.0f));
-        g.setColour (juce::Colours::white.withAlpha (0.70f));
+        g.setColour (uiColour (0.70f));
         g.drawText (label, 54, yy, 250, 30, juce::Justification::centredLeft);
-        g.setColour (juce::Colours::white.withAlpha (0.92f));
+        g.setColour (uiColour (0.92f));
         g.drawText (value, 330, yy, 300, 30, juce::Justification::centredRight);
     };
 
@@ -1400,7 +1430,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics
                            + (processor.hasMidiControllerPreset (midiPresetSlot) ? "  SAVED" : "  EMPTY"));
     row (458, "MOTION BARS", juce::String (motionBars));
 
-    g.setColour (juce::Colours::white.withAlpha (0.82f));
+    g.setColour (uiColour (0.82f));
     g.drawText ("LOAD", 110, 496, 180, 36, juce::Justification::centred);
     g.drawText ("SAVE", 430, 496, 180, 36, juce::Justification::centred);
 
@@ -1409,7 +1439,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics
                 + "     Y " + juce::String (processor.getMidiControllerY()).paddedLeft ('0', 3),
                 180, 538, 360, 24, juce::Justification::centred);
     g.setFont (juce::FontOptions (11.5f));
-    g.setColour (juce::Colours::white.withAlpha (0.52f));
+    g.setColour (uiColour (0.52f));
     g.drawText ("CHORD OUT sends the generated ChordPlan notes to the selected MIDI OUT.", 54, 570, 620, 20, juce::Justification::centredLeft);
     g.drawText ("L1: WET -5%    R1: WET +5%    96 motion ticks / bar", 54, 592, 610, 20, juce::Justification::centredLeft);
     g.drawText ("X 0..127 / Y 0..127. CLOCK uses 24 PPQN.", 54, 614, 610, 20, juce::Justification::centredLeft);
