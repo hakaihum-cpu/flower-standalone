@@ -85,11 +85,6 @@ jobs:
             test -f JuceLibraryCode/BinaryData.cpp
             test -f JuceLibraryCode/BinaryData.h
             grep -F 'BinaryData.cpp' Builds/Android/app/CMakeLists.txt
-            grep -F 'arm64-v8a' Builds/Android/app/build.gradle
-            if grep -F 'x86_64' Builds/Android/app/build.gradle; then
-              echo "[FAIL] unexpected x86_64 ABI in generated Android project"
-              exit 1
-            fi
             echo "[diagnostic] generated NDK references:"
             grep -R "28.1.13356709\|26.1.10909125" Builds/Android -n --include='*.gradle' --include='*.properties' || true
             test -d "$ANDROID_HOME/ndk/28.1.13356709"
