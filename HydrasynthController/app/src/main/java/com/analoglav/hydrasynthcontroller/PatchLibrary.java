@@ -10,21 +10,27 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Android private preset library. These are editor documents containing all explicitly
- * assigned parameter values, NOT manufacturer patch dumps or complete synth snapshots.
+ * Android private editor documents. For acquired patches retains the complete
+ * 2790-byte original as a baseline, plus editable mapped values as an overlay.
+ * The raw baseline is NOT updated when values are edited: export is not yet supported.
  */
 public final class PatchLibrary {
     public static final class Document {
         public final String name;
         public final LinkedHashMap<String,Integer> values;
-        Document(String name, LinkedHashMap<String,Integer> values) {
+        /** Immutable copy of a complete acquired Hydrasynth slot, if known. */
+        public final byte[] sourcePatch;
+        Document(String name, LinkedHashMap<String,Integer> values, byte[] sourcePatch) {
             this.name=name; this.values=values;
+            this.sourcePatch=sourcePatch==null?null:Arrays.copyOf(sourcePatch,sourcePatch.length);
         }
     }
     private final AtomicFile storage;
@@ -67,7 +73,12 @@ public final class PatchLibrary {
         return result;
     }
     public void save(String name,Map<String,Integer> values) throws Exception {
+        save(name,values,null);
+    }
+    public void save(String name,Map<String,Integer> values,byte[] rawBaseline) throws Exception {
         name=validateName(name);
+        if(rawBaseline!=null&&rawBaseline.length!=2790)
+            throw new IllegalArgumentException("Only complete 2790-byte patch baselines may be saved");
         JSONObject root=read();
         JSONArray existing=root.getJSONArray("documents");
         JSONArray next=new JSONArray();
@@ -82,6 +93,8 @@ public final class PatchLibrary {
             if(e.getKey()!=null && e.getValue()!=null)assignments.put(e.getKey(),e.getValue());
         }
         document.put("values",assignments);
+        if(rawBaseline!=null)
+            document.put("rawBaseline",Base64.getEncoder().encodeToString(rawBaseline));
         next.put(document);
         root.put("documents",next);
         write(root);
@@ -100,7 +113,13 @@ public final class PatchLibrary {
                 ParameterCatalog.Param p=ParameterCatalog.find(key);
                 if(p!=null && v>=p.min && v<=p.max)map.put(key,v);
             }
-            return new Document(name,map);
+            byte[] raw=null;
+            if(d.has("rawBaseline")){
+                raw=Base64.getDecoder().decode(d.getString("rawBaseline"));
+                if(raw.length!=2790)throw new IllegalArgumentException("Corrupted raw baseline");
+                new HydraPatchSnapshot(raw);  // validate slot metadata
+            }
+            return new Document(name,map,raw);
         }
         throw new IllegalArgumentException("Preset not found");
     }
