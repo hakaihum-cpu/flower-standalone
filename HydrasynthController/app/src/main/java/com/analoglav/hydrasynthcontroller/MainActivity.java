@@ -451,7 +451,7 @@ public final class MainActivity extends Activity {
       tile(c,"NEW",28,626,125,49,true,false);
       tile(c,"SAVE",163,626,125,49,true,false);
       tile(c,"LOAD",298,626,125,49,true,false);
-      tile(c,"CURRENTLOAD",433,626,125,49,dumpReader==null||!dumpReader.active(),false);
+      tile(c,dumpReader!=null&&dumpReader.active()?"CANCEL READ":"CURRENTLOAD",433,626,125,49,true,false);
       tile(c,"CONFIG",568,626,125,49,true,false);
       text(c,sourceSnapshot==null?
         "LOCAL PRESET / HARDWARE FLASH WRITE NOT AVAILABLE":
@@ -682,7 +682,9 @@ public final class MainActivity extends Activity {
         else if(x<293)triggerSave();
         else if(x<428)openLibrary();
         else if(x<563){
-          if(!dumpReader.active()){panelMode=6;invalidate();}
+          if(dumpReader!=null&&dumpReader.active()){
+            dumpReader.cancel("USER CANCELLED");
+          }else{panelMode=6;invalidate();}
         }else{panelMode=5;invalidate();}
         return true;
       }
