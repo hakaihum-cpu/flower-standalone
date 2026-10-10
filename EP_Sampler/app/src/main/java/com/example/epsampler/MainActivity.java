@@ -690,11 +690,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         });
         root.addView(choose);
 
-        new AlertDialog.Builder(this)
+        showStyledDialog(new AlertDialog.Builder(this)
                 .setTitle("SAMPLE BANK " + (slot + 1))
-                .setView(root)
-                .setPositiveButton("CLOSE", null)
-                .show();
+                .setView(dotDialogContent(root))
+                .setPositiveButton("CLOSE", null));
     }
 
     @Override public void onToggleDreamy() {
@@ -792,13 +791,56 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         return root;
     }
 
-    private ScrollView scrollDialogView(LinearLayout root) {
+    private View scrollDialogView(LinearLayout root) {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.addView(root, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT,
                 ScrollView.LayoutParams.WRAP_CONTENT));
-        return scroll;
+        return dotDialogContent(scroll);
+    }
+
+    private View dotDialogContent(View content) {
+        if (!dotVisualMode) return content;
+        DotUiLayer layer = new DotUiLayer(this);
+        layer.setBackgroundColor(0xff100e08);
+        layer.setDotEnabled(true);
+        layer.addView(content, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        return layer;
+    }
+
+    private android.graphics.drawable.GradientDrawable dotFrame(boolean emphasis) {
+        android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
+        background.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        background.setColor(emphasis ? 0xff80671e : 0xff100e08);
+        int stroke = Math.max(1,Math.round(getResources().getDisplayMetrics().density*2f));
+        background.setStroke(stroke,0xffffdb46);
+        background.setCornerRadius(0f);
+        return background;
+    }
+
+    private void applyDotDialogChrome(AlertDialog dialog) {
+        if (!dotVisualMode || dialog == null || dialog.getWindow() == null) return;
+        dialog.getWindow().setBackgroundDrawable(dotFrame(false));
+        styleDotConfig(dialog.getWindow().getDecorView());
+        int[] buttons = {AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL};
+        for(int which : buttons) {
+            Button button=dialog.getButton(which);
+            if(button!=null) {
+                button.setAllCaps(false);
+                button.setTypeface(android.graphics.Typeface.MONOSPACE,android.graphics.Typeface.BOLD);
+                button.setTextColor(0xffffe57a);
+                button.setBackground(dotFrame(false));
+            }
+        }
+    }
+
+    private void showStyledDialog(AlertDialog.Builder builder) {
+        AlertDialog dialog=builder.create();
+        dialog.setOnShowListener(d -> applyDotDialogChrome(dialog));
+        dialog.show();
     }
 
     private void addSlider(LinearLayout root, String name, int max, int value, java.util.function.IntConsumer onChange) {
@@ -821,8 +863,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             pianoView.setBoostDb(v);
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_BOOST_DB, v).apply();
         });
-        new AlertDialog.Builder(this).setTitle("BOOST").setView(scrollDialogView(root))
-                .setPositiveButton("CLOSE", null).show();
+        showStyledDialog(new AlertDialog.Builder(this).setTitle("BOOST").setView(scrollDialogView(root))
+                .setPositiveButton("CLOSE", null));
     }
 
     private void showSpaceDialog() {
@@ -837,8 +879,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             NativeEngine.setSpaceParameters(spaceMix, spaceDecay);
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_SPACE_DECAY, v).apply();
         });
-        new AlertDialog.Builder(this).setTitle("SPACE").setView(scrollDialogView(root))
-                .setPositiveButton("CLOSE", null).show();
+        showStyledDialog(new AlertDialog.Builder(this).setTitle("SPACE").setView(scrollDialogView(root))
+                .setPositiveButton("CLOSE", null));
     }
 
     private void showTapeDialog() {
@@ -858,8 +900,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             NativeEngine.setTapeParameters(tapeWow, tapeFlutter, tapeDrive);
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_TAPE_DRIVE, v).apply();
         });
-        new AlertDialog.Builder(this).setTitle("TAPE").setView(scrollDialogView(root))
-                .setPositiveButton("CLOSE", null).show();
+        showStyledDialog(new AlertDialog.Builder(this).setTitle("TAPE").setView(scrollDialogView(root))
+                .setPositiveButton("CLOSE", null));
     }
 
     private void applyDreamySettings() {
@@ -978,11 +1020,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         refresh.run();
 
-        new AlertDialog.Builder(this)
+        showStyledDialog(new AlertDialog.Builder(this)
                 .setTitle("DREAMY / TEXTURE MODES")
                 .setView(scrollDialogView(root))
-                .setPositiveButton("CLOSE", null)
-                .show();
+                .setPositiveButton("CLOSE", null));
     }
 
     private static final class AudioOutputChoice {
@@ -1118,6 +1159,15 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             TextView label=(TextView)view;
             label.setTypeface(android.graphics.Typeface.MONOSPACE);
             label.setTextColor(0xffffdb46);
+        }
+        if(view instanceof Spinner) view.setBackground(dotFrame(false));
+        if(view instanceof CheckBox) {
+            ((CheckBox)view).setButtonTintList(android.content.res.ColorStateList.valueOf(0xffffdb46));
+        }
+        if(view instanceof SeekBar) {
+            SeekBar bar=(SeekBar)view;
+            bar.setProgressTintList(android.content.res.ColorStateList.valueOf(0xffffdb46));
+            bar.setThumbTintList(android.content.res.ColorStateList.valueOf(0xffffe57a));
         }
         if(view instanceof android.view.ViewGroup) {
             android.view.ViewGroup group=(android.view.ViewGroup)view;
@@ -1372,10 +1422,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         };
         dialog.setOnShowListener(d -> {
             audioStats.post(refreshStats);
-            if(dotVisualMode) {
-                dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0xff100e08));
-                styleDotConfig(dialog.getWindow().getDecorView());
-            }
+            applyDotDialogChrome(dialog);
         });
         dialog.setOnCancelListener(d -> NativeEngine.setAudioBufferBursts(originalAudioBuffer));
         dialog.show();
@@ -1484,6 +1531,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 .setNegativeButton("CANCEL", null)
                 .create();
         dialog.setOnShowListener(ignored -> {
+            applyDotDialogChrome(dialog);
             android.widget.ListView list = dialog.getListView();
             list.setOnItemClickListener((parent, view, position, id) -> {
                 applyInstrument(Math.max(0, Math.min(15, position)));
