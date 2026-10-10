@@ -305,6 +305,7 @@ public final class MainActivity extends Activity {
     private final java.util.LinkedHashMap<String,Integer> draft=new java.util.LinkedHashMap<>();
     private String patchName="UNTITLED",module="OSC 1",status="SELECT MODULE > EDIT > SEND";
     private boolean dirty, loadedFromHardware;
+    private boolean autoSend;
     private HydraPatchSnapshot sourceSnapshot;
     // Imported UI fields are for viewing; only subsequent deliberate edits are re-sent.
     private final java.util.LinkedHashMap<String,Integer> changedSinceRead=new java.util.LinkedHashMap<>();
@@ -323,6 +324,7 @@ public final class MainActivity extends Activity {
       brush.setAntiAlias(false);
       setLayerType(View.LAYER_TYPE_SOFTWARE,null);
       setFocusable(true);
+      autoSend=getPreferences(MODE_PRIVATE).getBoolean("hydra_auto_send",true);
     }
     private void rect(Canvas c,int color,float x,float y,float w,float h){
       brush.setColor(color);brush.setStyle(Paint.Style.FILL);
@@ -363,7 +365,11 @@ public final class MainActivity extends Activity {
       value=Math.max(p.min,Math.min(p.max,value));
       draft.put(p.key(),value);selectedParam=p;dirty=true;
       if(loadedFromHardware)changedSinceRead.put(p.key(),value);
-      status="EDITED "+p.name+"  /  SEND WHEN READY";invalidate();
+      status="EDITED "+p.name+(autoSend?" / AUTO TX":" / SEND WHEN READY");
+      invalidate();
+      // Only a user-confirmed selection or USE VALUE enters stage().
+      // Reading a patch, opening a menu, and loading a local preset never send.
+      if(autoSend&&txPort!=null&&!dumpReader.active())send(p,value);
     }
     private int stagedValue(ParameterCatalog.Param p){
       Integer i=draft.get(p.key());return i==null?p.min:i;
@@ -549,8 +555,9 @@ public final class MainActivity extends Activity {
       drawConfigRow(c,"MIDI OUTPUT",deviceLabel(outs,outId),337);
       drawConfigRow(c,"MIDI INPUT",deviceLabel(ins,inId),410);
       drawConfigRow(c,"MIDI CHANNEL","CHANNEL "+channel,483);
-      tile(c,"REFRESH",43,563,308,41,true,false);
-      tile(c,"TEST NOTE",364,563,314,41,txPort!=null,false);
+      tile(c,autoSend?"AUTO: ON":"AUTO: OFF",43,563,196,41,true,false);
+      tile(c,"REFRESH",251,563,196,41,true,false);
+      tile(c,"TEST NOTE",459,563,219,41,txPort!=null,false);
       text(c,outputIsDigitakt()?"DIGITAKT USB: VERIFY DIN ROUTING":
            "HYDRA: SET SYSTEM PARAM RX = NRPN",DIM,43,612,16);
       text(c,"TX="+txBytes+" BYTES   RX="+rxBytes+" BYTES (NOT ACK)",DIM,43,632,15);
@@ -714,9 +721,13 @@ public final class MainActivity extends Activity {
           if(y>=414&&y<464){chooseMidi(true);return true;}
           if(y>=489&&y<540){chooseChannel();return true;}
           if(y>=563&&y<611){
-            if(x<359){
+            if(x<245){
+              autoSend=!autoSend;
+              getPreferences(MODE_PRIVATE).edit().putBoolean("hydra_auto_send",autoSend).apply();
+              status=autoSend?"AUTO SEND ENABLED":"AUTO SEND DISABLED";
+            }else if(x<455){
               updateBluetoothPermission();refresh();status="MIDI DEVICE LIST REFRESHED";
-            } else sendDiagnosticNote();
+            }else sendDiagnosticNote();
             invalidate();
           }
           return true;
