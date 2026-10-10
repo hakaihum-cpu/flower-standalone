@@ -16,7 +16,7 @@ feature-only source tree. Existing MIYAKO/FLOWER/EP assets or MASTER branches ar
 - **No implicit sending on selection or adjustment.** SEND transmits NRPN via MIDI CC
   99/98/6/38. Raw CC numbers, MIDI parameter numbers are never presented as user controls.
 - Mappings include OSC1/2/3 waves and pitch/keytrack, OSC1/2 WaveScan 1–8, four Mutants,
-  Ring/Noise, Mixer routing, Filter types/routing, Delay, Reverb, some LFO settings, ENV 1–5 triggers/curves/sync, ARP Division/Swing/Gate/Octave/Length/Tap/Phrase/Ratchet/Chance, Voice performance settings, Macro panel value (but not Macro Assign).
+  Ring/Noise, Mixer routing/source levels, Filter cutoff/resonance/model, Amp level, Delay wet/feedback, Reverb wet/time, some LFO settings, ENV 1–5 triggers/curves/sync, ARP Division/Swing/Gate/Octave/Length/Tap/Phrase/Ratchet/Chance, Voice performance settings, Macro panel value (but not Macro Assign).
 - Unsupported modules remain visible with **NO VERIFIED MIDI MAP** and disabled SEND.
 - Values are **staged locally**. SEND is disabled until the user explicitly selects/adjusts a value, because the app cannot read current synth values. TX SENT means Android passed bytes to its MIDI port,
   **not** confirmation from the synth. There is no SysEx transfer and no remote patch save.
@@ -43,3 +43,24 @@ of Android. See `test_core.sh`. Android CI runs **only by CircleCI parameter**
 This branch uses its own CircleCI build definition targeting `HydrasynthController`.
 
 Status: **SOURCE MVP / NOT BUILT / NOT TESTED ON HYDRASYNTH EXPLORER**.
+
+## Sound-design workbench (source revision)
+- Top: patch identity + dirty state, Explorer signal-path/module map (OSC 1-3,
+  Ring/Noise, Mutants, Mixer, Filters, AMP, FX, and modulation families).
+- Middle: current module's visible control cards (four at a time, accessible in
+  the same pane); each tap opens an **in-place** discrete-option or numeric editor.
+- Bottom: SEND FIELD, APPLY PATCH (all deliberately staged parameter values,
+  paced at 22ms), NEW, SAVE, LOAD, CONFIG.
+- Local SAVE and LOAD now use AtomicFile-backed schema-1 patch documents;
+  patch files are app-private. Name editing uses an in-place Android keyboard dialog.
+- This version does **not** create full manufacturer binary patches, remotely
+  perform INIT, or write a hardware preset slot. APPLY PATCH edits the current
+  synth's active temporary patch; the hardware must be set to a known initial
+  patch first. A complete no-touch workflow requires further firmware-verified
+  patch import/initialization & persist-to-device support.
+- Normalized 0–100% controls added only for NRPN parameters whose v1.5
+  default 14-bit raw range is [0,8192]. These controls represent **relative**
+  positions, not certified cut-off Hz/time or full 14-bit precision; further
+  validation is required before claiming fidelity to Explorer FW2.2.
+- FW1.5 VOICE/Glide Off/On mapping conflicts with Explorer FW2.2.0 manual
+  Off/Glide/Glissando. Disabled pending verified implementation.

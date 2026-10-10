@@ -9,7 +9,7 @@ import java.util.List;
  *  The waveform list's 0..218 index order requires an Explorer FW2.2 hardware check.
  */
 public final class ParameterCatalog {
-  public enum Encoding { U14, PACKED, SEMITONE }
+  public enum Encoding { U14, PACKED, SEMITONE, PERCENT8192 }
   public static final class Param {
     public final String group,name,unit;
     public final int msb,lsb,min,max,selector;
@@ -24,10 +24,11 @@ public final class ParameterCatalog {
         throw new IllegalArgumentException("Bad mapping: "+g+"/"+n);
     }
     public String display(int v) {
-      return options!=null?options[v-min]:v+unit;
+      return options!=null?options[v-min]:(encoding==Encoding.PERCENT8192?v+"%":v+unit);
     }
     public int encode(int v) {
       if(v<min||v>max)throw new IllegalArgumentException("Outside range");
+      if(encoding==Encoding.PERCENT8192)return (v*8192+50)/100;
       if(encoding==Encoding.PACKED)return selector*128+v;
       if(encoding==Encoding.SEMITONE)return selector*128+(v<0?v+128:v);
       return v;
@@ -48,6 +49,14 @@ public final class ParameterCatalog {
   }
   private static void numeric(String g,String n,int a,int b,int lo,int hi,String suffix) {
     add(new Param(g,n,a,b,lo,hi,suffix,Encoding.U14,0,null));
+  }
+  /**
+   * Coarse, explicitly labeled 0-100% position mapping, never fictional Hz
+   * or milliseconds. NRPN v1.5 default range 0..0x2000 => 0..8192.
+   * Device/FW-specific curves remain subject to real-hardware validation.
+   */
+  private static void normalized(String g,String n,int a,int b){
+    add(new Param(g,n,a,b,0,100,"%",Encoding.PERCENT8192,0,null));
   }
   private static void waveGroup(List<String> a,String name,int n){
     for(int i=1;i<=n;i++)a.add(name+" "+i);
@@ -96,6 +105,14 @@ public final class ParameterCatalog {
     choose("RING / NOISE","Noise type",0x3F,0x27,
            "White","Pink","Brown","Red","Blue","Violet","Grey");
     choose("MIXER","Filter routing",0x3F,0x2C,"Series","Parallel");
+    normalized("MIXER","OSC 1 level",0x40,0x07);
+    normalized("MIXER","OSC 2 level",0x40,0x09);
+    normalized("MIXER","OSC 3 level",0x40,0x0B);
+    normalized("MIXER","Noise level",0x40,0x0D);
+    normalized("MIXER","Ring Mod level",0x40,0x01);
+    normalized("FILTER 1","Cutoff position",0x40,0x28);
+    normalized("FILTER 1","Resonance",0x40,0x29);
+    normalized("FILTER 1","Drive",0x40,0x2B);
     choose("FILTER 1","Model",0x3F,0x28,
            "LP Ladder 12","LP Ladder 24","LP Fat 12","LP Fat 24",
            "Low Pass Gate","LP MS20","HP MS20","LP Threeler","BP Threeler",
@@ -103,12 +120,20 @@ public final class ParameterCatalog {
     choose("FILTER 1","Drive position",0x3F,0x29,"Pre","Post");
     choose("FILTER 1","Vowel order",0x3F,0x2E,
            "AEIOU","AIUEO","AUIOE","AOUIE","IOUAE","UEAOI","IOEAU","UIEAO");
+    normalized("FILTER 2","Cutoff position",0x40,0x2C);
+    normalized("FILTER 2","Resonance",0x40,0x2D);
+    normalized("FILTER 2","Morph position",0x40,0x2E);
     choose("FILTER 2","Type",0x3F,0x23,"LP-BP-HP","LP-NO-HP");
     choose("FILTER 2","Drive position",0x3F,0x2B,"Pre","Post");
+    normalized("DELAY","Wet mix",0x41,0x78);
+    normalized("DELAY","Feedback",0x41,0x75);
     choose("DELAY","BPM sync",0x3B,0x70,ON);
     choose("DELAY","Type",0x3B,0x71,
            "Basic","Basic stereo","Pan Delay","LRC Delay","Reverse");
+    normalized("REVERB","Wet mix",0x41,0x7E);
+    normalized("REVERB","Time position",0x41,0x79);
     choose("REVERB","Type",0x3C,0x72,"Hall","Room","Plate","Cloud");
+    normalized("AMP","Level",0x40,0x02);
     for(int i=0;i<5;i++) {
       String g="LFO "+(i+1);
       packed(g,"BPM sync",0x3F,0x04+i,1,ON);
@@ -144,7 +169,8 @@ public final class ParameterCatalog {
     add(new Param("ARPEGGIATOR","Chance",0x39,0x03,0,100,"%",Encoding.PACKED,0x0B,null));
 
     // VOICE: direct 14-bit parameter values documented in v1.5.
-    choose("VOICE","Glide",0x3F,0x12,ON);
+    // FW1.5 describes Glide Off/On, but Explorer manual 2.2.0 describes
+    // Off/Glide/Glissando. Disagreement: intentionally disable until verified.
     choose("VOICE","Glide legato",0x3F,0x1F,ON);
     choose("VOICE","Polyphonic",0x3F,0x13,ON);
     choose("VOICE","Random phase",0x3F,0x1E,ON);
@@ -160,7 +186,7 @@ public final class ParameterCatalog {
     for(int m=0;m<8;m++)
       numeric("MACRO "+(m+1),"Panel value",0x3F,0x58+m,0,1024,"");
 
-    Collections.addAll(GROUPS,"AMP","PRE-FX","POST-FX","MOD MATRIX","SYSTEM");
+    Collections.addAll(GROUPS,"PRE-FX","POST-FX","MOD MATRIX","SYSTEM");
   }
   private ParameterCatalog(){}
   public static List<String> modules(){return Collections.unmodifiableList(GROUPS);}

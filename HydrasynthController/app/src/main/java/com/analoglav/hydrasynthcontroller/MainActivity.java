@@ -368,6 +368,11 @@ public final class MainActivity extends Activity {
         tile(c,trim((index+1)+"  "+list.get(index),37),
           44,330+i*42,634,38,true,false);
       }
+      if(list.size()>6) {
+        // Direct scrollbar allows reaching waveform 219 without dozens of swipes.
+        rect(c,DIM,671,330,6,248);
+        rect(c,YELLOW,665,330+(int)(220f*scrollIndex/(list.size()-6)),18,25);
+      }
       text(c,(list.isEmpty()?"NO STORED PRESETS":(scrollIndex+1)+" - "
           +Math.min(scrollIndex+6,list.size())+" / "+list.size()),
           DIM,49,604,17);
@@ -542,6 +547,11 @@ public final class MainActivity extends Activity {
           if(Math.abs(diff)>20){
             scrollIndex=Math.max(0,Math.min(Math.max(0,items.size()-6),
                  scrollIndex+Math.round(diff/34f)));invalidate();return true;
+          }
+          if(x>=655&&y>=330&&y<582&&items.size()>6){
+            scrollIndex=Math.max(0,Math.min(items.size()-6,
+              Math.round((y-330)/252f*(items.size()-6))));
+            invalidate();return true;
           }
           if(y>=330&&y<582){
             int chosen=scrollIndex+(int)((y-330)/42f);

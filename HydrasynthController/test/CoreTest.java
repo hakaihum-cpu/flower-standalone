@@ -50,6 +50,18 @@ public final class CoreTest {
     eq(swing.encode(60),0x02*128+60);
     eq(pitch.encode(24),24);
     eq(macro.lsb,0x5F);eq(macro.encode(1024),1024);
+    ParameterCatalog.Param cutoff=null,mixer=null,glide=null;
+    for(ParameterCatalog.Param p:ParameterCatalog.params("FILTER 1"))
+      if(p.name.equals("Cutoff position"))cutoff=p;
+    for(ParameterCatalog.Param p:ParameterCatalog.params("MIXER"))
+      if(p.name.equals("OSC 2 level"))mixer=p;
+    for(ParameterCatalog.Param p:ParameterCatalog.params("VOICE"))
+      if(p.name.equals("Glide"))glide=p;
+    if(cutoff==null||mixer==null)throw new AssertionError("Core patch sound-shaping fields missing");
+    eq(cutoff.msb,0x40);eq(cutoff.lsb,0x28);
+    eq(cutoff.encode(100),8192);eq(cutoff.encode(0),0);
+    eq(mixer.lsb,0x09);
+    if(glide!=null)throw new AssertionError("Unsafe FW1.5/2.2 Glide mismatch enabled");
     if(ParameterCatalog.params("MOD MATRIX").size()!=0)
       throw new AssertionError("Unmapped mod matrix must be disabled");
     System.out.println("CORE TEST PASS: "+ParameterCatalog.mappedCount()+" params, MIDI NRPN packing");
