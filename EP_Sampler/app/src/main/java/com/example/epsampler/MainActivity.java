@@ -317,6 +317,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         epBackground.setZ(0f);
         videoLayer.setZ(1f);
+        dotUiLayer.setZ(10f);
         performanceXYView.setZ(10f);
         pianoView.setZ(20f);
         drumEditorView.setZ(30f);
