@@ -72,10 +72,10 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
         textureView.setSurfaceTextureListener(this);
         addView(textureView, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
-        dreamyOverlay = new DreamyOverlay(context, textureView);
-        addView(dreamyOverlay, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         dotOverlay = new DotVisualOverlay(context, textureView);
         addView(dotOverlay, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        dreamyOverlay = new DreamyOverlay(context, textureView);
+        addView(dreamyOverlay, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
         prepareAssetAsync(context.getApplicationContext(), 0);
     }
