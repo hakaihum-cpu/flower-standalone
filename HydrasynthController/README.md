@@ -1,6 +1,6 @@
 # HYDRA DOT / AN-62
 
-Dedicated **Hydrasynth Explorer Android remote editor** for RG Rotate (720 x 720 design
+Combined **HYDRA / ANALOG KEYS Android remote editor** for RG Rotate (720 x 720 design
 coordinates). **Independent APK package** `com.analoglav.hydrasynthcontroller` inside a
 feature-only source tree. Existing MIYAKO/FLOWER/EP assets or MASTER branches are unchanged.
 
@@ -125,3 +125,69 @@ The previous working branch and main are unchanged. `test_core.sh` now includes
 pure-Java SysEx fixture tests (CRC, fragmented MIDI, 22-ACK sequence, slot identity,
 mapped UI values, corrupt/out-of-order cancellation and no Flash WRITE). Source
 has **not** been built in CircleCI or tried on device.
+
+## AN-64: SYNTH DOT — one APK, two separate synthesis modes
+
+**One app / one Android package:** `com.analoglav.hydrasynthcontroller`;
+the existing APK package is retained so users do not get duplicate standalone
+apps. Application name is **SYNTH DOT**, Android versionCode 2, versionName
+0.2.0-dev. This branch is NOT a rename/merge of any unrelated app.
+
+**Mode switch:** CONFIG → SYNTH MODE → HYDRA or ANALOG KEYS.
+Switching modes or Analog Keys tracks does not send MIDI or overwrite any
+stored preset. In-memory edits and module navigation are preserved separately.
+HYDRA remains the original CurrentLoad/NRPN workbench. Analog Keys has a
+different signal-flow grid with TRK 1–4, FX and PERF and per-track MIDI channels.
+MIDI OUTPUT and INPUT use the Android MIDI API to reach a compatible *5-pin DIN*
+MIDI interface; **Analog Keys does not need to be connected via USB**.
+The selected output MIDI interface and each track's MIDI channel must match
+the actual device wiring and settings. Enable RECEIVE CC/NRPN in Analog Keys.
+
+**Analog Keys official reference:** Elektron *Analog Keys User Manual
+(OS 1.55, June 2026)* Appendix D MIDI:
+https://www.elektron.se/wp-content/uploads/2026/06/Analog-Keys-User-Manual_ENG_OS1.55_260610.pdf
+
+**Implemented editor fields:** OSC1/2, Noise, OSC Common, two filters, AMP,
+filter/user envelopes, LFO1/2; EXT IN, Chorus, Delay, Reverb, FX LFO1/2 on the
+FX channel; performance macros A–J on their configured performance channel.
+Only the explicitly documented NRPN addresses are enabled. MIDI Data Entry
+**MSB-only parameters send value << 7** and documented 14-bit parameters
+send true 14-bit values. Track Mute/Track Level in the manual use **Data
+Entry LSB only** and are sent with the correct low-seven-bit encoding.
+Hydrasynth's unrelated NRPN mappings and custom scalings are NOT reused.
+
+**AUTO SEND:** enabled by default and stored independently for each mode,
+with CONFIG ON/OFF. Each user-confirmed choice or USE VALUE sends that field
+to the configured MIDI port (the device is not polled for an ACK);
+scroll/navigation/mode changes and local preset LOAD never transmit edits.
+APPLY SOUND manually sends all staged Analog Keys fields for the selected
+track, paced like the original HYDRA APPLY; any pending staged transmission
+is cancelled before switching tracks, modes, or output ports.
+
+**Local presets:** still NEW / SAVE / LOAD, but analog tracks have independent
+AtomicFile JSON documents in private files (one per TRK 1–4, FX, PERF). HYDRA
+keeps its original unmodified preset storage. These are local **editor
+assignments**, not complete Analog Keys Sound files or a hardware Kit.
+
+### CURRENTLOAD / +Drive / Kit — not yet supported on Analog Keys
+
+Analog Keys mode visibly disables CURRENTLOAD, explaining that a verified
+Analog Keys **Sound SysEx read protocol is not yet implemented**. The
+Hydrasynth mode retains its saved-slot CurrentLoad; the two instruments have
+incompatible SysEx protocols. Likewise, **SAVE is local to the app**:
+there is NO Analog Keys +Drive Sound store, Kit write, or automatic read of
+the current unsaved sound in this branch. Do not claim to have implemented
+them; the prior firmware research was not an Android device test. The
+design is intentionally safe from accidental device patch/Kit overwrites.
+
+### Source/test/build status
+
+The non-destructive AN-64 work is confined to branch
+`feature/an-64-analog-keys-dot`. Hydra original code remains in the same
+Android app; main and Golden Baseline are unchanged.
+`test_core.sh` runs Hydra, HydraDump, and AnalogKeysCoreTest's
+pure-Java address/value regression checks. **No Android build or hardware
+test has yet occurred.** A successful Java fixture still does not prove DIN
+MIDI communication on a specific phone/interface/firmware combination.
+CircleCI retains the existing manual workflow and default `run_build=false`;
+no GitHub Actions.
