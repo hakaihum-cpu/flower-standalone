@@ -7,6 +7,7 @@
 #include "PluginProcessor.h"
 #include "RetroLookAndFeel.h"
 #include "FramePack.h"
+#include "FlowerDotRenderer.h"
 
 class PerformancePadComponent final : public juce::Component,
                                       private juce::Timer
@@ -35,6 +36,7 @@ public:
     void setExternalPosition (float x, float y);
     void setEffectState (bool arpOn, bool delayOn, bool yEffectOn, bool dreamyMode);
     void setBpmDisplay (float bpm, bool visible);
+    void setDotMode (bool enabled);
     float getXValue() const noexcept { return xValue; }
     float getYValue() const noexcept { return yValue; }
     int getPatternIndex() const noexcept;
@@ -64,6 +66,8 @@ private:
     int currentMixedVisual = -1;
     int visualCooldown = 0;
     uint32_t visualRandomState = 0x464C5752u;
+    FlowerDotRenderer dotRenderer;
+    bool dotMode = false;
     bool arpIndicatorOn = true;
     bool delayIndicatorOn = true;
     bool yEffectIndicatorOn = true;
@@ -102,6 +106,7 @@ public:
                     bool yEffectDreamy,
                     int midiChannel,
                     int audioBufferMode,
+                    bool dotMode,
                     const juce::String& audioStatus);
     void moveSelection (int delta);
     void adjustSelected (int delta);
@@ -113,6 +118,7 @@ public:
     std::function<void(bool)> onYEffectModeChanged;
     std::function<void(int)> onMidiChannelChanged;
     std::function<void(int)> onAudioBufferChanged;
+    std::function<void(bool)> onDotModeChanged;
     std::function<void()> onCarnivalRequested;
     std::function<void()> onCloseRequested;
 
@@ -123,6 +129,7 @@ private:
     bool yEffectDreamy = false;
     int midiChannel = 1;
     int audioBufferMode = 0;
+    bool dotMode = false;
     juce::String audioStatus;
     int selectedRow = 0;
 
@@ -254,6 +261,7 @@ private:
     bool yEffectDreamy = false;
     int midiChannel = 1;
     int audioBufferMode = 0;
+    bool dotMode = false;
     int audioDefaultBufferFrames = -1;
     int audioFramesPerBurst = 0;
     int audioActualBufferFrames = 0;
