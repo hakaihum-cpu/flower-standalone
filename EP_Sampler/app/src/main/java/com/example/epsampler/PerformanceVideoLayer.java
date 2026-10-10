@@ -156,7 +156,6 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
     }
 
     void pauseForLifecycle() {
-        dotOverlay.setDotEnabled(false);
         pausedByLifecycle = true;
         handler.removeCallbacks(reverseTick);
         if (player != null && prepared) {
