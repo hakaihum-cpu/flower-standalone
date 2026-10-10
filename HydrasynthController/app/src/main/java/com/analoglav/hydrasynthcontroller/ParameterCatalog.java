@@ -9,7 +9,7 @@ import java.util.List;
  *  The waveform list's 0..218 index order requires an Explorer FW2.2 hardware check.
  */
 public final class ParameterCatalog {
-  public enum Encoding { U14, PACKED, SEMITONE, PERCENT8192 }
+  public enum Encoding { U14, PACKED, SEMITONE, PERCENT8192, MSB7 }
   public static final class Param {
     public final String group,name,unit;
     public final int msb,lsb,min,max,selector;
@@ -29,6 +29,7 @@ public final class ParameterCatalog {
     public int encode(int v) {
       if(v<min||v>max)throw new IllegalArgumentException("Outside range");
       if(encoding==Encoding.PERCENT8192)return (v*8192+50)/100;
+      if(encoding==Encoding.MSB7)return v<<7;
       if(encoding==Encoding.PACKED)return selector*128+v;
       if(encoding==Encoding.SEMITONE)return selector*128+(v<0?v+128:v);
       return v;
