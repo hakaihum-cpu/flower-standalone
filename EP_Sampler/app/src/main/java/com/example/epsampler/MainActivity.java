@@ -156,6 +156,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private PianoView pianoView;
     private ImageView epBackground;
     private PerformanceVideoLayer videoLayer;
+    private boolean dotVisualMode = false;
     private PerformanceXYView performanceXYView;
     private DrumEditorView drumEditorView;
     private DrumSampleMixerView drumSampleMixerView;
@@ -229,6 +230,8 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         epBackground.setScaleType(ImageView.ScaleType.FIT_CENTER);
         epBackground.setBackgroundColor(android.graphics.Color.BLACK);
         videoLayer = new PerformanceVideoLayer(this);
+        dotVisualMode = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("dot_visual_mode", false);
+        videoLayer.setDotEnabled(dotVisualMode);
         pianoView = new PianoView(this);
         pianoView.setPerformanceVideoLayer(videoLayer);
         pianoView.setActionListener(this);
@@ -1083,6 +1086,15 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
     private void showConfigDialog() {
         LinearLayout root = dialogRoot();
+        TextView displayLabel = new TextView(this);
+        displayLabel.setText("VISUAL MODE");
+        displayLabel.setTextSize(16f);
+        root.addView(displayLabel);
+        Spinner visualModeSpinner = new Spinner(this);
+        visualModeSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"NORMAL (IMAGE / MP4)", "DOT"}));
+        visualModeSpinner.setSelection(dotVisualMode ? 1 : 0);
+        root.addView(visualModeSpinner);
 
         TextView outputLabel = new TextView(this);
         outputLabel.setText("AUDIO OUTPUT");
@@ -1293,7 +1305,10 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                     NativeEngine.controlChange(64, sus);
                     pianoView.controlChange(64, sus);
 
+                    dotVisualMode = visualModeSpinner.getSelectedItemPosition() == 1;
+                    if (videoLayer != null) videoLayer.setDotEnabled(dotVisualMode);
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                            .putBoolean("dot_visual_mode", dotVisualMode)
                             .putFloat(KEY_AUDIO_BUFFER_BURSTS, audioBufferBursts)
                             .putString(KEY_AUDIO_OUTPUT, audioOutputKey)
                             .putInt(KEY_PART_MIDI_PREFIX + selectedPart, partMidiChannels[selectedPart])
