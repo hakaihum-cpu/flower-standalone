@@ -15,7 +15,7 @@ import android.widget.FrameLayout;
  */
 final class DotUiLayer extends FrameLayout {
     private static final int[] BAYER={0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5};
-    private static final int[] COLORS={0x00100e08,0xff80671e,0xffffdb46,0xffffe57a};
+    private static final int[] COLORS={0xff100e08,0xff80671e,0xffffdb46,0xffffe57a};
     private boolean dotEnabled;
     private Bitmap source, rendered;
     private int[] srcPixels, dstPixels;
@@ -33,13 +33,21 @@ final class DotUiLayer extends FrameLayout {
         invalidate();
     }
 
+    @Override protected void onDetachedFromWindow() {
+        if(source!=null) {source.recycle();source=null;}
+        if(rendered!=null) {rendered.recycle();rendered=null;}
+        srcPixels=null;
+        dstPixels=null;
+        super.onDetachedFromWindow();
+    }
+
     @Override protected void dispatchDraw(Canvas canvas) {
         if (!dotEnabled || getWidth()<1 || getHeight()<1) {
             super.dispatchDraw(canvas);
             return;
         }
-        final int w=Math.max(1,Math.min(512,getWidth()/2));
-        final int h=Math.max(1,Math.min(384,getHeight()/2));
+        final int w=Math.max(1,Math.min(512,getWidth()));
+        final int h=Math.max(1,Math.min(384,getHeight()));
         if (source==null || source.getWidth()!=w || source.getHeight()!=h) {
             if(source!=null) source.recycle();
             if(rendered!=null) rendered.recycle();
