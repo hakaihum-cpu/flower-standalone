@@ -1,10 +1,8 @@
 version: 2.1
-
 parameters:
   run_build:
     type: boolean
     default: false
-
 jobs:
   android_build:
     docker:
@@ -12,148 +10,56 @@ jobs:
     resource_class: medium
     steps:
       - checkout
-
       - run:
-          name: Static EP Sampler source preflight
+          name: Hydrasynth isolated static preflight
           command: |
             set -euo pipefail
-            test -f EP_Sampler/settings.gradle
-            test -f EP_Sampler/app/build.gradle
-            test -f EP_Sampler/app/src/main/cpp/SampleBank.cpp
-            test -f EP_Sampler/app/src/main/cpp/AudioEngine.cpp
-            test -f EP_Sampler/app/src/main/java/com/example/epsampler/MainActivity.java
-            grep -F "abiFilters 'arm64-v8a', 'armeabi-v7a'" EP_Sampler/app/build.gradle
-            grep -F 'signingConfig signingConfigs.debug' EP_Sampler/app/build.gradle
-            test ! -f EP_Sampler/app/src/main/assets/epbank_24bit_dedup.bin
-
+            test -f HydrasynthController/settings.gradle
+            test -f HydrasynthController/app/build.gradle
+            test -f HydrasynthController/app/src/main/java/com/analoglav/hydrasynthcontroller/MainActivity.java
+            test -f HydrasynthController/app/src/main/java/com/analoglav/hydrasynthcontroller/NrpnEncoder.java
+            sh HydrasynthController/test_core.sh
+            ! grep -R "com.example.epsampler" HydrasynthController/app/src/main/
       - run:
-          name: Install Android SDK components
+          name: Android SDK 35
           command: |
             yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-              "platforms;android-35" \
-              "build-tools;35.0.0" \
-              "ndk;26.1.10909125" \
-              "cmake;3.22.1"
-
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
       - run:
-          name: Prepare Gradle 8.9
+          name: Gradle 8.9
           command: |
-            set -euo pipefail
             curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle-8.9-bin.zip
-            rm -rf /tmp/gradle-8.9
             unzip -q /tmp/gradle-8.9-bin.zip -d /tmp
             echo 'export PATH=/tmp/gradle-8.9/bin:$PATH' >> "$BASH_ENV"
-
       - run:
-          name: Create Android debug signing keystore
+          name: Android signing key
           command: |
-            set -euo pipefail
             mkdir -p "$HOME/.android"
-            rm -f "$HOME/.android/debug.keystore"
-            keytool -genkeypair -v \
-              -keystore "$HOME/.android/debug.keystore" \
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
               -storepass android -alias androiddebugkey -keypass android \
               -dname "CN=Android Debug,O=Android,C=US" \
               -keyalg RSA -keysize 2048 -validity 10000
-
-      - restore_cache:
-          keys:
-            - gradle-ep-sampler-v1-
-
       - run:
-          name: Build EP Sampler APK
-          no_output_timeout: 30m
+          name: Build HYDRA DOT APK
+          no_output_timeout: 20m
           command: |
-            set -u
-            export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
-            export CMAKE_BUILD_PARALLEL_LEVEL=2
-            export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=2"
-            mkdir -p android-artifact
-            LOG="$PWD/android-artifact/gradle-build.log"
-            EXIT_FILE="$PWD/android-artifact/gradle-exit-code.txt"
-
-            {
-              echo "[diagnostic] start $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              echo "[diagnostic] nproc=$(nproc)"
-              echo "[diagnostic] CMAKE_BUILD_PARALLEL_LEVEL=$CMAKE_BUILD_PARALLEL_LEVEL"
-              java -version 2>&1
-              free -m || true
-              df -h || true
-            } | tee "$LOG"
-
-            cd EP_Sampler
+            set -euo pipefail
+            cd HydrasynthController
             printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-
-            set +e
-            gradle :app:assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2 >> "$LOG" 2>&1 &
-            GRADLE_PID=$!
-            echo "[diagnostic] gradle_pid=$GRADLE_PID" | tee -a "$LOG"
-
-            while kill -0 "$GRADLE_PID" 2>/dev/null; do
-              {
-                echo "[heartbeat] $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-                free -m || true
-                ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 16 || true
-              } | tee -a "$LOG"
-              sleep 30
-            done
-
-            wait "$GRADLE_PID"
-            STATUS=$?
-            set -e
-            cd ..
-            echo "$STATUS" | tee "$EXIT_FILE"
-            tail -n 250 "$LOG" || true
-            exit 0
-
-      - save_cache:
-          key: gradle-ep-sampler-v1-{{ epoch }}
-          paths:
-            - ~/.gradle/caches
-            - ~/.gradle/wrapper
-
+            gradle :app:assembleRelease --stacktrace --console=plain --no-daemon --max-workers=2
       - run:
-          name: Collect EP Sampler APK
-          when: always
+          name: Verify HYDRA DOT build artifact
           command: |
             set -euo pipefail
-            mkdir -p android-artifact
-            git rev-parse HEAD | tee android-artifact/SOURCE_COMMIT.txt
-            APK="$(find EP_Sampler/app/build/outputs/apk/release -type f -name '*.apk' | head -n 1 || true)"
-            if [ -n "$APK" ]; then
-              cp "$APK" android-artifact/EP-Sampler-Android.apk
-              sha256sum android-artifact/EP-Sampler-Android.apk | tee android-artifact/SHA256.txt
-            else
-              echo "No release APK produced." | tee android-artifact/NO_APK.txt
-            fi
-
+            mkdir -p artifacts
+            APK="HydrasynthController/app/build/outputs/apk/release/app-release.apk"
+            test -s "$APK"
+            cp "$APK" artifacts/HydrasynthController-Android.apk
+            sha256sum artifacts/HydrasynthController-Android.apk > artifacts/SHA256.txt
+            git rev-parse HEAD > artifacts/SOURCE_COMMIT.txt
       - store_artifacts:
-          path: android-artifact/EP-Sampler-Android.apk
-          destination: EP-Sampler-Android.apk
-
-      - store_artifacts:
-          path: android-artifact
-          destination: diagnostics
-
-      - run:
-          name: Propagate Gradle build result
-          when: always
-          command: |
-            set -euo pipefail
-            if [ ! -f android-artifact/gradle-exit-code.txt ]; then
-              echo "Gradle exit code file is missing."
-              exit 97
-            fi
-            STATUS="$(cat android-artifact/gradle-exit-code.txt)"
-            echo "Gradle exit code: $STATUS"
-            if [ "$STATUS" != "0" ] && [ -f android-artifact/gradle-build.log ]; then
-              grep -nE '(^|[^A-Za-z])(error:|fatal error:|FAILURE:|FAILED|Exception|undefined reference|ninja: build stopped|Execution failed for task)' \
-                android-artifact/gradle-build.log | tail -n 120 || true
-              tail -n 300 android-artifact/gradle-build.log || true
-            fi
-            exit "$STATUS"
-
+          path: artifacts
+          destination: hydrasynth-controller
 workflows:
   manual_android_build:
     when: << pipeline.parameters.run_build >>
