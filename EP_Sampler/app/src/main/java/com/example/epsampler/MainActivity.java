@@ -791,13 +791,82 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         return root;
     }
 
+    private int dp(float value) {
+        return Math.max(1, Math.round(value * getResources().getDisplayMetrics().density));
+    }
+
+    private int dotDialogViewportHeight() {
+        return Math.max(1,
+                Math.round(getResources().getDisplayMetrics().heightPixels * 0.65f));
+    }
+
+    private void configureDotScrollable(View scrollable) {
+        if (!dotVisualMode || scrollable == null) return;
+
+        // Keep DOT dialog scrolling native.  Do not route the scroll gesture
+        // through DotUiLayer's off-screen post-processing wrapper.
+        scrollable.setVerticalScrollBarEnabled(true);
+        scrollable.setScrollbarFadingEnabled(false);
+        scrollable.setScrollBarStyle(View.SCROLLBARS_INSIDE_INSET);
+        scrollable.setScrollBarSize(dp(12f));
+        scrollable.setVerticalFadingEdgeEnabled(false);
+
+        if (scrollable instanceof ScrollView) {
+            ((ScrollView)scrollable).setNestedScrollingEnabled(false);
+        } else if (scrollable instanceof android.widget.ListView) {
+            ((android.widget.ListView)scrollable).setNestedScrollingEnabled(false);
+        }
+
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            android.graphics.drawable.GradientDrawable thumb =
+                    new android.graphics.drawable.GradientDrawable();
+            thumb.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+            thumb.setColor(0xffffdb46);
+            thumb.setCornerRadius(0f);
+
+            android.graphics.drawable.GradientDrawable track =
+                    new android.graphics.drawable.GradientDrawable();
+            track.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+            track.setColor(0xff2b2614);
+            track.setStroke(dp(1f), 0xff80671e);
+            track.setCornerRadius(0f);
+
+            scrollable.setVerticalScrollbarThumbDrawable(thumb);
+            scrollable.setVerticalScrollbarTrackDrawable(track);
+        }
+
+        scrollable.setOnTouchListener((view, event) -> {
+            int action = event.getActionMasked();
+            if (action == android.view.MotionEvent.ACTION_DOWN
+                    || action == android.view.MotionEvent.ACTION_MOVE) {
+                android.view.ViewParent parent = view.getParent();
+                if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+            } else if (action == android.view.MotionEvent.ACTION_UP
+                    || action == android.view.MotionEvent.ACTION_CANCEL) {
+                android.view.ViewParent parent = view.getParent();
+                if (parent != null) parent.requestDisallowInterceptTouchEvent(false);
+            }
+            return false;
+        });
+    }
+
     private View scrollDialogView(LinearLayout root) {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.addView(root, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT,
                 ScrollView.LayoutParams.WRAP_CONTENT));
-        return dotDialogContent(scroll);
+
+        if (dotVisualMode) {
+            configureDotScrollable(scroll);
+            scroll.setBackgroundColor(0xff100e08);
+            scroll.setPadding(0, 0, dp(4f), 0);
+            // Direct native ScrollView in DOT mode: the dialog chrome and
+            // child controls already receive the DOT palette/type treatment.
+            return scroll;
+        }
+
+        return scroll;
     }
 
     private View dotDialogContent(View content) {
@@ -1557,12 +1626,19 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 }
             });
             list.setItemChecked(instrumentMode, true);
-            DotUiLayer picker = new DotUiLayer(this);
-            picker.setDotEnabled(true);
-            picker.addView(list, new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-            int maxHeight = Math.round(getResources().getDisplayMetrics().heightPixels * 0.65f);
+            configureDotScrollable(list);
+            list.setBackgroundColor(0xff100e08);
+            list.setDivider(new android.graphics.drawable.ColorDrawable(0xff80671e));
+            list.setDividerHeight(dp(1f));
+            list.setPadding(0, 0, dp(4f), 0);
+
+            int maxHeight = dotDialogViewportHeight();
+            FrameLayout picker = new FrameLayout(this);
+            picker.setBackgroundColor(0xff100e08);
             picker.setMinimumHeight(maxHeight);
+            picker.addView(list, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, maxHeight));
+
             AlertDialog dialog = new AlertDialog.Builder(this)
                     .setTitle("CONTROL TARGET")
                     .setView(picker)
