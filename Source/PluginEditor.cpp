@@ -2264,6 +2264,8 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     yEffectDreamy = processor.getConfiguredYEffectDreamy();
     midiChannel = processor.getConfiguredMidiChannel();
     audioBufferMode = processor.getAudioBufferMode();
+    dotMode = processor.getConfiguredDotMode();
+    performancePad.setDotMode (dotMode);
     refreshAudioBufferStatus();
     if (audioBufferMode != 0)
         applyAudioBufferMode (audioBufferMode);
@@ -2272,7 +2274,7 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
         arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
     configScreen.setValues (
         rootClass, scaleIndex, delayEnabled, yEffectDreamy, midiChannel,
-        audioBufferMode, makeAudioBufferStatus());
+        audioBufferMode, dotMode, makeAudioBufferStatus());
 
     performancePad.onPadChanged =
         [this] (float x, float y, float speed, float horizontalDirection, bool active)
@@ -2360,7 +2362,21 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
                 rootClass, scaleIndex,
                 processor.getDefaultEffectsEnabled(),
                 yEffectDreamy, midiChannel,
-                audioBufferMode, makeAudioBufferStatus());
+                audioBufferMode, dotMode, makeAudioBufferStatus());
+        };
+
+    configScreen.onDotModeChanged =
+        [this] (bool enabled)
+        {
+            dotMode = enabled;
+            processor.setConfiguredDotMode (dotMode);
+            performancePad.setDotMode (dotMode);
+
+            configScreen.setValues (
+                rootClass, scaleIndex,
+                processor.getDefaultEffectsEnabled(),
+                yEffectDreamy, midiChannel,
+                audioBufferMode, dotMode, makeAudioBufferStatus());
         };
 
     configScreen.onCarnivalRequested =
@@ -2455,7 +2471,7 @@ void FlowerStandaloneAudioProcessorEditor::applyRootDelta (int delta)
         rootClass, scaleIndex,
         processor.getDefaultEffectsEnabled(),
         yEffectDreamy, midiChannel,
-        audioBufferMode, makeAudioBufferStatus());
+        audioBufferMode, dotMode, makeAudioBufferStatus());
 }
 
 void FlowerStandaloneAudioProcessorEditor::applyBpmDelta (float delta)
@@ -2478,7 +2494,7 @@ void FlowerStandaloneAudioProcessorEditor::cycleScale (int delta)
         rootClass, scaleIndex,
         processor.getDefaultEffectsEnabled(),
         yEffectDreamy, midiChannel,
-        audioBufferMode, makeAudioBufferStatus());
+        audioBufferMode, dotMode, makeAudioBufferStatus());
 }
 
 void FlowerStandaloneAudioProcessorEditor::toggleHold()
@@ -2662,6 +2678,7 @@ void FlowerStandaloneAudioProcessorEditor::toggleConfig()
             yEffectDreamy,
             midiChannel,
             audioBufferMode,
+            dotMode,
             makeAudioBufferStatus());
 
         // SELECT-opened CONFIG must use the exact same fullscreen bounds as
@@ -3040,7 +3057,7 @@ bool FlowerStandaloneAudioProcessorEditor::keyPressed (const juce::KeyPress& key
             rootClass, scaleIndex,
             processor.getDefaultEffectsEnabled(),
             yEffectDreamy, midiChannel,
-            audioBufferMode, makeAudioBufferStatus());
+            audioBufferMode, dotMode, makeAudioBufferStatus());
         return true;
     }
 
