@@ -1160,7 +1160,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             label.setTypeface(android.graphics.Typeface.MONOSPACE);
             label.setTextColor(0xffffdb46);
         }
-        if(view instanceof Spinner) view.setBackground(dotFrame(false));
+        if(view instanceof Spinner || view instanceof Button || view instanceof EditText) {
+            view.setBackground(dotFrame(false));
+        }
         if(view instanceof CheckBox) {
             ((CheckBox)view).setButtonTintList(android.content.res.ColorStateList.valueOf(0xffffdb46));
         }
