@@ -793,17 +793,18 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
     private int dotDialogMaxHeightPx() {
         int screenHeight=getResources().getDisplayMetrics().heightPixels;
-        int minHeight=Math.round(260f*getResources().getDisplayMetrics().density);
-        return Math.min(screenHeight,Math.max(minHeight,Math.round(screenHeight*0.65f)));
+        return Math.max(1,Math.round(screenHeight*0.65f));
     }
 
     private View scrollDialogView(LinearLayout root) {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setVerticalScrollBarEnabled(true);
-        scroll.setScrollbarFadingEnabled(false);
-        scroll.setNestedScrollingEnabled(true);
-        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        if(dotVisualMode) {
+            scroll.setVerticalScrollBarEnabled(true);
+            scroll.setScrollbarFadingEnabled(false);
+            scroll.setNestedScrollingEnabled(true);
+            scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        }
         scroll.addView(root, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT,
                 ScrollView.LayoutParams.WRAP_CONTENT));
