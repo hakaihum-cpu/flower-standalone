@@ -451,7 +451,7 @@ public final class MainActivity extends Activity {
       tile(c,"NEW",28,626,125,49,true,false);
       tile(c,"SAVE",163,626,125,49,true,false);
       tile(c,"LOAD",298,626,125,49,true,false);
-      tile(c,"CURRENTLOAD",433,626,125,49,!dumpReader.active(),false);
+      tile(c,"CURRENTLOAD",433,626,125,49,dumpReader==null||!dumpReader.active(),false);
       tile(c,"CONFIG",568,626,125,49,true,false);
       text(c,sourceSnapshot==null?
         "LOCAL PRESET / HARDWARE FLASH WRITE NOT AVAILABLE":
