@@ -34,8 +34,17 @@ public final class PatchLibrary {
         }
     }
     private final AtomicFile storage;
+    private final boolean analog;
+    /** Legacy Hydra local presets remain in their original unchanged file. */
     public PatchLibrary(Context context) {
-        storage = new AtomicFile(new File(context.getFilesDir(),"hydra_dot_presets_v1.json"));
+        this(context,"hydra_dot_presets_v1.json",false);
+    }
+    /** Separate per-track Analog Keys documents, never mixed into Hydra presets. */
+    public PatchLibrary(Context context,String fileName,boolean analog) {
+        if(fileName==null||!fileName.matches("[a-zA-Z0-9_\\.-]+\\.json"))
+            throw new IllegalArgumentException("Unsafe preset filename");
+        this.analog=analog;
+        storage = new AtomicFile(new File(context.getFilesDir(),fileName));
     }
     private JSONObject read() throws Exception {
         if (!storage.getBaseFile().exists()) {
@@ -110,7 +119,7 @@ public final class PatchLibrary {
             while(iter.hasNext()){
                 String key=iter.next();
                 int v=a.getInt(key);
-                ParameterCatalog.Param p=ParameterCatalog.find(key);
+                ParameterCatalog.Param p=analog?AnalogKeysCatalog.find(key):ParameterCatalog.find(key);
                 if(p!=null && v>=p.min && v<=p.max)map.put(key,v);
             }
             byte[] raw=null;
