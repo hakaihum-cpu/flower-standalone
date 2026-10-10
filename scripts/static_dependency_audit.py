@@ -272,7 +272,6 @@ for required_xy_ui in [
     "audioBufferBursts",
     "makeAudioBufferStatus",
     "onDotModeChanged",
-    "performanceUiModeConfig",
 ]:
     if required_xy_ui not in editor_text and required_xy_ui not in editor_header:
         fail(f"XY fullscreen/physical-key contract missing: {required_xy_ui}")
@@ -340,6 +339,15 @@ def count_call_args(text: str, token: str) -> list[int]:
 set_values_arg_counts = count_call_args(editor_text, "configScreen.setValues")
 if not set_values_arg_counts or any(count != 8 for count in set_values_arg_counts):
     fail(f"ConfigScreenComponent::setValues call arity mismatch: {set_values_arg_counts}")
+
+for required_dot_state in [
+    "performanceUiModeConfig",
+    "getConfiguredDotMode",
+    "setConfiguredDotMode",
+    '"FULL", "DOT"',
+]:
+    if required_dot_state not in processor_text and required_dot_state not in (ROOT / "Source/ParameterIDs.h").read_text(encoding="utf-8"):
+        fail(f"DOT persisted state contract missing: {required_dot_state}")
 
 for required_dot in [
     "sourceWidth = 512",
