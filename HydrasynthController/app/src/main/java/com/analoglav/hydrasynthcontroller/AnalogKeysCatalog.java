@@ -118,8 +118,12 @@ public final class AnalogKeysCatalog {
       v(g,"Destination B",1,b+8);
       hi(g,"Depth B",1,b+9);
     }
-    v("TRACK","Track Level",1,100);
-    v("TRACK","Mute",1,101);
+    // Official Appendix D TRACK NRPN uses Data Entry LSB only, unlike
+    // the majority of Sound NRPN values which use Data Entry MSB.
+    PARAMS.add(new ParameterCatalog.Param("TRACK","Track Level",1,100,0,127,"",
+      ParameterCatalog.Encoding.U14,0,null));
+    PARAMS.add(new ParameterCatalog.Param("TRACK","Mute",1,101,0,127,"",
+      ParameterCatalog.Encoding.U14,0,null));
 
     String[] ext={"Ch1 Chorus","Ch1 Delay","Ch1 Reverb","Ch1 Pan","Ch1 Level",
                   "Ch2 Chorus","Ch2 Delay","Ch2 Reverb","Ch2 Pan","Ch2 Level"};
