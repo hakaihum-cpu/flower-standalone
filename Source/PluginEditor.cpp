@@ -391,7 +391,7 @@ void RealtimeChordFxAudioProcessorEditor::paintDotUiFrame (
 
     g.setColour (amber.withAlpha (0.86f));
     g.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
-    g.drawText ("DOT", 334, 18, 52, 20,
+    g.drawText ("DOT", 310, 18, 48, 20,
                 juce::Justification::centred);
 }
 
@@ -518,8 +518,9 @@ void RealtimeChordFxAudioProcessorEditor::paintBar (juce::Graphics& g,
                                                      const juce::String& text)
 {
     g.setColour (uiColour (0.84f));
-    g.setFont (juce::FontOptions (13.0f).withStyle (
-        dotModeEnabled() ? "Bold" : "Regular"));
+    g.setFont (dotModeEnabled()
+        ? juce::FontOptions (13.0f).withStyle ("Bold")
+        : juce::FontOptions (13.0f));
     g.drawText (label, r.removeFromTop (20.0f), juce::Justification::centredLeft);
     auto line = r.removeFromTop (20.0f).reduced (0.0f, 8.0f);
     g.setColour (uiColour (0.30f));
@@ -1343,6 +1344,8 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     const bool midiControl = processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
     const int clock = juce::roundToInt (processor.state().getRawParameterValue (ParamID::clockMode)->load());
     const int bpm = juce::roundToInt (processor.state().getRawParameterValue (ParamID::internalBpm)->load());
+    const int displayMode = juce::jlimit (0, 1, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::displayMode)->load()));
 
     g.setColour (uiColour (0.78f));
     g.setFont (juce::FontOptions (16.0f));
@@ -1365,9 +1368,15 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
         g.drawText ("BPM", 54, 638, 180, 30, juce::Justification::centredLeft);
         g.drawText (juce::String (bpm), 450, 638, 180, 30, juce::Justification::centredRight);
     }
-    g.setFont (juce::FontOptions (11.0f));
-    g.setColour (uiColour (0.42f));
-    g.drawText ("MODE: CHORD-A / CHORD-B / DREAMY / EUREKA / CHORDBOT", 54, 681, 590, 18, juce::Justification::centredLeft);
+    g.setFont (displayMode == 1
+        ? juce::FontOptions (15.0f).withStyle ("Bold")
+        : juce::FontOptions (15.0f));
+    g.setColour (uiColour (displayMode == 1 ? 0.94f : 0.72f));
+    g.drawText ("DISPLAY", 54, 674, 220, 28,
+                juce::Justification::centredLeft);
+    g.drawText (displayMode == 1 ? "DOT" : "MEDIA",
+                450, 674, 180, 28,
+                juce::Justification::centredRight);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
@@ -1669,6 +1678,14 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         {
             auto* par = processor.state().getParameter (ParamID::internalBpm);
             par->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, par->getValue() + (p.x > 360 ? 1.0f/200.0f : -1.0f/200.0f)));
+        }
+        else if (p.y >= 670 && p.y < 708)
+        {
+            const int current = juce::jlimit (0, 1, juce::roundToInt (
+                processor.state().getRawParameterValue (ParamID::displayMode)->load()));
+            setChoiceActual (ParamID::displayMode, 1 - current);
+            dotRenderedRevision = -1;
+            dotLumaRevision = -1;
         }
         repaint();
         return;
