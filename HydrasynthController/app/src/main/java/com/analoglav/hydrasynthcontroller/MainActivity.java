@@ -27,6 +27,7 @@ import android.view.View;
 import android.view.WindowManager;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +37,15 @@ public final class MainActivity extends Activity {
   private MidiManager midi;
   private PatchLibrary library;
   private int sendGeneration=0;
+  private HydraDumpProtocol.Reader dumpReader;
+  private HydraDumpProtocol.Assembler dumpAssembler;
+  private final Runnable dumpTimeout=new Runnable(){
+    @Override public void run(){if(dumpReader!=null&&dumpReader.active())dumpReader.cancel("SLOT READ TIMEOUT");}
+  };
+  private void resetDumpTimeout(){
+    main.removeCallbacks(dumpTimeout);
+    if(dumpReader!=null&&dumpReader.active())main.postDelayed(dumpTimeout,2500);
+  }
   private MidiDevice txDevice,rxDevice;
   private MidiInputPort txPort;
   private MidiOutputPort rxPort;
@@ -45,7 +55,13 @@ public final class MainActivity extends Activity {
   private final Handler main=new Handler(Looper.getMainLooper());
   private final MidiReceiver receiver=new MidiReceiver(){
     @Override public void onSend(byte[] msg,int offset,int count,long timestamp){
-      rxBytes+=count;main.post(()->{if(view!=null)view.invalidate();});
+      // MidiReceiver callbacks can be split and can run off the UI thread.
+      byte[] copy=Arrays.copyOfRange(msg,offset,offset+count);
+      main.post(()->{
+        rxBytes+=copy.length;
+        if(dumpAssembler!=null)dumpAssembler.feed(copy,0,copy.length);
+        if(view!=null)view.invalidate();
+      });
     }
   };
   private final MidiManager.DeviceCallback callback=new MidiManager.DeviceCallback(){
@@ -64,20 +80,58 @@ public final class MainActivity extends Activity {
     midi=(MidiManager)getSystemService(Context.MIDI_SERVICE);
     library=new PatchLibrary(this);
     view=new Editor();setContentView(view);
+    dumpReader=new HydraDumpProtocol.Reader(new HydraDumpProtocol.Listener(){
+      @Override public void send(byte[] data){
+        if(txPort==null)throw new IllegalStateException("MIDI OUT DISCONNECTED");
+        try{txPort.send(data,0,data.length);txBytes+=data.length;}
+        catch(IOException e){throw new IllegalStateException("SYSEX MIDI SEND FAILED",e);}
+      }
+      @Override public void status(String message){
+        view.status=message;view.invalidate();resetDumpTimeout();
+      }
+      @Override public void complete(byte[] data){
+        main.removeCallbacks(dumpTimeout);
+        try{view.acceptSlot(new HydraPatchSnapshot(data));}
+        catch(RuntimeException e){view.status="PATCH DECODE FAILED / "+e.getMessage();view.invalidate();}
+      }
+      @Override public void failed(String reason){
+        main.removeCallbacks(dumpTimeout);
+        view.status="CURRENT LOAD FAILED / "+reason;view.invalidate();
+      }
+    });
+    dumpAssembler=new HydraDumpProtocol.Assembler(frame->{
+      if(dumpReader==null||!dumpReader.active())return;
+      try{dumpReader.accept(frame);}
+      catch(RuntimeException ex){
+        try{dumpReader.cancel(ex.getMessage());}
+        catch(RuntimeException ignored){view.status="SYSEX IO FAILED";view.invalidate();}
+      }
+    });
     if(midi!=null)midi.registerDeviceCallback(callback,main);
     refresh();
   }
   @Override protected void onDestroy(){
     if(midi!=null)midi.unregisterDeviceCallback(callback);
+    main.removeCallbacks(dumpTimeout);
+    if(dumpReader!=null&&dumpReader.active()){
+      try{dumpReader.cancel("APP CLOSED");}catch(RuntimeException ignored){}
+    }
     closeTx();closeRx();super.onDestroy();
   }
   private void closeTx(){
+    if(dumpReader!=null&&dumpReader.active()){
+      try{dumpReader.cancel("MIDI OUT CLOSED");}catch(RuntimeException ignored){}
+    }
     sendGeneration++;
     if(txPort!=null){try{txPort.close();}catch(IOException ignored){}txPort=null;}
     if(txDevice!=null){try{txDevice.close();}catch(IOException ignored){}txDevice=null;}
     outId=-1;
   }
   private void closeRx(){
+    if(dumpReader!=null&&dumpReader.active()){
+      try{dumpReader.cancel("MIDI IN CLOSED");}catch(RuntimeException ignored){}
+    }
+    if(dumpAssembler!=null)dumpAssembler.reset();
     if(rxPort!=null){try{rxPort.close();}catch(IOException ignored){}rxPort=null;}
     if(rxDevice!=null){try{rxDevice.close();}catch(IOException ignored){}rxDevice=null;}
     inId=-1;
@@ -179,6 +233,21 @@ public final class MainActivity extends Activity {
     }
   }
 
+
+  private void beginSlotRead(int bank,int slot){
+    if(dumpReader==null||dumpReader.active()){view.status="READ ALREADY ACTIVE";view.invalidate();return;}
+    if(txPort==null||rxPort==null){
+      view.status="CURRENT LOAD NEEDS MIDI OUT + MIDI IN";view.invalidate();return;
+    }
+    if(dumpAssembler!=null)dumpAssembler.reset();
+    try{dumpReader.start(bank,slot);resetDumpTimeout();}
+    catch(RuntimeException ex){
+      if(dumpReader.active()){
+        try{dumpReader.cancel(ex.getMessage());}catch(RuntimeException ignored){}
+      }
+      view.status="CURRENT LOAD ERROR / "+ex.getMessage();view.invalidate();
+    }
+  }
 
   /** Explicit routing check. No patch data is changed by this test. */
   private void sendDiagnosticNote(){
