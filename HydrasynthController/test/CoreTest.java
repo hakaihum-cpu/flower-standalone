@@ -27,6 +27,11 @@ public final class CoreTest {
     eq(osc.max,218);eq(osc.options.length,219);eq(osc.display(0),"Sine");
     eq(semi.encode(-36),92);eq(semi.encode(36),36);
     eq(filter.max,10);eq(mut.encode(7),135);
+    ParameterCatalog.Param oneShot=null;
+    for(ParameterCatalog.Param p:ParameterCatalog.params("LFO 1"))
+      if(p.name.equals("One shot"))oneShot=p;
+    if(oneShot==null)throw new AssertionError("Missing LFO 1 One Shot");
+    eq(oneShot.encode(1),0x14*128+1);
     if(ParameterCatalog.params("MOD MATRIX").size()!=0)throw new AssertionError("Unmapped mod matrix must be disabled");
     System.out.println("CORE TEST PASS: "+ParameterCatalog.mappedCount()+" params, MIDI NRPN packing");
   }

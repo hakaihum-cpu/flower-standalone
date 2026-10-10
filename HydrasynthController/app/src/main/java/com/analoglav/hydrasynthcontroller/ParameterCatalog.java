@@ -112,7 +112,7 @@ public final class ParameterCatalog {
     for(int i=0;i<5;i++) {
       String g="LFO "+(i+1);
       packed(g,"BPM sync",0x3F,0x04+i,1,ON);
-      packed(g,"One shot",0x3F,0x04+i,14,ON);
+      packed(g,"One shot",0x3F,0x04+i,0x14,ON);
       numeric(g,"Phase",0x3F,0x30+i,0,360," deg");
     }
     Collections.addAll(GROUPS,"ENV 1","ENV 2","ENV 3","ENV 4","ENV 5",
