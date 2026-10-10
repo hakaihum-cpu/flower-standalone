@@ -19,6 +19,7 @@ namespace ParamIDs
     inline constexpr auto performanceYEffectConfig = "performanceYEffectConfig";
     inline constexpr auto performanceMidiChannelConfig = "performanceMidiChannelConfig";
     inline constexpr auto audioBufferMode = "audioBufferMode";
+    inline constexpr auto performanceUiModeConfig = "performanceUiModeConfig";
 
     inline constexpr auto flowerEnabled = "flowerEnabled";
     inline constexpr auto flowerRecord = "flowerRecord";
