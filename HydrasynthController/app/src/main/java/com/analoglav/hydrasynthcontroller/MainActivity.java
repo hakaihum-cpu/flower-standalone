@@ -36,6 +36,7 @@ import java.util.Map;
 public final class MainActivity extends Activity {
   private MidiManager midi;
   private PatchLibrary library;
+  private final PatchLibrary[] analogLibraries=new PatchLibrary[6];
   private int sendGeneration=0;
   private HydraDumpProtocol.Reader dumpReader;
   private HydraDumpProtocol.Assembler dumpAssembler;
@@ -79,6 +80,8 @@ public final class MainActivity extends Activity {
     channel=Math.max(1,Math.min(16,getPreferences(MODE_PRIVATE).getInt("midi_channel",1)));
     midi=(MidiManager)getSystemService(Context.MIDI_SERVICE);
     library=new PatchLibrary(this);
+    for(int i=0;i<analogLibraries.length;i++)
+      analogLibraries[i]=new PatchLibrary(this,"analog_keys_track"+(i+1)+"_presets_v1.json",true);
     view=new Editor();setContentView(view);
     dumpReader=new HydraDumpProtocol.Reader(new HydraDumpProtocol.Listener(){
       @Override public void send(byte[] data){
@@ -190,14 +193,19 @@ public final class MainActivity extends Activity {
       rxDevice=d;rxPort=p;p.connect(receiver);view.status="MIDI IN READY";view.invalidate();
     },main);
   }
+  private int editorChannel(){
+    if(view==null||!view.analogMode)return channel;
+    return view.akChannels[view.akTrack];
+  }
   private void send(ParameterCatalog.Param p,int value){
     if(txPort==null){view.status="CONNECT MIDI OUT IN CONFIG";view.invalidate();return;}
     try {
-      byte[] msg=NrpnEncoder.encode(channel,p.msb,p.lsb,p.encode(value));
+      final int onChannel=editorChannel();
+      byte[] msg=NrpnEncoder.encode(onChannel,p.msb,p.lsb,p.encode(value));
       // Preserve NRPN CC 99/98/6/38 together in one ordered output write.
       txPort.send(msg,0,msg.length);
       txBytes+=msg.length;
-      view.status="TX TO PORT CH"+channel+"  "+p.name+" / SYNTH NOT VERIFIED";
+      view.status="TX TO PORT CH"+onChannel+"  "+p.name+" / SYNTH NOT VERIFIED";
     }catch(IOException|IllegalArgumentException ex){
       view.status="TX FAILED: "+ex.getClass().getSimpleName();
     }
@@ -208,8 +216,11 @@ public final class MainActivity extends Activity {
   private void applyDocument(Map<String,Integer> staged) {
     if(txPort==null){view.status="MIDI OUT NOT CONNECTED";view.invalidate();return;}
     ArrayList<ParameterCatalog.Param> list=new ArrayList<>();
-    for(ParameterCatalog.Param p:ParameterCatalog.all()) if(staged.containsKey(p.key()))
-      list.add(p);
+    final boolean ak=view!=null&&view.analogMode;
+    final int track=ak?view.akTrack:0;
+    final int destinationChannel=editorChannel();
+    for(ParameterCatalog.Param p:(ak?AnalogKeysCatalog.all(track):ParameterCatalog.all()))
+      if(staged.containsKey(p.key()))list.add(p);
     if(list.isEmpty()){view.status="NO PATCH VALUES SET";view.invalidate();return;}
     final int job=++sendGeneration;
     final int count=list.size();
@@ -221,7 +232,7 @@ public final class MainActivity extends Activity {
       main.postDelayed(()->{
         if(sendGeneration!=job||txPort==null)return;
         try{
-          byte[] m=NrpnEncoder.encode(channel,p.msb,p.lsb,p.encode(value));
+          byte[] m=NrpnEncoder.encode(destinationChannel,p.msb,p.lsb,p.encode(value));
           txPort.send(m,0,m.length);
           txBytes+=m.length;
           if(last){view.status="TX TO PORT "+count+" FIELDS / SYNTH NOT VERIFIED";view.invalidate();}
@@ -255,15 +266,15 @@ public final class MainActivity extends Activity {
     if(destination==null){
       view.status="TEST: SELECT MIDI OUTPUT FIRST";view.invalidate();return;
     }
-    final int midiCh=(channel-1)&15;
+    final int midiCh=(editorChannel()-1)&15;
     try{
       destination.send(new byte[]{(byte)(0x90|midiCh),60,100},0,3);
-      view.status="TEST CH"+channel+": NOTE ON WRITTEN TO PORT";
+      view.status="TEST CH"+editorChannel()+": NOTE ON WRITTEN TO PORT";
       view.invalidate();
       main.postDelayed(()->{
         try{
           destination.send(new byte[]{(byte)(0x80|midiCh),60,0},0,3);
-          view.status="TEST NOTE OFF / NO HYDRASYNTH ACK";
+          view.status="TEST NOTE OFF / NO DEVICE ACK";
         }catch(IOException e){
           view.status="TEST NOTE OFF PORT ERROR";
         }
