@@ -39,6 +39,7 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
 
     private final TextureView textureView;
     private final DreamyOverlay dreamyOverlay;
+    private final DotVisualOverlay dotOverlay;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private MediaPlayer player;
@@ -73,8 +74,14 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
 
         dreamyOverlay = new DreamyOverlay(context, textureView);
         addView(dreamyOverlay, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        dotOverlay = new DotVisualOverlay(context, textureView);
+        addView(dotOverlay, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
         prepareAssetAsync(context.getApplicationContext(), 0);
+    }
+
+    void setDotEnabled(boolean enabled) {
+        dotOverlay.setDotEnabled(enabled);
     }
 
     boolean isVideoReady() {
@@ -149,6 +156,7 @@ final class PerformanceVideoLayer extends FrameLayout implements TextureView.Sur
     }
 
     void pauseForLifecycle() {
+        dotOverlay.setDotEnabled(false);
         pausedByLifecycle = true;
         handler.removeCallbacks(reverseTick);
         if (player != null && prepared) {
