@@ -1542,13 +1542,46 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     @Override public void onSelectInstrument() {
         pianoView.setRecorderOpen(false);
         final String[] names = mixerPartNames();
+        if (dotVisualMode) {
+            android.widget.ListView list = new android.widget.ListView(this);
+            list.setChoiceMode(android.widget.ListView.CHOICE_MODE_SINGLE);
+            list.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_list_item_single_choice, names) {
+                @Override public View getView(int position, View old, android.view.ViewGroup parent) {
+                    View row = super.getView(position, old, parent);
+                    if (row instanceof TextView) {
+                        ((TextView)row).setTextColor(0xffffe57a);
+                        ((TextView)row).setTypeface(android.graphics.Typeface.MONOSPACE);
+                    }
+                    row.setBackgroundColor(0xff100e08);
+                    return row;
+                }
+            });
+            list.setItemChecked(instrumentMode, true);
+            DotUiLayer picker = new DotUiLayer(this);
+            picker.setDotEnabled(true);
+            picker.addView(list, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+            int maxHeight = Math.round(getResources().getDisplayMetrics().heightPixels * 0.65f);
+            picker.setMinimumHeight(maxHeight);
+            AlertDialog dialog = new AlertDialog.Builder(this)
+                    .setTitle("CONTROL TARGET")
+                    .setView(picker)
+                    .setNegativeButton("CANCEL", null)
+                    .create();
+            list.setOnItemClickListener((parent, view, position, id) -> {
+                applyInstrument(Math.max(0, Math.min(15, position)));
+                dialog.dismiss();
+            });
+            dialog.setOnShowListener(ignored -> applyDotDialogChrome(dialog));
+            dialog.show();
+            return;
+        }
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("CONTROL TARGET")
                 .setSingleChoiceItems(names, instrumentMode, null)
                 .setNegativeButton("CANCEL", null)
                 .create();
         dialog.setOnShowListener(ignored -> {
-            applyDotDialogChrome(dialog);
             android.widget.ListView list = dialog.getListView();
             list.setOnItemClickListener((parent, view, position, id) -> {
                 applyInstrument(Math.max(0, Math.min(15, position)));
