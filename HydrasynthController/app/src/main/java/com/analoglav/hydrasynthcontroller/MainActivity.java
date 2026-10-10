@@ -304,10 +304,14 @@ public final class MainActivity extends Activity {
     private final Paint brush=new Paint();
     private final java.util.LinkedHashMap<String,Integer> draft=new java.util.LinkedHashMap<>();
     private String patchName="UNTITLED",module="OSC 1",status="SELECT MODULE > EDIT > SEND";
-    private boolean dirty;
+    private boolean dirty, loadedFromHardware;
+    private HydraPatchSnapshot sourceSnapshot;
+    // Imported UI fields are for viewing; only subsequent deliberate edits are re-sent.
+    private final java.util.LinkedHashMap<String,Integer> changedSinceRead=new java.util.LinkedHashMap<>();
+    private int chosenBank=0,chosenSlot=0;
     private int sectionOffset;
     private ParameterCatalog.Param selectedParam;
-    // panelMode: 0 normal, 1 enum list, 2 numeric entry, 3 family select, 4 local preset list, 5 config
+    // panelMode: 0 editor, 1 values, 2 number, 3 family, 4 library, 5 config, 6 CurrentLoad
     private int panelMode,scrollIndex,familyType;
     private int numCurrent;
     private float touchStartY;
@@ -358,6 +362,7 @@ public final class MainActivity extends Activity {
       if(p==null)return;
       value=Math.max(p.min,Math.min(p.max,value));
       draft.put(p.key(),value);selectedParam=p;dirty=true;
+      if(loadedFromHardware)changedSinceRead.put(p.key(),value);
       status="EDITED "+p.name+"  /  SEND WHEN READY";invalidate();
     }
     private int stagedValue(ParameterCatalog.Param p){
@@ -377,6 +382,7 @@ public final class MainActivity extends Activity {
       drawHeader(screen);
       drawRouting(screen);
       if(panelMode==5)drawConfig(screen);
+      else if(panelMode==6)drawCurrentLoad(screen);
       else if(panelMode==1||panelMode==3||panelMode==4)drawList(screen);
       else if(panelMode==2)drawNumber(screen);
       else drawModuleEditor(screen);
@@ -437,15 +443,20 @@ public final class MainActivity extends Activity {
       text(c,trim(status,65),LIGHT,38,557,17);
       tile(c,"SEND FIELD",28,570,323,43,
         selectedParam!=null && draft.containsKey(selectedParam.key()),false);
-      tile(c,"APPLY PATCH",365,570,328,43,!draft.isEmpty(),false);
+      tile(c,loadedFromHardware?"APPLY EDITS":"APPLY PATCH",365,570,328,43,
+        loadedFromHardware?!changedSinceRead.isEmpty():!draft.isEmpty(),false);
       drawBottom(c);
     }
     private void drawBottom(Canvas c){
-      tile(c,"NEW",28,626,155,49,true,false);
-      tile(c,"SAVE",196,626,155,49,true,false);
-      tile(c,"LOAD",364,626,155,49,true,false);
-      tile(c,"CONFIG",532,626,161,49,true,false);
-      text(c,"LOCAL PRESET   /   PATCH MEMORY WRITE NOT IMPLEMENTED",DIM,29,694,15);
+      tile(c,"NEW",28,626,125,49,true,false);
+      tile(c,"SAVE",163,626,125,49,true,false);
+      tile(c,"LOAD",298,626,125,49,true,false);
+      tile(c,"CURRENTLOAD",433,626,125,49,!dumpReader.active(),false);
+      tile(c,"CONFIG",568,626,125,49,true,false);
+      text(c,sourceSnapshot==null?
+        "LOCAL PRESET / HARDWARE FLASH WRITE NOT AVAILABLE":
+        "SOURCE SLOT "+(char)('A'+sourceSnapshot.bank)+"-"+(sourceSnapshot.slot+1)+
+        " / RAW 2790B / UI "+draft.size()+" FIELDS",DIM,29,694,15);
     }
     private List<String> listItems(){
       ArrayList<String> items=new ArrayList<>();
@@ -496,6 +507,40 @@ public final class MainActivity extends Activity {
       tile(c,"+10",532,442,146,64,true,false);
       tile(c,"USE VALUE",43,528,635,57,true,false);
       drawBottom(c);
+    }
+    private void drawCurrentLoad(Canvas c){
+      rect(c,BG,27,274,666,340);stroke(c,YELLOW,27,274,666,340);
+      text(c,"CURRENT LOAD / SLOT READ",YELLOW,42,310,25);
+      tile(c,"CLOSE",570,280,110,37,true,false);
+      text(c,"SAVED SLOT ONLY - NOT UNSAVED EDIT BUFFER",DIM,43,329,16);
+      for(int i=0;i<8;i++){
+        int col=i%4,row=i/4;
+        tile(c,"BANK "+(char)('A'+i),43+159*col,339+45*row,148,39,true,chosenBank==i);
+      }
+      text(c,"SLOT",DIM,45,450,18);
+      text(c,""+(chosenSlot+1)+" / 128",LIGHT,181,454,30);
+      tile(c,"-10",43,469,148,52,true,false);
+      tile(c,"-1",205,469,148,52,true,false);
+      tile(c,"+1",367,469,148,52,true,false);
+      tile(c,"+10",529,469,149,52,true,false);
+      tile(c,dumpReader.active()?"READING ...":"READ SAVED SLOT",43,538,635,51,
+           !dumpReader.active()&&txPort!=null&&rxPort!=null,false);
+      text(c,dumpReader.active()?trim(status,55):
+        "Requires MIDI IN + OUT. Does not modify synth.",DIM,43,611,16);
+      drawBottom(c);
+    }
+    private void acceptSlot(HydraPatchSnapshot snapshot){
+      // Nothing in the editor changes before the complete 22 chunk dump,
+      // CRC, expected slot, version and footer checks have all succeeded.
+      sourceSnapshot=snapshot;
+      chosenBank=snapshot.bank;chosenSlot=snapshot.slot;
+      draft.clear();draft.putAll(snapshot.mapped);
+      changedSinceRead.clear();loadedFromHardware=true;
+      patchName=snapshot.name;dirty=false;
+      selectedParam=null;sectionOffset=0;panelMode=0;module="OSC 1";
+      status="READ "+(char)('A'+snapshot.bank)+"-"+(snapshot.slot+1)+
+        " / FULL RAW / UI "+draft.size()+" OF "+ParameterCatalog.mappedCount();
+      invalidate();
     }
     private void drawConfig(Canvas c){
       rect(c,BG,27,274,666,340);stroke(c,YELLOW,27,274,666,340);
@@ -555,8 +600,10 @@ public final class MainActivity extends Activity {
     }
     private void store(String name){
       try{
-        library.save(name,draft);patchName=name;dirty=false;
-        status="SAVED LOCALLY / "+draft.size()+" PARAMETERS";
+        library.save(name,draft,sourceSnapshot==null?null:sourceSnapshot.raw);
+        patchName=name;dirty=false;
+        status="SAVED LOCALLY / "+draft.size()+" UI VALUES"+
+          (sourceSnapshot!=null?" + ORIGINAL RAW":"");
       }catch(Exception ex){status="SAVE FAILED: "+ex.getClass().getSimpleName();}
       invalidate();
     }
@@ -564,14 +611,20 @@ public final class MainActivity extends Activity {
     private void load(String name){
       try{
         PatchLibrary.Document doc=library.load(name);
+        // Validate before altering the current patch document.
+        HydraPatchSnapshot baseline=doc.sourcePatch==null?null:new HydraPatchSnapshot(doc.sourcePatch);
+        sourceSnapshot=baseline;loadedFromHardware=baseline!=null;
+        changedSinceRead.clear();
         draft.clear();draft.putAll(doc.values);patchName=doc.name;
         dirty=false;selectedParam=null;sectionOffset=0;panelMode=0;
-        status="LOADED LOCAL / "+draft.size()+" VALUES";
+        status="LOADED LOCAL / "+draft.size()+" UI VALUES"+
+          (baseline==null?"":" + ORIGINAL RAW");
       }catch(Exception ex){status="LOAD FAILED: "+ex.getClass().getSimpleName();}
       invalidate();
     }
     private void newPatch(){
       draft.clear();patchName="UNTITLED";selectedParam=null;dirty=false;
+      sourceSnapshot=null;loadedFromHardware=false;changedSinceRead.clear();
       sectionOffset=0;panelMode=0;status="NEW PROJECT / NO SYNTH INIT SENT";
       invalidate();
     }
@@ -625,14 +678,35 @@ public final class MainActivity extends Activity {
       }
       if(event.getActionMasked()!=MotionEvent.ACTION_UP)return true;
       if(y>=626&&y<679){
-        if(x<185)requireClean(this::newPatch);
-        else if(x<354)triggerSave();
-        else if(x<527)openLibrary();
-        else{panelMode=5;invalidate();}
+        if(x<158)requireClean(this::newPatch);
+        else if(x<293)triggerSave();
+        else if(x<428)openLibrary();
+        else if(x<563){
+          if(!dumpReader.active()){panelMode=6;invalidate();}
+        }else{panelMode=5;invalidate();}
         return true;
       }
       if(panelMode!=0){
-        if(y>=280&&y<324&&x>564){panelMode=0;invalidate();return true;}
+        if(y>=280&&y<324&&x>564){if(!dumpReader.active())panelMode=0;invalidate();return true;}
+        if(panelMode==6){
+          if(dumpReader.active())return true;
+          if(y>=339&&y<424&&x>=43&&x<681){
+            int col=(int)((x-43)/159f),row=(int)((y-339)/45f);
+            int index=row*4+col;
+            if(index>=0&&index<8)chosenBank=index;
+            invalidate();return true;
+          }
+          if(y>=469&&y<522){
+            int delta=x<198?-10:x<361?-1:x<523?1:10;
+            chosenSlot=Math.max(0,Math.min(127,chosenSlot+delta));
+            invalidate();return true;
+          }
+          if(y>=538&&y<592){
+            requireClean(()->beginSlotRead(chosenBank,chosenSlot));
+            return true;
+          }
+          return true;
+        }
         if(panelMode==5){
           if(y>=340&&y<391){chooseMidi(false);return true;}
           if(y>=414&&y<464){chooseMidi(true);return true;}
@@ -692,7 +766,8 @@ public final class MainActivity extends Activity {
             status="SELECT A PARAMETER VALUE FIRST";invalidate();
           } else send(selectedParam,draft.get(selectedParam.key()));
         } else {
-          applyDocument(new java.util.LinkedHashMap<>(draft));
+          applyDocument(new java.util.LinkedHashMap<>(
+            loadedFromHardware?changedSinceRead:draft));
         }
       }
       return true;
