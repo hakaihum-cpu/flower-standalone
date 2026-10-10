@@ -2,6 +2,9 @@ package com.analoglav.hydrasynthcontroller;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.widget.EditText;
+import android.text.InputType;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Canvas;
@@ -31,6 +34,8 @@ import java.util.Map;
 /** Entire patch editor, dropdowns and CONFIG run in one View. No Activity navigation. */
 public final class MainActivity extends Activity {
   private MidiManager midi;
+  private PatchLibrary library;
+  private int sendGeneration=0;
   private MidiDevice txDevice,rxDevice;
   private MidiInputPort txPort;
   private MidiOutputPort rxPort;
@@ -57,6 +62,7 @@ public final class MainActivity extends Activity {
         WindowManager.LayoutParams.FLAG_FULLSCREEN);
     channel=Math.max(1,Math.min(16,getPreferences(MODE_PRIVATE).getInt("midi_channel",1)));
     midi=(MidiManager)getSystemService(Context.MIDI_SERVICE);
+    library=new PatchLibrary(this);
     view=new Editor();setContentView(view);
     if(midi!=null)midi.registerDeviceCallback(callback,main);
     refresh();
@@ -66,6 +72,7 @@ public final class MainActivity extends Activity {
     closeTx();closeRx();super.onDestroy();
   }
   private void closeTx(){
+    sendGeneration++;
     if(txPort!=null){try{txPort.close();}catch(IOException ignored){}txPort=null;}
     if(txDevice!=null){try{txDevice.close();}catch(IOException ignored){}txDevice=null;}
     outId=-1;
@@ -140,243 +147,454 @@ public final class MainActivity extends Activity {
     }
     view.invalidate();
   }
+
+  /** Send all explicitly staged editor assignments, with throttling and cancellation. */
+  private void applyDocument(Map<String,Integer> staged) {
+    if(txPort==null){view.status="MIDI OUT NOT CONNECTED";view.invalidate();return;}
+    ArrayList<ParameterCatalog.Param> list=new ArrayList<>();
+    for(ParameterCatalog.Param p:ParameterCatalog.all()) if(staged.containsKey(p.key()))
+      list.add(p);
+    if(list.isEmpty()){view.status="NO PATCH VALUES SET";view.invalidate();return;}
+    final int job=++sendGeneration;
+    final int count=list.size();
+    view.status="APPLY "+count+" FIELDS / NOT A SYSEX PATCH";view.invalidate();
+    for(int i=0;i<count;i++){
+      ParameterCatalog.Param p=list.get(i);
+      int value=staged.get(p.key());
+      final boolean last=(i==count-1);
+      main.postDelayed(()->{
+        if(sendGeneration!=job||txPort==null)return;
+        try{
+          byte[] m=NrpnEncoder.encode(channel,p.msb,p.lsb,p.encode(value));
+          for(int j=0;j<m.length;j+=3)txPort.send(m,j,3);
+          if(last){view.status="APPLIED "+count+" FIELDS / SYNTH NOT ACKNOWLEDGED";view.invalidate();}
+        }catch(IOException|IllegalArgumentException err){
+          sendGeneration++;
+          view.status="APPLY ABORTED: "+err.getClass().getSimpleName();view.invalidate();
+        }
+      },i*22L);
+    }
+  }
+
   private void updateBluetoothPermission(){
     if(Build.VERSION.SDK_INT>=31 &&
        checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED)
       requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},11);
   }
 
-  /** Coordinates always originate on a square 720x720 canvas, letterboxed without touch drift. */
+  /**
+   * One square view: a permanent patch workbench rather than a MIDI-value list.
+   * Signal blocks represent the Explorer sound-design path. The editor area
+   * changes IN PLACE when a block is selected; there are no separate screens.
+   */
   private final class Editor extends View {
-    private final int BLACK=0xff100e08,DIM=0xff80671e,YELLOW=0xffffdb46,BRIGHT=0xffffe57a;
+    private final int BG=0xff100e08,PANEL=0xff201c0d,DIM=0xff80671e;
+    private final int YELLOW=0xffffdb46,LIGHT=0xffffe57a,GREY=0xff534720;
     private final int[] BAYER={0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5};
-    private final Paint pen=new Paint();
-    private final Map<String,Integer> pending=new HashMap<>();
-    private int moduleIndex,parameterIndex,dropOffset,dropKind; // 0=none, 1=module, 2=parameter, 3=value, 4=out, 5=in, 6=channel
-    private boolean config;
-    private float startY;
-    private int frame;
-    private String status="CONFIG > SELECT MIDI OUT";
-    private String currentGroup(){return ParameterCatalog.modules().get(moduleIndex);}
-    private List<ParameterCatalog.Param> available(){return ParameterCatalog.params(currentGroup());}
-    private ParameterCatalog.Param current(){
-      List<ParameterCatalog.Param> p=available();
-      return p.isEmpty()?null:p.get(Math.min(parameterIndex,p.size()-1));
-    }
-    private int val(){
-      ParameterCatalog.Param p=current();
-      return p==null?0:pending.containsKey(p.key())?pending.get(p.key()):p.min;
-    }
-    private void change(int next){
-      ParameterCatalog.Param p=current();
-      if(p==null)return;
-      pending.put(p.key(),Math.max(p.min,Math.min(p.max,next)));
-      status="PENDING / PRESS SEND";invalidate();
-    }
-    private Editor(){
+    private final String[][] FLOW={
+      {"OSC 1","OSC 2","OSC 3","RING / NOISE","MUTANT 1","MUTANT 2"},
+      {"MUTANT 3","MUTANT 4","MIXER","FILTER 1","FILTER 2","AMP"},
+      {"PRE-FX","DELAY","REVERB","POST-FX","VOICE","ARPEGGIATOR"},
+      {"ENV 1-5","LFO 1-5","MOD MATRIX","MACRO 1-8","SYSTEM","PATCH"}
+    };
+    private final Paint brush=new Paint();
+    private final java.util.LinkedHashMap<String,Integer> draft=new java.util.LinkedHashMap<>();
+    private String patchName="UNTITLED",module="OSC 1",status="SELECT MODULE > EDIT > SEND";
+    private boolean dirty;
+    private int sectionOffset;
+    private ParameterCatalog.Param selectedParam;
+    // panelMode: 0 normal, 1 enum list, 2 numeric entry, 3 family select, 4 local preset list, 5 config
+    private int panelMode,scrollIndex,familyType;
+    private int numCurrent;
+    private float touchStartY;
+    private final float[] area={0,0,720,720};
+
+    Editor() {
       super(MainActivity.this);
-      pen.setTypeface(Typeface.create(Typeface.MONOSPACE,Typeface.BOLD));
-      pen.setAntiAlias(false);setLayerType(View.LAYER_TYPE_SOFTWARE,null);
+      brush.setTypeface(Typeface.create(Typeface.MONOSPACE,Typeface.BOLD));
+      brush.setAntiAlias(false);
+      setLayerType(View.LAYER_TYPE_SOFTWARE,null);
+      setFocusable(true);
     }
-    private void fill(Canvas c,int color,float x,float y,float w,float h){
-      pen.setColor(color);pen.setStyle(Paint.Style.FILL);
-      c.drawRect(x,y,x+w,y+h,pen);
+    private void rect(Canvas c,int color,float x,float y,float w,float h){
+      brush.setColor(color);brush.setStyle(Paint.Style.FILL);
+      c.drawRect(x,y,x+w,y+h,brush);
     }
-    private void outline(Canvas c,int color,float x,float y,float w,float h){
-      pen.setColor(color);pen.setStyle(Paint.Style.STROKE);pen.setStrokeWidth(2);
-      c.drawRect(x,y,x+w,y+h,pen);pen.setStyle(Paint.Style.FILL);
+    private void stroke(Canvas c,int color,float x,float y,float w,float h){
+      brush.setColor(color);brush.setStyle(Paint.Style.STROKE);brush.setStrokeWidth(2);
+      c.drawRect(x,y,x+w,y+h,brush);brush.setStyle(Paint.Style.FILL);
     }
-    private void txt(Canvas c,String text,int color,float x,float y,int size){
-      pen.setColor(color);pen.setTextSize(size);
-      c.drawText(text,x,y,pen);
+    private void text(Canvas c,String v,int color,float x,float y,int size){
+      brush.setColor(color);brush.setTextSize(size);
+      c.drawText(v,x,y,brush);
     }
-    private String fit(String s,int limit){
-      if(s==null)return "";
-      return s.length()>limit?s.substring(0,Math.max(0,limit-2))+"..":s;
+    private String trim(String value,int n){
+      if(value==null)return "";
+      return value.length()>n?value.substring(0,Math.max(0,n-2))+"..":value;
     }
-    private void field(Canvas c,String label,String value,int y){
-      txt(c,label,DIM,55,y,23);
-      fill(c,0xff241f0c,48,y+11,624,78);
-      outline(c,DIM,48,y+11,624,78);
-      txt(c,fit(value,28),BRIGHT,70,y+66,31);
-      txt(c,"v",YELLOW,636,y+62,27);
+    private void tile(Canvas c,String label,float x,float y,float w,float h,boolean enabled,boolean active){
+      rect(c,active?YELLOW:PANEL,x,y,w,h);
+      stroke(c,active?LIGHT:(enabled?DIM:GREY),x,y,w,h);
+      text(c,trim(label,13),active?BG:(enabled?YELLOW:GREY),x+8,y+h/2+6,17);
     }
-    private void dotBackground(Canvas c){
-      c.drawColor(BLACK);
-      frame++;
+    private void dot(Canvas c){
+      c.drawColor(BG);
       for(int y=0;y<720;y+=8)for(int x=0;x<720;x+=8){
-        int v=BAYER[((x/8)&3)+((((y/8)&3))<<2)];
-        if(v==0||v==7||v==14){
-          pen.setColor(v==0?0xff31290e:0xff231d0c);
-          c.drawRect(x,y,x+2,y+2,pen);
-        }
+        if(BAYER[((x/8)&3)+(((y/8)&3)<<2)]<2)
+          rect(c,0xff29230f,x,y,2,2);
       }
+      stroke(c,DIM,10,10,700,700);
     }
-    @Override protected void onDraw(Canvas actual){
-      super.onDraw(actual);
+    private List<ParameterCatalog.Param> fields(){return ParameterCatalog.params(module);}
+    private void chooseModule(String name){
+      module=name;sectionOffset=0;selectedParam=null;panelMode=0;
+      status="EDIT / "+name;invalidate();
+    }
+    private void stage(ParameterCatalog.Param p,int value){
+      if(p==null)return;
+      value=Math.max(p.min,Math.min(p.max,value));
+      draft.put(p.key(),value);selectedParam=p;dirty=true;
+      status="EDITED "+p.name+"  /  SEND WHEN READY";invalidate();
+    }
+    private int stagedValue(ParameterCatalog.Param p){
+      Integer i=draft.get(p.key());return i==null?p.min:i;
+    }
+    private String stagedText(ParameterCatalog.Param p){
+      Integer i=draft.get(p.key());return i==null?"-- SELECT --":p.display(i);
+    }
+    @Override protected void onDraw(Canvas screen){
+      super.onDraw(screen);
       float scale=Math.min(getWidth()/720f,getHeight()/720f);
       if(scale<=0)return;
-      float ox=(getWidth()-720f*scale)/2f,oy=(getHeight()-720f*scale)/2f;
-      actual.drawColor(Color.BLACK);
-      actual.save();actual.translate(ox,oy);actual.scale(scale,scale);
-      Canvas c=actual;dotBackground(c);
-      outline(c,DIM,13,13,694,694);
-      txt(c,"HYDRA / EDITOR",YELLOW,40,53,35);
-      txt(c,txPort==null?"OUT:--":"OUT:OK",txPort==null?DIM:BRIGHT,521,52,22);
-      txt(c,"MIDI NRPN  /  DOT  /  AN-62",DIM,41,79,18);
-      if(config)drawConfig(c);
-      else drawEditor(c);
-      if(dropKind!=0)drawDropdown(c);
-      actual.restore();
+      float dx=(getWidth()-720f*scale)/2f,dy=(getHeight()-720f*scale)/2f;
+      screen.drawColor(0xff000000);
+      screen.save();screen.translate(dx,dy);screen.scale(scale,scale);
+      dot(screen);
+      drawHeader(screen);
+      drawRouting(screen);
+      if(panelMode==5)drawConfig(screen);
+      else if(panelMode==1||panelMode==3||panelMode==4)drawList(screen);
+      else if(panelMode==2)drawNumber(screen);
+      else drawModuleEditor(screen);
+      screen.restore();
     }
-    private void drawEditor(Canvas c){
-      field(c,"01  MODULE",currentGroup(),107);
-      ParameterCatalog.Param p=current();
-      field(c,"02  PARAMETER",p==null?"NO VERIFIED MIDI MAP":p.name,228);
-      field(c,"03  VALUE",p==null?"NOT AVAILABLE":pending.containsKey(p.key())?p.display(val()):"SELECT VALUE (UNKNOWN)",349);
-      fill(c,0xff241f0c,48,466,195,75);outline(c,DIM,48,466,195,75);
-      txt(c,"-  1",YELLOW,107,516,29);
-      fill(c,0xff241f0c,260,466,195,75);outline(c,DIM,260,466,195,75);
-      txt(c,"+  1",YELLOW,319,516,29);
-      fill(c,0xff241f0c,474,466,198,75);outline(c,DIM,474,466,198,75);
-      txt(c,"+10",YELLOW,541,516,29);
-      boolean ready=p!=null && pending.containsKey(p.key());
-      fill(c,ready?YELLOW:DIM,48,562,415,76);
-      txt(c,"SEND  >",ready?BLACK:BRIGHT,176,612,36);
-      fill(c,0xff241f0c,480,562,192,76);outline(c,YELLOW,480,562,192,76);
-      txt(c,"CONFIG",BRIGHT,507,610,27);
-      txt(c,fit(status,43),BRIGHT,48,669,21);
-      txt(c,"SELECT  >  ADJUST  >  SEND",DIM,48,694,15);
+    private void drawHeader(Canvas c){
+      text(c,"HYDRA / DOT",YELLOW,28,41,31);
+      text(c,trim(patchName+(dirty?" *":""),25),LIGHT,30,71,21);
+      text(c,txPort==null?"MIDI OFF":"MIDI ON",txPort==null?DIM:LIGHT,575,42,20);
+      text(c,draft.size()+" SET",DIM,593,70,16);
+    }
+    private void drawRouting(Canvas c){
+      text(c,"SOURCES  >  MUTATORS  >  MIX / FILTER  >  FX",DIM,27,95,15);
+      for(int row=0;row<4;row++)for(int col=0;col<6;col++){
+        String id=FLOW[row][col];float x=28+col*111,y=104+row*37;
+        boolean family=id.equals("ENV 1-5")||id.equals("LFO 1-5")||id.equals("MACRO 1-8");
+        boolean active=id.equals(module)||(family&&(
+          id.startsWith("ENV")&&module.startsWith("ENV ")||
+          id.startsWith("LFO")&&module.startsWith("LFO ")||
+          id.startsWith("MACRO")&&module.startsWith("MACRO ")));
+        boolean enabled=family||id.equals("PATCH")||!ParameterCatalog.params(id).isEmpty();
+        tile(c,id.equals("RING / NOISE")?"RING/NOISE":id,x,y,105,32,enabled,active);
+      }
+      text(c,"MODULATION        ENV / LFO / MATRIX / MACROS",DIM,27,260,15);
+    }
+    private void drawModuleEditor(Canvas c){
+      rect(c,PANEL,27,274,666,255);
+      stroke(c,YELLOW,27,274,666,255);
+      text(c,"EDIT / "+module,YELLOW,43,304,25);
+      List<ParameterCatalog.Param> ps=fields();
+      if(ps.size()>4) {
+        tile(c,"<",549,277,38,36,sectionOffset>0,false);
+        tile(c,">",649,277,38,36,sectionOffset+4<ps.size(),false);
+        text(c,(sectionOffset/4+1)+"/"+((ps.size()+3)/4),DIM,594,304,18);
+      }
+      if(ps.isEmpty()){
+        text(c,"NOT MAPPED FOR SAFE MIDI EDIT",LIGHT,51,367,23);
+        text(c,"This module remains in the patch path.",DIM,51,402,18);
+        text(c,"Do not invent parameter addresses.",DIM,51,429,18);
+        text(c,"PATCH SAVE stores assigned values only.",DIM,51,472,17);
+      }else {
+        for(int i=0;i<4;i++){
+          int ix=sectionOffset+i;
+          if(ix>=ps.size())break;
+          ParameterCatalog.Param p=ps.get(ix);
+          int col=i%2,row=i/2;
+          int x=41+col*330,y=322+row*99;
+          boolean active=p==selectedParam;
+          rect(c,active?0xff393017:BG,x,y,310,90);
+          stroke(c,active?YELLOW:DIM,x,y,310,90);
+          text(c,trim(p.name,23),active?LIGHT:YELLOW,x+12,y+25,20);
+          text(c,trim(stagedText(p),22),
+            draft.containsKey(p.key())?LIGHT:GREY,x+12,y+62,24);
+          text(c,p.options==null?"+ -":">",DIM,x+280,y+66,18);
+        }
+      }
+      text(c,trim(status,65),LIGHT,38,557,17);
+      tile(c,"SEND FIELD",28,570,323,43,
+        selectedParam!=null && draft.containsKey(selectedParam.key()),false);
+      tile(c,"APPLY PATCH",365,570,328,43,!draft.isEmpty(),false);
+      drawBottom(c);
+    }
+    private void drawBottom(Canvas c){
+      tile(c,"NEW",28,626,155,49,true,false);
+      tile(c,"SAVE",196,626,155,49,true,false);
+      tile(c,"LOAD",364,626,155,49,true,false);
+      tile(c,"CONFIG",532,626,161,49,true,false);
+      text(c,"LOCAL PRESET   /   PATCH MEMORY WRITE NOT IMPLEMENTED",DIM,29,694,15);
+    }
+    private List<String> listItems(){
+      ArrayList<String> items=new ArrayList<>();
+      if(panelMode==1 && selectedParam!=null&&selectedParam.options!=null){
+        for(String s:selectedParam.options)items.add(s);
+      }else if(panelMode==3){
+        String family=familyType==1?"ENV ":familyType==2?"LFO ":"MACRO ";
+        int n=familyType==3?8:5;
+        for(int i=1;i<=n;i++)items.add(family+i);
+      }else if(panelMode==4){
+        try{items.addAll(library.names());}catch(Exception e){status="PRESET READ ERROR";}
+      }
+      return items;
+    }
+    private void drawList(Canvas c){
+      rect(c,BG,27,274,666,340);stroke(c,YELLOW,27,274,666,340);
+      String title=panelMode==1?selectedParam.name:panelMode==4?"LOAD LOCAL PRESET":"SELECT MODULE";
+      text(c,trim(title,29),YELLOW,44,311,25);
+      tile(c,"CLOSE",570,280,110,37,true,false);
+      List<String> list=listItems();
+      scrollIndex=Math.max(0,Math.min(scrollIndex,Math.max(0,list.size()-6)));
+      for(int i=0;i<6;i++){
+        int index=scrollIndex+i;
+        if(index>=list.size())break;
+        tile(c,trim((index+1)+"  "+list.get(index),37),
+          44,330+i*42,634,38,true,false);
+      }
+      text(c,(list.isEmpty()?"NO STORED PRESETS":(scrollIndex+1)+" - "
+          +Math.min(scrollIndex+6,list.size())+" / "+list.size()),
+          DIM,49,604,17);
+      drawBottom(c);
+    }
+    private void drawNumber(Canvas c){
+      rect(c,BG,27,274,666,340);stroke(c,YELLOW,27,274,666,340);
+      if(selectedParam==null){panelMode=0;return;}
+      text(c,trim(selectedParam.name,29),YELLOW,45,310,25);
+      tile(c,"CLOSE",570,280,110,37,true,false);
+      text(c,selectedParam.display(numCurrent),LIGHT,55,389,41);
+      text(c,"RANGE "+selectedParam.min+" ... "+selectedParam.max,DIM,55,413,17);
+      tile(c,"-10",43,442,149,64,true,false);
+      tile(c,"-1",206,442,149,64,true,false);
+      tile(c,"+1",369,442,149,64,true,false);
+      tile(c,"+10",532,442,146,64,true,false);
+      tile(c,"USE VALUE",43,528,635,57,true,false);
+      drawBottom(c);
     }
     private void drawConfig(Canvas c){
-      fill(c,BLACK,28,93,664,594);outline(c,YELLOW,28,93,664,594);
-      txt(c,"CONFIG / MIDI",YELLOW,48,130,30);
-      String out=chosenDeviceIndex(true)>0?deviceNames(true).get(chosenDeviceIndex(true)):"Not connected";
-      String in=chosenDeviceIndex(false)>0?deviceNames(false).get(chosenDeviceIndex(false)):"Not connected";
-      field(c,"OUTPUT DEVICE",out,149);
-      field(c,"INPUT DEVICE",in,260);
-      field(c,"MIDI CHANNEL","Channel "+channel,371);
-      fill(c,0xff241f0c,48,488,282,73);outline(c,DIM,48,488,282,73);
-      txt(c,"REFRESH MIDI",BRIGHT,68,537,26);
-      fill(c,YELLOW,349,488,323,73);
-      txt(c,"CLOSE",BLACK,450,538,31);
-      txt(c,"Hydrasynth: PARAM RX = NRPN",DIM,48,604,18);
-      txt(c,"MIDI IN monitors bytes only. No sync yet.",DIM,48,631,16);
-      txt(c,fit(status,48),BRIGHT,48,667,18);
+      rect(c,BG,27,274,666,340);stroke(c,YELLOW,27,274,666,340);
+      text(c,"CONFIG / MIDI",YELLOW,45,310,25);
+      tile(c,"CLOSE",570,280,110,37,true,false);
+      drawConfigRow(c,"MIDI OUTPUT",deviceLabel(outs,outId),337);
+      drawConfigRow(c,"MIDI INPUT",deviceLabel(ins,inId),410);
+      drawConfigRow(c,"MIDI CHANNEL","CHANNEL "+channel,483);
+      tile(c,"REFRESH",43,563,635,41,true,false);
+      text(c,"Hydrasynth SYSTEM PARAM RX must be NRPN",DIM,43,616,16);
+      drawBottom(c);
     }
-    private List<String> dropdownItems(){
-      ArrayList<String> a=new ArrayList<>();
-      if(dropKind==1)return ParameterCatalog.modules();
-      if(dropKind==2){for(ParameterCatalog.Param p:available())a.add(p.name);return a;}
-      if(dropKind==3){ParameterCatalog.Param p=current();
-        if(p!=null)for(int v=p.min;v<=p.max;v++)a.add(p.display(v));
-        return a;
+    private void drawConfigRow(Canvas c,String label,String value,int y){
+      text(c,label,DIM,47,y,18);
+      rect(c,PANEL,43,y+7,635,42);stroke(c,DIM,43,y+7,635,42);
+      text(c,trim(value,42),LIGHT,54,y+36,20);
+    }
+    private String deviceLabel(List<MidiDeviceInfo> list,int id){
+      for(MidiDeviceInfo d:list)if(d.getId()==id)return name(d);
+      return "NOT CONNECTED  > SELECT";
+    }
+    private void popupValues(ParameterCatalog.Param p){
+      selectedParam=p;scrollIndex=0;
+      if(p.options!=null){
+        panelMode=1;Integer existing=draft.get(p.key());
+        if(existing!=null)scrollIndex=Math.max(0,existing-3);
+      }else{
+        panelMode=2;numCurrent=stagedValue(p);
       }
-      if(dropKind==4)return deviceNames(true);
-      if(dropKind==5)return deviceNames(false);
-      if(dropKind==6){for(int v=1;v<=16;v++)a.add("Channel "+v);return a;}
-      return a;
+      invalidate();
     }
-    private int dropdownSelected(){
-      if(dropKind==1)return moduleIndex;
-      if(dropKind==2)return parameterIndex;
-      if(dropKind==3){ParameterCatalog.Param p=current();return p==null?0:val()-p.min;}
-      if(dropKind==4)return chosenDeviceIndex(true);
-      if(dropKind==5)return chosenDeviceIndex(false);
-      if(dropKind==6)return channel-1;
-      return 0;
+    private void triggerSave(){
+      EditText e=new EditText(MainActivity.this);
+      e.setSingleLine(true);e.setText(patchName);
+      e.setTextColor(YELLOW);e.setHintTextColor(DIM);e.setSelectAllOnFocus(true);
+      e.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+      new AlertDialog.Builder(MainActivity.this)
+        .setTitle("SAVE LOCAL PRESET")
+        .setMessage("Saves assigned editor values locally. Not a synth patch dump.")
+        .setView(e)
+        .setNegativeButton("CANCEL",null)
+        .setPositiveButton("SAVE",(d,w)->{
+          String name=e.getText().toString().trim();
+          try{
+            if(library.names().contains(name)){
+              new AlertDialog.Builder(MainActivity.this)
+              .setTitle("REPLACE PRESET?")
+              .setMessage(name)
+              .setNegativeButton("CANCEL",null)
+              .setPositiveButton("REPLACE",(a,b)->store(name)).show();
+            } else store(name);
+          }catch(Exception ex){status="SAVE FAILED: "+ex.getClass().getSimpleName();invalidate();}
+        }).show();
     }
-    private void openDrop(int kind){
-      dropKind=kind;dropOffset=Math.max(0,dropdownSelected()-3);invalidate();
+    private void store(String name){
+      try{
+        library.save(name,draft);patchName=name;dirty=false;
+        status="SAVED LOCALLY / "+draft.size()+" PARAMETERS";
+      }catch(Exception ex){status="SAVE FAILED: "+ex.getClass().getSimpleName();}
+      invalidate();
     }
-    private void drawDropdown(Canvas c){
-      fill(c,BLACK,25,101,670,551);
-      outline(c,YELLOW,25,101,670,551);
-      txt(c,"SELECT  /  TAP ITEM",YELLOW,50,145,27);
-      fill(c,0xff241f0c,583,111,95,44);
-      txt(c,"CLOSE",BRIGHT,591,141,17);
-      List<String> items=dropdownItems();
-      int max=Math.max(0,items.size()-8);dropOffset=Math.min(max,Math.max(0,dropOffset));
-      for(int i=0;i<8;i++) {
-        int index=dropOffset+i;
-        if(index>=items.size())break;
-        int y=160+i*53;
-        boolean selected=index==dropdownSelected();
-        fill(c,selected?DIM:0xff211c0c,47,y,626,48);
-        txt(c,fit((index+1)+"  "+items.get(index),37),
-            selected?BRIGHT:YELLOW,62,y+34,23);
+    private void openLibrary(){panelMode=4;scrollIndex=0;invalidate();}
+    private void load(String name){
+      try{
+        PatchLibrary.Document doc=library.load(name);
+        draft.clear();draft.putAll(doc.values);patchName=doc.name;
+        dirty=false;selectedParam=null;sectionOffset=0;panelMode=0;
+        status="LOADED LOCAL / "+draft.size()+" VALUES";
+      }catch(Exception ex){status="LOAD FAILED: "+ex.getClass().getSimpleName();}
+      invalidate();
+    }
+    private void newPatch(){
+      draft.clear();patchName="UNTITLED";selectedParam=null;dirty=false;
+      sectionOffset=0;panelMode=0;status="NEW PROJECT / NO SYNTH INIT SENT";
+      invalidate();
+    }
+    private void requireClean(Runnable next){
+      if(!dirty){next.run();return;}
+      new AlertDialog.Builder(MainActivity.this)
+        .setTitle("DISCARD UNSAVED EDITS?")
+        .setMessage("Your local patch has unsaved parameter edits.")
+        .setNegativeButton("CANCEL",null)
+        .setPositiveButton("DISCARD",(d,w)->next.run()).show();
+    }
+    private void processSelection(int i){
+      if(panelMode==1) {
+        if(selectedParam!=null&&i>=0&&i<selectedParam.options.length)
+          stage(selectedParam,selectedParam.min+i);
+        panelMode=0;invalidate();return;
       }
-      txt(c,(dropOffset+1)+" - "+Math.min(dropOffset+8,items.size())
-          +" / "+items.size(),DIM,50,628,19);
-      txt(c,"SWIPE OR TAP RIGHT EDGE TO SCROLL",DIM,50,648,14);
+      if(panelMode==3){
+        List<String> items=listItems();
+        if(i>=0&&i<items.size())chooseModule(items.get(i));
+        else panelMode=0;
+        invalidate();return;
+      }
+      if(panelMode==4){
+        List<String> names=listItems();
+        if(i>=0&&i<names.size()){
+          String target=names.get(i);
+          requireClean(()->load(target));
+        }
+        panelMode=0;invalidate();
+      }
     }
-    @Override public boolean onTouchEvent(MotionEvent ev){
-      float s=Math.min(getWidth()/720f,getHeight()/720f);
-      if(s<=0)return true;
-      float x=(ev.getX()-(getWidth()-720f*s)/2f)/s;
-      float y=(ev.getY()-(getHeight()-720f*s)/2f)/s;
-      if(ev.getActionMasked()==MotionEvent.ACTION_DOWN){startY=y;return true;}
-      if(ev.getActionMasked()!=MotionEvent.ACTION_UP)return true;
-      if(dropKind!=0){
-        List<String> a=dropdownItems();
-        float diff=startY-y;
-        if(Math.abs(diff)>22){
-          dropOffset=Math.min(Math.max(0,a.size()-8),
-                    Math.max(0,dropOffset+Math.round(diff/45f)));invalidate();return true;
+    private void routingTap(float x,float y){
+      int col=(int)((x-28)/111f),row=(int)((y-104)/37f);
+      if(row<0||row>=4||col<0||col>=6)return;
+      String id=FLOW[row][col];
+      if(id.equals("PATCH")){openLibrary();return;}
+      if(id.equals("ENV 1-5")||id.equals("LFO 1-5")||id.equals("MACRO 1-8")){
+        familyType=id.startsWith("ENV")?1:id.startsWith("LFO")?2:3;
+        scrollIndex=0;panelMode=3;invalidate();return;
+      }
+      chooseModule(id);
+    }
+    @Override public boolean onTouchEvent(MotionEvent event){
+      float scale=Math.min(getWidth()/720f,getHeight()/720f);
+      if(scale<=0)return true;
+      float x=(event.getX()-(getWidth()-720f*scale)/2f)/scale;
+      float y=(event.getY()-(getHeight()-720f*scale)/2f)/scale;
+      if(event.getActionMasked()==MotionEvent.ACTION_DOWN){
+        touchStartY=y;return true;
+      }
+      if(event.getActionMasked()!=MotionEvent.ACTION_UP)return true;
+      if(y>=626&&y<679){
+        if(x<185)requireClean(this::newPatch);
+        else if(x<354)triggerSave();
+        else if(x<527)openLibrary();
+        else{panelMode=5;invalidate();}
+        return true;
+      }
+      if(panelMode!=0){
+        if(y>=280&&y<324&&x>564){panelMode=0;invalidate();return true;}
+        if(panelMode==5){
+          if(y>=340&&y<391){chooseMidi(false);return true;}
+          if(y>=414&&y<464){chooseMidi(true);return true;}
+          if(y>=489&&y<540){chooseChannel();return true;}
+          if(y>=563&&y<611){updateBluetoothPermission();refresh();status="MIDI DEVICE LIST REFRESHED";invalidate();}
+          return true;
         }
-        if(y>=111&&y<158&&x>=575){dropKind=0;invalidate();return true;}
-        if(x>590&&y>=160&&y<590&&a.size()>8){
-          dropOffset=Math.min(Math.max(0,a.size()-8),
-                 Math.max(0,Math.round((y-160)/430f*(a.size()-8))));
-          invalidate();return true;
-        }
-        if(y>=160&&y<584){
-          int ix=dropOffset+(int)(y-160)/53;
-          if(ix>=0&&ix<a.size()){
-            if(dropKind==1){moduleIndex=ix;parameterIndex=0;status="MODULE SELECTED";}
-            if(dropKind==2){parameterIndex=ix;status="PARAMETER SELECTED";}
-            if(dropKind==3){ParameterCatalog.Param p=current();if(p!=null)change(p.min+ix);}
-            if(dropKind==4)openTx(ix);
-            if(dropKind==5)openRx(ix);
-            if(dropKind==6){
-              channel=ix+1;
-              getPreferences(MODE_PRIVATE).edit().putInt("midi_channel",channel).apply();
-              status="MIDI CHANNEL "+channel;
-            }
+        if(panelMode==2){
+          if(y>=442&&y<512){
+            int step=x<198?-10:x<361?-1:x<525?1:10;
+            numCurrent=Math.max(selectedParam.min,Math.min(selectedParam.max,numCurrent+step));
+            invalidate();return true;
           }
-          dropKind=0;invalidate();return true;
+          if(y>=525&&y<590){stage(selectedParam,numCurrent);panelMode=0;invalidate();}
+          return true;
         }
-        return true;
-      }
-      if(config){
-        if(y>=160&&y<253){openDrop(4);return true;}
-        if(y>=270&&y<365){openDrop(5);return true;}
-        if(y>=380&&y<477){openDrop(6);return true;}
-        if(y>=488&&y<561){
-          if(x<335){updateBluetoothPermission();refresh();status="DEVICE LIST REFRESHED";}
-          else config=false;
-          invalidate();return true;
+        if(panelMode==1||panelMode==3||panelMode==4){
+          List<String> items=listItems();
+          float diff=touchStartY-y;
+          if(Math.abs(diff)>20){
+            scrollIndex=Math.max(0,Math.min(Math.max(0,items.size()-6),
+                 scrollIndex+Math.round(diff/34f)));invalidate();return true;
+          }
+          if(y>=330&&y<582){
+            int chosen=scrollIndex+(int)((y-330)/42f);
+            if(chosen>=0&&chosen<items.size())processSelection(chosen);
+          }
+          return true;
         }
+      }
+      if(y>=104&&y<252){routingTap(x,y);return true;}
+      List<ParameterCatalog.Param> fields=fields();
+      if(y>=274&&y<315&&fields.size()>4){
+        if(x>=547&&x<592)sectionOffset=Math.max(0,sectionOffset-4);
+        if(x>=637)sectionOffset=Math.min(((fields.size()-1)/4)*4,sectionOffset+4);
+        invalidate();return true;
+      }
+      if(y>=322&&y<513){
+        int row=y<414?0:1,col=x<362?0:1;
+        int ix=sectionOffset+row*2+col;
+        if(ix>=0&&ix<fields.size())popupValues(fields.get(ix));
         return true;
       }
-      if(y>=118&&y<210){openDrop(1);return true;}
-      if(y>=240&&y<332){if(current()!=null)openDrop(2);return true;}
-      if(y>=360&&y<450){if(current()!=null)openDrop(3);return true;}
-      if(y>=466&&y<541){
-        if(x<243)change(val()-1);
-        else if(x<463)change(val()+1);
-        else change(val()+10);
-        return true;
-      }
-      if(y>=562&&y<639){
-        if(x<466){
-          if(current()==null){status="NO VERIFIED NRPN - SEND DISABLED";invalidate();}
-          else if(!pending.containsKey(current().key())){
-            status="SELECT A VALUE BEFORE SEND";invalidate();
-          }else send(current(),val());
-        } else {config=true;invalidate();}
+      if(y>=570&&y<613){
+        if(x<358){
+          if(selectedParam==null||!draft.containsKey(selectedParam.key())){
+            status="SELECT A PARAMETER VALUE FIRST";invalidate();
+          } else send(selectedParam,draft.get(selectedParam.key()));
+        } else {
+          applyDocument(new java.util.LinkedHashMap<>(draft));
+        }
       }
       return true;
+    }
+    private void chooseMidi(boolean input){
+      final ArrayList<MidiDeviceInfo> l=input?ins:outs;
+      String[] options=new String[l.size()+1];
+      options[0]="Not connected";
+      for(int i=0;i<l.size();i++)options[i+1]=name(l.get(i));
+      // A small selection dialog is an overlay for device setup, not a navigation screen.
+      new AlertDialog.Builder(MainActivity.this)
+        .setTitle(input?"MIDI INPUT":"MIDI OUTPUT")
+        .setItems(options,(d,index)->{if(input)openRx(index);else openTx(index);invalidate();})
+        .show();
+    }
+    private void chooseChannel(){
+      String[] channels=new String[16];
+      for(int i=0;i<16;i++)channels[i]="MIDI CH "+(i+1);
+      new AlertDialog.Builder(MainActivity.this)
+        .setTitle("MIDI CHANNEL")
+        .setSingleChoiceItems(channels,channel-1,(d,which)->{
+          channel=which+1;
+          getPreferences(MODE_PRIVATE).edit().putInt("midi_channel",channel).apply();
+          status="MIDI CH "+channel;d.dismiss();invalidate();
+        }).setNegativeButton("CANCEL",null).show();
     }
   }
 }

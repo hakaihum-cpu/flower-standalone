@@ -170,4 +170,10 @@ public final class ParameterCatalog {
     return a;
   }
   public static int mappedCount(){return PARAMS.size();}
+  public static List<Param> all(){return Collections.unmodifiableList(PARAMS);}
+  public static Param find(String key){
+    if(key==null)return null;
+    for(Param p:PARAMS)if(p.key().equals(key))return p;
+    return null;
+  }
 }
