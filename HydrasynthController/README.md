@@ -191,3 +191,23 @@ test has yet occurred.** A successful Java fixture still does not prove DIN
 MIDI communication on a specific phone/interface/firmware combination.
 CircleCI retains the existing manual workflow and default `run_build=false`;
 no GitHub Actions.
+
+### Build signing / upgrade blocker (must resolve before a real APK replacement)
+
+The inherited CircleCI `.circleci/config.yml` creates a **new debug.keystore**
+with `keytool -genkeypair` inside each short-lived build container and
+`build.gradle` signs the release variant with `signingConfigs.debug`.
+An Android app update requires the **same signing certificate** as the
+previously installed APK; identical `applicationId` alone is not enough.
+`AndroidManifest.xml` currently sets `allowBackup=false`, so uninstalling
+the previous version can delete app-private patch libraries that cannot
+automatically be restored.
+
+**This branch has NOT yet implemented a compatible signing migration.**
+Do not tell users a new APK can safely overwrite an installed HYDRA DOT
+release without checking certificate compatibility. A stable secret keystore
+must be established for future CircleCI builds, with the fingerprint checked
+against the currently installed application's signer if that signer is known.
+If it is not known or cannot be recovered, agree a data-preserving migration
+plan first. Do not commit signing keys or copy an arbitrary new debug key
+into the repository.
