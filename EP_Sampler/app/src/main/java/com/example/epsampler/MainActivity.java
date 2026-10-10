@@ -32,6 +32,10 @@ import java.util.List;
 
 
 public class MainActivity extends Activity implements MidiController.Listener, PianoView.ActionListener, DrumEditorView.Listener, PerformanceXYView.Listener, MixerView.Listener, SoundDesignView.Listener {
+    private static final int DOT_BG = 0xff0b0a07;
+    private static final int DOT_MID = 0xff6f5a1f;
+    private static final int DOT_AMBER = 0xffd7b83f;
+    private static final int DOT_HI = 0xfffff0a3;
     private static final int PICK_BANK = 1001;
     private static final String PREFS = "violin_physical";
     private static final String KEY_BANK_URI = "bank_uri"; // legacy SAMPLE 1
@@ -821,14 +825,14 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             android.graphics.drawable.GradientDrawable thumb =
                     new android.graphics.drawable.GradientDrawable();
             thumb.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-            thumb.setColor(0xffffdb46);
+            thumb.setColor(DOT_AMBER);
             thumb.setCornerRadius(0f);
 
             android.graphics.drawable.GradientDrawable track =
                     new android.graphics.drawable.GradientDrawable();
             track.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-            track.setColor(0xff2b2614);
-            track.setStroke(dp(1f), 0xff80671e);
+            track.setColor(0xff241f11);
+            track.setStroke(dp(1f), DOT_MID);
             track.setCornerRadius(0f);
 
             scrollable.setVerticalScrollbarThumbDrawable(thumb);
@@ -859,7 +863,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
         if (dotVisualMode) {
             configureDotScrollable(scroll);
-            scroll.setBackgroundColor(0xff100e08);
+            scroll.setBackgroundColor(DOT_BG);
             scroll.setPadding(0, 0, dp(4f), 0);
             // Direct native ScrollView in DOT mode: the dialog chrome and
             // child controls already receive the DOT palette/type treatment.
@@ -872,7 +876,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private View dotDialogContent(View content) {
         if (!dotVisualMode) return content;
         DotUiLayer layer = new DotUiLayer(this);
-        layer.setBackgroundColor(0xff100e08);
+        layer.setBackgroundColor(DOT_BG);
         layer.setDotEnabled(true);
         layer.addView(content, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -883,9 +887,9 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private android.graphics.drawable.GradientDrawable dotFrame(boolean emphasis) {
         android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
         background.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-        background.setColor(emphasis ? 0xff80671e : 0xff100e08);
+        background.setColor(emphasis ? DOT_MID : DOT_BG);
         int stroke = Math.max(1,Math.round(getResources().getDisplayMetrics().density*2f));
-        background.setStroke(stroke,0xffffdb46);
+        background.setStroke(stroke,DOT_AMBER);
         background.setCornerRadius(0f);
         return background;
     }
@@ -900,7 +904,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
             if(button!=null) {
                 button.setAllCaps(false);
                 button.setTypeface(android.graphics.Typeface.MONOSPACE,android.graphics.Typeface.BOLD);
-                button.setTextColor(0xffffe57a);
+                button.setTextColor(DOT_HI);
                 button.setBackground(dotFrame(false));
             }
         }
@@ -1227,18 +1231,18 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         if(view instanceof TextView) {
             TextView label=(TextView)view;
             label.setTypeface(android.graphics.Typeface.MONOSPACE);
-            label.setTextColor(0xffffdb46);
+            label.setTextColor(DOT_AMBER);
         }
         if(view instanceof Spinner || view instanceof Button || view instanceof EditText) {
             view.setBackground(dotFrame(false));
         }
         if(view instanceof CheckBox) {
-            ((CheckBox)view).setButtonTintList(android.content.res.ColorStateList.valueOf(0xffffdb46));
+            ((CheckBox)view).setButtonTintList(android.content.res.ColorStateList.valueOf(DOT_AMBER));
         }
         if(view instanceof SeekBar) {
             SeekBar bar=(SeekBar)view;
-            bar.setProgressTintList(android.content.res.ColorStateList.valueOf(0xffffdb46));
-            bar.setThumbTintList(android.content.res.ColorStateList.valueOf(0xffffe57a));
+            bar.setProgressTintList(android.content.res.ColorStateList.valueOf(DOT_AMBER));
+            bar.setThumbTintList(android.content.res.ColorStateList.valueOf(DOT_HI));
         }
         if(view instanceof android.view.ViewGroup) {
             android.view.ViewGroup group=(android.view.ViewGroup)view;
@@ -1253,7 +1257,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 if (row instanceof TextView) {
                     TextView label=(TextView)row;
                     label.setTypeface(android.graphics.Typeface.MONOSPACE);
-                    label.setTextColor(0xffffe57a);
+                    label.setTextColor(DOT_HI);
                     label.setBackground(dotFrame(false));
                 }
                 return row;
@@ -1618,23 +1622,23 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 @Override public View getView(int position, View old, android.view.ViewGroup parent) {
                     View row = super.getView(position, old, parent);
                     if (row instanceof TextView) {
-                        ((TextView)row).setTextColor(0xffffe57a);
+                        ((TextView)row).setTextColor(DOT_HI);
                         ((TextView)row).setTypeface(android.graphics.Typeface.MONOSPACE);
                     }
-                    row.setBackgroundColor(0xff100e08);
+                    row.setBackgroundColor(DOT_BG);
                     return row;
                 }
             });
             list.setItemChecked(instrumentMode, true);
             configureDotScrollable(list);
-            list.setBackgroundColor(0xff100e08);
-            list.setDivider(new android.graphics.drawable.ColorDrawable(0xff80671e));
+            list.setBackgroundColor(DOT_BG);
+            list.setDivider(new android.graphics.drawable.ColorDrawable(DOT_MID));
             list.setDividerHeight(dp(1f));
             list.setPadding(0, 0, dp(4f), 0);
 
             int maxHeight = dotDialogViewportHeight();
             FrameLayout picker = new FrameLayout(this);
-            picker.setBackgroundColor(0xff100e08);
+            picker.setBackgroundColor(DOT_BG);
             picker.setMinimumHeight(maxHeight);
             picker.addView(list, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, maxHeight));
