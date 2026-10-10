@@ -115,10 +115,52 @@ public final class ParameterCatalog {
       packed(g,"One shot",0x3F,0x04+i,0x14,ON);
       numeric(g,"Phase",0x3F,0x30+i,0,360," deg");
     }
-    Collections.addAll(GROUPS,"ENV 1","ENV 2","ENV 3","ENV 4","ENV 5",
-      "AMP","PRE-FX","POST-FX","VOICE","ARPEGGIATOR","MOD MATRIX",
-      "MACRO 1","MACRO 2","MACRO 3","MACRO 4",
-      "MACRO 5","MACRO 6","MACRO 7","MACRO 8","SYSTEM");
+    // ENV1-5: packed selectors and trigger-source lists confirmed in legacy v1.5.
+    final String[] trig={"Off","Note On","LFO 1","LFO 2","LFO 3",
+      "LFO 4","LFO 5","Ribbon On","Ribbon Release","Sustain On","Mod In 1","Mod In 2"};
+    for(int e=0;e<5;e++){
+      String g="ENV "+(e+1);
+      packed(g,"Legato",0x3F,e,0x07,ON);
+      packed(g,"BPM sync",0x3F,e,0x0C,ON);
+      packed(g,"Freerun",0x3F,e,0x0D,ON);
+      numeric(g,"Attack curve",0x3F,0x70+e,0,128,"");
+      numeric(g,"Decay curve",0x3F,0x75+e,0,128,"");
+      numeric(g,"Release curve",0x3F,0x7A+e,0,128,"");
+      for(int s=0;s<4;s++)
+        choose(g,"Trigger "+(s+1),0x3A,0x60+e*4+s,trig);
+    }
+
+    // User-friendly ARP fields: packed VV selector in 0x39/0x03.
+    packed("ARPEGGIATOR","Division",0x39,0x03,0x01,
+      "1/1","1/2","1/4","1/8","1/16","1/32",
+      "1/1T","1/2T","1/4T","1/8T","1/16T","1/32T");
+    add(new Param("ARPEGGIATOR","Swing",0x39,0x03,50,75,"%",Encoding.PACKED,0x02,null));
+    add(new Param("ARPEGGIATOR","Gate",0x39,0x03,5,100,"%",Encoding.PACKED,0x03,null));
+    add(new Param("ARPEGGIATOR","Octaves",0x39,0x03,1,4,"",Encoding.PACKED,0x05,null));
+    add(new Param("ARPEGGIATOR","Length",0x39,0x03,0,32,"",Encoding.PACKED,0x07,null));
+    packed("ARPEGGIATOR","Tap trigger",0x39,0x03,0x08,ON);
+    add(new Param("ARPEGGIATOR","Phrase",0x39,0x03,0,63,"",Encoding.PACKED,0x09,null));
+    add(new Param("ARPEGGIATOR","Ratchet",0x39,0x03,0,127,"",Encoding.PACKED,0x0A,null));
+    add(new Param("ARPEGGIATOR","Chance",0x39,0x03,0,100,"%",Encoding.PACKED,0x0B,null));
+
+    // VOICE: direct 14-bit parameter values documented in v1.5.
+    choose("VOICE","Glide",0x3F,0x12,ON);
+    choose("VOICE","Glide legato",0x3F,0x1F,ON);
+    choose("VOICE","Polyphonic",0x3F,0x13,ON);
+    choose("VOICE","Random phase",0x3F,0x1E,ON);
+    choose("VOICE","Warm mode",0x3F,0x4F,ON);
+    choose("VOICE","Vibrato BPM",0x3F,0x49,ON);
+    numeric("VOICE","Pitch bend range",0x3F,0x41,0,24," st");
+    numeric("VOICE","Density",0x3F,0x3C,1,8,"");
+    numeric("VOICE","Stereo width",0x3F,0x44,0,127,"");
+    numeric("VOICE","Detune",0x3F,0x39,0,127,"");
+    numeric("VOICE","Glide time",0x3F,0x15,0,127,"");
+
+    // Macro panel values; Macro Assign/Target/Depth are not yet enabled.
+    for(int m=0;m<8;m++)
+      numeric("MACRO "+(m+1),"Panel value",0x3F,0x58+m,0,1024,"");
+
+    Collections.addAll(GROUPS,"AMP","PRE-FX","POST-FX","MOD MATRIX","SYSTEM");
   }
   private ParameterCatalog(){}
   public static List<String> modules(){return Collections.unmodifiableList(GROUPS);}

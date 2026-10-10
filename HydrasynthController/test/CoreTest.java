@@ -32,7 +32,26 @@ public final class CoreTest {
       if(p.name.equals("One shot"))oneShot=p;
     if(oneShot==null)throw new AssertionError("Missing LFO 1 One Shot");
     eq(oneShot.encode(1),0x14*128+1);
-    if(ParameterCatalog.params("MOD MATRIX").size()!=0)throw new AssertionError("Unmapped mod matrix must be disabled");
+    ParameterCatalog.Param trig=null,swing=null,pitch=null,macro=null,legato=null;
+    for(ParameterCatalog.Param p:ParameterCatalog.params("ENV 3")) {
+      if(p.name.equals("Trigger 4"))trig=p;
+      if(p.name.equals("Legato"))legato=p;
+    }
+    for(ParameterCatalog.Param p:ParameterCatalog.params("ARPEGGIATOR"))
+      if(p.name.equals("Swing"))swing=p;
+    for(ParameterCatalog.Param p:ParameterCatalog.params("VOICE"))
+      if(p.name.equals("Pitch bend range"))pitch=p;
+    for(ParameterCatalog.Param p:ParameterCatalog.params("MACRO 8"))
+      if(p.name.equals("Panel value"))macro=p;
+    if(trig==null||swing==null||pitch==null||macro==null||legato==null)
+      throw new AssertionError("Missing ENV/ARP/VOICE/MACRO fields");
+    eq(trig.lsb,0x6B);eq(trig.display(11),"Mod In 2");
+    eq(legato.encode(1),0x07*128+1);
+    eq(swing.encode(60),0x02*128+60);
+    eq(pitch.encode(24),24);
+    eq(macro.lsb,0x5F);eq(macro.encode(1024),1024);
+    if(ParameterCatalog.params("MOD MATRIX").size()!=0)
+      throw new AssertionError("Unmapped mod matrix must be disabled");
     System.out.println("CORE TEST PASS: "+ParameterCatalog.mappedCount()+" params, MIDI NRPN packing");
   }
 }

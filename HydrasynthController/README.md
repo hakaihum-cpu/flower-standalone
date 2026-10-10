@@ -16,7 +16,7 @@ feature-only source tree. Existing MIYAKO/FLOWER/EP assets or MASTER branches ar
 - **No implicit sending on selection or adjustment.** SEND transmits NRPN via MIDI CC
   99/98/6/38. Raw CC numbers, MIDI parameter numbers are never presented as user controls.
 - Mappings include OSC1/2/3 waves and pitch/keytrack, OSC1/2 WaveScan 1–8, four Mutants,
-  Ring/Noise, Mixer routing, Filter types/routing, Delay, Reverb and some LFO settings.
+  Ring/Noise, Mixer routing, Filter types/routing, Delay, Reverb, some LFO settings, ENV 1–5 triggers/curves/sync, ARP Division/Swing/Gate/Octave/Length/Tap/Phrase/Ratchet/Chance, Voice performance settings, Macro panel value (but not Macro Assign).
 - Unsupported modules remain visible with **NO VERIFIED MIDI MAP** and disabled SEND.
 - Values are **staged locally**. TX SENT means Android passed bytes to its MIDI port,
   **not** confirmation from the synth. There is no SysEx transfer and no remote patch save.
@@ -29,8 +29,9 @@ feature-only source tree. Existing MIYAKO/FLOWER/EP assets or MASTER branches ar
   https://www.mecldata.com/download/asm/legacy/Hydrasynth_KB_DR_MIDI_Spec_1.5.0.pdf
 - Version mismatch: mappings and especially **219-wave ordering and device response must
   be checked on Explorer firmware 2.2.0**, not assumed to be equivalent.
-- Comprehensive implementation remains pending for ENV1–5, macro assign, mod matrix,
-  arp, pre/post FX dependent menus, patch readback and all system functions.
+- Comprehensive implementation remains pending for ENV time envelopes, Macro Assign/Target/Depth,
+  Mod Matrix routing, some Arpeggiator modes, pre/post FX dependent menus, patch readback,
+  System parameters and numerous continuous engine parameters.
 - Avoid parameter guessing. The legacy spec documents many variable-dependent encodings,
   some of which are not safely mapped yet.
 
