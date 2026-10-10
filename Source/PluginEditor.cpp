@@ -543,8 +543,9 @@ void RealtimeChordFxAudioProcessorEditor::paintBar (juce::Graphics& g,
             line.getCentreY() - 3.0f, 6.0f, 6.0f);
     }
 
-    g.setFont (juce::FontOptions (13.0f).withStyle (
-        dotModeEnabled() ? "Bold" : "Regular"));
+    g.setFont (dotModeEnabled()
+        ? juce::FontOptions (13.0f).withStyle ("Bold")
+        : juce::FontOptions (13.0f));
     g.drawText (text, r, juce::Justification::centredLeft);
 }
 
