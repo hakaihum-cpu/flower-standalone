@@ -791,9 +791,19 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         return root;
     }
 
+    private int dotDialogMaxHeightPx() {
+        int screenHeight=getResources().getDisplayMetrics().heightPixels;
+        int minHeight=Math.round(260f*getResources().getDisplayMetrics().density);
+        return Math.min(screenHeight,Math.max(minHeight,Math.round(screenHeight*0.65f)));
+    }
+
     private View scrollDialogView(LinearLayout root) {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        scroll.setVerticalScrollBarEnabled(true);
+        scroll.setScrollbarFadingEnabled(false);
+        scroll.setNestedScrollingEnabled(true);
+        scroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
         scroll.addView(root, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT,
                 ScrollView.LayoutParams.WRAP_CONTENT));
@@ -805,6 +815,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         DotUiLayer layer = new DotUiLayer(this);
         layer.setBackgroundColor(0xff100e08);
         layer.setDotEnabled(true);
+        layer.setDialogMaxHeight(dotDialogMaxHeightPx());
         layer.addView(content, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -1557,12 +1568,18 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 }
             });
             list.setItemChecked(instrumentMode, true);
+            list.setVerticalScrollBarEnabled(true);
+            list.setScrollbarFadingEnabled(false);
+            list.setNestedScrollingEnabled(true);
+            list.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+
             DotUiLayer picker = new DotUiLayer(this);
             picker.setDotEnabled(true);
+            int maxHeight = dotDialogMaxHeightPx();
+            picker.setDialogMaxHeight(maxHeight);
+            picker.setMinimumHeight(maxHeight);
             picker.addView(list, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-            int maxHeight = Math.round(getResources().getDisplayMetrics().heightPixels * 0.65f);
-            picker.setMinimumHeight(maxHeight);
             AlertDialog dialog = new AlertDialog.Builder(this)
                     .setTitle("CONTROL TARGET")
                     .setView(picker)
