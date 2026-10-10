@@ -14,8 +14,11 @@ import android.widget.FrameLayout;
  * listeners, positions and z-order; only the final pixels are transformed.
  */
 final class DotUiLayer extends FrameLayout {
+    private static final int DOT_MAX_SIDE=576;
+    private static final float UI_DITHER_STRENGTH=0.16f;
     private static final int[] BAYER={0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5};
-    private static final int[] COLORS={0xff100e08,0xff80671e,0xffffdb46,0xffffe57a};
+    // Readability-first amber palette: stronger separation between all four levels.
+    private static final int[] COLORS={0xff0b0a07,0xff6f5a1f,0xffd7b83f,0xfffff0a3};
     private boolean dotEnabled;
     private Bitmap source, rendered;
     private int[] srcPixels, dstPixels;
@@ -46,8 +49,9 @@ final class DotUiLayer extends FrameLayout {
             super.dispatchDraw(canvas);
             return;
         }
-        final int w=Math.max(1,Math.min(512,getWidth()));
-        final int h=Math.max(1,Math.min(384,getHeight()));
+        final float scale=Math.min(1f,DOT_MAX_SIDE/(float)Math.max(getWidth(),getHeight()));
+        final int w=Math.max(1,Math.round(getWidth()*scale));
+        final int h=Math.max(1,Math.round(getHeight()*scale));
         if (source==null || source.getWidth()!=w || source.getHeight()!=h) {
             if(source!=null) source.recycle();
             if(rendered!=null) rendered.recycle();
@@ -65,8 +69,12 @@ final class DotUiLayer extends FrameLayout {
             int i=y*w+x,c=srcPixels[i],a=Color.alpha(c);
             if(a<16) {dstPixels[i]=Color.TRANSPARENT;continue;}
             float l=(0.2126f*Color.red(c)+0.7152f*Color.green(c)+0.0722f*Color.blue(c))/255f;
-            float threshold=0.13f+0.63f*BAYER[(x&3)+((y&3)<<2)]/16f;
-            int out=COLORS[l<threshold?0:l>0.88f?3:l>0.63f?2:1];
+            // Lift mid-tones slightly so thin labels/lines survive the DOT pass.
+            l=Math.max(0f,Math.min(1f,l*1.08f+0.035f));
+            float ordered=((BAYER[(x&3)+((y&3)<<2)]+0.5f)/16f)-0.5f;
+            float dithered=Math.max(0f,Math.min(1f,l+ordered*UI_DITHER_STRENGTH));
+            int level=Math.max(0,Math.min(3,Math.round(dithered*3f)));
+            int out=COLORS[level];
             dstPixels[i]=(Math.min(255,a)<<24)|(out&0x00ffffff);
         }
         rendered.setPixels(dstPixels,0,w,0,0,w,h);
