@@ -30,6 +30,13 @@ private:
     void timerCallback() override;
     void paintMain (juce::Graphics&);
     void paintGlobalControls (juce::Graphics&);
+    bool dotModeEnabled() const;
+    juce::Colour uiColour (float alpha) const;
+    void paintMediaFrame (juce::Graphics&, const juce::Image&,
+                          juce::Rectangle<float>, int sourceKind, int sourceRevision);
+    void rebuildDotLuma (const juce::Image&, int sourceKind, int sourceRevision);
+    void rebuildDotDisplay (int width, int height, int sourceKind, int sourceRevision);
+    void paintDotUiFrame (juce::Graphics&);
     void paintHaze (juce::Graphics&);
     void paintChordBot (juce::Graphics&);
     void paintConfig (juce::Graphics&);
@@ -92,6 +99,21 @@ private:
     bool eurekaXYTouchDown = false;
     float eurekaXYX = 0.5f;
     float eurekaXYY = 0.5f;
+
+    static constexpr int dotSourceW = 512;
+    static constexpr int dotSourceH = 384;
+    std::array<float, dotSourceW * dotSourceH> dotLuma {};
+    juce::Image dotDisplayCache;
+    int dotFrameRevision = 1;
+    int dotEurekaRevision = 1;
+    int dotLumaSourceKind = -1;
+    int dotLumaRevision = -1;
+    int dotRenderedSourceKind = -1;
+    int dotRenderedRevision = -1;
+    int dotRenderedTick = -1;
+    int dotUiTick = 0;
+    int dotTimerDivider = 0;
+    float dotActivity = 0.0f;
 
     static constexpr float design = 720.0f;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RealtimeChordFxAudioProcessorEditor)
