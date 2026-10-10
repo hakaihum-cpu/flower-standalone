@@ -38,6 +38,11 @@ constexpr const char* audioBufferNames[]
     "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS"
 };
 
+constexpr const char* uiModeNames[]
+{
+    "FULL", "DOT"
+};
+
 constexpr float audioBufferBursts[]
 {
     0.0f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f,
@@ -216,6 +221,17 @@ void PerformancePadComponent::setBpmDisplay (float bpm, bool visible)
     repaint();
 }
 
+void PerformancePadComponent::setDotMode (bool enabled)
+{
+    if (dotMode == enabled)
+        return;
+
+    dotMode = enabled;
+    if (dotMode)
+        dotRenderer.reset();
+    repaint();
+}
+
 void PerformancePadComponent::updateVisualTimer()
 {
     const bool animated =
@@ -309,6 +325,33 @@ void PerformancePadComponent::paint (juce::Graphics& g)
         g.drawFittedText ("VISUAL FRAME ERROR",
                           getLocalBounds().reduced (24),
                           juce::Justification::centred, 1);
+        return;
+    }
+
+    if (dotMode)
+    {
+        const int visualSourceKey =
+            currentMixedVisual >= 0 ? currentMixedVisual : visualTileIndex;
+
+        dotRenderer.paint (
+            g, getLocalBounds(), frame, visualSourceKey, visualPhase,
+            arpIndicatorOn, delayIndicatorOn, yEffectIndicatorOn,
+            dreamyIndicatorMode, bpmDisplayValue, bpmDisplayVisible);
+
+        if (physicalPointerVisible)
+        {
+            const float px = xValue * static_cast<float> (getWidth());
+            const float py = (1.0f - yValue) * static_cast<float> (getHeight());
+            const auto amber = juce::Colour (0xffffdb46);
+            const auto dark = juce::Colour (0xff100e08);
+
+            g.setColour (dark.withAlpha (0.95f));
+            g.drawEllipse (px - 14.0f, py - 14.0f, 28.0f, 28.0f, 5.0f);
+            g.setColour (amber);
+            g.drawEllipse (px - 10.0f, py - 10.0f, 20.0f, 20.0f, 2.0f);
+            g.drawLine (px - 17.0f, py, px + 17.0f, py, 2.0f);
+            g.drawLine (px, py - 17.0f, px, py + 17.0f, 2.0f);
+        }
         return;
     }
 
