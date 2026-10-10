@@ -64,3 +64,8 @@ Status: **SOURCE MVP / NOT BUILT / NOT TESTED ON HYDRASYNTH EXPLORER**.
   validation is required before claiming fidelity to Explorer FW2.2.
 - FW1.5 VOICE/Glide Off/On mapping conflicts with Explorer FW2.2.0 manual
   Off/Glide/Glissando. Disabled pending verified implementation.
+
+- Envelope 1–5 cards now surface **ADSR** together as a working shape: Attack, Decay,
+  Sustain, Release normalized positions (FW1.5 NRPN positions). Hold and secondary
+  controls remain available in the same pane via next controls. Time in milliseconds
+  is not fabricated from these values. BPM sync-specific values require distinct mapping.

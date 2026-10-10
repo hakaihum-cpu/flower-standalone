@@ -145,6 +145,13 @@ public final class ParameterCatalog {
       "LFO 4","LFO 5","Ribbon On","Ribbon Release","Sustain On","Mod In 1","Mod In 2"};
     for(int e=0;e<5;e++){
       String g="ENV "+(e+1);
+      // Core envelope contour first: the user sees ADSR together, not a raw list.
+      // Source FW1.5 NRPN table: ENV1-5 contiguous address ranges.
+      normalized(g,"Attack position",0x41,0x11+e);
+      normalized(g,"Decay position",0x41,0x1B+e);
+      normalized(g,"Sustain position",0x41,0x20+e);
+      normalized(g,"Release position",0x41,0x25+e);
+      normalized(g,"Hold position",0x41,0x16+e);
       packed(g,"Legato",0x3F,e,0x07,ON);
       packed(g,"BPM sync",0x3F,e,0x0C,ON);
       packed(g,"Freerun",0x3F,e,0x0D,ON);

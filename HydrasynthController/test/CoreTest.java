@@ -46,6 +46,16 @@ public final class CoreTest {
     if(trig==null||swing==null||pitch==null||macro==null||legato==null)
       throw new AssertionError("Missing ENV/ARP/VOICE/MACRO fields");
     eq(trig.lsb,0x6B);eq(trig.display(11),"Mod In 2");
+    for(int e=0;e<5;e++){
+      int count=0;
+      for(ParameterCatalog.Param p:ParameterCatalog.params("ENV "+(e+1))){
+        if(p.name.equals("Attack position")) {eq(p.lsb,0x11+e);count++;}
+        if(p.name.equals("Decay position")) {eq(p.lsb,0x1B+e);count++;}
+        if(p.name.equals("Sustain position")) {eq(p.lsb,0x20+e);count++;}
+        if(p.name.equals("Release position")) {eq(p.lsb,0x25+e);count++;}
+      }
+      eq(count,4);
+    }
     eq(legato.encode(1),0x07*128+1);
     eq(swing.encode(60),0x02*128+60);
     eq(pitch.encode(24),24);
