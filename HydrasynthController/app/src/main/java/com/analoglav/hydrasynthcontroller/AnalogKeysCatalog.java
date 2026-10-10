@@ -122,8 +122,8 @@ public final class AnalogKeysCatalog {
     // the majority of Sound NRPN values which use Data Entry MSB.
     PARAMS.add(new ParameterCatalog.Param("TRACK","Track Level",1,100,0,127,"",
       ParameterCatalog.Encoding.U14,0,null));
-    PARAMS.add(new ParameterCatalog.Param("TRACK","Mute",1,101,0,127,"",
-      ParameterCatalog.Encoding.U14,0,null));
+    PARAMS.add(new ParameterCatalog.Param("TRACK","Mute",1,101,0,1,"",
+      ParameterCatalog.Encoding.BINARY127,0,new String[]{"OFF","ON"}));
 
     String[] ext={"Ch1 Chorus","Ch1 Delay","Ch1 Reverb","Ch1 Pan","Ch1 Level",
                   "Ch2 Chorus","Ch2 Delay","Ch2 Reverb","Ch2 Pan","Ch2 Level"};

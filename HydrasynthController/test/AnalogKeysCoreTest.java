@@ -37,7 +37,9 @@ public final class AnalogKeysCoreTest {
     eq(get("PERFORMANCE|Macro J").msb,0);
     eq(get("PERFORMANCE|Macro J").lsb,9);
     // Track mute/level specifically use Data Entry LSB in the official manual.
-    eq(get("TRACK|Mute").encode(127),127);
+    eq(get("TRACK|Mute").encode(1),127);
+    eq(get("TRACK|Mute").display(0),"OFF");
+    eq(get("TRACK|Mute").display(1),"ON");
     eq(get("TRACK|Track Level").encode(64),64);
     if(!AnalogKeysCatalog.allowed("OSC 1",0)||
       AnalogKeysCatalog.allowed("OSC 1",4)||
