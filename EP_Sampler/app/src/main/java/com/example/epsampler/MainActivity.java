@@ -157,6 +157,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private ImageView epBackground;
     private PerformanceVideoLayer videoLayer;
     private boolean dotVisualMode = false;
+    private DotUiLayer dotUiLayer;
     private PerformanceXYView performanceXYView;
     private DrumEditorView drumEditorView;
     private DrumSampleMixerView drumSampleMixerView;
@@ -285,27 +286,32 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         root.addView(videoLayer, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+        dotUiLayer = new DotUiLayer(this);
+        dotUiLayer.setDotEnabled(dotVisualMode);
+        root.addView(dotUiLayer, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
         // Performance XY sits below the control UI. PianoView returns false for
         // blank-area ACTION_DOWN events so those gestures still reach XY.
-        root.addView(performanceXYView, new FrameLayout.LayoutParams(
+        dotUiLayer.addView(performanceXYView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(pianoView, new FrameLayout.LayoutParams(
+        dotUiLayer.addView(pianoView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(drumEditorView, new FrameLayout.LayoutParams(
+        dotUiLayer.addView(drumEditorView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(drumSampleMixerView, new FrameLayout.LayoutParams(
+        dotUiLayer.addView(drumSampleMixerView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(mixerView, new FrameLayout.LayoutParams(
+        dotUiLayer.addView(mixerView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(soundDesignView, new FrameLayout.LayoutParams(
+        dotUiLayer.addView(soundDesignView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        root.addView(sequencerView, new FrameLayout.LayoutParams(
+        dotUiLayer.addView(sequencerView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
@@ -1307,6 +1313,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
 
                     dotVisualMode = visualModeSpinner.getSelectedItemPosition() == 1;
                     if (videoLayer != null) videoLayer.setDotEnabled(dotVisualMode);
+                    if (dotUiLayer != null) dotUiLayer.setDotEnabled(dotVisualMode);
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                             .putBoolean("dot_visual_mode", dotVisualMode)
                             .putFloat(KEY_AUDIO_BUFFER_BURSTS, audioBufferBursts)
