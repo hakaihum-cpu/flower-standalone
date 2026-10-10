@@ -67,14 +67,18 @@ final class DotVisualOverlay extends View {
 
     @Override protected void onDetachedFromWindow() {
         removeCallbacks(update);
+        if(sample!=null) {sample.recycle();sample=null;}
+        if(output!=null) {output.recycle();output=null;}
+        pixels=null;
+        dots=null;
         super.onDetachedFromWindow();
     }
 
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (!active || getWidth() < 1 || getHeight() < 1) return;
-        int w = Math.min(W, Math.max(1, getWidth() / 2));
-        int h = Math.min(H, Math.max(1, getHeight() / 2));
+        int w = Math.min(W, Math.max(1, getWidth()));
+        int h = Math.min(H, Math.max(1, getHeight()));
         if (sample == null || sample.getWidth() != w || sample.getHeight() != h) {
             if (sample != null) sample.recycle();
             if (output != null) output.recycle();
