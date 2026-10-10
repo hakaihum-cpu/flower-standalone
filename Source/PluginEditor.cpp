@@ -177,6 +177,224 @@ juce::Point<float> RealtimeChordFxAudioProcessorEditor::toDesign (juce::Point<fl
              p.y * design / (float) juce::jmax (1, getHeight()) };
 }
 
+bool RealtimeChordFxAudioProcessorEditor::dotModeEnabled() const
+{
+    if (const auto* value =
+            processor.state().getRawParameterValue (ParamID::displayMode))
+        return juce::roundToInt (value->load()) == 1;
+
+    return false;
+}
+
+juce::Colour RealtimeChordFxAudioProcessorEditor::uiColour (float alpha) const
+{
+    return dotModeEnabled()
+        ? juce::Colour (0xffffdb46).withAlpha (alpha)
+        : juce::Colours::white.withAlpha (alpha);
+}
+
+void RealtimeChordFxAudioProcessorEditor::rebuildDotLuma (
+    const juce::Image& source, int sourceKind, int sourceRevision)
+{
+    if (! source.isValid())
+        return;
+
+    juce::Image small (
+        juce::Image::RGB, dotSourceW, dotSourceH, true);
+    juce::Graphics downsampler (small);
+    downsampler.setImageResamplingQuality (
+        juce::Graphics::mediumResamplingQuality);
+    downsampler.drawImage (
+        source,
+        0, 0, dotSourceW, dotSourceH,
+        0, 0, source.getWidth(), source.getHeight());
+
+    juce::Image::BitmapData data (
+        small, juce::Image::BitmapData::readOnly);
+
+    for (int y = 0; y < dotSourceH; ++y)
+    {
+        for (int x = 0; x < dotSourceW; ++x)
+        {
+            const auto c = data.getPixelColour (x, y);
+            dotLuma[(size_t) (y * dotSourceW + x)] =
+                0.2126f * c.getFloatRed()
+                + 0.7152f * c.getFloatGreen()
+                + 0.0722f * c.getFloatBlue();
+        }
+    }
+
+    dotLumaSourceKind = sourceKind;
+    dotLumaRevision = sourceRevision;
+    dotRenderedRevision = -1;
+}
+
+void RealtimeChordFxAudioProcessorEditor::rebuildDotDisplay (
+    int width, int height, int sourceKind, int sourceRevision)
+{
+    width = juce::jlimit (1, dotSourceW, width);
+    height = juce::jlimit (1, dotSourceH, height);
+
+    if (! dotDisplayCache.isValid()
+        || dotDisplayCache.getWidth() != width
+        || dotDisplayCache.getHeight() != height)
+    {
+        dotDisplayCache = juce::Image (
+            juce::Image::RGB, width, height, true);
+        dotRenderedRevision = -1;
+    }
+
+    static constexpr int bayer4[16] = {
+         0,  8,  2, 10,
+        12,  4, 14,  6,
+         3, 11,  1,  9,
+        15,  7, 13,  5
+    };
+
+    const juce::Colour dark   (0xff100e08);
+    const juce::Colour mid    (0xff80671e);
+    const juce::Colour amber  (0xffffdb46);
+    const juce::Colour bright (0xffffe57a);
+
+    juce::Image::BitmapData out (
+        dotDisplayCache, juce::Image::BitmapData::readWrite);
+
+    const float activity = juce::jlimit (0.0f, 1.0f, dotActivity);
+    const float flicker =
+        1.0f + std::sin ((float) dotUiTick * 0.42f)
+                     * (0.035f + 0.045f * activity);
+
+    for (int y = 0; y < height; ++y)
+    {
+        const int sy0 = juce::jlimit (
+            0, dotSourceH - 1,
+            (y * dotSourceH) / juce::jmax (1, height));
+
+        const uint32_t rowHash =
+            (uint32_t) y * 1103515245u
+            + (uint32_t) dotUiTick * 2654435761u;
+
+        int rowShift = 0;
+        if (activity > 0.08f
+            && (rowHash & 31u) < (uint32_t) (activity * 5.0f))
+            rowShift = (int) ((rowHash >> 8) % 5u) - 2;
+
+        for (int x = 0; x < width; ++x)
+        {
+            const int shiftedX = juce::jlimit (
+                0, width - 1, x + rowShift);
+            const int sx = juce::jlimit (
+                0, dotSourceW - 1,
+                (shiftedX * dotSourceW) / juce::jmax (1, width));
+
+            float luminance =
+                dotLuma[(size_t) (sy0 * dotSourceW + sx)] * flicker;
+
+            if (((y + dotUiTick) % 8) == 0)
+                luminance *= 1.0f - 0.12f * activity;
+
+            const uint32_t pixelHash =
+                rowHash ^ ((uint32_t) x * 2246822519u);
+            if ((pixelHash & 2047u)
+                < (uint32_t) (activity * 8.0f))
+                luminance = 1.0f - luminance;
+
+            luminance = juce::jlimit (0.0f, 1.0f, luminance);
+
+            const float threshold =
+                0.13f
+                + 0.63f
+                    * (float) bayer4[
+                        (x & 3) + ((y & 3) << 2)]
+                    / 16.0f;
+
+            const auto colour =
+                luminance < threshold ? dark
+                : luminance > 0.88f ? bright
+                : luminance > 0.63f ? amber
+                                    : mid;
+
+            out.setPixelColour (x, y, colour);
+        }
+    }
+
+    dotRenderedSourceKind = sourceKind;
+    dotRenderedRevision = sourceRevision;
+    dotRenderedTick = dotUiTick;
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintMediaFrame (
+    juce::Graphics& g,
+    const juce::Image& source,
+    juce::Rectangle<float> bounds,
+    int sourceKind,
+    int sourceRevision)
+{
+    if (! source.isValid())
+        return;
+
+    if (! dotModeEnabled())
+    {
+        g.drawImage (
+            source, bounds,
+            juce::RectanglePlacement::stretchToFit);
+        return;
+    }
+
+    if (dotLumaSourceKind != sourceKind
+        || dotLumaRevision != sourceRevision)
+        rebuildDotLuma (source, sourceKind, sourceRevision);
+
+    const int width = juce::jmin (
+        dotSourceW, juce::jmax (1, juce::roundToInt (bounds.getWidth())));
+    const int height = juce::jmin (
+        dotSourceH, juce::jmax (1, juce::roundToInt (bounds.getHeight())));
+
+    if (! dotDisplayCache.isValid()
+        || dotRenderedSourceKind != sourceKind
+        || dotRenderedRevision != sourceRevision
+        || dotRenderedTick != dotUiTick
+        || dotDisplayCache.getWidth() != width
+        || dotDisplayCache.getHeight() != height)
+    {
+        rebuildDotDisplay (
+            width, height, sourceKind, sourceRevision);
+    }
+
+    g.setImageResamplingQuality (
+        juce::Graphics::lowResamplingQuality);
+    g.drawImage (
+        dotDisplayCache, bounds,
+        juce::RectanglePlacement::stretchToFit);
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintDotUiFrame (
+    juce::Graphics& g)
+{
+    if (! dotModeEnabled())
+        return;
+
+    const auto amber = juce::Colour (0xffffdb46);
+    g.setColour (amber.withAlpha (0.44f));
+
+    for (int x = 12; x < 708; x += 16)
+    {
+        g.fillRect ((float) x, 8.0f, 5.0f, 2.0f);
+        g.fillRect ((float) x, 710.0f, 5.0f, 2.0f);
+    }
+
+    for (int y = 20; y < 700; y += 16)
+    {
+        g.fillRect (8.0f, (float) y, 2.0f, 5.0f);
+        g.fillRect (710.0f, (float) y, 2.0f, 5.0f);
+    }
+
+    g.setColour (amber.withAlpha (0.86f));
+    g.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
+    g.drawText ("DOT", 334, 18, 52, 20,
+                juce::Justification::centred);
+}
+
 void RealtimeChordFxAudioProcessorEditor::setParameterFromX (DragParam which, float x)
 {
     auto setNorm = [&] (const char* id, float norm)
@@ -356,6 +574,7 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
                 nextVisualFrame (frames.getFrameCount(), loadedFrame);
             currentFrame = frames.getFrame (frame);
             loadedFrame = frame;
+            ++dotFrameRevision;
             chordVisualCooldown = 5; // ~167 ms at 30 Hz
         }
 
@@ -368,6 +587,7 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         {
             currentFrame = frames.getFrame (frame);
             loadedFrame = frame;
+            ++dotFrameRevision;
         }
     }
     else if (effectMode == 2 && eurekaFrames.getFrameCount() > 0)
@@ -392,9 +612,17 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             currentEurekaFrame =
                 eurekaFrames.getFrame (eurekaFrameIndex);
             loadedEurekaFrame = eurekaFrameIndex;
+            ++dotEurekaRevision;
         }
 
         eurekaVisualPreviousActivity = activity;
+    }
+
+    dotActivity = juce::jlimit (0.0f, 1.0f, activity * 18.0f);
+    if (dotModeEnabled() && ++dotTimerDivider >= 2)
+    {
+        dotTimerDivider = 0;
+        ++dotUiTick;
     }
 
     repaint();
