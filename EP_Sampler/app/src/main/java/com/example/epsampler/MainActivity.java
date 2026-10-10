@@ -1175,6 +1175,27 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         }
     }
 
+    private ArrayAdapter<String> visualModeAdapter(String[] labels) {
+        return new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, labels) {
+            private View decorate(View row) {
+                if (!dotVisualMode || row == null) return row;
+                if (row instanceof TextView) {
+                    TextView label=(TextView)row;
+                    label.setTypeface(android.graphics.Typeface.MONOSPACE);
+                    label.setTextColor(0xffffe57a);
+                    label.setBackground(dotFrame(false));
+                }
+                return row;
+            }
+            @Override public View getView(int position, View old, android.view.ViewGroup parent) {
+                return decorate(super.getView(position,old,parent));
+            }
+            @Override public View getDropDownView(int position, View old, android.view.ViewGroup parent) {
+                return decorate(super.getDropDownView(position,old,parent));
+            }
+        };
+    }
+
     private void showConfigDialog() {
         LinearLayout root = dialogRoot();
         TextView displayLabel = new TextView(this);
@@ -1182,8 +1203,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         displayLabel.setTextSize(16f);
         root.addView(displayLabel);
         Spinner visualModeSpinner = new Spinner(this);
-        visualModeSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"NORMAL (IMAGE / MP4)", "DOT"}));
+        visualModeSpinner.setAdapter(visualModeAdapter(new String[]{"NORMAL (IMAGE / MP4)", "DOT"}));
         visualModeSpinner.setSelection(dotVisualMode ? 1 : 0);
         root.addView(visualModeSpinner);
 
@@ -1199,8 +1219,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         }
 
         Spinner outputSpinner = new Spinner(this);
-        outputSpinner.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, outputLabels));
+        outputSpinner.setAdapter(visualModeAdapter(outputLabels));
         outputSpinner.setSelection(audioOutputSelection(outputChoices, audioOutputKey));
         root.addView(outputSpinner);
 
@@ -1210,8 +1229,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         root.addView(audioLabel);
 
         Spinner audioSpinner = new Spinner(this);
-        audioSpinner.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, AUDIO_BUFFER_LABELS));
+        audioSpinner.setAdapter(visualModeAdapter(AUDIO_BUFFER_LABELS));
         final float originalAudioBuffer = audioBufferBursts;
         final int[] lastAudioResult = { 0 };
         audioSpinner.setSelection(audioBufferSelection(audioBufferBursts));
@@ -1267,8 +1285,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         root.addView(instrumentLabel);
 
         Spinner instrumentSpinner = new Spinner(this);
-        instrumentSpinner.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, mixerPartNames()));
+        instrumentSpinner.setAdapter(visualModeAdapter(mixerPartNames()));
         instrumentSpinner.setSelection(instrumentMode);
         root.addView(instrumentSpinner);
 
@@ -1281,8 +1298,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         String[] channels = new String[17];
         channels[0] = "OFF";
         for (int i=1;i<=16;i++) channels[i] = "CH " + i;
-        channelSpinner.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, channels));
+        channelSpinner.setAdapter(visualModeAdapter(channels));
         channelSpinner.setSelection(partMidiChannels[instrumentMode]);
         root.addView(channelSpinner);
 
@@ -1312,8 +1328,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         Spinner presetSpinner = new Spinner(this);
         String[] presetSlots = new String[PRESET_SLOTS];
         for (int i=0; i<PRESET_SLOTS; i++) presetSlots[i] = "SLOT " + (i + 1);
-        presetSpinner.setAdapter(new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_dropdown_item, presetSlots));
+        presetSpinner.setAdapter(visualModeAdapter(presetSlots));
         root.addView(presetSpinner);
 
         LinearLayout presetButtons = new LinearLayout(this);
