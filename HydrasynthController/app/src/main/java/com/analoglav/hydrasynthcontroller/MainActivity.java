@@ -680,17 +680,19 @@ public final class MainActivity extends Activity {
     }
     private void drawConfig(Canvas c){
       rect(c,BG,27,274,666,340);stroke(c,YELLOW,27,274,666,340);
-      text(c,"CONFIG / MIDI",YELLOW,45,310,25);
+      text(c,"CONFIG / "+(analogMode?"ANALOG KEYS":"HYDRA"),YELLOW,45,310,25);
       tile(c,"CLOSE",570,280,110,37,true,false);
-      drawConfigRow(c,"MIDI OUTPUT",deviceLabel(outs,outId),337);
-      drawConfigRow(c,"MIDI INPUT",deviceLabel(ins,inId),410);
-      drawConfigRow(c,"MIDI CHANNEL","CHANNEL "+channel,483);
-      tile(c,autoSend?"AUTO: ON":"AUTO: OFF",43,563,196,41,true,false);
-      tile(c,"REFRESH",251,563,196,41,true,false);
-      tile(c,"TEST NOTE",459,563,219,41,txPort!=null,false);
-      text(c,outputIsDigitakt()?"DIGITAKT USB: VERIFY DIN ROUTING":
-           "HYDRA: SET SYSTEM PARAM RX = NRPN",DIM,43,612,16);
-      text(c,"TX="+txBytes+" BYTES   RX="+rxBytes+" BYTES (NOT ACK)",DIM,43,632,15);
+      drawConfigRow(c,"SYNTH MODE",analogMode?"ANALOG KEYS":"HYDRA",328);
+      drawConfigRow(c,"MIDI OUTPUT",deviceLabel(outs,outId),388);
+      drawConfigRow(c,"MIDI INPUT",deviceLabel(ins,inId),448);
+      drawConfigRow(c,analogMode?akTrackName(akTrack)+" MIDI CHANNEL":"MIDI CHANNEL",
+        "CHANNEL "+editorChannel(),508);
+      tile(c,autoSend?"AUTO: ON":"AUTO: OFF",43,565,196,42,true,false);
+      tile(c,"REFRESH",251,565,196,42,true,false);
+      tile(c,"TEST NOTE",459,565,219,42,txPort!=null,false);
+      text(c,analogMode?"AK: SET RECEIVE CC/NRPN ON. MATCH TRACK CH.":
+        outputIsDigitakt()?"VERIFY DIGITAKT USB/DIN ROUTING":
+        "HYDRA: SYSTEM PARAM RX = NRPN",DIM,43,617,15);
       drawBottom(c);
     }
     private void drawConfigRow(Canvas c,String label,String value,int y){
@@ -863,13 +865,15 @@ public final class MainActivity extends Activity {
           return true;
         }
         if(panelMode==5){
-          if(y>=340&&y<391){chooseMidi(false);return true;}
-          if(y>=414&&y<464){chooseMidi(true);return true;}
-          if(y>=489&&y<540){chooseChannel();return true;}
-          if(y>=563&&y<611){
+          if(y>=335&&y<379){chooseMode();return true;}
+          if(y>=395&&y<439){chooseMidi(false);return true;}
+          if(y>=455&&y<499){chooseMidi(true);return true;}
+          if(y>=515&&y<559){chooseChannel();return true;}
+          if(y>=565&&y<611){
             if(x<245){
               autoSend=!autoSend;
-              getPreferences(MODE_PRIVATE).edit().putBoolean("hydra_auto_send",autoSend).apply();
+              getPreferences(MODE_PRIVATE).edit().putBoolean(
+                analogMode?"ak_auto_send":"hydra_auto_send",autoSend).apply();
               status=autoSend?"AUTO SEND ENABLED":"AUTO SEND DISABLED";
             }else if(x<455){
               updateBluetoothPermission();refresh();status="MIDI DEVICE LIST REFRESHED";
@@ -946,11 +950,19 @@ public final class MainActivity extends Activity {
       String[] channels=new String[16];
       for(int i=0;i<16;i++)channels[i]="MIDI CH "+(i+1);
       new AlertDialog.Builder(MainActivity.this)
-        .setTitle("MIDI CHANNEL")
-        .setSingleChoiceItems(channels,channel-1,(d,which)->{
-          channel=which+1;
-          getPreferences(MODE_PRIVATE).edit().putInt("midi_channel",channel).apply();
-          status="MIDI CH "+channel;d.dismiss();invalidate();
+        .setTitle(analogMode?"MIDI / "+akTrackName(akTrack):"HYDRA MIDI CHANNEL")
+        .setSingleChoiceItems(channels,editorChannel()-1,(d,which)->{
+          if(analogMode){
+            akChannels[akTrack]=which+1;
+            getPreferences(MODE_PRIVATE).edit()
+              .putInt("ak_channel_"+akTrack,which+1).apply();
+          }else{
+            channel=which+1;
+            getPreferences(MODE_PRIVATE).edit().putInt("midi_channel",channel).apply();
+          }
+          sendGeneration++;
+          status="MIDI CH "+(which+1)+" / "+(analogMode?akTrackName(akTrack):"HYDRA");
+          d.dismiss();invalidate();
         }).setNegativeButton("CANCEL",null).show();
     }
   }
