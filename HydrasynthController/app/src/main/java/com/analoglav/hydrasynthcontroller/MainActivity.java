@@ -508,30 +508,42 @@ public final class MainActivity extends Activity {
       screen.restore();
     }
     private void drawHeader(Canvas c){
-      text(c,"HYDRA / DOT",YELLOW,28,41,31);
-      text(c,trim(patchName+(dirty?" *":""),25),LIGHT,30,71,21);
+      text(c,analogMode?"ANALOG KEYS / DOT":"HYDRA / DOT",YELLOW,28,41,31);
+      text(c,trim((analogMode?akTrackName(akTrack)+" / ":"")+
+        patchName+(dirty?" *":""),28),LIGHT,30,71,21);
       text(c,txPort==null?"PORT OFF":"PORT OPEN",txPort==null?DIM:LIGHT,559,42,20);
       text(c,draft.size()+" SET",DIM,593,70,16);
       if(txPort!=null)text(c,trim(deviceLabel(outs,outId),21),DIM,332,70,13);
     }
     private void drawRouting(Canvas c){
-      text(c,"SOURCES  >  MUTATORS  >  MIX / FILTER  >  FX",DIM,27,95,15);
+      text(c,analogMode?"TRACKS  >  VOICE MODULES  >  FX":
+        "SOURCES  >  MUTATORS  >  MIX / FILTER  >  FX",DIM,27,95,15);
+      String[][] activeFlow=analogMode?ANALOG_FLOW:FLOW;
       for(int row=0;row<4;row++)for(int col=0;col<6;col++){
-        String id=FLOW[row][col];float x=28+col*111,y=104+row*37;
-        boolean family=id.equals("ENV 1-5")||id.equals("LFO 1-5")||id.equals("MACRO 1-8");
-        boolean active=id.equals(module)||(family&&(
-          id.startsWith("ENV")&&module.startsWith("ENV ")||
-          id.startsWith("LFO")&&module.startsWith("LFO ")||
-          id.startsWith("MACRO")&&module.startsWith("MACRO ")));
-        boolean enabled=family||id.equals("PATCH")||!ParameterCatalog.params(id).isEmpty();
-        tile(c,id.equals("RING / NOISE")?"RING/NOISE":id,x,y,105,32,enabled,active);
+        String id=activeFlow[row][col];float x=28+col*111,y=104+row*37;
+        if(analogMode){
+          boolean trackTab=row==0;
+          boolean enabled=trackTab||AnalogKeysCatalog.allowed(id,akTrack);
+          boolean active=trackTab?col==akTrack:id.equals(module);
+          tile(c,id,x,y,105,32,enabled,active);
+        }else{
+          boolean family=id.equals("ENV 1-5")||id.equals("LFO 1-5")||id.equals("MACRO 1-8");
+          boolean active=id.equals(module)||(family&&(
+            id.startsWith("ENV")&&module.startsWith("ENV ")||
+            id.startsWith("LFO")&&module.startsWith("LFO ")||
+            id.startsWith("MACRO")&&module.startsWith("MACRO ")));
+          boolean enabled=family||id.equals("PATCH")||!ParameterCatalog.params(id).isEmpty();
+          tile(c,id.equals("RING / NOISE")?"RING/NOISE":id,x,y,105,32,enabled,active);
+        }
       }
-      text(c,"MODULATION        ENV / LFO / MATRIX / MACROS",DIM,27,260,15);
+      text(c,analogMode?"TRACK 1-4 / FX / PERFORMANCE  |  MODE IN CONFIG":
+        "MODULATION        ENV / LFO / MATRIX / MACROS",DIM,27,260,15);
     }
     private void drawModuleEditor(Canvas c){
       rect(c,PANEL,27,274,666,255);
       stroke(c,YELLOW,27,274,666,255);
-      text(c,"EDIT / "+module,YELLOW,43,304,25);
+      text(c,trim("EDIT / "+module+(analogMode?"  / "+akTrackName(akTrack):""),32),
+        YELLOW,43,304,25);
       List<ParameterCatalog.Param> ps=fields();
       if(ps.size()>4) {
         tile(c,"<",549,277,38,36,sectionOffset>0,false);
@@ -542,7 +554,8 @@ public final class MainActivity extends Activity {
         text(c,"NOT MAPPED FOR SAFE MIDI EDIT",LIGHT,51,367,23);
         text(c,"This module remains in the patch path.",DIM,51,402,18);
         text(c,"Do not invent parameter addresses.",DIM,51,429,18);
-        text(c,"PATCH SAVE stores assigned values only.",DIM,51,472,17);
+        text(c,analogMode?"LOCAL SOUND SAVE / NO HARDWARE STORE":
+          "PATCH SAVE stores assigned values only.",DIM,51,472,17);
       }else {
         for(int i=0;i<4;i++){
           int ix=sectionOffset+i;
@@ -562,17 +575,21 @@ public final class MainActivity extends Activity {
       text(c,trim(status,65),LIGHT,38,557,17);
       tile(c,"SEND FIELD",28,570,323,43,
         selectedParam!=null && draft.containsKey(selectedParam.key()),false);
-      tile(c,loadedFromHardware?"APPLY EDITS":"APPLY PATCH",365,570,328,43,
-        loadedFromHardware?!changedSinceRead.isEmpty():!draft.isEmpty(),false);
+      tile(c,analogMode?"APPLY SOUND":loadedFromHardware?"APPLY EDITS":"APPLY PATCH",
+        365,570,328,43,loadedFromHardware?!changedSinceRead.isEmpty():!draft.isEmpty(),false);
       drawBottom(c);
     }
     private void drawBottom(Canvas c){
       tile(c,"NEW",28,626,125,49,true,false);
       tile(c,"SAVE",163,626,125,49,true,false);
       tile(c,"LOAD",298,626,125,49,true,false);
-      tile(c,dumpReader!=null&&dumpReader.active()?"CANCEL READ":"CURRENTLOAD",433,626,125,49,true,false);
+      tile(c,analogMode?"READ N/A":
+        dumpReader!=null&&dumpReader.active()?"CANCEL READ":"CURRENTLOAD",
+        433,626,125,49,!analogMode,false);
       tile(c,"CONFIG",568,626,125,49,true,false);
-      text(c,sourceSnapshot==null?
+      text(c,analogMode?
+        "ANALOG KEYS / NRPN LIVE EDIT / LOCAL SAVE ONLY":
+        sourceSnapshot==null?
         "LOCAL PRESET / HARDWARE FLASH WRITE NOT AVAILABLE":
         "SOURCE SLOT "+(char)('A'+sourceSnapshot.bank)+"-"+(sourceSnapshot.slot+1)+
         " / RAW 2790B / UI "+draft.size()+" FIELDS",DIM,29,694,15);
@@ -586,7 +603,7 @@ public final class MainActivity extends Activity {
         int n=familyType==3?8:5;
         for(int i=1;i<=n;i++)items.add(family+i);
       }else if(panelMode==4){
-        try{items.addAll(library.names());}catch(Exception e){status="PRESET READ ERROR";}
+        try{items.addAll(activeLibrary().names());}catch(Exception e){status="PRESET READ ERROR";}
       }
       return items;
     }
@@ -608,7 +625,7 @@ public final class MainActivity extends Activity {
         rect(c,DIM,671,330,6,248);
         rect(c,YELLOW,665,330+(int)(220f*scrollIndex/(list.size()-6)),18,25);
       }
-      text(c,(list.isEmpty()?"NO STORED PRESETS":(scrollIndex+1)+" - "
+      text(c,(list.isEmpty()?"NO LOCAL PRESETS":(scrollIndex+1)+" - "
           +Math.min(scrollIndex+6,list.size())+" / "+list.size()),
           DIM,49,604,17);
       drawBottom(c);
@@ -708,7 +725,7 @@ public final class MainActivity extends Activity {
         .setPositiveButton("SAVE",(d,w)->{
           String name=e.getText().toString().trim();
           try{
-            if(library.names().contains(name)){
+            if(activeLibrary().names().contains(name)){
               new AlertDialog.Builder(MainActivity.this)
               .setTitle("REPLACE PRESET?")
               .setMessage(name)
@@ -720,7 +737,7 @@ public final class MainActivity extends Activity {
     }
     private void store(String name){
       try{
-        library.save(name,draft,sourceSnapshot==null?null:sourceSnapshot.raw);
+        activeLibrary().save(name,draft,sourceSnapshot==null?null:sourceSnapshot.raw);
         patchName=name;dirty=false;
         status="SAVED LOCALLY / "+draft.size()+" UI VALUES"+
           (sourceSnapshot!=null?" + ORIGINAL RAW":"");
@@ -730,7 +747,7 @@ public final class MainActivity extends Activity {
     private void openLibrary(){panelMode=4;scrollIndex=0;invalidate();}
     private void load(String name){
       try{
-        PatchLibrary.Document doc=library.load(name);
+        PatchLibrary.Document doc=activeLibrary().load(name);
         // Validate before altering the current patch document.
         HydraPatchSnapshot baseline=doc.sourcePatch==null?null:new HydraPatchSnapshot(doc.sourcePatch);
         sourceSnapshot=baseline;loadedFromHardware=baseline!=null;
@@ -786,7 +803,14 @@ public final class MainActivity extends Activity {
     private void routingTap(float x,float y){
       int col=(int)((x-28)/111f),row=(int)((y-104)/37f);
       if(row<0||row>=4||col<0||col>=6)return;
-      String id=FLOW[row][col];
+      String id=(analogMode?ANALOG_FLOW:FLOW)[row][col];
+      if(analogMode){
+        if(row==0){selectAnalogTrack(col);return;}
+        if(!AnalogKeysCatalog.allowed(id,akTrack)){
+          status="NOT AVAILABLE ON "+akTrackName(akTrack);invalidate();return;
+        }
+        chooseModule(id);return;
+      }
       if(id.equals("PATCH")){openLibrary();return;}
       if(id.equals("ENV 1-5")||id.equals("LFO 1-5")||id.equals("MACRO 1-8")){
         familyType=id.startsWith("ENV")?1:id.startsWith("LFO")?2:3;
@@ -808,7 +832,10 @@ public final class MainActivity extends Activity {
         else if(x<293)triggerSave();
         else if(x<428)openLibrary();
         else if(x<563){
-          if(dumpReader!=null&&dumpReader.active()){
+          if(analogMode){
+            status="ANALOG KEYS SYSEX READ NOT VERIFIED / DISABLED";
+            invalidate();
+          }else if(dumpReader!=null&&dumpReader.active()){
             dumpReader.cancel("USER CANCELLED");
           }else{panelMode=6;invalidate();}
         }else{panelMode=5;invalidate();}
