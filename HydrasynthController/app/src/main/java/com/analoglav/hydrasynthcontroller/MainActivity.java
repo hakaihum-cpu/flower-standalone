@@ -40,7 +40,7 @@ public final class MainActivity extends Activity {
   private MidiInputPort txPort;
   private MidiOutputPort rxPort;
   private final ArrayList<MidiDeviceInfo> outs=new ArrayList<>(),ins=new ArrayList<>();
-  private int outId=-1,inId=-1,channel=1,rxBytes;
+  private int outId=-1,inId=-1,channel=1,rxBytes,txBytes;
   private Editor view;
   private final Handler main=new Handler(Looper.getMainLooper());
   private final MidiReceiver receiver=new MidiReceiver(){
@@ -140,8 +140,10 @@ public final class MainActivity extends Activity {
     if(txPort==null){view.status="CONNECT MIDI OUT IN CONFIG";view.invalidate();return;}
     try {
       byte[] msg=NrpnEncoder.encode(channel,p.msb,p.lsb,p.encode(value));
-      for(int i=0;i<msg.length;i+=3)txPort.send(msg,i,3);
-      view.status="PORT WRITE OK  CH"+channel+"  "+p.name+" / NO RX ACK";
+      // Preserve NRPN CC 99/98/6/38 together in one ordered output write.
+      txPort.send(msg,0,msg.length);
+      txBytes+=msg.length;
+      view.status="TX TO PORT CH"+channel+"  "+p.name+" / SYNTH NOT VERIFIED";
     }catch(IOException|IllegalArgumentException ex){
       view.status="TX FAILED: "+ex.getClass().getSimpleName();
     }
@@ -166,8 +168,9 @@ public final class MainActivity extends Activity {
         if(sendGeneration!=job||txPort==null)return;
         try{
           byte[] m=NrpnEncoder.encode(channel,p.msb,p.lsb,p.encode(value));
-          for(int j=0;j<m.length;j+=3)txPort.send(m,j,3);
-          if(last){view.status="PORT WRITE OK "+count+" FIELDS / NO SYNTH ACK";view.invalidate();}
+          txPort.send(m,0,m.length);
+          txBytes+=m.length;
+          if(last){view.status="TX TO PORT "+count+" FIELDS / SYNTH NOT VERIFIED";view.invalidate();}
         }catch(IOException|IllegalArgumentException err){
           sendGeneration++;
           view.status="APPLY ABORTED: "+err.getClass().getSimpleName();view.invalidate();
@@ -315,6 +318,7 @@ public final class MainActivity extends Activity {
       text(c,trim(patchName+(dirty?" *":""),25),LIGHT,30,71,21);
       text(c,txPort==null?"PORT OFF":"PORT OPEN",txPort==null?DIM:LIGHT,559,42,20);
       text(c,draft.size()+" SET",DIM,593,70,16);
+      if(txPort!=null)text(c,trim(deviceLabel(outs,outId),21),DIM,332,70,13);
     }
     private void drawRouting(Canvas c){
       text(c,"SOURCES  >  MUTATORS  >  MIX / FILTER  >  FX",DIM,27,95,15);
@@ -433,8 +437,9 @@ public final class MainActivity extends Activity {
       drawConfigRow(c,"MIDI CHANNEL","CHANNEL "+channel,483);
       tile(c,"REFRESH",43,563,308,41,true,false);
       tile(c,"TEST NOTE",364,563,314,41,txPort!=null,false);
-      text(c,outputIsDigitakt()?"DIGITAKT USB NOT AUTO-ROUTED TO DIN OUT":
-           "HYDRA: SET SYSTEM PARAM RX = NRPN",DIM,43,616,16);
+      text(c,outputIsDigitakt()?"DIGITAKT USB: VERIFY DIN ROUTING":
+           "HYDRA: SET SYSTEM PARAM RX = NRPN",DIM,43,612,16);
+      text(c,"TX="+txBytes+" BYTES   RX="+rxBytes+" BYTES (NOT ACK)",DIM,43,632,15);
       drawBottom(c);
     }
     private void drawConfigRow(Canvas c,String label,String value,int y){
