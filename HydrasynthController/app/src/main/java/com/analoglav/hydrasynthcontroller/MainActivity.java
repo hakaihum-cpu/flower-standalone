@@ -623,6 +623,12 @@ public final class MainActivity extends Activity {
         sourceSnapshot=baseline;loadedFromHardware=baseline!=null;
         changedSinceRead.clear();
         draft.clear();draft.putAll(doc.values);patchName=doc.name;
+        if(baseline!=null){
+          for(Map.Entry<String,Integer> entry:doc.values.entrySet()){
+            if(!entry.getValue().equals(baseline.mapped.get(entry.getKey())))
+              changedSinceRead.put(entry.getKey(),entry.getValue());
+          }
+        }
         dirty=false;selectedParam=null;sectionOffset=0;panelMode=0;
         status="LOADED LOCAL / "+draft.size()+" UI VALUES"+
           (baseline==null?"":" + ORIGINAL RAW");
