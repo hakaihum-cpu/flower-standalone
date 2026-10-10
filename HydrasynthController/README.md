@@ -18,7 +18,7 @@ feature-only source tree. Existing MIYAKO/FLOWER/EP assets or MASTER branches ar
 - Mappings include OSC1/2/3 waves and pitch/keytrack, OSC1/2 WaveScan 1–8, four Mutants,
   Ring/Noise, Mixer routing, Filter types/routing, Delay, Reverb, some LFO settings, ENV 1–5 triggers/curves/sync, ARP Division/Swing/Gate/Octave/Length/Tap/Phrase/Ratchet/Chance, Voice performance settings, Macro panel value (but not Macro Assign).
 - Unsupported modules remain visible with **NO VERIFIED MIDI MAP** and disabled SEND.
-- Values are **staged locally**. TX SENT means Android passed bytes to its MIDI port,
+- Values are **staged locally**. SEND is disabled until the user explicitly selects/adjusts a value, because the app cannot read current synth values. TX SENT means Android passed bytes to its MIDI port,
   **not** confirmation from the synth. There is no SysEx transfer and no remote patch save.
 
 ## Sources / critical limitation

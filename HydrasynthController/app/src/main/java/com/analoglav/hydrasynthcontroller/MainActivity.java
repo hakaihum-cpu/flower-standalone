@@ -233,15 +233,16 @@ public final class MainActivity extends Activity {
       field(c,"01  MODULE",currentGroup(),107);
       ParameterCatalog.Param p=current();
       field(c,"02  PARAMETER",p==null?"NO VERIFIED MIDI MAP":p.name,228);
-      field(c,"03  VALUE",p==null?"NOT AVAILABLE":p.display(val()),349);
+      field(c,"03  VALUE",p==null?"NOT AVAILABLE":pending.containsKey(p.key())?p.display(val()):"SELECT VALUE (UNKNOWN)",349);
       fill(c,0xff241f0c,48,466,195,75);outline(c,DIM,48,466,195,75);
       txt(c,"-  1",YELLOW,107,516,29);
       fill(c,0xff241f0c,260,466,195,75);outline(c,DIM,260,466,195,75);
       txt(c,"+  1",YELLOW,319,516,29);
       fill(c,0xff241f0c,474,466,198,75);outline(c,DIM,474,466,198,75);
       txt(c,"+10",YELLOW,541,516,29);
-      fill(c,p==null?DIM:YELLOW,48,562,415,76);
-      txt(c,"SEND  >",BLACK,176,612,36);
+      boolean ready=p!=null && pending.containsKey(p.key());
+      fill(c,ready?YELLOW:DIM,48,562,415,76);
+      txt(c,"SEND  >",ready?BLACK:BRIGHT,176,612,36);
       fill(c,0xff241f0c,480,562,192,76);outline(c,YELLOW,480,562,192,76);
       txt(c,"CONFIG",BRIGHT,507,610,27);
       txt(c,fit(status,43),BRIGHT,48,669,21);
@@ -369,8 +370,10 @@ public final class MainActivity extends Activity {
       }
       if(y>=562&&y<639){
         if(x<466){
-          if(current()!=null)send(current(),val());
-          else{status="NO VERIFIED NRPN - SEND DISABLED";invalidate();}
+          if(current()==null){status="NO VERIFIED NRPN - SEND DISABLED";invalidate();}
+          else if(!pending.containsKey(current().key())){
+            status="SELECT A VALUE BEFORE SEND";invalidate();
+          }else send(current(),val());
         } else {config=true;invalidate();}
       }
       return true;
