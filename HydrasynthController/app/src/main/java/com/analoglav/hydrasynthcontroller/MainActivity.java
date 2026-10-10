@@ -198,6 +198,8 @@ public final class MainActivity extends Activity {
     return view.akChannels[view.akTrack];
   }
   private void send(ParameterCatalog.Param p,int value){
+    // A direct edit supersedes all remaining stale bulk-APPLY sends.
+    ++sendGeneration;
     if(txPort==null){view.status="CONNECT MIDI OUT IN CONFIG";view.invalidate();return;}
     try {
       final int onChannel=editorChannel();
@@ -477,12 +479,20 @@ public final class MainActivity extends Activity {
       if(p==null)return;
       value=Math.max(p.min,Math.min(p.max,value));
       draft.put(p.key(),value);selectedParam=p;dirty=true;
+      // New user input cancels queued old APPLY packets before they can undo it.
+      ++sendGeneration;
       if(loadedFromHardware)changedSinceRead.put(p.key(),value);
-      status="EDITED "+p.name+(autoSend?" / AUTO TX":" / SEND WHEN READY");
-      invalidate();
-      // Only a user-confirmed selection or USE VALUE enters stage().
+      final boolean canAutoSend=autoSend&&txPort!=null&&
+        (dumpReader==null||!dumpReader.active());
+      if(canAutoSend){
+        send(p,value); // "TX TO PORT" means only Android port write, not synth ACK.
+      }else{
+        status="EDITED "+p.name+
+          (autoSend?(txPort==null?" / MIDI OUT NOT CONNECTED":
+            " / SYSEX READ ACTIVE"):" / SEND WHEN READY");
+        invalidate();
+      }
       // Reading a patch, opening a menu, and loading a local preset never send.
-      if(autoSend&&txPort!=null&&(dumpReader==null||!dumpReader.active()))send(p,value);
     }
     private int stagedValue(ParameterCatalog.Param p){
       Integer i=draft.get(p.key());return i==null?p.min:i;
