@@ -69,3 +69,59 @@ Status: **SOURCE MVP / NOT BUILT / NOT TESTED ON HYDRASYNTH EXPLORER**.
   Sustain, Release normalized positions (FW1.5 NRPN positions). Hold and secondary
   controls remain available in the same pane via next controls. Time in milliseconds
   is not fabricated from these values. BPM sync-specific values require distinct mapping.
+
+## CurrentLoad: read-only saved-slot patch acquisition (feature/an-62-currentload-readback)
+
+The single 720x720 workspace now has a **CURRENTLOAD** control next to NEW/SAVE/LOAD/CONFIG.
+It opens a bank A–H and slot 1–128 selector overlay without any wizard or new Activity.
+Both **MIDI OUT and MIDI IN** must be connected to the Hydrasynth. Read-only SysEx:
+
+1. Open session via encoded HEADER 18 00; wait for HEADER RESPONSE 19 00.
+2. Request selected saved bank/slot 04 00 [bank 0..7] [slot 0..127].
+3. Receive 22 ordered chunks (21 × 128 bytes plus final 102 bytes), validate
+   base64+CRC32, and ACK 17 00 [index] 16 after each. Collect **2790 raw bytes**.
+4. Send FOOTER 1A 00 and wait for 1B 00; then validate version and slot metadata.
+5. **Only on complete validation**, atomically replace the editor's working document,
+   patch name, and all *currently implemented* UI mappings. The full original raw
+   patch remains available for private on-device SAVE/LOAD alongside the JSON overlay.
+
+A READ timeout, missing/corrupt chunk, bad CRC or wrong slot **leaves the current
+editor untouched** and attempts to send a session-release FOOTER. CANCEL READ is
+available while a transaction is in progress. There is **no Flash WRITE command**.
+For safety, after CurrentLoad, APPLY EDITS transmits only values deliberately
+changed in the UI after loading, rather than re-transmitting every imported value.
+
+### Critical limitations
+
+- The Synth's **unsaved current edit buffer cannot be queried** with the known
+  SysEx commands. CURRENTLOAD therefore means *read a specified SAVED slot*, not
+  'find and read whatever is currently sounding'. The user must select the bank
+  and slot, and the app never guesses.
+- It reads **all raw bytes** but currently maps only the subset of engine controls
+  defined in ParameterCatalog into semantic UI fields. E.g. Mod Matrix and Macro
+  Assign do not yet have complete UI coverage; RAW retention must not be mistaken
+  for 100% GUI parameter coverage.
+- A raw baseline retained in a local preset is an **original snapshot**, not
+  regenerated when editor values change. Hardware flash writes / patch SysEx
+  upload are NOT supported or enabled.
+- Edisyn's reverse-engineered patch and message format, not ASM's published
+  guarantee: https://github.com/eclab/edisyn/blob/master/edisyn/synth/asmhydrasynth/info/SysexEncoding.txt
+  and https://github.com/eclab/edisyn/blob/master/edisyn/synth/asmhydrasynth/ASMHydrasynth.java.
+- Android FW2.2.0 USB MIDI reply chunk sizes/handshake have **not been tested**
+  on an actual Explorer. A reply using undocumented chunk lengths is rejected
+  rather than incorrectly installed as a complete patch.
+
+### Auto Send (separate from CurrentLoad)
+
+CONFIG also includes **AUTO: ON/OFF** (default ON). It sends **only confirmed
+user edits** to a connected MIDI output; opening/scrolling modules, receiving
+a SysEx patch, and loading a local preset cause **no MIDI parameter writes**.
+SEND FIELD is retained as a manual fallback.
+
+### Build safety
+
+Changes are on independent feature branch `feature/an-62-currentload-readback`.
+The previous working branch and main are unchanged. `test_core.sh` now includes
+pure-Java SysEx fixture tests (CRC, fragmented MIDI, 22-ACK sequence, slot identity,
+mapped UI values, corrupt/out-of-order cancellation and no Flash WRITE). Source
+has **not** been built in CircleCI or tried on device.
