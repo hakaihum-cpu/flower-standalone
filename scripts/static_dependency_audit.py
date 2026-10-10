@@ -110,6 +110,17 @@ for forbidden_ref in FORBIDDEN_JUCER_REFS:
     if forbidden_ref in jucer_text:
         fail(f"animation-free MVP unexpectedly references: {forbidden_ref}")
 
+for required_jucer_contract in [
+    'MODULE id="juce_audio_processors_headless"',
+    'androidArchitectures="arm64-v8a"',
+    'resource="1" file="Resources/flower_video_frames.pack"',
+]:
+    if required_jucer_contract not in jucer_text:
+        fail(f"JUCER build/resource contract missing: {required_jucer_contract}")
+
+if "x86_64" in jucer_text or "armeabi-v7a" in jucer_text:
+    fail("FLOWER Android target must remain arm64-v8a only")
+
 circle = (ROOT / ".circleci/config.yml").read_text(encoding="utf-8")
 if "default: false" not in circle or "run_build" not in circle:
     fail("CircleCI manual build gate is missing")
