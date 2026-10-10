@@ -22,6 +22,8 @@ REQUIRED = [
     "Source/FlowerFrameData.h",
     "Source/FramePack.h",
     "Source/FramePack.cpp",
+    "Source/FlowerTechnicalFont.h",
+    "Source/FlowerDotRenderer.h",
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
     "scripts/patch_android_native_parallelism.py",
@@ -96,6 +98,8 @@ for required_ref in [
     "Source/RetroLookAndFeel.cpp",
     "Source/PluginProcessor.cpp",
     "Source/FramePack.cpp",
+    "Source/FlowerTechnicalFont.h",
+    "Source/FlowerDotRenderer.h",
     "Source/PluginEditor.cpp",
     "Resources/flower_video_frames.pack",
 ]:
@@ -138,6 +142,8 @@ for required_patcher in [
 editor_header = (ROOT / "Source/PluginEditor.h").read_text(encoding="utf-8")
 editor_text = (ROOT / "Source/PluginEditor.cpp").read_text(encoding="utf-8")
 processor_text = (ROOT / "Source/PluginProcessor.cpp").read_text(encoding="utf-8")
+dot_renderer_text = (ROOT / "Source/FlowerDotRenderer.h").read_text(encoding="utf-8")
+dot_font_text = (ROOT / "Source/FlowerTechnicalFont.h").read_text(encoding="utf-8")
 
 if "juce::Desktop::getInstance().setOrientationsEnabled" in editor_text:
     fail("Android orientation must not be forced during editor startup")
@@ -214,6 +220,10 @@ for required_visual_ui in [
     "chooseNextMixedVisual",
     "visualCooldown = 4",
     "currentMixedVisual",
+    '#include "FlowerDotRenderer.h"',
+    "FlowerDotRenderer dotRenderer",
+    "setDotMode",
+    "dotRenderer.paint",
 ]:
     if required_visual_ui not in editor_text and required_visual_ui not in editor_header:
         fail(f"XY direct-frame visual contract missing: {required_visual_ui}")
@@ -261,6 +271,8 @@ for required_xy_ui in [
     "setAudioDeviceSetup",
     "audioBufferBursts",
     "makeAudioBufferStatus",
+    "onDotModeChanged",
+    "performanceUiModeConfig",
 ]:
     if required_xy_ui not in editor_text and required_xy_ui not in editor_header:
         fail(f"XY fullscreen/physical-key contract missing: {required_xy_ui}")
@@ -273,6 +285,8 @@ for required_current_ui in [
     'label = "MIDI CHANNEL"',
     'label = "CARNIVAL"',
     'label = "AUDIO BUFFER"',
+    'label = "UI MODE"',
+    '"FULL", "DOT"',
     'activeEffects.add ("DELAY")',
     'activeEffects.add (dreamyIndicatorMode ? "DRM" : "GRN")',
     'activeEffects.add ("ARP")',
@@ -324,8 +338,36 @@ def count_call_args(text: str, token: str) -> list[int]:
     return counts
 
 set_values_arg_counts = count_call_args(editor_text, "configScreen.setValues")
-if not set_values_arg_counts or any(count != 7 for count in set_values_arg_counts):
+if not set_values_arg_counts or any(count != 8 for count in set_values_arg_counts):
     fail(f"ConfigScreenComponent::setValues call arity mismatch: {set_values_arg_counts}")
+
+for required_dot in [
+    "sourceWidth = 512",
+    "sourceHeight = 384",
+    "0.2126f * colour.getFloatRed()",
+    "0.7152f * colour.getFloatGreen()",
+    "0.0722f * colour.getFloatBlue()",
+    "static constexpr int bayer4[16]",
+    "0xff100e08",
+    "0xff80671e",
+    "0xffffdb46",
+    "0xffffe57a",
+    "lowResamplingQuality",
+    "displayCache",
+]:
+    if required_dot not in dot_renderer_text:
+        fail(f"MIYAKO #204 DOT rendering contract missing: {required_dot}")
+
+for required_font in [
+    "struct FlowerTechnicalFont",
+    "static std::array<unsigned char, 5> glyph",
+    "g.fillRect",
+]:
+    if required_font not in dot_font_text:
+        fail(f"DOT technical font contract missing: {required_font}")
+
+if "FlowerDotRenderer" in processor_text or "FlowerTechnicalFont" in processor_text:
+    fail("DOT presentation code leaked into audio processor")
 
 for required_android_startup in [
     "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
@@ -409,6 +451,9 @@ print("[PASS] Android physical-key down/up bridge patch present")
 print("[PASS] Android standalone startup safeguards present")
 print("[PASS] current CARNIVAL/Y EFFECT/MIDI/effect legend/BPM UI retained")
 print("[PASS] Android output-buffer burst control/status contract present")
-print("[PASS] all CONFIG setValues call sites use the 7-argument current signature")
+print("[PASS] optional FULL/DOT UI mode added without audio-processor presentation code")
+print("[PASS] MIYAKO #204 512x384 luma / Bayer4 / amber 4-level DOT contract present")
+print("[PASS] DOT technical bitmap UI font present")
+print("[PASS] all CONFIG setValues call sites use the 8-argument current signature")
 print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
 print("[PASS] CircleCI native parallelism controls present")
