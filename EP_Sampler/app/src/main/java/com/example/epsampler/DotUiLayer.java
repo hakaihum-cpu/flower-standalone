@@ -20,6 +20,7 @@ final class DotUiLayer extends FrameLayout {
     private Bitmap source, rendered;
     private int[] srcPixels, dstPixels;
     private final Paint blit=new Paint();
+    private int dialogMaxHeightPx;
 
     DotUiLayer(Context context) {
         super(context);
@@ -31,6 +32,31 @@ final class DotUiLayer extends FrameLayout {
         if (dotEnabled==enabled) return;
         dotEnabled=enabled;
         invalidate();
+    }
+
+    void setDialogMaxHeight(int maxHeightPx) {
+        dialogMaxHeightPx=Math.max(0,maxHeightPx);
+        requestLayout();
+    }
+
+    @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (dialogMaxHeightPx<=0) {
+            super.onMeasure(widthMeasureSpec,heightMeasureSpec);
+            return;
+        }
+
+        int cap=dialogMaxHeightPx;
+        int parentMode=MeasureSpec.getMode(heightMeasureSpec);
+        if(parentMode!=MeasureSpec.UNSPECIFIED) {
+            cap=Math.min(cap,MeasureSpec.getSize(heightMeasureSpec));
+        }
+        cap=Math.max(1,cap);
+
+        // AlertDialog may measure a custom wrapper with UNSPECIFIED height.
+        // Capping the wrapper with AT_MOST keeps ListView/ScrollView bounded,
+        // so their own content remains scrollable instead of being clipped.
+        super.onMeasure(widthMeasureSpec,
+                MeasureSpec.makeMeasureSpec(cap,MeasureSpec.AT_MOST));
     }
 
     @Override protected void onDetachedFromWindow() {
