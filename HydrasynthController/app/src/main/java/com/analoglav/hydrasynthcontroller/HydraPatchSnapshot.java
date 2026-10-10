@@ -20,7 +20,8 @@ public final class HydraPatchSnapshot {
     bank=u8(2);slot=u8(3);version=u8(4);
     if(bank>7||slot>127)throw new IllegalArgumentException("Invalid stored slot");
     String n=new String(raw,9,16,StandardCharsets.ISO_8859_1);
-    name=n.replace("\u0000","").trim().isEmpty()?"UNTITLED":n.replace("\u0000","").trim();
+    String cleaned=n.replace((char)0,' ').trim();
+    name=cleaned.isEmpty()?"UNTITLED":cleaned;
     decode();
   }
   private int u8(int pos){return raw[pos]&255;}
