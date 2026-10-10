@@ -312,11 +312,30 @@ public final class MainActivity extends Activity {
       {"PRE-FX","DELAY","REVERB","POST-FX","VOICE","ARPEGGIATOR"},
       {"ENV 1-5","LFO 1-5","MOD MATRIX","MACRO 1-8","SYSTEM","PATCH"}
     };
+    private final String[][] ANALOG_FLOW={
+      {"TRK 1","TRK 2","TRK 3","TRK 4","FX","PERF"},
+      {"OSC 1","OSC 2","NOISE","OSC COMMON","FILTERS","AMP"},
+      {"ENV F","ENV 2","LFO 1","LFO 2","TRACK","PERFORMANCE"},
+      {"EXT IN","CHORUS","DELAY","REVERB","FX LFO 1","FX LFO 2"}
+    };
     private final Paint brush=new Paint();
     private final java.util.LinkedHashMap<String,Integer> draft=new java.util.LinkedHashMap<>();
     private String patchName="UNTITLED",module="OSC 1",status="SELECT MODULE > EDIT > SEND";
     private boolean dirty, loadedFromHardware;
     private boolean autoSend;
+    private boolean analogMode;
+    private int akTrack;
+    private final int[] akChannels=new int[6];
+    @SuppressWarnings("unchecked")
+    private final java.util.LinkedHashMap<String,Integer>[] akDrafts=
+      (java.util.LinkedHashMap<String,Integer>[])new java.util.LinkedHashMap[6];
+    private final String[] akNames=new String[6],akModules=new String[6];
+    private final boolean[] akDirty=new boolean[6];
+    private final java.util.LinkedHashMap<String,Integer> hydraDraft=new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashMap<String,Integer> hydraChanged=new java.util.LinkedHashMap<>();
+    private String hydraName="UNTITLED",hydraModule="OSC 1";
+    private boolean hydraDirty,hydraLoaded;
+    private HydraPatchSnapshot hydraSnapshot;
     private HydraPatchSnapshot sourceSnapshot;
     // Imported UI fields are for viewing; only subsequent deliberate edits are re-sent.
     private final java.util.LinkedHashMap<String,Integer> changedSinceRead=new java.util.LinkedHashMap<>();
@@ -335,7 +354,88 @@ public final class MainActivity extends Activity {
       brush.setAntiAlias(false);
       setLayerType(View.LAYER_TYPE_SOFTWARE,null);
       setFocusable(true);
-      autoSend=getPreferences(MODE_PRIVATE).getBoolean("hydra_auto_send",true);
+      android.content.SharedPreferences pref=getPreferences(MODE_PRIVATE);
+      analogMode=pref.getBoolean("analog_mode",false);
+      akTrack=Math.max(0,Math.min(5,pref.getInt("analog_track",0)));
+      for(int i=0;i<6;i++){
+        akDrafts[i]=new java.util.LinkedHashMap<>();
+        akNames[i]="UNTITLED";
+        akModules[i]=i==4?"CHORUS":i==5?"PERFORMANCE":"OSC 1";
+        akChannels[i]=Math.max(1,Math.min(16,pref.getInt("ak_channel_"+i,i+1)));
+      }
+      autoSend=pref.getBoolean(analogMode?"ak_auto_send":"hydra_auto_send",true);
+      if(analogMode)restoreActive();
+    }
+    private String akTrackName(int i){
+      return i==4?"FX":i==5?"PERF":"TRK "+(i+1);
+    }
+    private void stashActive(){
+      if(analogMode){
+        akDrafts[akTrack].clear();akDrafts[akTrack].putAll(draft);
+        akNames[akTrack]=patchName;
+        akModules[akTrack]=module;
+        akDirty[akTrack]=dirty;
+      }else{
+        hydraDraft.clear();hydraDraft.putAll(draft);
+        hydraChanged.clear();hydraChanged.putAll(changedSinceRead);
+        hydraName=patchName;hydraModule=module;hydraDirty=dirty;
+        hydraLoaded=loadedFromHardware;hydraSnapshot=sourceSnapshot;
+      }
+    }
+    private void restoreActive(){
+      draft.clear();changedSinceRead.clear();
+      if(analogMode){
+        draft.putAll(akDrafts[akTrack]);
+        patchName=akNames[akTrack];module=akModules[akTrack];dirty=akDirty[akTrack];
+        loadedFromHardware=false;sourceSnapshot=null;
+      }else{
+        draft.putAll(hydraDraft);changedSinceRead.putAll(hydraChanged);
+        patchName=hydraName;module=hydraModule;dirty=hydraDirty;
+        loadedFromHardware=hydraLoaded;sourceSnapshot=hydraSnapshot;
+      }
+      selectedParam=null;sectionOffset=0;panelMode=0;
+      status=(analogMode?"ANALOG KEYS / "+akTrackName(akTrack):"HYDRA")+
+        " / DOCUMENT RESTORED / NO MIDI SENT";
+      invalidate();
+    }
+    private void selectAnalogTrack(int i){
+      if(!analogMode||i<0||i>=6||i==akTrack)return;
+      sendGeneration++;stashActive();
+      akTrack=i;
+      getPreferences(MODE_PRIVATE).edit().putInt("analog_track",i).apply();
+      restoreActive();
+    }
+    private void switchMode(boolean toAnalog){
+      if(toAnalog==analogMode)return;
+      if(dumpReader!=null&&dumpReader.active()){
+        status="CANCEL CURRENT LOAD BEFORE SWITCHING";invalidate();return;
+      }
+      sendGeneration++;stashActive();
+      analogMode=toAnalog;
+      autoSend=getPreferences(MODE_PRIVATE).getBoolean(
+        analogMode?"ak_auto_send":"hydra_auto_send",true);
+      getPreferences(MODE_PRIVATE).edit().putBoolean("analog_mode",analogMode).apply();
+      restoreActive();
+    }
+    private PatchLibrary activeLibrary(){
+      return analogMode?analogLibraries[akTrack]:library;
+    }
+    private void chooseMode(){
+      new AlertDialog.Builder(MainActivity.this)
+        .setTitle("SYNTH MODE")
+        .setSingleChoiceItems(new String[]{"HYDRA","ANALOG KEYS"},analogMode?1:0,
+          (d,which)->{
+            boolean next=which==1;
+            if(next!=analogMode&&dirty){
+              d.dismiss();
+              new AlertDialog.Builder(MainActivity.this)
+                .setTitle("SWITCH SYNTH MODE?")
+                .setMessage("Unsaved edits remain in this mode's working document. They will be kept in memory, not written to either synth.")
+                .setNegativeButton("CANCEL",null)
+                .setPositiveButton("SWITCH",(dialog,button)->switchMode(next)).show();
+            } else {d.dismiss();switchMode(next);}
+          })
+        .setNegativeButton("CANCEL",null).show();
     }
     private void rect(Canvas c,int color,float x,float y,float w,float h){
       brush.setColor(color);brush.setStyle(Paint.Style.FILL);
@@ -366,7 +466,9 @@ public final class MainActivity extends Activity {
       }
       stroke(c,DIM,10,10,700,700);
     }
-    private List<ParameterCatalog.Param> fields(){return ParameterCatalog.params(module);}
+    private List<ParameterCatalog.Param> fields(){
+      return analogMode?AnalogKeysCatalog.params(module,akTrack):ParameterCatalog.params(module);
+    }
     private void chooseModule(String name){
       module=name;sectionOffset=0;selectedParam=null;panelMode=0;
       status="EDIT / "+name;invalidate();
@@ -380,7 +482,7 @@ public final class MainActivity extends Activity {
       invalidate();
       // Only a user-confirmed selection or USE VALUE enters stage().
       // Reading a patch, opening a menu, and loading a local preset never send.
-      if(autoSend&&txPort!=null&&!dumpReader.active())send(p,value);
+      if(autoSend&&txPort!=null&&(dumpReader==null||!dumpReader.active()))send(p,value);
     }
     private int stagedValue(ParameterCatalog.Param p){
       Integer i=draft.get(p.key());return i==null?p.min:i;
