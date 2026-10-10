@@ -158,6 +158,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
     private PerformanceVideoLayer videoLayer;
     private boolean dotVisualMode = false;
     private DotUiLayer dotUiLayer;
+    private android.graphics.Bitmap dotBackgroundBitmap;
     private PerformanceXYView performanceXYView;
     private DrumEditorView drumEditorView;
     private DrumSampleMixerView drumSampleMixerView;
@@ -233,6 +234,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
         videoLayer = new PerformanceVideoLayer(this);
         dotVisualMode = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("dot_visual_mode", false);
         videoLayer.setDotEnabled(dotVisualMode);
+        updateDotBackground();
         pianoView = new PianoView(this);
         pianoView.setPerformanceVideoLayer(videoLayer);
         pianoView.setActionListener(this);
@@ -1091,6 +1093,38 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 "\nXRuns: " + Math.max(0, xruns) + result;
     }
 
+    private void updateDotBackground() {
+        if(epBackground==null) return;
+        if(!dotVisualMode) {
+            epBackground.setImageResource(R.drawable.piano_reference);
+            return;
+        }
+        if(dotBackgroundBitmap==null) {
+            android.graphics.Bitmap original=android.graphics.BitmapFactory.decodeResource(
+                    getResources(),R.drawable.piano_reference);
+            if(original!=null) {
+                dotBackgroundBitmap=DotVisualOverlay.makeDotBitmap(original);
+                original.recycle();
+            }
+        }
+        if(dotBackgroundBitmap!=null) {
+            epBackground.setImageBitmap(dotBackgroundBitmap);
+            epBackground.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        }
+    }
+
+    private void styleDotConfig(android.view.View view) {
+        if(view instanceof TextView) {
+            TextView label=(TextView)view;
+            label.setTypeface(android.graphics.Typeface.MONOSPACE);
+            label.setTextColor(0xffffdb46);
+        }
+        if(view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group=(android.view.ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++) styleDotConfig(group.getChildAt(i));
+        }
+    }
+
     private void showConfigDialog() {
         LinearLayout root = dialogRoot();
         TextView displayLabel = new TextView(this);
@@ -1315,6 +1349,7 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                     dotVisualMode = visualModeSpinner.getSelectedItemPosition() == 1;
                     if (videoLayer != null) videoLayer.setDotEnabled(dotVisualMode);
                     if (dotUiLayer != null) dotUiLayer.setDotEnabled(dotVisualMode);
+                    updateDotBackground();
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                             .putBoolean("dot_visual_mode", dotVisualMode)
                             .putFloat(KEY_AUDIO_BUFFER_BURSTS, audioBufferBursts)
@@ -1335,7 +1370,13 @@ public class MainActivity extends Activity implements MidiController.Listener, P
                 audioStats.postDelayed(this, 500L);
             }
         };
-        dialog.setOnShowListener(d -> audioStats.post(refreshStats));
+        dialog.setOnShowListener(d -> {
+            audioStats.post(refreshStats);
+            if(dotVisualMode) {
+                dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0xff100e08));
+                styleDotConfig(dialog.getWindow().getDecorView());
+            }
+        });
         dialog.setOnCancelListener(d -> NativeEngine.setAudioBufferBursts(originalAudioBuffer));
         dialog.show();
     }
