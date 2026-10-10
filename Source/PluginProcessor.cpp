@@ -840,6 +840,12 @@ int FlowerStandaloneAudioProcessor::getAudioBufferMode() const noexcept
             apvts.getRawParameterValue (ParamIDs::audioBufferMode)->load()));
 }
 
+bool FlowerStandaloneAudioProcessor::getConfiguredDotMode() const noexcept
+{
+    return apvts.getRawParameterValue (
+        ParamIDs::performanceUiModeConfig)->load() > 0.5f;
+}
+
 void FlowerStandaloneAudioProcessor::setConfiguredRoot (int noteClass)
 {
     noteClass = juce::jlimit (0, 11, noteClass);
@@ -893,6 +899,13 @@ void FlowerStandaloneAudioProcessor::setAudioBufferMode (int mode)
     if (auto* parameter = apvts.getParameter (ParamIDs::audioBufferMode))
         parameter->setValueNotifyingHost (
             parameter->convertTo0to1 (static_cast<float> (mode)));
+}
+
+void FlowerStandaloneAudioProcessor::setConfiguredDotMode (bool enabled)
+{
+    if (auto* parameter = apvts.getParameter (
+            ParamIDs::performanceUiModeConfig))
+        parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
 }
 
 void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC (juce::MidiBuffer& midi)
@@ -2420,6 +2433,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout FlowerStandaloneAudioProcess
         juce::StringArray { "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST",
                             "1.5 BURSTS", "2 BURSTS", "3 BURSTS", "4 BURSTS",
                             "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS" },
+        0));
+    parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParamIDs::performanceUiModeConfig, 1 },
+        "UI Mode",
+        juce::StringArray { "FULL", "DOT" },
         0));
 
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
