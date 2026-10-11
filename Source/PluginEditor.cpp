@@ -394,16 +394,6 @@ void RealtimeChordFxAudioProcessorEditor::paintDotUiFrame (
     g.drawText ("DOT", 310, 18, 48, 20,
                 juce::Justification::centred);
 
-    if (! configVisible && ! midiControlConfigVisible)
-    {
-        g.setFont (juce::FontOptions (10.5f).withStyle ("Bold"));
-        g.setColour (amber.withAlpha (0.54f));
-        g.drawText ("SELECT", 18, 690, 54, 20,
-                    juce::Justification::centredLeft);
-        g.setColour (amber.withAlpha (0.96f));
-        g.drawText ("CONFIG", 76, 690, 76, 20,
-                    juce::Justification::centredLeft);
-    }
 }
 
 void RealtimeChordFxAudioProcessorEditor::setParameterFromX (DragParam which, float x)
@@ -1739,7 +1729,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     }
 
     if (dotModeEnabled()
-        && juce::Rectangle<float> (70.0f, 690.0f, 110.0f, 28.0f).contains (p))
+        && juce::Rectangle<float> (64.0f, 680.0f, 128.0f, 38.0f).contains (p))
     {
         if (chordBotPressedPad >= 0)
         {
