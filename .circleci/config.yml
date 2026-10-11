@@ -25,18 +25,20 @@ jobs:
             test "$(git -C "$HOME/project/androidapp-control" rev-parse HEAD)" = "$CIRCLE_SHA1"
             mkdir -p "$HOME/project/miyako-source"
             cd "$HOME/project/miyako-source"
-            if [ -n "${MIYAKO_GITHUB_TOKEN:-}" ]; then
-              AUTH_HELPER="$(mktemp)"
-              trap 'rm -f "$AUTH_HELPER"' EXIT
-              printf '%s\n' '#!/bin/sh' 'case "$1" in' '  *Username*) printf "%s" "x-access-token" ;;' '  *Password*) printf "%s" "$MIYAKO_GITHUB_TOKEN" ;;' 'esac' > "$AUTH_HELPER"
-              chmod 700 "$AUTH_HELPER"
-              GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="$AUTH_HELPER" git clone --quiet --depth 1 --branch "feature/AN-66-snes-tile-sprite-25fps" https://github.com/hakaihum-cpu/Vstplugin.git .
-            else
-              GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=12' git clone --quiet --depth 1 --branch "feature/AN-66-snes-tile-sprite-25fps" git@github.com:hakaihum-cpu/Vstplugin.git . || {
-                echo 'AN-66 source checkout unavailable: configure a read-only MIYAKO deploy key or MIYAKO_GITHUB_TOKEN in androidapp project secrets.'
-                exit 31
-              }
+            # The existing androidapp checkout key grants access to
+            # flower-standalone only, not the private Vstplugin repository.
+            # A missing read-only token is an environment blocker, not a
+            # compile failure. Never fall back to an unverified SSH key.
+            if [ -z "${MIYAKO_GITHUB_TOKEN:-}" ]; then
+              echo 'AN-66 BLOCKED: androidapp CircleCI needs the read-only MIYAKO_GITHUB_TOKEN project secret for private Vstplugin.'
+              echo 'No source checkout or Android build was attempted.'
+              exit 31
             fi
+            AUTH_HELPER="$(mktemp)"
+            trap 'rm -f "$AUTH_HELPER"' EXIT
+            printf '%s\n' '#!/bin/sh' 'case "$1" in' '  *Username*) printf "%s" "x-access-token" ;;' '  *Password*) printf "%s" "$MIYAKO_GITHUB_TOKEN" ;;' 'esac' > "$AUTH_HELPER"
+            chmod 700 "$AUTH_HELPER"
+            GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="$AUTH_HELPER" git clone --quiet --depth 1 --branch "feature/AN-66-snes-tile-sprite-25fps" https://github.com/hakaihum-cpu/Vstplugin.git .
             test "$(git rev-parse HEAD)" = "2b6f5906b51a9363b1248be03c401411649e11d5"
             test -f MIYAKO_Android.jucer
             test -f Source/MiyakoTileSpriteScene.h
