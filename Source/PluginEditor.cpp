@@ -2832,6 +2832,83 @@ void FlowerStandaloneAudioProcessorEditor::timerCallback()
 {
     const double nowMs = juce::Time::getMillisecondCounterHiRes();
 
+    bool midiConfigChanged = false;
+
+    if (const int request = processor.consumeMidiRootConfigRequest();
+        request >= 0)
+    {
+        rootClass = juce::jlimit (0, 11, request);
+        processor.setConfiguredRoot (rootClass);
+        midiConfigChanged = true;
+    }
+
+    if (const int request = processor.consumeMidiScaleConfigRequest();
+        request >= 0)
+    {
+        scaleIndex = juce::jlimit (0, 4, request);
+        processor.setConfiguredScale (scaleIndex);
+        midiConfigChanged = true;
+    }
+
+    if (const int request =
+            processor.consumeMidiDefaultEffectsConfigRequest();
+        request >= 0)
+    {
+        const bool enabled = request != 0;
+        delayEnabled = enabled;
+        granularEnabled = enabled;
+        processor.setDefaultEffectsEnabled (enabled);
+        midiConfigChanged = true;
+    }
+
+    if (const int request =
+            processor.consumeMidiYEffectModeConfigRequest();
+        request >= 0)
+    {
+        yEffectDreamy = request != 0;
+        processor.setConfiguredYEffectDreamy (yEffectDreamy);
+        midiConfigChanged = true;
+    }
+
+    const int yModeToggleCount =
+        processor.consumeMidiYEffectModeToggleCount();
+    if ((yModeToggleCount & 1) != 0)
+    {
+        yEffectDreamy = ! yEffectDreamy;
+        processor.setConfiguredYEffectDreamy (yEffectDreamy);
+        midiConfigChanged = true;
+    }
+
+    if (const int request = processor.consumeMidiUiModeConfigRequest();
+        request >= 0)
+    {
+        dotMode = request != 0;
+        processor.setConfiguredDotMode (dotMode);
+        midiConfigChanged = true;
+    }
+
+    const int uiModeToggleCount =
+        processor.consumeMidiUiModeToggleCount();
+    if ((uiModeToggleCount & 1) != 0)
+    {
+        dotMode = ! dotMode;
+        processor.setConfiguredDotMode (dotMode);
+        midiConfigChanged = true;
+    }
+
+    if (midiConfigChanged)
+    {
+        performancePad.setDotMode (dotMode);
+        performancePad.setEffectState (
+            arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
+        configScreen.setValues (
+            rootClass, scaleIndex,
+            processor.getDefaultEffectsEnabled(),
+            yEffectDreamy, midiChannel,
+            audioBufferMode, dotMode, makeAudioBufferStatus());
+        configScreen.repaint();
+    }
+
     const float externalX = processor.getPerformanceX();
     const float externalY = processor.getPerformanceY();
     bpm = processor.getPerformanceBpm();
