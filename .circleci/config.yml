@@ -9,8 +9,8 @@ parameters:
 
 jobs:
   manual_android_build:
-    machine:
-      image: android:2026.05.1
+    docker:
+      - image: cimg/android:2026.08.1
     resource_class: medium
     working_directory: ~/project/miyako-source
     steps:
@@ -43,6 +43,8 @@ jobs:
             test -f MIYAKO_Android.jucer
             test -f Source/MiyakoTileSpriteScene.h
             printf 'AN-66 source verified at %s\n' "2b6f5906b51a9363b1248be03c401411649e11d5"
+            mkdir -p android-artifact
+            git rev-parse HEAD > android-artifact/MIYAKO_SOURCE_SHA.txt
       - run:
           name: "Guard the one-off AN-66 build"
           command: |
@@ -167,6 +169,7 @@ jobs:
             grep -q 'KEYCODE_BUTTON_SELECT' JUCE/modules/juce_gui_basics/native/juce_Windowing_android.cpp
       - run:
           name: "Build Projucer"
+          no_output_timeout: 30m
           command: |
             set -euo pipefail
             cmake -S JUCE -B JUCE/build -DJUCE_BUILD_EXTRAS=ON -DJUCE_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release
@@ -197,6 +200,11 @@ jobs:
             set -euo pipefail
             "$PROJUCER" --resave MIYAKO_Android.jucer
             test -d Builds/Android
+            # AN-15: reuse androidapp's validated CMake/Ninja job-pool patcher.
+            python3 "$HOME/project/androidapp-control/scripts/patch_android_native_parallelism.py" Builds/Android/app/build.gradle
+            grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
+            grep -F -- '-DCMAKE_JOB_POOL_COMPILE:STRING=compile' Builds/Android/app/build.gradle
+            grep -F -- '-DCMAKE_JOB_POOL_LINK:STRING=link' Builds/Android/app/build.gradle
             printf 'sdk.dir=%s\n' "$ANDROID_HOME" > Builds/Android/local.properties
       - run:
           name: "Integrate verified Speed Editor USB bridge"
@@ -236,12 +244,33 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
       - run:
           name: "Build optimized installable APK"
+          no_output_timeout: 30m
           command: |
-            set -euo pipefail
+            # AN-10/11/13/15: preserve full diagnostics and bound native jobs.
+            set -u
             export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
+            export CMAKE_BUILD_PARALLEL_LEVEL=2
+            export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=2"
+            mkdir -p android-artifact
+            LOG="$PWD/android-artifact/gradle-build.log"
+            printf '[preflight] MIYAKO AN-66 source %s\n' "$(git rev-parse HEAD)" > "$LOG"
             cd Builds/Android
             chmod +x gradlew
-            ./gradlew assembleRelease --stacktrace --no-daemon
+            set +e
+            ./gradlew assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2 >> "$LOG" 2>&1 &
+            GRADLE_PID=$!
+            while kill -0 "$GRADLE_PID" 2>/dev/null; do
+              echo "[heartbeat] $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              free -m || true
+              ps -eo pid,ppid,%cpu,%mem,rss,comm --sort=-rss | head -n 12 || true
+              sleep 30
+            done
+            wait "$GRADLE_PID"
+            STATUS=$?
+            cd ../..
+            printf '%s\n' "$STATUS" > android-artifact/gradle-exit-code.txt
+            tail -n 120 "$LOG" || true
+            exit "$STATUS"
       - run:
           name: "Collect APK"
           command: |
