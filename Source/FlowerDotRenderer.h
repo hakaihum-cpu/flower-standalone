@@ -13,6 +13,40 @@ public:
     static constexpr int sourceWidth = 512;
     static constexpr int sourceHeight = 384;
 
+    static juce::Rectangle<int> getConfigTouchBounds (
+        juce::Rectangle<int> bounds)
+    {
+        if (bounds.isEmpty())
+            return {};
+
+        const auto inner = bounds.reduced (8);
+        const juce::Rectangle<int> labelBounds {
+            inner.getX() + 4,
+            inner.getBottom() - 36,
+            inner.getWidth() / 2 - 6,
+            30
+        };
+
+        constexpr int fullLength = 13; // "SELECT CONFIG"
+        const int px = juce::jlimit (
+            1, 3,
+            juce::jmin (
+                juce::jmax (1, labelBounds.getHeight() / 11),
+                labelBounds.getWidth() / (fullLength * 6)));
+
+        // FlowerTechnicalFont left-aligns at bounds.x + 2.
+        // "CONFIG" starts after "SELECT " = 7 glyph cells.
+        const int configX = labelBounds.getX() + 2 + (7 * 6 * px);
+        const int configWidth = (6 * 6 * px) - px;
+
+        return juce::Rectangle<int> (
+            configX - juce::jmax (4, 2 * px),
+            labelBounds.getY() - 4,
+            configWidth + juce::jmax (8, 4 * px),
+            labelBounds.getHeight() + 8)
+            .getIntersection (bounds);
+    }
+
     void reset()
     {
         lastSourceKey = -1;
