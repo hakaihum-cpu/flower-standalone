@@ -36,3 +36,17 @@ strongly recommended to prevent acoustic feedback. Route/burst changes restart
 the audio stream; ordinary DSP parameter changes do not.
 
 Native audio migration: 2026-10-11. Audio DSP is in AmpModel.h, parameters synchronized via JNI; Java AmpDsp.java remains the existing isolated smoke/model reference. Measure end-to-end analog latency externally; buffer frame count is not a round-trip latency measurement.
+
+## AN-68 latency + periodic-buzz diagnostic revision
+The original 0.5 BURST readout displayed the actual **output buffer depth
+only** (e.g., 960 frames at 48kHz = 20ms), not input-to-output round-trip
+latency. Android may reject/clamp burst settings. This revision removes
+abrupt FIFO frame trimming, smooths input starvation with a short fade,
+tracks minor independent input/output clock drift by fractional resampling,
+primes the capture FIFO before starting output, and moves constant-drive
+pow() calculations out of the per-sample callback. CONFIG reports MAX CB
+execution time and frame count, output XRun, FIFO DROP/STARVE for diagnosis.
+Changing BURST does not guarantee a corresponding measured round-trip delay.
+Use Bypass to distinguish the audio route from amp DSP in device testing.
+Neither DSP stability nor lowest achievable latency is confirmed until an
+RG Rotate + the intended USB interface has been exercised.

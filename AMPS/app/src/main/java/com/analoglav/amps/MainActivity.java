@@ -312,11 +312,11 @@ public final class MainActivity extends Activity {
       txt(c,String.format(Locale.US,"RATE %dHz   OUT %dFR / %.1fms",
           bridge.sampleRate,bridge.outputFrames,
           bridge.outputFrames*1000f/Math.max(1,bridge.sampleRate)),24,573,14,LIT);
-      txt(c,"BURST "+bridge.burstFrames+"   OUT XRUN "+bridge.xruns+
-          "   FIFO LOST "+bridge.ringDrops,24,598,14,LIT);
-      txt(c,String.format(Locale.US,"IN %dFR  FIFO %dFR  STARVE %d  PEAK %.2f/%.2f",
-          bridge.inputFrames,bridge.ringDepth,bridge.ringStarvation,
-          bridge.inputPeak,bridge.outputPeak),24,623,12,LIT);
+      txt(c,"HW BURST "+bridge.burstFrames+"   OUT XRUN "+bridge.xruns+
+          "   FIFO DROP "+bridge.ringDrops,24,598,14,LIT);
+      txt(c,String.format(Locale.US,"FIFO %dFR  STARVE %d  MAX CB %dus/%dFR",
+          bridge.ringDepth,bridge.ringStarvation,bridge.outputCbMaxUs,
+          bridge.outputCbMaxFrames),24,623,12,LIT);
       txt(c,shorten(bridge.status,60),24,648,12,GOLD);
       rect(c,20,658,680,49,CASE,GOLD);
       centered(c,"CLOSE",360,691,18,LIT);

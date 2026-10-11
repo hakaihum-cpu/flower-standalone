@@ -26,6 +26,8 @@ jobs:
             test -f AMPS/app/src/main/java/com/analoglav/amps/AmpDsp.java
             test -f AMPS/app/src/main/cpp/AAudioEngine.cpp
             test -f AMPS/app/src/main/cpp/AmpModel.h
+            test -f AMPS/app/src/main/cpp/AudioFifo.h
+            test -f AMPS/test/AudioFifoSmoke.cpp
             test -f AMPS/app/src/main/cpp/CMakeLists.txt
             grep -F "externalNativeBuild" AMPS/app/build.gradle
             grep -F "26.1.10909125" AMPS/app/build.gradle

@@ -15,9 +15,16 @@ public:
     int channel=1, cabinet=0, bypass=0;
   };
   void setSampleRate(int rate) { sr_ = rate > 0 ? static_cast<double>(rate) : 48000.0; }
-  void setControls(const Controls& c) { c_ = c; }
+  void setControls(const Controls& c) {
+    c_ = c;
+    // Pow is constant during a callback: doing it per sample on a small
+    // ARM CPU can overrun even large output buffers.
+    driveScale_=(1. + std::pow(static_cast<double>(c_.gain), 1.7)*17.)
+              *(.18 + c_.volume*1.2);
+  }
   void reset() {
-    previous_=hp_=low_=bright_=cabLp_=cabHp_=cabLast_=preLast_=reverbLp_=phase_=0;
+    previous_=hp_=low_=bright_=cabLp_=cabHp_=cabLast_=speakerPrevious_
+             =preLast_=reverbLp_=phase_=0;
     a_.clear(); b_.clear(); d_.clear();
   }
   float process(float source) {
@@ -30,8 +37,7 @@ public:
     const double top = c_.channel == 1 ? 1.0 : 0.0;
     const double shape = hp + top * (.23 + c_.treble*.52) * (hp - bright_)
                        - top*.10*low_;
-    const double input = shape * (1 + std::pow(c_.gain, 1.7f)*17)
-                             * (.18 + c_.volume*1.2);
+    const double input = shape * driveScale_;
     const double pre = .5*(saturate(input) + saturate(.5*(input+preLast_)));
     preLast_ = input;
     const double shaped = pre*(.68+c_.treble*.38)
@@ -70,6 +76,7 @@ private:
     void clear() {ring_.fill(0);pos_=0;damp_=0;}
   };
   Controls c_{};
+  double driveScale_=1.;
   double sr_=48000.0,previous_=0,hp_=0,low_=0,bright_=0,cabLp_=0,
          cabHp_=0,cabLast_=0,speakerPrevious_=0,preLast_=0,
          reverbLp_=0,phase_=0;

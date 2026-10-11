@@ -11,3 +11,9 @@ java -cp "$TMP" com.analoglav.amps.DspSmoke
 c++ -std=c++17 -O2 -Wall -Wextra -Werror \
   -o "$TMP/native_smoke" "$ROOT/test/NativeSmoke.cpp"
 "$TMP/native_smoke"
+
+# Simulate split full-duplex capture/playback clocks on the host CPU.
+# Covers steady callbacks, clock drift and input-disconnect fade.
+c++ -std=c++17 -O2 -Wall -Wextra -Werror \
+  -o "$TMP/fifo_smoke" "$ROOT/test/AudioFifoSmoke.cpp"
+"$TMP/fifo_smoke"

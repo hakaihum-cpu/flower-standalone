@@ -7,7 +7,11 @@
 #include <cstdint>
 #include <mutex>
 #include <iterator>
+#include <thread>
+#include <chrono>
+#include <time.h>
 #include "AmpModel.h"
+#include "AudioFifo.h"
 
 // Separate high-priority INPUT and OUTPUT callbacks connected by a bounded
 // single-producer/single-consumer FIFO. No callback allocates, waits or locks.
@@ -19,9 +23,11 @@ public:
     std::lock_guard<std::mutex> lock(mutex_);
     closeLocked();
     selectedIn_=requestedIn; selectedOut_=requestedOut;
-    lastError_.store(0); dropCount_.store(0); starveCount_.store(0);
+    lastError_.store(0);
+    fifo_.reset();
     inputPeak_.store(0); outputPeak_.store(0);
-    readIndex_.store(0); writeIndex_.store(0);
+    maxCallbackUs_.store(0);
+    maxInputFrames_.store(0);maxOutputFrames_.store(0);
     int result = openStream(AAUDIO_DIRECTION_OUTPUT, AAUDIO_SHARING_MODE_EXCLUSIVE,
                             requestedOut,0,&output_);
     if(result!=AAUDIO_OK) {
@@ -54,11 +60,26 @@ public:
        burst*(burstSelection==0?2.0f:ratios[burstSelection])));
     const int actual=AAudioStream_setBufferSizeInFrames(output_,reqFrames);
     if(actual<0) return failLocked(actual);
+    // Cache burst size once; output callback must not access control-plane
+    // AAudio APIs. Keep priming shallow to avoid adding software latency.
+    outputBurst_=std::max(32,burst);
+    const int inputBurst=std::max(32,AAudioStream_getFramesPerBurst(input_));
+    const int callbackFrames=AAudioStream_getFramesPerDataCallback(output_);
+    // If AAudio publishes its callback size, prime at least that many
+    // samples. One large callback cannot safely consume one tiny burst.
+    const int required=callbackFrames>0?callbackFrames:outputBurst_;
+    queueTarget_=std::max(128,std::min(2048,std::max(required,inputBurst)));
     // The input callback has its own native capture buffer; do not conflate
     // output buffer size with input buffer or full end-to-end latency.
     running_.store(true,std::memory_order_release);
     result=AAudioStream_requestStart(input_);
     if(result!=AAUDIO_OK)return failLocked(result);
+    // At startup previously the output stream consumed a completely empty
+    // FIFO. Prime one hardware callback before enabling the output callback.
+    // This wait happens on the UI caller, never on either audio thread.
+    for(int retry=0;retry<40 && fifo_.available()<
+        static_cast<uint32_t>(queueTarget_);retry++)
+      std::this_thread::sleep_for(std::chrono::milliseconds(2));
     result=AAudioStream_requestStart(output_);
     if(result!=AAUDIO_OK)return failLocked(result);
     state_.store(ST_RUNNING);
@@ -74,7 +95,7 @@ public:
       std::max(0.f,std::min(1.f,values[i])),std::memory_order_relaxed);
     channel_.store(channel);cabinet_.store(cabinet);bypass_.store(bypass);
   }
-  void getStats(jint (&values)[21]){
+  void getStats(jint (&values)[28]){
     std::lock_guard<std::mutex> lock(mutex_);
     std::fill(std::begin(values),std::end(values),0);
     values[0]=state_.load();
@@ -90,14 +111,21 @@ public:
     values[10]=input_?AAudioStream_getBufferCapacityInFrames(input_):0;
     values[11]=output_?AAudioStream_getSharingMode(output_):0;
     values[12]=input_?AAudioStream_getSharingMode(input_):0;
-    values[13]=dropCount_.load();
-    values[14]=starveCount_.load();
-    values[15]=static_cast<jint>(writeIndex_.load()-readIndex_.load());
+    values[13]=fifo_.overflow();
+    values[14]=fifo_.starvation();
+    values[15]=static_cast<jint>(fifo_.available());
     values[16]=lastError_.load();
     values[17]=input_?AAudioStream_getChannelCount(input_):0;
     values[18]=output_?AAudioStream_getChannelCount(output_):0;
     values[19]=static_cast<jint>(inputPeak_.load()*1000.f);
     values[20]=static_cast<jint>(outputPeak_.load()*1000.f);
+    values[21]=input_?AAudioStream_getSampleRate(input_):0;
+    values[22]=input_?AAudioStream_getPerformanceMode(input_):0;
+    values[23]=output_?AAudioStream_getPerformanceMode(output_):0;
+    values[24]=maxCallbackUs_.load();
+    values[25]=maxOutputFrames_.load();
+    values[26]=maxInputFrames_.load();
+    values[27]=fifo_.ratioPartsPerMillion();
   }
 private:
   std::mutex mutex_;
@@ -105,35 +133,41 @@ private:
   int selectedIn_=-1,selectedOut_=-1;
   std::atomic<bool> running_{false};
   std::atomic<int> state_{ST_STOPPED},lastError_{0};
-  std::atomic<uint32_t> readIndex_{0},writeIndex_{0};
-  std::array<int16_t,CAPACITY> fifo_{};
-  std::atomic<uint32_t> dropCount_{0},starveCount_{0};
+  AudioFifo fifo_;
+  int outputBurst_=192,queueTarget_=384;
+  std::atomic<int> maxCallbackUs_{0},maxOutputFrames_{0},maxInputFrames_{0};
   std::atomic<float> inputPeak_{0},outputPeak_{0};
   std::array<std::atomic<float>,9> params_{};
   std::atomic<int> channel_{1},cabinet_{0},bypass_{0};
   AmpModel model_;
+  static void updateMaximum(std::atomic<int>& destination,int value) {
+    int old=destination.load(std::memory_order_relaxed);
+    while(old<value && !destination.compare_exchange_weak(old,value,
+                  std::memory_order_relaxed,std::memory_order_relaxed)){}
+  }
   static aaudio_data_callback_result_t inputCallback(
       AAudioStream*,void* data,void* buffer,int32_t frames){
     auto& e=*static_cast<LowLatencyEngine*>(data);
-    if(!e.running_.load(std::memory_order_acquire))return AAUDIO_CALLBACK_RESULT_STOP;
+    if(!e.running_.load(std::memory_order_acquire))
+      return AAUDIO_CALLBACK_RESULT_STOP;
+    if(!buffer || frames<=0)return AAUDIO_CALLBACK_RESULT_CONTINUE;
     const auto* samples=static_cast<const int16_t*>(buffer);
     float peak=0;
-    // Every producer write is published after the sample itself.
-    for(int32_t i=0;i<frames;i++){
+    for(int32_t i=0;i<frames;i++)
       peak=std::max(peak,std::abs(samples[i]*(1.f/32768.f)));
-      const auto write=e.writeIndex_.load(std::memory_order_relaxed);
-      const auto read=e.readIndex_.load(std::memory_order_acquire);
-      if(write-read>=CAPACITY) {e.dropCount_.fetch_add(1,std::memory_order_relaxed);continue;}
-      e.fifo_[write%CAPACITY]=samples[i];
-      e.writeIndex_.store(write+1,std::memory_order_release);
-    }
+    e.fifo_.push(samples,frames);
     e.inputPeak_.store(peak,std::memory_order_relaxed);
+    updateMaximum(e.maxInputFrames_,frames);
     return AAUDIO_CALLBACK_RESULT_CONTINUE;
   }
   static aaudio_data_callback_result_t outputCallback(
-      AAudioStream* stream,void* data,void* buffer,int32_t frames){
+      AAudioStream*,void* data,void* buffer,int32_t frames){
     auto& e=*static_cast<LowLatencyEngine*>(data);
-    if(!e.running_.load(std::memory_order_acquire))return AAUDIO_CALLBACK_RESULT_STOP;
+    if(!e.running_.load(std::memory_order_acquire))
+      return AAUDIO_CALLBACK_RESULT_STOP;
+    if(!buffer || frames<=0)return AAUDIO_CALLBACK_RESULT_CONTINUE;
+    struct timespec before{},after{};
+    clock_gettime(CLOCK_MONOTONIC,&before);
     auto* out=static_cast<float*>(buffer);
     AmpModel::Controls c{};
     c.gain=e.params_[0].load();c.volume=e.params_[1].load();
@@ -144,31 +178,27 @@ private:
     c.channel=e.channel_.load();c.cabinet=e.cabinet_.load();
     c.bypass=e.bypass_.load();
     e.model_.setControls(c);
-    uint32_t read=e.readIndex_.load(std::memory_order_relaxed);
-    const uint32_t write=e.writeIndex_.load(std::memory_order_acquire);
-    // If callbacks desynchronise, discard stale input rather than allowing
-    // the FIFO to accumulate audible delay. Two bursts is only a safety cap.
-    const uint32_t maxQueue=static_cast<uint32_t>(std::max(128,
-       AAudioStream_getFramesPerBurst(stream)*2));
-    if(write-read>maxQueue){
-      e.dropCount_.fetch_add(write-read-maxQueue,std::memory_order_relaxed);
-      read=write-maxQueue;
-    }
-    uint32_t empty=0;
     float peak=0;
-    for(int32_t i=0;i<frames;i++){
-      float sample=0;
-      if(read!=e.writeIndex_.load(std::memory_order_acquire)){
-        sample=e.fifo_[read%CAPACITY]*(1.f/32768.f);
-        ++read;
-      }else{++empty;}
-      const float value=e.model_.process(sample);
-      peak=std::max(peak,std::abs(value));
-      out[i*2]=value;out[i*2+1]=value;
+    // Callback frame count is platform-selected and is not necessarily the
+    // buffer size shown in CONFIG. Process any size in fixed stack chunks.
+    float input[256];
+    for(int32_t offset=0;offset<frames;){
+      const int count=std::min(256,frames-offset);
+      e.fifo_.pop(input,count,e.queueTarget_);
+      for(int i=0;i<count;i++){
+        const float value=e.model_.process(input[i]);
+        out[(offset+i)*2]=value;out[(offset+i)*2+1]=value;
+        peak=std::max(peak,std::abs(value));
+      }
+      offset+=count;
     }
-    e.readIndex_.store(read,std::memory_order_release);
     e.outputPeak_.store(peak,std::memory_order_relaxed);
-    if(empty)e.starveCount_.fetch_add(empty,std::memory_order_relaxed);
+    updateMaximum(e.maxOutputFrames_,frames);
+    clock_gettime(CLOCK_MONOTONIC,&after);
+    const auto elapsed=static_cast<int>(
+      (after.tv_sec-before.tv_sec)*1000000L +
+      (after.tv_nsec-before.tv_nsec)/1000L);
+    updateMaximum(e.maxCallbackUs_,elapsed);
     return AAUDIO_CALLBACK_RESULT_CONTINUE;
   }
   static void errorCallback(AAudioStream*,void* data,aaudio_result_t error){
@@ -225,10 +255,10 @@ Java_com_analoglav_amps_AudioBridge_nativeStop(JNIEnv*,jobject){
 }
 extern "C" JNIEXPORT jintArray JNICALL
 Java_com_analoglav_amps_AudioBridge_nativeStats(JNIEnv* env,jobject){
-  jint value[21]{};
+  jint value[28]{};
   engine.getStats(value);
-  auto array=env->NewIntArray(21);
-  if(array)env->SetIntArrayRegion(array,0,21,value);
+  auto array=env->NewIntArray(28);
+  if(array)env->SetIntArrayRegion(array,0,28,value);
   return array;
 }
 extern "C" JNIEXPORT void JNICALL
