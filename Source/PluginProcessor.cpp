@@ -926,9 +926,14 @@ void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC (juce::MidiBuffer& 
         const bool on = value >= 64;
 
         // FLOWER fixed MIDI CC map:
-        // CC10 Y, CC11 X, CC22 DELAY, CC23 ARP, CC24 Y EFFECT,
+        // CC10 Y, CC11 X, CC22 DELAY, CC23 ARP, CC24 Y EFFECT ON/OFF,
         // CC25 LOOPER CYCLE, CC26 BPM, CC27 HOLD, CC28 STOP,
         // CC29 LOOPER CLEAR.
+        // CONFIG parameters:
+        // CC85 ROOT, CC86 SCALE, CC87 DEFAULT EFFECT,
+        // CC88 Y EFFECT MODE (GRANULAR/DREAMY),
+        // CC89 UI MODE (FULL/DOT),
+        // CC90 Y EFFECT MODE TOGGLE, CC91 UI MODE TOGGLE.
         switch (cc)
         {
             case 10:
@@ -994,6 +999,59 @@ void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC (juce::MidiBuffer& 
                 if (on && ! performanceCcGate[29])
                     clearFlowerLoop();
                 performanceCcGate[29] = on;
+                break;
+
+            case 85:
+            {
+                const int root = juce::jlimit (0, 11, (value * 12) / 128);
+                setPerformanceRoot (root);
+                midiRootConfigRequest.store (root, std::memory_order_release);
+                break;
+            }
+
+            case 86:
+            {
+                const int scale = juce::jlimit (0, 4, (value * 5) / 128);
+                setPerformanceScale (scale);
+                midiScaleConfigRequest.store (scale, std::memory_order_release);
+                break;
+            }
+
+            case 87:
+                setPerformanceDelayEnabled (on);
+                setPerformanceGranularEnabled (on);
+                midiDefaultEffectsConfigRequest.store (
+                    on ? 1 : 0, std::memory_order_release);
+                break;
+
+            case 88:
+                setPerformanceDreamyMode (on);
+                midiYEffectModeConfigRequest.store (
+                    on ? 1 : 0, std::memory_order_release);
+                break;
+
+            case 89:
+                midiUiModeConfigRequest.store (
+                    on ? 1 : 0, std::memory_order_release);
+                break;
+
+            case 90:
+                if (on && ! performanceCcGate[90])
+                {
+                    const bool dreamy =
+                        ! performanceDreamyMode.load (std::memory_order_relaxed);
+                    setPerformanceDreamyMode (dreamy);
+                    midiYEffectModeToggleCount.fetch_add (
+                        1, std::memory_order_release);
+                }
+                performanceCcGate[90] = on;
+                break;
+
+            case 91:
+                if (on && ! performanceCcGate[91])
+                    midiUiModeToggleCount.fetch_add (
+                        1, std::memory_order_release);
+                performanceCcGate[91] = on;
                 break;
 
             default:
