@@ -235,6 +235,8 @@ for required_visual_ui in [
     "FlowerDotRenderer dotRenderer",
     "setDotMode",
     "dotRenderer.paint",
+    "FlowerDotRenderer::getConfigTouchBounds",
+    "onConfigRequested",
 ]:
     if required_visual_ui not in editor_text and required_visual_ui not in editor_header:
         fail(f"XY direct-frame visual contract missing: {required_visual_ui}")
@@ -388,6 +390,14 @@ for required_font in [
 if "FlowerDotRenderer" in processor_text or "FlowerTechnicalFont" in processor_text:
     fail("DOT presentation code leaked into audio processor")
 
+config_hit_index = editor_text.find("FlowerDotRenderer::getConfigTouchBounds")
+touch_start_index = editor_text.find("if (onTouchStarted)", config_hit_index)
+if config_hit_index < 0 or touch_start_index < 0 or config_hit_index >= touch_start_index:
+    fail("DOT CONFIG tap must be handled before performance touch start")
+
+if 'if (! configVisible && ! carnivalVisible)' not in editor_text:
+    fail("DOT CONFIG tap guard missing")
+
 for required_android_startup in [
     "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
     "juce::StandalonePluginHolder::getInstance()",
@@ -473,6 +483,7 @@ print("[PASS] Android output-buffer burst control/status contract present")
 print("[PASS] optional FULL/DOT UI mode added without audio-processor presentation code")
 print("[PASS] MIYAKO #204 512x384 luma / Bayer4 / amber 4-level DOT contract present")
 print("[PASS] DOT technical bitmap UI font present")
+print("[PASS] DOT CONFIG footer tap uses existing CONFIG path before XY touch handling")
 print("[PASS] all CONFIG setValues call sites use the 8-argument current signature")
 print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
 print("[PASS] CircleCI native parallelism controls present")
