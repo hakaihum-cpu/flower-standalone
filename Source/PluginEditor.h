@@ -46,6 +46,7 @@ public:
     PolyTouchCallback onPolyTouchChanged;
     std::function<void()> onTouchStarted;
     std::function<void()> onTapStopRequested;
+    std::function<void()> onConfigRequested;
 
 private:
     static constexpr int tileColumns = 10;
