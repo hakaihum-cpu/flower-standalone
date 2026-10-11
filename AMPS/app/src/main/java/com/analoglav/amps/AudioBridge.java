@@ -23,6 +23,7 @@ public final class AudioBridge {
   private native void nativeControls(float[] controlValues,int channel,int cabinet,int bypass);
   private final Context context;
   private final AudioManager manager;
+  public final boolean hasLowLatencyFeature,hasProAudioFeature;
   public final AmpDsp dsp=new AmpDsp(); // UI/preset parameters, native DSP owns audio.
   public volatile int inputDevice=-1,outputDevice=-1,burstIndex=0;
   public volatile String status="NOT STARTED",actualIn="--",actualOut="--";
@@ -35,6 +36,10 @@ public final class AudioBridge {
   private boolean started;
   public AudioBridge(Context c){
     context=c;manager=(AudioManager)c.getSystemService(Context.AUDIO_SERVICE);
+    hasLowLatencyFeature=c.getPackageManager().hasSystemFeature(
+        PackageManager.FEATURE_AUDIO_LOW_LATENCY);
+    hasProAudioFeature=c.getPackageManager().hasSystemFeature(
+        PackageManager.FEATURE_AUDIO_PRO);
   }
   // Match spelling variations RG Rotate / RG-Rotate / RG_Rotate / RGRotate.
   // Do not exclude USB interfaces simply because connected to that tablet.

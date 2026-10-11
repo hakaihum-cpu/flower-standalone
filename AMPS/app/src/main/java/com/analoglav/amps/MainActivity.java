@@ -306,7 +306,9 @@ public final class MainActivity extends Activity {
       centered(c,"RESCAN DEVICES",180,440,17,GOLD);
       rect(c,355,407,345,51,DARK,GOLD);
       centered(c,"RESTART AUDIO",526,440,17,GOLD);
-      txt(c,"ACTUAL ROUTES  /  NOT DEVICE LIST",24,491,14,GOLD);
+      txt(c,"ACTUAL ROUTES   LL "+
+          (bridge.hasLowLatencyFeature?"YES":"NO")+" / PRO "+
+          (bridge.hasProAudioFeature?"YES":"NO"),24,491,14,GOLD);
       txt(c,"IN : "+shorten(bridge.actualIn,52),24,522,14,LIT);
       txt(c,"OUT: "+shorten(bridge.actualOut,52),24,546,14,LIT);
       txt(c,String.format(Locale.US,"RATE %dHz   OUT %dFR / %.1fms",

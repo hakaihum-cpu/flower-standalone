@@ -22,3 +22,13 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror \
 c++ -std=c++17 -O2 -Wall -Wextra -Werror \
   -o "$TMP/large_callback" "$ROOT/test/VariableBurstSmoke.cpp"
 "$TMP/large_callback"
+
+# Test the production input fade helper used by the output callback.
+c++ -std=c++17 -O2 -Wall -Wextra -Werror \
+  -o "$TMP/input_fade_smoke" "$ROOT/test/InputFadeSmoke.cpp"
+"$TMP/input_fade_smoke"
+# Static duplex guard: old two-callback FIFO must not silently return.
+grep -Fq 'AAudioStream_read(e.input_,input,count,0)' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
+! grep -Fq 'inputCallback(' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
+! grep -Fq 'fifo_.pop(' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
+grep -Fq 'AAudioStream_getTimestamp(' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"

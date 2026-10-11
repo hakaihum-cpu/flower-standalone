@@ -25,6 +25,8 @@ jobs:
             test -f AMPS/app/src/main/java/com/analoglav/amps/AudioBridge.java
             test -f AMPS/app/src/main/java/com/analoglav/amps/AmpDsp.java
             test -f AMPS/app/src/main/cpp/AAudioEngine.cpp
+            test -f AMPS/app/src/main/cpp/InputFade.h
+            test -f AMPS/test/InputFadeSmoke.cpp
             test -f AMPS/app/src/main/cpp/AmpModel.h
             test -f AMPS/app/src/main/cpp/AudioFifo.h
             test -f AMPS/test/AudioFifoSmoke.cpp
