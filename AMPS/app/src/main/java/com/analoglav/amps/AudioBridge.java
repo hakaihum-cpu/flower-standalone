@@ -129,7 +129,8 @@ public final class AudioBridge {
       }else if(actualInId<=0||actualOutId<=0){
         status="ROUTE UNVERIFIED";
       }else{
-        status="AAUDIO ACTIVE / "+(outputMode==0?"EXCLUSIVE":"SHARED");
+        status="AAUDIO ACTIVE / "+(outputMode==0?"EXCLUSIVE":"SHARED")
+            +" / PERF "+s[23];
       }
     }else if(!started && !status.startsWith("AAUDIO OPEN FAILED") &&
              !status.contains("RESELECT") && !status.contains("PERMISSION")){
