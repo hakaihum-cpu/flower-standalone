@@ -50,7 +50,7 @@ jobs:
             git show -s --format=%H HEAD | grep -Fx "43e8dd9e3b2a3b45bb69c43b4534ed70d32fb4ff"
             git diff --quiet
             git diff --cached --quiet
-            printf 'Build target AN-66: %s (%s)\n' "$CIRCLE_BRANCH" "$CIRCLE_SHA1"
+            printf 'Build target AN-66 private source: %s (trigger: %s)\n' "$(git rev-parse HEAD)" "$CIRCLE_SHA1"
       - run:
           name: "Reconstruct and validate canonical MIYAKO Resources pack"
           command: |
@@ -290,7 +290,7 @@ jobs:
             fi
             
             sha256sum android-artifact/MIYAKO-Android.apk | tee android-artifact/SHA256.txt
-            printf 'AN-66 Git SHA: %s\nCircleCI Build: %s\n' "$CIRCLE_SHA1" "$CIRCLE_BUILD_NUM" > android-artifact/BUILD_INFO.txt
+            printf 'AN-66 Source SHA: %s\nCircleCI trigger SHA: %s\nCircleCI Build: %s\n' "$(git rev-parse HEAD)" "$CIRCLE_SHA1" "$CIRCLE_BUILD_NUM" > android-artifact/BUILD_INFO.txt
             test "$(stat -c%s android-artifact/MIYAKO-Android.apk)" -ge 35000000
 
       - store_artifacts:
