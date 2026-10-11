@@ -36,18 +36,18 @@ jobs:
                 exit 31
               }
             fi
-            test "$(git rev-parse HEAD)" = "43e8dd9e3b2a3b45bb69c43b4534ed70d32fb4ff"
+            test "$(git rev-parse HEAD)" = "2b6f5906b51a9363b1248be03c401411649e11d5"
             test -f MIYAKO_Android.jucer
             test -f Source/MiyakoTileSpriteScene.h
-            printf 'AN-66 source verified at %s\n' "43e8dd9e3b2a3b45bb69c43b4534ed70d32fb4ff"
+            printf 'AN-66 source verified at %s\n' "2b6f5906b51a9363b1248be03c401411649e11d5"
       - run:
           name: "Guard the one-off AN-66 build"
           command: |
             set -euo pipefail
             test "${CIRCLE_BRANCH:-}" = "feature/AN-66-miyako-circleci-trial"
             test -n "${CIRCLE_SHA1:-}"
-            test "$(git rev-parse HEAD)" = "43e8dd9e3b2a3b45bb69c43b4534ed70d32fb4ff"
-            git show -s --format=%H HEAD | grep -Fx "43e8dd9e3b2a3b45bb69c43b4534ed70d32fb4ff"
+            test "$(git rev-parse HEAD)" = "2b6f5906b51a9363b1248be03c401411649e11d5"
+            git show -s --format=%H HEAD | grep -Fx "2b6f5906b51a9363b1248be03c401411649e11d5"
             git diff --quiet
             git diff --cached --quiet
             printf 'Build target AN-66 private source: %s (trigger: %s)\n' "$(git rev-parse HEAD)" "$CIRCLE_SHA1"
