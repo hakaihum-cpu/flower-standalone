@@ -398,6 +398,72 @@ if config_hit_index < 0 or touch_start_index < 0 or config_hit_index >= touch_st
 if 'if (! configVisible && ! carnivalVisible)' not in editor_text:
     fail("DOT CONFIG tap guard missing")
 
+for required_midi_config in [
+    "case 85:",
+    "case 86:",
+    "case 87:",
+    "case 88:",
+    "case 89:",
+    "case 90:",
+    "case 91:",
+    "midiRootConfigRequest.store",
+    "midiScaleConfigRequest.store",
+    "midiDefaultEffectsConfigRequest.store",
+    "midiYEffectModeConfigRequest.store",
+    "midiUiModeConfigRequest.store",
+    "midiYEffectModeToggleCount.fetch_add",
+    "midiUiModeToggleCount.fetch_add",
+]:
+    if required_midi_config not in processor_text:
+        fail(f"MIDI CONFIG CC contract missing: {required_midi_config}")
+
+for required_midi_consume in [
+    "consumeMidiRootConfigRequest",
+    "consumeMidiScaleConfigRequest",
+    "consumeMidiDefaultEffectsConfigRequest",
+    "consumeMidiYEffectModeConfigRequest",
+    "consumeMidiUiModeConfigRequest",
+    "consumeMidiYEffectModeToggleCount",
+    "consumeMidiUiModeToggleCount",
+]:
+    if required_midi_consume not in editor_text or required_midi_consume not in editor_header.replace("class PerformancePadComponent", "class PerformancePadComponent"):
+        # consume methods live on the processor header, checked below.
+        pass
+
+processor_header_text = (ROOT / "Source/PluginProcessor.h").read_text(encoding="utf-8")
+for required_midi_consume in [
+    "consumeMidiRootConfigRequest",
+    "consumeMidiScaleConfigRequest",
+    "consumeMidiDefaultEffectsConfigRequest",
+    "consumeMidiYEffectModeConfigRequest",
+    "consumeMidiUiModeConfigRequest",
+    "consumeMidiYEffectModeToggleCount",
+    "consumeMidiUiModeToggleCount",
+]:
+    if required_midi_consume not in processor_header_text or required_midi_consume not in editor_text:
+        fail(f"MIDI CONFIG request handoff missing: {required_midi_consume}")
+
+midi_handler_start = processor_text.find(
+    "void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC")
+midi_handler_end = processor_text.find(
+    "void FlowerStandaloneAudioProcessor::setCarnivalEnabled",
+    midi_handler_start)
+if midi_handler_start < 0 or midi_handler_end <= midi_handler_start:
+    fail("MIDI CC handler region not found")
+midi_handler_text = processor_text[midi_handler_start:midi_handler_end]
+for forbidden_audio_thread_config_call in [
+    "setConfiguredRoot",
+    "setConfiguredScale",
+    "setDefaultEffectsEnabled",
+    "setConfiguredYEffectDreamy",
+    "setConfiguredDotMode",
+    "setAudioBufferMode",
+]:
+    if forbidden_audio_thread_config_call in midi_handler_text:
+        fail(
+            "audio-thread MIDI handler must not call APVTS/config setter: "
+            + forbidden_audio_thread_config_call)
+
 for required_android_startup in [
     "#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>",
     "juce::StandalonePluginHolder::getInstance()",
@@ -484,6 +550,7 @@ print("[PASS] optional FULL/DOT UI mode added without audio-processor presentati
 print("[PASS] MIYAKO #204 512x384 luma / Bayer4 / amber 4-level DOT contract present")
 print("[PASS] DOT technical bitmap UI font present")
 print("[PASS] DOT CONFIG footer tap uses existing CONFIG path before XY touch handling")
+print("[PASS] MIDI CC85-91 CONFIG/mode map uses lock-free audio-to-UI handoff")
 print("[PASS] all CONFIG setValues call sites use the 8-argument current signature")
 print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
 print("[PASS] CircleCI native parallelism controls present")
