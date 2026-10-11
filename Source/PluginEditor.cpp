@@ -1739,7 +1739,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     }
 
     if (dotModeEnabled()
-        && juce::Rectangle<float> (70.0f, 682.0f, 110.0f, 36.0f).contains (p))
+        && juce::Rectangle<float> (70.0f, 690.0f, 110.0f, 28.0f).contains (p))
     {
         if (chordBotPressedPad >= 0)
         {
