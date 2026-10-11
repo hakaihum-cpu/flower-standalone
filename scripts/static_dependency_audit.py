@@ -417,19 +417,6 @@ for required_midi_config in [
     if required_midi_config not in processor_text:
         fail(f"MIDI CONFIG CC contract missing: {required_midi_config}")
 
-for required_midi_consume in [
-    "consumeMidiRootConfigRequest",
-    "consumeMidiScaleConfigRequest",
-    "consumeMidiDefaultEffectsConfigRequest",
-    "consumeMidiYEffectModeConfigRequest",
-    "consumeMidiUiModeConfigRequest",
-    "consumeMidiYEffectModeToggleCount",
-    "consumeMidiUiModeToggleCount",
-]:
-    if required_midi_consume not in editor_text or required_midi_consume not in editor_header.replace("class PerformancePadComponent", "class PerformancePadComponent"):
-        # consume methods live on the processor header, checked below.
-        pass
-
 processor_header_text = (ROOT / "Source/PluginProcessor.h").read_text(encoding="utf-8")
 for required_midi_consume in [
     "consumeMidiRootConfigRequest",
