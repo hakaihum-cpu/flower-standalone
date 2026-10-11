@@ -42,6 +42,9 @@ jobs:
             test "$(git rev-parse HEAD)" = "2b6f5906b51a9363b1248be03c401411649e11d5"
             test -f MIYAKO_Android.jucer
             test -f Source/MiyakoTileSpriteScene.h
+            # AN-42: the JUCE headless module must exist in both tables.
+            grep -Fq '<MODULE id="juce_audio_processors_headless"' MIYAKO_Android.jucer
+            grep -Fq '<MODULEPATH id="juce_audio_processors_headless"' MIYAKO_Android.jucer
             printf 'AN-66 source verified at %s\n' "2b6f5906b51a9363b1248be03c401411649e11d5"
             mkdir -p android-artifact
             git rev-parse HEAD > android-artifact/MIYAKO_SOURCE_SHA.txt
@@ -324,6 +327,24 @@ jobs:
             sha256sum android-artifact/MIYAKO-Android.apk | tee android-artifact/SHA256.txt
             printf 'AN-66 Source SHA: %s\nCircleCI trigger SHA: %s\nCircleCI Build: %s\n' "$(git rev-parse HEAD)" "$CIRCLE_SHA1" "$CIRCLE_BUILD_NUM" > android-artifact/BUILD_INFO.txt
             test "$(stat -c%s android-artifact/MIYAKO-Android.apk)" -ge 35000000
+
+      - run:
+          name: "Always collect AN-66 failure diagnostics"
+          when: always
+          command: |
+            set -u
+            mkdir -p "$HOME/project/miyako-source/android-artifact"
+            (
+              echo "AN-66 troubleshooting record"
+              echo "CircleCI branch: ${CIRCLE_BRANCH:-unset}"
+              echo "CircleCI pipeline: ${CIRCLE_PIPELINE_ID:-unset}"
+              echo "CircleCI build number: ${CIRCLE_BUILD_NUM:-unset}"
+              echo "Control checkout: $(git -C "$HOME/project/androidapp-control" rev-parse HEAD 2>/dev/null || true)"
+              echo "MIYAKO checkout: $(git -C "$HOME/project/miyako-source" rev-parse HEAD 2>/dev/null || true)"
+              echo "MIYAKO private repository token present: $([ -n "${MIYAKO_GITHUB_TOKEN:-}" ] && echo yes || echo no)"
+              free -m || true
+              df -h || true
+            ) > "$HOME/project/miyako-source/android-artifact/DIAGNOSTICS.txt" 2>&1
 
       - store_artifacts:
           path: android-artifact
