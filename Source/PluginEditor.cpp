@@ -591,6 +591,15 @@ void PerformancePadComponent::paint (juce::Graphics& g)
 
 void PerformancePadComponent::mouseDown (const juce::MouseEvent& e)
 {
+    if (dotMode
+        && FlowerDotRenderer::getConfigTouchBounds (getLocalBounds())
+               .contains (e.getPosition()))
+    {
+        if (onConfigRequested)
+            onConfigRequested();
+        return;
+    }
+
     physicalPointerVisible = false;
     chooseNextMixedVisual();
     visualCooldown = 4;
@@ -2302,6 +2311,13 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
         [this]
         {
             stopAll();
+        };
+
+    performancePad.onConfigRequested =
+        [this]
+        {
+            if (! configVisible && ! carnivalVisible)
+                toggleConfig();
         };
 
     configScreen.onRootChanged =
