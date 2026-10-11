@@ -31,7 +31,9 @@ public final class AudioBridge {
       xruns=0,burstFrames=0,outputCapacity=0,inputCapacity=0,
       sampleRate=0,ringDepth=0,ringDrops=0,ringStarvation=0,
       inputMode=0,outputMode=0,requestFrames=0,outputCbMaxUs=0,
-      outputCbMaxFrames=0,inputCbMaxFrames=0,clockCorrectionPpm=0;
+      outputCbMaxFrames=0,inputCbMaxFrames=0,clockCorrectionPpm=0,
+      estimatedInputLatencyMs=-1,estimatedOutputLatencyMs=-1,
+      inputReadErrors=0,outputCallbackFrames=0,inputBurstFrames=0;
   public volatile float inputPeak=0,outputPeak=0;
   private boolean started;
   public AudioBridge(Context c){
@@ -102,13 +104,15 @@ public final class AudioBridge {
   /** Poll on the UI, never on an audio callback. */
   public void poll(){
     int[] s=nativeStats();
-    if(s==null||s.length<28)return;
+    if(s==null||s.length<33)return;
     inputFrames=s[3];outputFrames=s[4];burstFrames=s[5];sampleRate=s[6];
     xruns=s[7];outputCapacity=s[9];inputCapacity=s[10];
     outputMode=s[11];inputMode=s[12];
     ringDrops=s[13];ringStarvation=s[14];ringDepth=s[15];
     outputCbMaxUs=s[24];outputCbMaxFrames=s[25];inputCbMaxFrames=s[26];
     clockCorrectionPpm=s[27];
+    estimatedInputLatencyMs=s[28];estimatedOutputLatencyMs=s[29];
+    inputReadErrors=s[30];outputCallbackFrames=s[31];inputBurstFrames=s[32];
     actualInId=s[1];actualOutId=s[2];
     inputPeak=s[19]/1000f;outputPeak=s[20]/1000f;
     actualIn=shortName(find(actualInId,true));

@@ -311,17 +311,24 @@ public final class MainActivity extends Activity {
           (bridge.hasProAudioFeature?"YES":"NO"),24,491,14,GOLD);
       txt(c,"IN : "+shorten(bridge.actualIn,52),24,522,14,LIT);
       txt(c,"OUT: "+shorten(bridge.actualOut,52),24,546,14,LIT);
-      txt(c,String.format(Locale.US,"RATE %dHz   OUT %dFR / %.1fms",
-          bridge.sampleRate,bridge.outputFrames,
-          bridge.outputFrames*1000f/Math.max(1,bridge.sampleRate)),24,573,14,LIT);
-      txt(c,"HW BURST "+bridge.burstFrames+"   OUT XRUN "+bridge.xruns+
-          "   FIFO DROP "+bridge.ringDrops,24,598,14,LIT);
-      txt(c,String.format(Locale.US,"FIFO %dFR  STARVE %d  MAX CB %dus/%dFR",
-          bridge.ringDepth,bridge.ringStarvation,bridge.outputCbMaxUs,
-          bridge.outputCbMaxFrames),24,623,12,LIT);
-      txt(c,shorten(bridge.status,60),24,648,12,GOLD);
+      txt(c,String.format(Locale.US,"OUT BUFFER %d FR / %.1fms (NOT RTT)",
+          bridge.outputFrames,
+          bridge.outputFrames*1000f/Math.max(1,bridge.sampleRate)),24,572,13,LIT);
+      txt(c,"EST INPUT "+msLabel(bridge.estimatedInputLatencyMs)+
+          "  EST OUTPUT "+msLabel(bridge.estimatedOutputLatencyMs)+
+          " (NOT LOOPBACK)",24,592,12,LIT);
+      txt(c,String.format(Locale.US,"HW BURST %d / IN %d  RATE %dHz  CB %d",
+          bridge.burstFrames,bridge.inputBurstFrames,bridge.sampleRate,
+          bridge.outputCallbackFrames),24,612,12,LIT);
+      txt(c,String.format(Locale.US,"OUT XRUN %d / INPUT MISS %d / READ ERR %d",
+          bridge.xruns,bridge.ringStarvation,bridge.inputReadErrors),24,632,12,LIT);
+      txt(c,"MAX CALLBACK "+bridge.outputCbMaxUs+"us / "+bridge.outputCbMaxFrames+
+          " FR     "+shorten(bridge.status,27),24,651,11,GOLD);
       rect(c,20,658,680,49,CASE,GOLD);
       centered(c,"CLOSE",360,691,18,LIT);
+    }
+    private String msLabel(int value){
+      return value<0?"N/A":value+"ms";
     }
     private String shorten(String text,int max){
       return text.length()<=max?text:text.substring(0,max-2)+"..";
