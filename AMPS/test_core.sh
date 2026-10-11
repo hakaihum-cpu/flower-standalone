@@ -17,3 +17,8 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror \
 c++ -std=c++17 -O2 -Wall -Wextra -Werror \
   -o "$TMP/fifo_smoke" "$ROOT/test/AudioFifoSmoke.cpp"
 "$TMP/fifo_smoke"
+
+# Match the 20ms/960-frame output callback the user observed in the UI.
+c++ -std=c++17 -O2 -Wall -Wextra -Werror \
+  -o "$TMP/large_callback" "$ROOT/test/VariableBurstSmoke.cpp"
+"$TMP/large_callback"
