@@ -33,7 +33,8 @@ public final class AudioBridge {
       inputMode=0,outputMode=0,requestFrames=0,outputCbMaxUs=0,
       outputCbMaxFrames=0,inputCbMaxFrames=0,clockCorrectionPpm=0,
       estimatedInputLatencyMs=-1,estimatedOutputLatencyMs=-1,
-      inputReadErrors=0,outputCallbackFrames=0,inputBurstFrames=0;
+      inputReadErrors=0,outputCallbackFrames=0,inputBurstFrames=0,
+      inputPerfMode=0,outputPerfMode=0;
   public volatile float inputPeak=0,outputPeak=0;
   private boolean started;
   public AudioBridge(Context c){
@@ -113,6 +114,7 @@ public final class AudioBridge {
     clockCorrectionPpm=s[27];
     estimatedInputLatencyMs=s[28];estimatedOutputLatencyMs=s[29];
     inputReadErrors=s[30];outputCallbackFrames=s[31];inputBurstFrames=s[32];
+    inputPerfMode=s[22];outputPerfMode=s[23];
     actualInId=s[1];actualOutId=s[2];
     inputPeak=s[19]/1000f;outputPeak=s[20]/1000f;
     actualIn=shortName(find(actualInId,true));

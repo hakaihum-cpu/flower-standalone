@@ -317,9 +317,10 @@ public final class MainActivity extends Activity {
       txt(c,"EST INPUT "+msLabel(bridge.estimatedInputLatencyMs)+
           "  EST OUTPUT "+msLabel(bridge.estimatedOutputLatencyMs)+
           " (NOT LOOPBACK)",24,592,12,LIT);
-      txt(c,String.format(Locale.US,"HW BURST %d / IN %d  RATE %dHz  CB %d",
-          bridge.burstFrames,bridge.inputBurstFrames,bridge.sampleRate,
-          bridge.outputCallbackFrames),24,612,12,LIT);
+      txt(c,String.format(Locale.US,"BURST %d  RATE %dHz  CB %d  PERF %s / %s",
+          bridge.burstFrames,bridge.sampleRate,bridge.outputCallbackFrames,
+          bridge.outputPerfMode==12?"LOW":"OTHER",
+          bridge.outputMode==0?"EXCL":"SHARED"),24,612,12,LIT);
       txt(c,String.format(Locale.US,"OUT XRUN %d / INPUT MISS %d / READ ERR %d",
           bridge.xruns,bridge.ringStarvation,bridge.inputReadErrors),24,632,12,LIT);
       txt(c,"MAX CALLBACK "+bridge.outputCbMaxUs+"us / "+bridge.outputCbMaxFrames+
