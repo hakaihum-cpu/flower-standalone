@@ -24,6 +24,11 @@ jobs:
             test -f AMPS/app/src/main/java/com/analoglav/amps/MainActivity.java
             test -f AMPS/app/src/main/java/com/analoglav/amps/AudioBridge.java
             test -f AMPS/app/src/main/java/com/analoglav/amps/AmpDsp.java
+            test -f AMPS/app/src/main/cpp/AAudioEngine.cpp
+            test -f AMPS/app/src/main/cpp/AmpModel.h
+            test -f AMPS/app/src/main/cpp/CMakeLists.txt
+            grep -F "externalNativeBuild" AMPS/app/build.gradle
+            grep -F "26.1.10909125" AMPS/app/build.gradle
             ! grep -R "com.example.epsampler" AMPS/app/src/main/
             ! grep -R "com.analoglav.hydrasynthcontroller" AMPS/app/src/main/
             sh AMPS/test_core.sh
@@ -31,7 +36,8 @@ jobs:
           name: Android SDK 35
           command: |
             yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" \
+              "ndk;26.1.10909125" "cmake;3.22.1"
       - run:
           name: Gradle 8.9
           command: |
@@ -52,6 +58,7 @@ jobs:
           command: |
             set -euo pipefail
             cd AMPS
+            export CMAKE_BUILD_PARALLEL_LEVEL=2
             printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
             gradle :app:assembleRelease --stacktrace --console=plain --no-daemon --max-workers=2
       - run:

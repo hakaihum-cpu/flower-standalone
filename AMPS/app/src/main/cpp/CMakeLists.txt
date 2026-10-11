@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(amps_audio LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+# Keep existing CircleCI medium executor safe from uncontrolled Ninja builds.
+set_property(GLOBAL PROPERTY JOB_POOLS amps_compile=2)
+set(CMAKE_JOB_POOL_COMPILE amps_compile)
+add_library(amps_audio SHARED AAudioEngine.cpp)
+target_compile_options(amps_audio PRIVATE -O3 -Wall -Wextra)
+target_link_libraries(amps_audio PRIVATE aaudio log)

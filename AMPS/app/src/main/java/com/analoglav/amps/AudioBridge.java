@@ -1,178 +1,139 @@
 package com.analoglav.amps;
 
 import android.Manifest;
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.media.AudioAttributes;
 import android.media.AudioDeviceInfo;
-import android.media.AudioFormat;
 import android.media.AudioManager;
-import android.media.AudioRecord;
-import android.media.AudioTrack;
-import android.media.MediaRecorder;
+import java.util.Locale;
 
-/** Live mono-guitar-in / stereo-out audio path; actual routes are checked. */
+/**
+ * Native AAudio duplex routing. There is no Java read/write loop and no
+ * hard-coded 256-frame buffer floor. Requested versus ACTUAL is reported.
+ * AAudio may round or refuse sub-burst requests on particular USB hardware.
+ */
 public final class AudioBridge {
-  private static final int RATE=48000, FRAMES=256;
+  static { System.loadLibrary("amps_audio"); }
   public static final float[] BURSTS={0,.5f,.75f,1f,1.5f,2f,3f,4f,5f,6f,7f,8f};
   public static final String[] BURST_LABELS={
       "AUTO","0.5","0.75","1","1.5","2","3","4","5","6","7","8"};
-  private final Context ctx;
+  private native int nativeStart(int inputId,int outputId,int burstSelection);
+  private native void nativeStop();
+  private native int[] nativeStats();
+  private native void nativeControls(float[] controlValues,int channel,int cabinet,int bypass);
+  private final Context context;
   private final AudioManager manager;
-  public final AmpDsp dsp=new AmpDsp();
+  public final AmpDsp dsp=new AmpDsp(); // UI/preset parameters, native DSP owns audio.
   public volatile int inputDevice=-1,outputDevice=-1,burstIndex=0;
-  public volatile String status="NOT STARTED", actualIn="--", actualOut="--";
-  public volatile int actualInId=-1,actualOutId=-1,outputFrames=0,inputFrames=0,xruns=0,burstFrames=192;
+  public volatile String status="NOT STARTED",actualIn="--",actualOut="--";
+  public volatile int actualInId=-1,actualOutId=-1,outputFrames=0,inputFrames=0,
+      xruns=0,burstFrames=0,outputCapacity=0,inputCapacity=0,
+      sampleRate=0,ringDepth=0,ringDrops=0,ringStarvation=0,
+      inputMode=0,outputMode=0,requestFrames=0;
   public volatile float inputPeak=0,outputPeak=0;
-  private volatile boolean running;
-  private Thread worker;
-  private volatile AudioRecord recorder;
-  private volatile AudioTrack player;
+  private boolean started;
   public AudioBridge(Context c){
-    ctx=c;manager=(AudioManager)c.getSystemService(Context.AUDIO_SERVICE);
-    String prop=manager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER);
-    try{burstFrames=Integer.parseInt(prop);}catch(Exception ignored){}
-    if(burstFrames<32 || burstFrames>2048)burstFrames=192;
+    context=c;manager=(AudioManager)c.getSystemService(Context.AUDIO_SERVICE);
   }
-  private AudioDeviceInfo find(int id,boolean source){
-    int what=source?AudioManager.GET_DEVICES_INPUTS:AudioManager.GET_DEVICES_OUTPUTS;
-    for(AudioDeviceInfo d:manager.getDevices(what))if(d.getId()==id)return d;
+  // Match spelling variations RG Rotate / RG-Rotate / RG_Rotate / RGRotate.
+  // Do not exclude USB interfaces simply because connected to that tablet.
+  public static boolean excluded(AudioDeviceInfo d){
+    if(d==null)return false;
+    String name=String.valueOf(d.getProductName()).toLowerCase(Locale.ROOT);
+    return name.replaceAll("[^a-z0-9]","").contains("rgrotate");
+  }
+  public AudioDeviceInfo[] visibleDevices(boolean input){
+    AudioDeviceInfo[] all=manager.getDevices(input?
+        AudioManager.GET_DEVICES_INPUTS:AudioManager.GET_DEVICES_OUTPUTS);
+    java.util.ArrayList<AudioDeviceInfo> shown=new java.util.ArrayList<>();
+    for(AudioDeviceInfo d:all)if(!excluded(d))shown.add(d);
+    return shown.toArray(new AudioDeviceInfo[0]);
+  }
+  private AudioDeviceInfo find(int id,boolean input){
+    for(AudioDeviceInfo d:visibleDevices(input))if(d.getId()==id)return d;
     return null;
   }
   private static String shortName(AudioDeviceInfo d){
-    if(d==null)return "--";
-    String name=String.valueOf(d.getProductName());
-    return name+" ["+d.getId()+"]";
+    return d==null?"NOT IDENTIFIED":String.valueOf(d.getProductName())+
+        " [ID "+d.getId()+"]";
+  }
+  public void updateControls(){
+    float[] vals={dsp.gain,dsp.volume,dsp.bass,dsp.treble,dsp.cut,
+        dsp.master,dsp.spring,dsp.tremSpeed,dsp.tremDepth};
+    nativeControls(vals,dsp.channel,dsp.cabinet,dsp.bypass?1:0);
   }
   public synchronized void stop(){
-    running=false;
-    AudioRecord r=recorder;AudioTrack t=player;
-    if(r!=null)try{r.stop();}catch(Exception ignored){}
-    if(t!=null)try{t.pause();}catch(Exception ignored){}
-    Thread w=worker;
-    if(w!=null&&w!=Thread.currentThread()){
-      w.interrupt();
-      try{w.join(900);}catch(InterruptedException e){Thread.currentThread().interrupt();}
-    }
-    if(worker==w)worker=null;
+    nativeStop();
+    started=false;
+    status="STOPPED";
   }
   public synchronized void start(){
-    stop();
-    if(ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
-      status="RECORD_AUDIO PERMISSION REQUIRED";return;
+    nativeStop();
+    started=false;
+    if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=
+        PackageManager.PERMISSION_GRANTED){
+      status="RECORD_AUDIO PERMISSION REQUIRED";
+      return;
     }
-    running=true;status="OPENING AUDIO...";
-    Thread next=new Thread(this::runAudio,"AMPS-audio");
-    next.setPriority(Thread.MAX_PRIORITY);
-    worker=next;next.start();
+    if(inputDevice>=0&&find(inputDevice,true)==null){
+      status="SELECTED INPUT REMOVED / RESELECT";
+      return;
+    }
+    if(outputDevice>=0&&find(outputDevice,false)==null){
+      status="SELECTED OUTPUT REMOVED / RESELECT";
+      return;
+    }
+    updateControls();
+    int result=nativeStart(inputDevice,outputDevice,burstIndex);
+    if(result!=0){
+      status="AAUDIO OPEN FAILED "+result;
+      return;
+    }
+    started=true;
+    status="AAUDIO STREAM STARTED / ROUTE VERIFY";
+    poll();
   }
-  @SuppressLint("MissingPermission")
-  private void runAudio(){
-    AudioRecord r=null;AudioTrack t=null;
-    try{
-      AudioDeviceInfo requestedInput=inputDevice<0?null:find(inputDevice,true);
-      AudioDeviceInfo requestedOutput=outputDevice<0?null:find(outputDevice,false);
-      if(inputDevice>=0&&requestedInput==null)throw new IllegalStateException("INPUT DEVICE DISCONNECTED");
-      if(outputDevice>=0&&requestedOutput==null)throw new IllegalStateException("OUTPUT DEVICE DISCONNECTED");
-      int formatIn=AudioFormat.CHANNEL_IN_MONO;
-      int formatOut=AudioFormat.CHANNEL_OUT_STEREO;
-      int minIn=AudioRecord.getMinBufferSize(RATE,formatIn,AudioFormat.ENCODING_PCM_16BIT);
-      int minOut=AudioTrack.getMinBufferSize(RATE,formatOut,AudioFormat.ENCODING_PCM_16BIT);
-      if(minIn<=0||minOut<=0)throw new IllegalStateException("48K PCM NOT SUPPORTED");
-      // Input >= platform minimum. Output buffer chosen in burst units, clamped to hardware minimum.
-      int wanted=burstIndex==0?minOut/4:
-          Math.round(burstFrames*BURSTS[Math.max(1,Math.min(burstIndex,BURSTS.length-1))]);
-      int targetOut=Math.max(Math.max(minOut/4,FRAMES),wanted);
-      int inBytes=Math.max(minIn,FRAMES*2*4);
-      int outBytes=Math.max(minOut,targetOut*4);
-      AudioFormat inFormat=new AudioFormat.Builder()
-          .setSampleRate(RATE).setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-          .setChannelMask(formatIn).build();
-      AudioFormat outFormat=new AudioFormat.Builder()
-          .setSampleRate(RATE).setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-          .setChannelMask(formatOut).build();
-      // Request unprocessed guitar input where supported. If builder throws,
-      // explicitly retry with standard MIC source rather than failing open.
-      try{
-        r=new AudioRecord.Builder()
-            .setAudioSource(MediaRecorder.AudioSource.UNPROCESSED)
-            .setAudioFormat(inFormat).setBufferSizeInBytes(inBytes).build();
-      }catch(RuntimeException unsupported){r=null;}
-      if(r==null||r.getState()!=AudioRecord.STATE_INITIALIZED){
-        if(r!=null)r.release();
-        r=new AudioRecord.Builder().setAudioSource(MediaRecorder.AudioSource.MIC)
-            .setAudioFormat(inFormat).setBufferSizeInBytes(inBytes).build();
+  /** Poll on the UI, never on an audio callback. */
+  public void poll(){
+    int[] s=nativeStats();
+    if(s==null||s.length<21)return;
+    inputFrames=s[3];outputFrames=s[4];burstFrames=s[5];sampleRate=s[6];
+    xruns=s[7];outputCapacity=s[9];inputCapacity=s[10];
+    outputMode=s[11];inputMode=s[12];
+    ringDrops=s[13];ringStarvation=s[14];ringDepth=s[15];
+    actualInId=s[1];actualOutId=s[2];
+    inputPeak=s[19]/1000f;outputPeak=s[20]/1000f;
+    actualIn=shortName(find(actualInId,true));
+    actualOut=shortName(find(actualOutId,false));
+    // Actual device may be the builtin tablet when SYSTEM DEFAULT is used:
+    // for diagnostics, show what really routed, even if it is excluded from
+    // the picker. That is not an additional selectable device.
+    if(actualInId>0&&!hasVisibleDevice(actualInId,true))
+      actualIn="SYSTEM DEFAULT / ID "+actualInId;
+    if(actualOutId>0&&!hasVisibleDevice(actualOutId,false))
+      actualOut="SYSTEM DEFAULT / ID "+actualOutId;
+    int ratioIndex=Math.max(0,Math.min(burstIndex,BURSTS.length-1));
+    requestFrames=burstFrames>0?Math.max(1,Math.round(burstFrames*
+        (ratioIndex==0?2.0f:BURSTS[ratioIndex]))):0;
+    if(s[0]==2){
+      started=false;
+      status="AAUDIO ERROR "+s[16]+" / RESTART";
+    }else if(s[0]==1){
+      if(inputDevice>=0 && actualInId>0 && actualInId!=inputDevice){
+        status="INPUT ROUTE MISMATCH";
+      }else if(outputDevice>=0 && actualOutId>0 && actualOutId!=outputDevice){
+        status="OUTPUT ROUTE MISMATCH";
+      }else if(actualInId<=0||actualOutId<=0){
+        status="ROUTE UNVERIFIED";
+      }else{
+        status="AAUDIO ACTIVE / "+(outputMode==0?"EXCLUSIVE":"SHARED");
       }
-      if(r.getState()!=AudioRecord.STATE_INITIALIZED)throw new IllegalStateException("AUDIO IN FAILED");
-      if(requestedInput!=null&&!r.setPreferredDevice(requestedInput))
-        throw new IllegalStateException("CANNOT SELECT INPUT");
-      t=new AudioTrack.Builder().setAudioAttributes(new AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-          .setAudioFormat(outFormat).setTransferMode(AudioTrack.MODE_STREAM)
-          .setBufferSizeInBytes(outBytes)
-          .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY).build();
-      if(t.getState()!=AudioTrack.STATE_INITIALIZED)throw new IllegalStateException("AUDIO OUT FAILED");
-      if(requestedOutput!=null&&!t.setPreferredDevice(requestedOutput))
-        throw new IllegalStateException("CANNOT SELECT OUTPUT");
-      if(burstIndex!=0)t.setBufferSizeInFrames(targetOut);
-      inputFrames=r.getBufferSizeInFrames();
-      outputFrames=t.getBufferSizeInFrames();
-      dsp.reset();
-      recorder=r;player=t;
-      r.startRecording();t.play();
-      if(r.getRecordingState()!=AudioRecord.RECORDSTATE_RECORDING||
-          t.getPlayState()!=AudioTrack.PLAYSTATE_PLAYING)
-        throw new IllegalStateException("AUDIO STREAM NOT RUNNING");
-      status="STREAM STARTED / VERIFY ROUTE";
-      short[] input=new short[FRAMES];
-      short[] output=new short[FRAMES*2];
-      float[] processed=new float[2];
-      int readBlocks=0;
-      while(running&&!Thread.currentThread().isInterrupted()){
-        int n=r.read(input,0,input.length,AudioRecord.READ_BLOCKING);
-        if(n<=0)throw new IllegalStateException("READ ERROR "+n);
-        float pi=0,po=0;
-        for(int i=0;i<n;i++){
-          float sample=input[i]*(1f/32768f);
-          pi=Math.max(pi,Math.abs(sample));
-          dsp.process(sample,processed);
-          float left=processed[0],right=processed[1];
-          po=Math.max(po,Math.max(Math.abs(left),Math.abs(right)));
-          output[2*i]=(short)(Math.max(-1,Math.min(1,left))*32767f);
-          output[2*i+1]=(short)(Math.max(-1,Math.min(1,right))*32767f);
-        }
-        int sent=0,need=n*2;
-        while(sent<need&&running){
-          int k=t.write(output,sent,need-sent,AudioTrack.WRITE_BLOCKING);
-          if(k<=0)throw new IllegalStateException("WRITE ERROR "+k);
-          sent+=k;
-        }
-        inputPeak=inputPeak*.78f+pi*.22f;
-        outputPeak=outputPeak*.78f+po*.22f;
-        if(++readBlocks%8==0){
-          xruns=t.getUnderrunCount();
-          AudioDeviceInfo actI=r.getRoutedDevice(),actO=t.getRoutedDevice();
-          actualIn=shortName(actI);actualOut=shortName(actO);
-          actualInId=actI==null?-1:actI.getId();
-          actualOutId=actO==null?-1:actO.getId();
-          if(readBlocks>24){
-            if(inputDevice>=0&&actualInId!=inputDevice)
-              throw new IllegalStateException("INPUT ROUTED TO WRONG DEVICE");
-            if(outputDevice>=0&&actualOutId!=outputDevice)
-              throw new IllegalStateException("OUTPUT ROUTED TO WRONG DEVICE");
-            status=actI!=null&&actO!=null?"AUDIO ACTIVE":"ROUTE UNVERIFIED";
-          }
-        }
-      }
-      if(status.equals("AUDIO ACTIVE"))status="STOPPED";
-    }catch(SecurityException e){status="MIC PERMISSION DENIED";}
-    catch(Exception e){status="AUDIO ERROR: "+e.getMessage();}
-    finally{
-      running=false;
-      recorder=null;player=null;
-      if(r!=null){try{r.stop();}catch(Exception ignored){}r.release();}
-      if(t!=null){try{t.pause();t.flush();t.stop();}catch(Exception ignored){}t.release();}
+    }else if(!started && !status.startsWith("AAUDIO OPEN FAILED") &&
+             !status.contains("RESELECT") && !status.contains("PERMISSION")){
+      status="STOPPED";
     }
+  }
+  private boolean hasVisibleDevice(int id,boolean input){
+    return find(id,input)!=null;
   }
 }

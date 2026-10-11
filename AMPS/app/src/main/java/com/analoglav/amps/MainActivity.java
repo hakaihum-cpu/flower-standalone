@@ -97,7 +97,7 @@ public final class MainActivity extends Activity {
     bridge.stop();audioManager.unregisterAudioDeviceCallback(deviceCallback);super.onDestroy();
   }
   private AudioDeviceInfo[] endpoints(boolean input){
-    return audioManager.getDevices(input?AudioManager.GET_DEVICES_INPUTS:AudioManager.GET_DEVICES_OUTPUTS);
+    return bridge.visibleDevices(input);
   }
   private static String labelDevice(AudioDeviceInfo d){
     if(d==null)return "DEFAULT";
@@ -156,6 +156,7 @@ public final class MainActivity extends Activity {
       case 3:a.treble=v;break; case 4:a.cut=v;break; case 5:a.master=v;break;
       case 6:a.spring=v;break; case 7:a.tremSpeed=v;break; case 8:a.tremDepth=v;break;
     }
+    bridge.updateControls();
     screen.invalidate();
   }
   private void loadPreset(int selected){
@@ -300,7 +301,7 @@ public final class MainActivity extends Activity {
       txt(c,"AUDIO BUFFER / BURSTS",38,345,15,GOLD);
       String burst=bridge.burstIndex==0?"AUTO":
           AudioBridge.BURST_LABELS[bridge.burstIndex]+" BURSTS";
-      txt(c,burst+"     ACTUAL "+bridge.outputFrames+" FRAMES",38,376,17,LIT);
+      txt(c,burst+"  REQ "+bridge.requestFrames+"  ACT "+bridge.outputFrames+" FR",38,376,17,LIT);
       rect(c,20,407,320,51,DARK,GOLD);
       centered(c,"RESCAN DEVICES",180,440,17,GOLD);
       rect(c,355,407,345,51,DARK,GOLD);
@@ -308,11 +309,14 @@ public final class MainActivity extends Activity {
       txt(c,"ACTUAL ROUTES  /  NOT DEVICE LIST",24,491,14,GOLD);
       txt(c,"IN : "+shorten(bridge.actualIn,52),24,522,14,LIT);
       txt(c,"OUT: "+shorten(bridge.actualOut,52),24,546,14,LIT);
-      txt(c,String.format(Locale.US,"RATE 48kHz    OUTPUT BUFFER %d FR / %.1fms",
-          bridge.outputFrames,bridge.outputFrames*1000f/48000),24,573,14,LIT);
-      txt(c,"HW FRAMES/BURST "+bridge.burstFrames+"    XRUNS "+bridge.xruns,24,598,14,LIT);
-      txt(c,String.format(Locale.US,"IN PEAK %.3f     OUT PEAK %.3f",
-          bridge.inputPeak,bridge.outputPeak),24,623,14,LIT);
+      txt(c,String.format(Locale.US,"RATE %dHz   OUT %dFR / %.1fms",
+          bridge.sampleRate,bridge.outputFrames,
+          bridge.outputFrames*1000f/Math.max(1,bridge.sampleRate)),24,573,14,LIT);
+      txt(c,"BURST "+bridge.burstFrames+"   OUT XRUN "+bridge.xruns+
+          "   FIFO LOST "+bridge.ringDrops,24,598,14,LIT);
+      txt(c,String.format(Locale.US,"IN %dFR  FIFO %dFR  STARVE %d  PEAK %.2f/%.2f",
+          bridge.inputFrames,bridge.ringDepth,bridge.ringStarvation,
+          bridge.inputPeak,bridge.outputPeak),24,623,12,LIT);
       txt(c,shorten(bridge.status,60),24,648,12,GOLD);
       rect(c,20,658,680,49,CASE,GOLD);
       centered(c,"CLOSE",360,691,18,LIT);
@@ -321,6 +325,7 @@ public final class MainActivity extends Activity {
       return text.length()<=max?text:text.substring(0,max-2)+"..";
     }
     @Override protected void onDraw(Canvas c){
+      bridge.poll();
       c.drawColor(DARK);
       float sx=getWidth()/720f,sy=getHeight()/720f;
       c.save();c.scale(sx,sy);
@@ -371,7 +376,8 @@ public final class MainActivity extends Activity {
           else if(within(x,y,20,235,680,75))chooseDevice(false);
           else if(within(x,y,20,321,680,72))chooseBurst();
           else if(within(x,y,20,407,320,52)){
-            // Rescan should not replace a working audio route.
+            // Every list query enumerates OS devices, so this is a real rescan.
+            bridge.status="AUDIO DEVICE LIST REFRESHED";
             invalidate();
           }
           else if(within(x,y,355,407,345,52)){
@@ -381,14 +387,14 @@ public final class MainActivity extends Activity {
           }else if(y>=658){config=false;invalidate();}
         }else{
           if(within(x,y,34,166,173,45)){
-            bridge.dsp.channel=1-bridge.dsp.channel;invalidate();
+            bridge.dsp.channel=1-bridge.dsp.channel;bridge.updateControls();invalidate();
           }else if(within(x,y,12,440,217,178)){
-            bridge.dsp.cabinet=1-bridge.dsp.cabinet;invalidate();
+            bridge.dsp.cabinet=1-bridge.dsp.cabinet;bridge.updateControls();invalidate();
           }else if(within(x,y,12,628,696,52)){
             if(SystemClock.uptimeMillis()-downAt>650&&x>=100&&x<=608)savePreset();
             else loadPreset(preset+(x<100?-1:x>608?1:1));
           }else if(within(x,y,555,686,146,32)){
-            bridge.dsp.bypass=!bridge.dsp.bypass;invalidate();
+            bridge.dsp.bypass=!bridge.dsp.bypass;bridge.updateControls();invalidate();
           }
         }
         performClick();return true;
