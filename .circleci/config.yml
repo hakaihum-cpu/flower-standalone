@@ -16,6 +16,10 @@ jobs:
             set -euo pipefail
             test -f AMPS/settings.gradle
             test -f AMPS/app/build.gradle
+            # Match proven EP-SAMPLER/HydrasynthController Android target,
+            # fail before consuming Gradle time on ExpiredTargetSdkVersion.
+            grep -Eq '^[[:space:]]*targetSdk[[:space:]]+35([[:space:]]|$)' AMPS/app/build.gradle
+            grep -Eq '^[[:space:]]*compileSdk[[:space:]]+35([[:space:]]|$)' AMPS/app/build.gradle
             test -f AMPS/app/src/main/AndroidManifest.xml
             test -f AMPS/app/src/main/java/com/analoglav/amps/MainActivity.java
             test -f AMPS/app/src/main/java/com/analoglav/amps/AudioBridge.java
