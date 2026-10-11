@@ -53,7 +53,7 @@ class AudioFifo {
     const uint32_t begin=writer_.load(std::memory_order_acquire);
     const int target=std::max(64,std::min(targetFrames,2048));
     // Control ratio per callback, not once per sample. Slow its response.
-    const int error=static_cast<int>(begin-r)-target;
+    const int error=static_cast<int>(begin-r)-(target+frames);
     const double ideal=std::max(.990,std::min(1.010,
                                            1. + .000015*static_cast<double>(error)));
     ratio_ += .12*(ideal-ratio_);
