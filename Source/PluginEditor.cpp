@@ -393,6 +393,17 @@ void RealtimeChordFxAudioProcessorEditor::paintDotUiFrame (
     g.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
     g.drawText ("DOT", 310, 18, 48, 20,
                 juce::Justification::centred);
+
+    if (! configVisible && ! midiControlConfigVisible)
+    {
+        g.setFont (juce::FontOptions (10.5f).withStyle ("Bold"));
+        g.setColour (amber.withAlpha (0.54f));
+        g.drawText ("SELECT", 18, 690, 54, 20,
+                    juce::Justification::centredLeft);
+        g.setColour (amber.withAlpha (0.96f));
+        g.drawText ("CONFIG", 76, 690, 76, 20,
+                    juce::Justification::centredLeft);
+    }
 }
 
 void RealtimeChordFxAudioProcessorEditor::setParameterFromX (DragParam which, float x)
@@ -1250,6 +1261,14 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setColour (uiColour (0.62f));
     g.drawText ("AUDIO INPUT", 54, 94, 180, 24, juce::Justification::centredLeft);
 
+    const juce::Rectangle<float> audioRescanBounds (520.0f, 90.0f, 120.0f, 30.0f);
+    g.setColour (uiColour (0.10f));
+    g.fillRoundedRectangle (audioRescanBounds, 5.0f);
+    g.setColour (uiColour (0.62f));
+    g.drawRoundedRectangle (audioRescanBounds, 5.0f, 1.0f);
+    g.setFont (juce::FontOptions (11.0f).withStyle ("Bold"));
+    g.drawText ("RESCAN", audioRescanBounds, juce::Justification::centred);
+
     int y = 126;
     const int maxRows = juce::jmin (6, (int) audioInputs.size());
     for (int i = 0; i < maxRows; ++i)
@@ -1361,7 +1380,17 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.drawText ("MIDI CONTROL", 54, 542, 220, 30, juce::Justification::centredLeft);
     g.drawText (midiControl ? "ON" : "OFF", 450, 542, 180, 30, juce::Justification::centredRight);
     g.drawText ("MIDI SETTINGS", 54, 574, 220, 30, juce::Justification::centredLeft);
-    g.drawText (">", 450, 574, 180, 30, juce::Justification::centredRight);
+    g.drawText (">", 450, 574, 42, 30, juce::Justification::centred);
+
+    const juce::Rectangle<float> midiRescanBounds (510.0f, 574.0f, 130.0f, 28.0f);
+    g.setColour (uiColour (0.10f));
+    g.fillRoundedRectangle (midiRescanBounds, 5.0f);
+    g.setColour (uiColour (0.62f));
+    g.drawRoundedRectangle (midiRescanBounds, 5.0f, 1.0f);
+    g.setFont (juce::FontOptions (11.0f).withStyle ("Bold"));
+    g.drawText ("RESCAN", midiRescanBounds, juce::Justification::centred);
+    g.setFont (juce::FontOptions (16.0f));
+    g.setColour (uiColour (0.78f));
     g.drawText ("CLOCK", 54, 606, 180, 30, juce::Justification::centredLeft);
     g.drawText (clock == 0 ? "Internal" : "MIDI", 450, 606, 180, 30, juce::Justification::centredRight);
     if (clock == 0)
@@ -1632,6 +1661,15 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             return;
         }
         if (p.x >= 590 && p.y <= 74) { configVisible = false; repaint(); return; }
+
+        if (juce::Rectangle<float> (500.0f, 84.0f, 160.0f, 42.0f).contains (p))
+        {
+            refreshAudioInputs();
+            globalPresetMessage = "AUDIO RESCANNED";
+            repaint();
+            return;
+        }
+
         int y = 126;
         const int maxRows = juce::jmin (6, (int) audioInputs.size());
         for (int i = 0; i < maxRows; ++i, y += 38)
@@ -1666,9 +1704,17 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         }
         else if (p.y >= 572 && p.y < 604)
         {
-            midiControlConfigVisible = true;
-            configVisible = false;
-            refreshMidiOutputs();
+            if (p.x >= 500.0f)
+            {
+                refreshMidiOutputs();
+                globalPresetMessage = "MIDI RESCANNED";
+            }
+            else
+            {
+                midiControlConfigVisible = true;
+                configVisible = false;
+                refreshMidiOutputs();
+            }
         }
         else if (p.y >= 604 && p.y < 636)
         {
@@ -1688,6 +1734,23 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             dotRenderedRevision = -1;
             dotLumaRevision = -1;
         }
+        repaint();
+        return;
+    }
+
+    if (dotModeEnabled()
+        && juce::Rectangle<float> (70.0f, 682.0f, 110.0f, 36.0f).contains (p))
+    {
+        if (chordBotPressedPad >= 0)
+        {
+            processor.triggerChordBotPad (chordBotPressedPad, false);
+            chordBotPressedPad = -1;
+        }
+
+        chordBotEditSlot = -1;
+        configVisible = true;
+        refreshAudioInputs();
+        refreshMidiOutputs();
         repaint();
         return;
     }
