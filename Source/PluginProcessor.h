@@ -103,6 +103,35 @@ public:
     void setAudioBufferMode (int mode);
     void setConfiguredDotMode (bool enabled);
 
+    int consumeMidiRootConfigRequest() noexcept
+    {
+        return midiRootConfigRequest.exchange (-1, std::memory_order_acq_rel);
+    }
+    int consumeMidiScaleConfigRequest() noexcept
+    {
+        return midiScaleConfigRequest.exchange (-1, std::memory_order_acq_rel);
+    }
+    int consumeMidiDefaultEffectsConfigRequest() noexcept
+    {
+        return midiDefaultEffectsConfigRequest.exchange (-1, std::memory_order_acq_rel);
+    }
+    int consumeMidiYEffectModeConfigRequest() noexcept
+    {
+        return midiYEffectModeConfigRequest.exchange (-1, std::memory_order_acq_rel);
+    }
+    int consumeMidiUiModeConfigRequest() noexcept
+    {
+        return midiUiModeConfigRequest.exchange (-1, std::memory_order_acq_rel);
+    }
+    int consumeMidiYEffectModeToggleCount() noexcept
+    {
+        return midiYEffectModeToggleCount.exchange (0, std::memory_order_acq_rel);
+    }
+    int consumeMidiUiModeToggleCount() noexcept
+    {
+        return midiUiModeToggleCount.exchange (0, std::memory_order_acq_rel);
+    }
+
     void setCarnivalEnabled (bool enabled) noexcept;
     bool isCarnivalEnabled() const noexcept
     {
@@ -258,6 +287,17 @@ private:
         -1, -1, -1, -1, -1, -1, -1, -1
     };
     std::array<bool, 128> performanceCcGate {};
+
+    // CC85-91 CONFIG requests are written on the audio thread and consumed
+    // by the editor/message thread. APVTS/UI mutation never occurs in
+    // handlePerformanceMidiCC().
+    std::atomic<int> midiRootConfigRequest { -1 };
+    std::atomic<int> midiScaleConfigRequest { -1 };
+    std::atomic<int> midiDefaultEffectsConfigRequest { -1 };
+    std::atomic<int> midiYEffectModeConfigRequest { -1 };
+    std::atomic<int> midiUiModeConfigRequest { -1 };
+    std::atomic<int> midiYEffectModeToggleCount { 0 };
+    std::atomic<int> midiUiModeToggleCount { 0 };
 
     std::atomic<bool> carnivalEnabled { false };
     std::atomic<bool> carnivalPlaying { false };
