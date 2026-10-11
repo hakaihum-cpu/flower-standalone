@@ -1,52 +1,228 @@
+# ANDROIDAPP (flower-standalone) AN-66 one-off CircleCI trial.\n# The MIYAKO source stays private in Vstplugin; this branch stores CI config only.
+# A normal push creates no build: run_build must explicitly be true.
+# Trigger from only feature/AN-66-miyako-circleci-trial in the existing androidapp project.\n# Do NOT run EP-Sampler on this trial branch. No main/Golden Baseline writes.
 version: 2.1
-
 parameters:
   run_build:
     type: boolean
     default: false
 
 jobs:
-  android_build:
-    docker:
-      - image: cimg/android:2026.08.1
+  manual_android_build:
+    machine:
+      image: android:2026.05.1
     resource_class: medium
+    working_directory: ~/project/miyako-source
     steps:
-      - checkout
-
+      - checkout:
+          path: ~/project/androidapp-control
       - run:
-          name: Static EP Sampler source preflight
+          name: "Checkout pinned MIYAKO source from private repository"
           command: |
             set -euo pipefail
-            test -f EP_Sampler/settings.gradle
-            test -f EP_Sampler/app/build.gradle
-            test -f EP_Sampler/app/src/main/cpp/SampleBank.cpp
-            test -f EP_Sampler/app/src/main/cpp/AudioEngine.cpp
-            test -f EP_Sampler/app/src/main/java/com/example/epsampler/MainActivity.java
-            grep -F "abiFilters 'arm64-v8a', 'armeabi-v7a'" EP_Sampler/app/build.gradle
-            grep -F 'signingConfig signingConfigs.debug' EP_Sampler/app/build.gradle
-            test ! -f EP_Sampler/app/src/main/assets/epbank_24bit_dedup.bin
-
+            test "${CIRCLE_BRANCH:-}" = "feature/AN-66-miyako-circleci-trial"
+            test -n "${CIRCLE_SHA1:-}"
+            test "$(git -C "$HOME/project/androidapp-control" rev-parse HEAD)" = "$CIRCLE_SHA1"
+            cd "$HOME/project/miyako-source"
+            if [ -n "${MIYAKO_GITHUB_TOKEN:-}" ]; then
+              AUTH_HELPER="$(mktemp)"
+              trap 'rm -f "$AUTH_HELPER"' EXIT
+              printf '%s\n' '#!/bin/sh' 'case "$1" in' '  *Username*) printf "%s" "x-access-token" ;;' '  *Password*) printf "%s" "$MIYAKO_GITHUB_TOKEN" ;;' 'esac' > "$AUTH_HELPER"
+              chmod 700 "$AUTH_HELPER"
+              GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="$AUTH_HELPER" git clone --quiet --depth 1 --branch "feature/AN-66-snes-tile-sprite-25fps" https://github.com/hakaihum-cpu/Vstplugin.git .
+            else
+              GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=12' git clone --quiet --depth 1 --branch "feature/AN-66-snes-tile-sprite-25fps" git@github.com:hakaihum-cpu/Vstplugin.git . || {
+                echo 'AN-66 source checkout unavailable: configure a read-only MIYAKO deploy key or MIYAKO_GITHUB_TOKEN in androidapp project secrets.'
+                exit 31
+              }
+            fi
+            test "$(git rev-parse HEAD)" = "43e8dd9e3b2a3b45bb69c43b4534ed70d32fb4ff"
+            test -f MIYAKO_Android.jucer
+            test -f Source/MiyakoTileSpriteScene.h
+            printf 'AN-66 source verified at %s\n' "43e8dd9e3b2a3b45bb69c43b4534ed70d32fb4ff"
       - run:
-          name: Install Android SDK components
+          name: "Guard the one-off AN-66 build"
           command: |
+            set -euo pipefail
+            test "${CIRCLE_BRANCH:-}" = "feature/AN-66-miyako-circleci-trial"
+            test -n "${CIRCLE_SHA1:-}"
+            test "$(git rev-parse HEAD)" = "43e8dd9e3b2a3b45bb69c43b4534ed70d32fb4ff"
+            git show -s --format=%H HEAD | grep -Fx "43e8dd9e3b2a3b45bb69c43b4534ed70d32fb4ff"
+            git diff --quiet
+            git diff --cached --quiet
+            printf 'Build target AN-66: %s (%s)\n' "$CIRCLE_BRANCH" "$CIRCLE_SHA1"
+      - run:
+          name: "Reconstruct and validate canonical MIYAKO Resources pack"
+          command: |
+            set -euo pipefail
+            mkdir -p AndroidAssets
+            test -f Android/resources.b64/part_001.txt
+            test -f Android/resources.b64/part_050.txt
+            PART_COUNT="$(find Android/resources.b64 -maxdepth 1 -type f -name 'part_*.txt' | wc -l)"
+            if [ "$PART_COUNT" -ne 50 ]; then
+              echo "::error::Expected 50 canonical resource chunks, found $PART_COUNT"
+              exit 1
+            fi
+            cat Android/resources.b64/part_*.txt | tr -d '\r\n' | base64 -d > AndroidAssets/Resources.zip
+            
+            RESOURCE="AndroidAssets/Resources.zip"
+            EXPECTED_SIZE="22308106"
+            EXPECTED_SHA256="dec1d916d6c1b8ebf1cdce7f18a6eebcc32bdc991139e652440305bd8895fd86"
+            
+            if [ ! -f "$RESOURCE" ]; then
+              echo "::error::Canonical $RESOURCE is missing. Refusing to build an incomplete ~14MB APK."
+              exit 1
+            fi
+            
+            ACTUAL_SIZE="$(stat -c%s "$RESOURCE")"
+            if [ "$ACTUAL_SIZE" != "$EXPECTED_SIZE" ]; then
+              echo "::error::Unexpected Resources.zip size: $ACTUAL_SIZE (expected $EXPECTED_SIZE)"
+              exit 1
+            fi
+            
+            echo "$EXPECTED_SHA256  $RESOURCE" | sha256sum -c -
+            
+            python3 - <<'PY'
+            import zipfile
+            path = "AndroidAssets/Resources.zip"
+            with zipfile.ZipFile(path) as z:
+                names = z.namelist()
+                required_prefixes = (
+                    "Resources/frames/",
+                    "Resources/scenes/",
+                    "Resources/crush/",
+                )
+                missing = [p for p in required_prefixes if not any(n.startswith(p) for n in names)]
+                if missing:
+                    raise SystemExit("Missing required resource banks: " + ", ".join(missing))
+                bad = z.testzip()
+                if bad:
+                    raise SystemExit("Corrupt Resources.zip entry: " + bad)
+                print("Canonical Resources.zip validated:", len(names), "entries")
+            PY
+      - run:
+          name: "Prepare MIYAKO Android launcher icon"
+          command: |
+            set -euo pipefail
+            python3 scripts/prepare_android_icon.py
+            test -s Resources/miyako_app_icon.jpg
+      - run:
+          name: "Materialize validated EFFECTS video frame pack"
+          command: |
+            set -euo pipefail
+            python3 scripts/materialize_effects_video_pack.py
+            test -s Resources/effects_video_frames.pack
+      - run:
+          name: "Materialize validated original KNOWING source frames"
+          command: |
+            set -euo pipefail
+            python3 - <<'PY'
+            from pathlib import Path
+            from hashlib import sha256
+            import base64, zipfile
+            inputs = sorted(Path("Android/knowing_frames.b64").glob("part_*.txt"))
+            if len(inputs) != 14:
+                raise SystemExit(f"Expected 14 original frame chunks; got {len(inputs)}")
+            encoded = ''.join(''.join(p.read_text(encoding='ascii').split()) for p in inputs)
+            data = base64.b64decode(encoded, validate=True)
+            expected_sha = "bf323970b61af24b2dd5c08674a5040902a2cf3d52df39abb35be1a9a7bcdbb5"
+            if len(data) != 1257671 or sha256(data).hexdigest() != expected_sha:
+                raise SystemExit("KNOWING source ZIP size/SHA-256 mismatch")
+            dest = Path("Resources/knowing_frames_original.zip")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(data)
+            with zipfile.ZipFile(dest) as z:
+                expected = [f"{i:03d}.jpg" for i in range(1, 141)]
+                if z.namelist() != expected:
+                    raise SystemExit("KNOWING source ZIP must contain 001.jpg..140.jpg in order")
+                bad = z.testzip()
+                if bad is not None:
+                    raise SystemExit(f"KNOWING corrupted frame: {bad}")
+            print("KNOWING 140 original frames verified; DOT conversion is performed by #204 renderer at runtime")
+            PY
+      - run:
+          name: "Install Linux build dependencies"
+          command: |
+            set -euo pipefail
+            sudo apt-get update
+            sudo apt-get install -y \
+              libasound2-dev libjack-jackd2-dev libcurl4-openssl-dev \
+              libfreetype6-dev libx11-dev libxcomposite-dev libxcursor-dev \
+              libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+              libwebkit2gtk-4.1-dev libglu1-mesa-dev mesa-common-dev
+      - run:
+          name: "Checkout JUCE 9.0.2"
+          command: |
+            set -euo pipefail
+            git clone --depth 1 --branch 9.0.2 https://github.com/juce-framework/JUCE.git JUCE
+      - run:
+          name: "Patch JUCE Android gamepad keys for RG Rotate"
+          command: |
+            set -euo pipefail
+            python3 scripts/patch_juce_android_gamepad.py
+            grep -q 'KEYCODE_BUTTON_A' JUCE/modules/juce_gui_basics/native/juce_Windowing_android.cpp
+            grep -q 'KEYCODE_BUTTON_SELECT' JUCE/modules/juce_gui_basics/native/juce_Windowing_android.cpp
+      - run:
+          name: "Build Projucer"
+          command: |
+            set -euo pipefail
+            cmake -S JUCE -B JUCE/build -DJUCE_BUILD_EXTRAS=ON -DJUCE_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release
+            cmake --build JUCE/build --target Projucer -j2
+            PROJUCER="$(find JUCE/build -type f -name Projucer -perm -111 | head -n 1)"
+            test -n "$PROJUCER"
+            printf 'export PROJUCER="%s"\n' "$PROJUCER" >> "$BASH_ENV"
+      - run:
+          name: "Install Android SDK components"
+          command: |
+            set -euo pipefail
             yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
             "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
               "platforms;android-35" \
               "build-tools;35.0.0" \
-              "ndk;26.1.10909125" \
-              "cmake;3.22.1"
-
+              "ndk;26.1.10909125"
       - run:
-          name: Prepare Gradle 8.9
+          name: "Stamp APK build identity"
           command: |
             set -euo pipefail
-            curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle-8.9-bin.zip
-            rm -rf /tmp/gradle-8.9
-            unzip -q /tmp/gradle-8.9-bin.zip -d /tmp
-            echo 'export PATH=/tmp/gradle-8.9/bin:$PATH' >> "$BASH_ENV"
-
+            # Generated in the CI working tree only. The committed source keeps
+            # a LOCAL BUILD fallback so off-CI compilation still works.
+            printf '#pragma once\n#define MIYAKO_BUILD_LABEL "RUN #%s"\n' "$CIRCLE_BUILD_NUM" > Source/MiyakoBuildInfo.h
+            grep -q "RUN #$CIRCLE_BUILD_NUM" Source/MiyakoBuildInfo.h
       - run:
-          name: Create Android debug signing keystore
+          name: "Generate Android Studio project"
+          command: |
+            set -euo pipefail
+            "$PROJUCER" --resave MIYAKO_Android.jucer
+            test -d Builds/Android
+            printf 'sdk.dir=%s\n' "$ANDROID_HOME" > Builds/Android/local.properties
+      - run:
+          name: "Integrate verified Speed Editor USB bridge"
+          command: |
+            set -euo pipefail
+            JAVA_DIR="Builds/Android/app/src/main/java/local/miyako/android"
+            MANIFEST="Builds/Android/app/src/main/AndroidManifest.xml"
+            test -f Android/SpeedEditorUsbController.java
+            test -f "$MANIFEST"
+            mkdir -p "$JAVA_DIR"
+            cp Android/SpeedEditorUsbController.java "$JAVA_DIR/SpeedEditorUsbController.java"
+            python3 - "$MANIFEST" <<'PY'
+            from pathlib import Path
+            import sys
+            path = Path(sys.argv[1])
+            text = path.read_text(encoding="utf-8")
+            feature = '<uses-feature android:name="android.hardware.usb.host" android:required="false" />'
+            if feature not in text:
+                marker = "<application"
+                pos = text.find(marker)
+                if pos < 0:
+                    raise SystemExit("AndroidManifest.xml has no <application> tag")
+                text = text[:pos] + "    " + feature + "\n    " + text[pos:]
+                path.write_text(text, encoding="utf-8")
+            PY
+            grep -q 'android.hardware.usb.host' "$MANIFEST"
+            test -s "$JAVA_DIR/SpeedEditorUsbController.java"
+      - run:
+          name: "Create Android signing keystore"
           command: |
             set -euo pipefail
             mkdir -p "$HOME/.android"
@@ -54,108 +230,79 @@ jobs:
             keytool -genkeypair -v \
               -keystore "$HOME/.android/debug.keystore" \
               -storepass android -alias androiddebugkey -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US" \
-              -keyalg RSA -keysize 2048 -validity 10000
-
-      - restore_cache:
-          keys:
-            - gradle-ep-sampler-v1-
-
+              -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
       - run:
-          name: Build EP Sampler APK
-          no_output_timeout: 30m
+          name: "Build optimized installable APK"
           command: |
-            set -u
+            set -euo pipefail
             export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
-            export CMAKE_BUILD_PARALLEL_LEVEL=2
-            export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=2"
-            mkdir -p android-artifact
-            LOG="$PWD/android-artifact/gradle-build.log"
-            EXIT_FILE="$PWD/android-artifact/gradle-exit-code.txt"
-
-            {
-              echo "[diagnostic] start $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              echo "[diagnostic] nproc=$(nproc)"
-              echo "[diagnostic] CMAKE_BUILD_PARALLEL_LEVEL=$CMAKE_BUILD_PARALLEL_LEVEL"
-              java -version 2>&1
-              free -m || true
-              df -h || true
-            } | tee "$LOG"
-
-            cd EP_Sampler
-            printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-
-            set +e
-            gradle :app:assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2 >> "$LOG" 2>&1 &
-            GRADLE_PID=$!
-            echo "[diagnostic] gradle_pid=$GRADLE_PID" | tee -a "$LOG"
-
-            while kill -0 "$GRADLE_PID" 2>/dev/null; do
-              {
-                echo "[heartbeat] $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-                free -m || true
-                ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 16 || true
-              } | tee -a "$LOG"
-              sleep 30
-            done
-
-            wait "$GRADLE_PID"
-            STATUS=$?
-            set -e
-            cd ..
-            echo "$STATUS" | tee "$EXIT_FILE"
-            tail -n 250 "$LOG" || true
-            exit 0
-
-      - save_cache:
-          key: gradle-ep-sampler-v1-{{ epoch }}
-          paths:
-            - ~/.gradle/caches
-            - ~/.gradle/wrapper
-
+            cd Builds/Android
+            chmod +x gradlew
+            ./gradlew assembleRelease --stacktrace --no-daemon
       - run:
-          name: Collect EP Sampler APK
-          when: always
+          name: "Collect APK"
           command: |
             set -euo pipefail
             mkdir -p android-artifact
-            git rev-parse HEAD | tee android-artifact/SOURCE_COMMIT.txt
-            APK="$(find EP_Sampler/app/build/outputs/apk/release -type f -name '*.apk' | head -n 1 || true)"
-            if [ -n "$APK" ]; then
-              cp "$APK" android-artifact/EP-Sampler-Android.apk
-              sha256sum android-artifact/EP-Sampler-Android.apk | tee android-artifact/SHA256.txt
-            else
-              echo "No release APK produced." | tee android-artifact/NO_APK.txt
+            APK="$(find Builds/Android -type f -name '*.apk' | grep -E '/release/|release\.apk$' | head -n 1)"
+            test -n "$APK"
+            cp "$APK" android-artifact/MIYAKO-Android.apk
+            cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" android-artifact/apksigner.jar
+            cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" android-artifact/zipalign
+            chmod +x android-artifact/zipalign
+            
+            python3 - "$APK" <<'PY'
+            import hashlib
+            import io
+            import sys
+            import zipfile
+            
+            apk_path = sys.argv[1]
+            expected_size = 22308106
+            expected_sha256 = "dec1d916d6c1b8ebf1cdce7f18a6eebcc32bdc991139e652440305bd8895fd86"
+            
+            with zipfile.ZipFile(apk_path) as apk:
+                try:
+                    payload = apk.read("assets/Resources.zip")
+                except KeyError:
+                    raise SystemExit("assets/Resources.zip is missing from APK; refusing incomplete artifact")
+            
+            if len(payload) != expected_size:
+                raise SystemExit(f"APK Resources.zip size mismatch: {len(payload)} != {expected_size}")
+            
+            actual_sha256 = hashlib.sha256(payload).hexdigest()
+            if actual_sha256 != expected_sha256:
+                raise SystemExit(f"APK Resources.zip SHA-256 mismatch: {actual_sha256}")
+            
+            with zipfile.ZipFile(io.BytesIO(payload)) as resources:
+                names = resources.namelist()
+                for prefix in ("Resources/frames/", "Resources/scenes/", "Resources/crush/"):
+                    if not any(name.startswith(prefix) for name in names):
+                        raise SystemExit(f"APK resource bank missing: {prefix}")
+            
+            print("APK canonical Resources.zip verified:", expected_size, actual_sha256)
+            PY
+            
+            APK_SIZE="$(stat -c%s "$APK")"
+            if [ "$APK_SIZE" -lt 35000000 ]; then
+              echo "::error::APK is unexpectedly small ($APK_SIZE bytes). Refusing incomplete artifact."
+              exit 1
             fi
-
-      - store_artifacts:
-          path: android-artifact/EP-Sampler-Android.apk
-          destination: EP-Sampler-Android.apk
+            
+            sha256sum android-artifact/MIYAKO-Android.apk | tee android-artifact/SHA256.txt
+            printf 'AN-66 Git SHA: %s\nCircleCI Build: %s\n' "$CIRCLE_SHA1" "$CIRCLE_BUILD_NUM" > android-artifact/BUILD_INFO.txt
+            test "$(stat -c%s android-artifact/MIYAKO-Android.apk)" -ge 35000000
 
       - store_artifacts:
           path: android-artifact
-          destination: diagnostics
-
-      - run:
-          name: Propagate Gradle build result
-          when: always
-          command: |
-            set -euo pipefail
-            if [ ! -f android-artifact/gradle-exit-code.txt ]; then
-              echo "Gradle exit code file is missing."
-              exit 97
-            fi
-            STATUS="$(cat android-artifact/gradle-exit-code.txt)"
-            echo "Gradle exit code: $STATUS"
-            if [ "$STATUS" != "0" ] && [ -f android-artifact/gradle-build.log ]; then
-              grep -nE '(^|[^A-Za-z])(error:|fatal error:|FAILURE:|FAILED|Exception|undefined reference|ninja: build stopped|Execution failed for task)' \
-                android-artifact/gradle-build.log | tail -n 120 || true
-              tail -n 300 android-artifact/gradle-build.log || true
-            fi
-            exit "$STATUS"
+          destination: MIYAKO-AN66-CircleCI
 
 workflows:
-  manual_android_build:
+  an66_manual_trial:
     when: << pipeline.parameters.run_build >>
     jobs:
-      - android_build
+      - manual_android_build:
+          filters:
+            branches:
+              only:
+                - feature/AN-66-miyako-circleci-trial
