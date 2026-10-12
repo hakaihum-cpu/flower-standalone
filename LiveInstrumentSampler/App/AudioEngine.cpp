@@ -109,7 +109,7 @@ juce::String AudioEngine::startRecording(const juce::File& file) {
 
     file.getParentDirectory().createDirectory();
     file.deleteFile();
-    auto stream = file.createOutputStream();
+    std::unique_ptr<juce::OutputStream> stream { file.createOutputStream() };
     if (stream == nullptr)
         return "Could not create RAW WAV.";
 
