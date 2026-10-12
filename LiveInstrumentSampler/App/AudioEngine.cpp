@@ -114,13 +114,17 @@ juce::String AudioEngine::startRecording(const juce::File& file) {
         return "Could not create RAW WAV.";
 
     juce::WavAudioFormat wav;
-    auto* writer = wav.createWriterFor(stream.release(), 48000.0, 2, 24, {}, 0);
+    const auto options = juce::AudioFormatWriterOptions{}
+                             .withSampleRate(48000.0)
+                             .withNumChannels(2)
+                             .withBitsPerSample(24);
+    auto writer = wav.createWriterFor(stream, options);
     if (writer == nullptr)
         return "Could not create 24-bit WAV writer.";
 
     {
         const juce::ScopedLock sl(writerLock_);
-        threadedWriter_ = std::make_unique<juce::AudioFormatWriter::ThreadedWriter>(writer, writerThread_, 32768);
+        threadedWriter_ = std::make_unique<juce::AudioFormatWriter::ThreadedWriter>(writer.release(), writerThread_, 32768);
         activeWriter_ = threadedWriter_.get();
     }
     writerDropouts_.store(0, std::memory_order_release);
