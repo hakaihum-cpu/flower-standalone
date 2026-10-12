@@ -34,6 +34,7 @@ private:
     void startSession();
     void beginRecording();
     void stopRecording();
+    void togglePreview();
     void confirmTake();
     void retake();
     void updateCurrentKeyUi();
@@ -67,6 +68,9 @@ private:
     std::vector<ChannelChoice> inputChannelChoices_, outputChannelChoices_;
     juce::Label driverLabel_, inputDeviceLabel_, outputDeviceLabel_, inputPairLabel_, outputPairLabel_, bufferLabel_;
     juce::TextButton applyAudioButton_{"APPLY AUDIO"};
+    juce::ToggleButton monitorButton_{"MONITOR"};
+    juce::Slider inputGainSlider_;
+    juce::Label inputGainLabel_, inputMeterLabel_, clipLabel_;
     juce::Label audioStatusLabel_;
 
     juce::TextButton asioCheckButton_{"RUN ASIO CHECK"};
@@ -90,6 +94,7 @@ private:
     juce::Label currentKeyLabel_;
     juce::TextButton recButton_{"REC"};
     juce::TextButton stopButton_{"STOP"};
+    juce::TextButton previewButton_{"PREVIEW"};
     juce::TextButton setButton_{"SET"};
     juce::TextButton retakeButton_{"RETAKE"};
     WaveformTrimComponent waveform_;
@@ -97,6 +102,7 @@ private:
     juce::Label trimStartLabel_, trimEndLabel_;
     juce::Label recordHintLabel_;
     bool syncingTrimEditors_ = false;
+    int clipHoldTicks_ = 0;
 
     juce::GroupComponent finishGroup_{"finish", "4. FINISH / TUNING"};
     juce::TextButton finishButton_{"FINISH -> DIRECT BIN"};
