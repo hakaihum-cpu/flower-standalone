@@ -35,6 +35,8 @@ public:
     juce::String startRecording(const juce::File& file);
     void stopRecording();
     bool isRecording() const noexcept { return recording_.load(); }
+    int recordingWriteDropouts() const noexcept { return writerDropouts_.load(); }
+    int recordingXRuns() const noexcept;
 
     float currentInputLevel() const noexcept;
     bool currentDeviceIsOpenAt48k() const noexcept;
@@ -58,6 +60,9 @@ private:
     std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> threadedWriter_;
     std::atomic<juce::AudioFormatWriter::ThreadedWriter*> activeWriter_{nullptr};
     std::atomic<bool> recording_{false};
+    std::atomic<int> writerDropouts_{0};
+    int xRunStart_ = -1;
+    int xRunEnd_ = -1;
     juce::AudioBuffer<float> stereoScratch_;
     double currentSampleRate_ = 0.0;
     int currentBlockSize_ = 0;
