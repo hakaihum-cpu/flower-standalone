@@ -341,7 +341,7 @@ public final class MainActivity extends Activity {
     directWorkerActive=true;
     final int generation=++directGeneration;
     final UsbDevice device=selectedUsb;
-    usbStatus="USB DIRECT: STARTING USBFS PCM";
+    usbStatus="USB HOST: STARTING LIBUSB ASYNC ISO";
     usbReport="USB_DIRECT_START_REQUESTED\n"+UsbAudioDeviceProbe.inspect(this,device);
     try{
       UsbDiagnosticStore.save(this,diagnosticReport());
@@ -603,10 +603,10 @@ public final class MainActivity extends Activity {
     s.append("GOAL: <=10ms ANALOG INPUT-TO-OUTPUT; NOT MEASURED\n");
     s.append("DIRECT USBFS ISO TEST RUN="+ranDirectIso+" / BUSY="+directIsoRunning+"\n");
     s.append("DIRECT USBFS ISO QUEUE DEPTH="+isoQueueDepth+"\n");
-    s.append("ENGINE_CONFIG="+(usbDirectEnabled?"USBFS_DIRECT_PCM":"AAUDIO")+"\n");
+    s.append("ENGINE_CONFIG="+(usbDirectEnabled?"LIBUSB_UAC1_HOST":"AAUDIO")+"\n");
     s.append("AAUDIO_RUNTIME_RUNNING="+bridge.aaudioRunning+"\n");
     String runtime=bridge.aaudioRunning?"AAUDIO":
-        (UsbDirectEngine.isRunning()?"USBFS_DIRECT_PCM":"NO_ACTIVE_STREAM");
+        (UsbDirectEngine.isRunning()?"LIBUSB_UAC1_HOST":"NO_ACTIVE_STREAM");
     s.append("ENGINE_ACTUALLY_RUNNING="+runtime+"\n");
     s.append("USB_DIRECT_STATS="+UsbDirectEngine.stats()+"\n");
     s.append("USB_STATUS="+usbStatus+"\n");
@@ -813,16 +813,16 @@ public final class MainActivity extends Activity {
     }
     private void config(Canvas c){
       header(c);
-      title(c,usbDirectEnabled?"CONFIG / USB DIRECT":"CONFIG / AAUDIO",25,130);
+      title(c,usbDirectEnabled?"CONFIG / USB HOST":"CONFIG / AAUDIO",25,130);
       txt(c,"APK "+shorten(installedVersion,24),440,128,10,DIM);
       if(usbDirectEnabled){
         rect(c,20,150,680,75,CASE,GOLD);
-        txt(c,"ENGINE SELECTED: USB DIRECT",38,174,16,GOLD);
+        txt(c,"ENGINE SELECTED: USB HOST",38,174,16,GOLD);
         txt(c,shorten(usbStatus,57),38,204,15,LIT);
         rect(c,20,235,680,75,CASE,GOLD);
         txt(c,"ACTIVE AUDIO ENGINE (NATIVE)",38,259,15,GOLD);
         String active=bridge.aaudioRunning?"AAUDIO (UNEXPECTED)":
-          (UsbDirectEngine.isRunning()?"USBFS DIRECT PCM":"NONE / FAILED OR STOPPED");
+          (UsbDirectEngine.isRunning()?"LIBUSB ASYNC PCM":"NONE / FAILED OR STOPPED");
         txt(c,active,38,290,18,bridge.aaudioRunning?Color.RED:LIT);
         rect(c,20,321,680,72,CASE,GOLD);
         txt(c,"USB ISO QUEUE DEPTH (TAP TO CHANGE)",38,345,15,GOLD);
@@ -849,7 +849,7 @@ public final class MainActivity extends Activity {
         centered(c,"RESTART AUDIO",526,440,17,GOLD);
       }
       rect(c,20,468,320,38,usbDirectEnabled?GOLD:DARK,GOLD);
-      centered(c,usbDirectEnabled?"ENGINE: USB DIRECT":"ENGINE: AAUDIO",180,493,15,
+      centered(c,usbDirectEnabled?"ENGINE: USB HOST":"ENGINE: AAUDIO",180,493,15,
           usbDirectEnabled?DARK:LIT);
       rect(c,355,468,345,38,DARK,GOLD);
       centered(c,"USB DIAGNOSTICS >",526,493,15,LIT);
@@ -858,7 +858,7 @@ public final class MainActivity extends Activity {
         txt(c,shorten(UsbDirectEngine.stats(),82),24,546,11,GOLD);
         txt(c,"AAUDIO RUNTIME: "+(bridge.aaudioRunning?"ACTIVE - ERROR":"STOPPED"),24,573,16,
             bridge.aaudioRunning?Color.RED:GOLD);
-        txt(c,"USB PATH: 48kHz / UAC1 PCM / DIRECT USBFS",24,595,12,LIT);
+        txt(c,"USB PATH: UAC1 / LIBUSB ASYNC ISO / 48kHz",24,595,12,LIT);
         txt(c,"USB ERRORS: "+shorten(usbReport,61),24,619,11,DIM);
         txt(c,"FULL FAILURE REASON: USB DIAGNOSTICS > VIEW RESULT",24,644,12,GOLD);
       }else{
@@ -884,12 +884,12 @@ public final class MainActivity extends Activity {
     }
     private void tuning(Canvas c){
       header(c);
-      title(c,usbDirectEnabled?"USB DIRECT / DIAGNOSTICS":"USB TUNING / AAUDIO",25,128);
+      title(c,usbDirectEnabled?"USB HOST / DIAGNOSTICS":"USB TUNING / AAUDIO",25,128);
       txt(c,shorten(usbStatus,78),25,148,12,GOLD);
       if(usbDirectEnabled){
         rect(c,20,162,680,272,CASE,GOLD);
-        txt(c,"USBFS PCM ENGINE - NOT AAUDIO",35,197,18,GOLD);
-        txt(c,"iRig PRO DUO / USB DIRECT / 48000Hz",35,232,15,LIT);
+        txt(c,"LIBUSB UAC1 HOST - NOT AAUDIO",35,197,18,GOLD);
+        txt(c,"iRig PRO DUO / USB HOST / 48000Hz",35,232,15,LIT);
         txt(c,"ACTIVE: "+(UsbDirectEngine.isRunning()?"YES":"NO / TRANSFER FAILED"),35,270,16,LIT);
         txt(c,"AAUDIO STREAM: "+(bridge.aaudioRunning?"ACTIVE - BUG":"CLOSED"),35,310,16,
             bridge.aaudioRunning?Color.RED:GOLD);
@@ -916,7 +916,7 @@ public final class MainActivity extends Activity {
       rect(c,355,548,345,47,DARK,GOLD);
       centered(c,"SAVE REPORT .TXT",526,578,16,LIT);
       if(usbDirectEnabled){
-        txt(c,"USBFS DIRECT   "+shorten(UsbDirectEngine.stats(),60),24,618,11,GOLD);
+        txt(c,"LIBUSB HOST    "+shorten(UsbDirectEngine.stats(),60),24,618,11,GOLD);
       }else{
         txt(c,"OUT FR "+bridge.outputFrames+" / REQ "+bridge.requestFrames+
             "    XRUN "+bridge.xruns+"    MISS "+bridge.ringStarvation,24,618,12,GOLD);

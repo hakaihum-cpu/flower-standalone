@@ -1,11 +1,40 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(amps_audio LANGUAGES CXX)
+project(amps_audio LANGUAGES C CXX)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-# Keep existing CircleCI medium executor safe from uncontrolled Ninja builds.
+
+# Existing CircleCI Android/NDK worker: keep Ninja parallelism bounded.
 set_property(GLOBAL PROPERTY JOB_POOLS amps_compile=2)
 set(CMAKE_JOB_POOL_COMPILE amps_compile)
-add_library(amps_audio SHARED AAudioEngine.cpp UsbIsoTester.cpp UsbPcmEngine.cpp)
+
+# libusb-cmake includes a VENDORED copy of libusb, not a Git submodule.
+# Immutable upstream commit for repeatable builds; NO GitHub Actions,
+# new CI workflow or alternate Android signing/build machinery.
+include(FetchContent)
+set(FETCHCONTENT_QUIET ON)
+set(LIBUSB_INSTALL_TARGETS OFF CACHE BOOL "" FORCE)
+set(LIBUSB_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(LIBUSB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LIBUSB_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(amps_libusb
+  GIT_REPOSITORY https://github.com/libusb/libusb-cmake.git
+  GIT_TAG bea6567b63796ab27c1c33257d230284fb2d8316
+  GIT_SHALLOW FALSE
+  GIT_PROGRESS FALSE
+)
+FetchContent_MakeAvailable(amps_libusb)
+set_target_properties(usb-1.0 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# AAudio remains available solely for the explicitly selected AAudio mode.
+# UsbPcmEngine.cpp is deliberately NOT linked: its legacy USBFS JNI symbol
+# would collide with UsbLibusbHost.cpp and reintroduce old direct transport.
+add_library(amps_audio SHARED
+  AAudioEngine.cpp
+  UsbIsoTester.cpp
+  UsbLibusbHost.cpp
+)
 target_compile_options(amps_audio PRIVATE -O3 -Wall -Wextra)
-target_link_libraries(amps_audio PRIVATE aaudio log)
+target_link_libraries(amps_audio PRIVATE aaudio log libusb::usb-1.0)

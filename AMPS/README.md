@@ -280,3 +280,47 @@ usb_set_interface to activate or deactivate streaming endpoints;
 Linux libusb treats -ESHUTDOWN as an unusable/disconnected USB stream.
 This is a targeted hypothesis, NOT a verified cure for the actual
 kernel's OUT endpoint shutdown. Tested failure may remain.
+
+## AN-68 / 0.8.0 native libusb USB Audio Host (experimental)
+
+The goal is an independent UAC1 USB Host for iRig PRO DUO / RG Rotate,
+NOT incremental AAudio burst tuning and not another manual USBDEVFS URB
+engine. USB Host architecture uses libusb, Native AmpModel AC30 DSP,
+and Android UsbDeviceConnection solely for USB permission, descriptor
+verification, AudioControl/AudioStreaming interface claiming, and UAC1
+48000 Hz endpoint setup. AAudio mode remains available by user choice,
+but USB Host audio never passes through AAudio/AudioRecord/AudioTrack.
+
+Dependency: libusb-cmake commit bea6567b63796ab27c1c33257d230284fb2d8316
+includes a vendored upstream libusb source tree. CMake FetchContent
+downloads this exact immutable commit at NDK configure time and builds
+libusb::usb-1.0 STATIC, linked into amps_audio. This is an EXTERNAL
+GIT NETWORK BUILD DEPENDENCY; the existing CircleCI environment needs
+GitHub access for the first Gradle/CMake configuration. No new workflow
+or GitHub Actions introduced, signing configuration unchanged.
+
+Transport: libusb_init_context(NO_DEVICE_DISCOVERY), libusb_wrap_sys_device
+on the Android-permitted USB fd (Linux backend retains ownership of fd
+with Android), asynchronous ISO two packets/transfer and 1–4
+transfers/endpoint. Playback silence primed first, then capture. A
+single native event thread uses libusb_handle_events_timeout_completed
+at 1ms intervals, takes mono input channel 1, processes AmpModel
+AC30 and writes stereo 24-bit output. All active transfers are
+cancelled and drained on stop, or held allocated on timeout to avoid
+USB use-after-free; cleanup leaks are explicit in diagnostics.
+Native JNI run/stats/controls API kept compatible with UsbDirectEngine.
+Legacy UsbPcmEngine.cpp stays as source reference but is EXCLUDED
+from amps_audio target to prevent duplicate JNI symbols.
+MIDI interfaces IF3 and IF4 are untouched by the Android claim logic.
+
+Previous 0.7.4 real device behavior was OUT -ESHUTDOWN and zero
+completions, despite correctly configured UAC1/48kHz/streaming ALT.
+LIBUSB DOES NOT circumvent the underlying Linux USB host controller
+and also uses Linux usbfs; therefore the same hardware issue may
+persist. v0.8.0 is a deliberately separate transport implementation
+and not a claim of ESHUTDOWN cure, working output or <=10ms RTT.
+Only built/verified APK and loopback measurement can establish results.
+
+Preflight source and invariants: AMPS/test_core.sh (existing CircleCI).
+Run exactly one manual CircleCI manual_android_build with
+run_build=true on the identified feature HEAD, after preflight.

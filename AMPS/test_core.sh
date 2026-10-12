@@ -55,48 +55,44 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror \
 grep -Fq 'USBDEVFS_SUBMITURB' "$ROOT/app/src/main/cpp/UsbIsoTester.cpp"
 grep -Fq 'AAUDIO=NOT_USED_DURING_USBFS_TEST' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbIsoTester.java"
 
-# USB Direct transport/DSP; native JNI compilation is mandatory before Gradle.
-c++ -std=c++17 -O2 -Wall -Wextra -Werror \
-  -I "$JDK_TOP/include" -I "$JDK_TOP/include/linux" \
-  -c "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp" -o "$TMP/UsbPcmEngine.o"
-grep -Fq 'UsbDirectFormat.find(device,c.getRawDescriptors())' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
-grep -Fq 'UsbDirectEngine.execute(this,device' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
-grep -Fq 'UsbDiagnosticStore.load(this)' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
-
-# Regression guards for actual iRig PRO DUO endpoint shutdown report.
-grep -Fq 'FIRST_OUT_URB_STATUS' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
-grep -Fq 'failure==-ESHUTDOWN' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
-grep -Fq 'controlTransfer(0x22,0x01,0x0100' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
-grep -Fq 'inputRateControl=fmtIn.rateCtrlIn' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectFormat.java"
-grep -Fq 'USB_DESCRIPTORS' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
-
-# Avoid misleading AAudio reports when USB DIRECT is selected.
-grep -Fq 'ENGINE_ACTUALLY_RUNNING=' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
-grep -Fq 'AAUDIO_RUNTIME_RUNNING=' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
-grep -Fq 'INSTALLED_APK_VERSION=' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
-grep -Fq 'if(usbDirectEnabled)chooseUsbQueueDepth();else chooseBurst();' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
-grep -Fq 'aaudioRunning=s[0]==1' "$ROOT/app/src/main/java/com/analoglav/amps/AudioBridge.java"
-
-# AN-68: USB OUT-first implementation guards. Fail before expensive Gradle.
-grep -Fq 'DIRECT_INIT_ORDER=OUT_FIRST' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
-grep -Fq 'TARGET_DEVICE_STILL_ENUMERATED=' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
-grep -Fq 'OUTPUT_FIRST_STARTUP=1' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
-grep -Fq 'err=-ETIMEDOUT' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
-grep -Fq 'completedOut.load()>0 ? 1:0' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
-
-# AN-68 iRig OUT -EXDEV/-ESHUTDOWN: maintain millisecond-scale USBFS
-# isochronous queue and record the first failing scheduled frame.
-grep -Fq 'packetsPerUrb=2' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
-grep -Fq 'const int rc=poll(&pfd,1,1)' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
-grep -Fq 'ISO_PACKETS_PER_URB=' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
-grep -Fq 'FIRST_OUT_BAD_PACKET_INDEX=' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
-grep -Fq 'MAX_LOOP_GAP_US=' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
-! grep -Fq 'int pollResult=poll(&pfd,1,20)' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
-
-# AN-68 USB IF0 AudioControl ownership is determined by UAC1 header
-# baInterfaceNr; MIDI AudioControl IF3 must remain untouched.
-grep -Fq 'findAudioControl(device,c.getRawDescriptors()' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
-grep -Fq 'final int n=raw[p+7]' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
-grep -Fq 'UAC_CONTROL_CLAIMED=true' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
-grep -Fq 'GET_INTERFACE_' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
-grep -Fq 'GET_INTERFACE_=' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java" || grep -Fq '"_IF"' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+# AN-68/libusb Host mode: source-path and dependency isolation audit.
+# Actual libusb JNI compilation happens in the existing NDK/CMake job after
+# FetchContent obtains the SHA-pinned upstream source.
+test -f "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
+grep -Fq 'GIT_TAG bea6567b63796ab27c1c33257d230284fb2d8316' \
+  "$ROOT/app/src/main/cpp/CMakeLists.txt"
+grep -Fq 'libusb::usb-1.0' "$ROOT/app/src/main/cpp/CMakeLists.txt"
+grep -Fq 'UsbLibusbHost.cpp' "$ROOT/app/src/main/cpp/CMakeLists.txt"
+! grep -Eq '^[[:space:]]*UsbPcmEngine\.cpp([[:space:]]|$)' \
+  "$ROOT/app/src/main/cpp/CMakeLists.txt"
+grep -Fq 'libusb_wrap_sys_device' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
+grep -Fq 'libusb_init_context' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
+grep -Fq 'LIBUSB_OPTION_NO_DEVICE_DISCOVERY' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
+grep -Fq 'libusb_fill_iso_transfer' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
+grep -Fq 'libusb_submit_transfer' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
+grep -Fq 'libusb_handle_events_timeout_completed' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
+grep -Fq 'libusb_cancel_transfer' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
+grep -Fq 'ENGINE=LIBUSB_UAC1_HOST_ASYNC_DSP' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
+grep -Fq 'ENGINE_CONFIG="+(usbDirectEnabled?"LIBUSB_UAC1_HOST":"AAUDIO")' \
+  "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'UsbDirectFormat.find(device,c.getRawDescriptors())' \
+  "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'findAudioControl(device,c.getRawDescriptors()' \
+  "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'UAC_CONTROL_CLAIMED=true' \
+  "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'UsbDirectEngine.execute(this,device' \
+  "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'AAUDIO_RUNTIME_RUNNING=' \
+  "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'INSTALLED_APK_VERSION=' \
+  "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'UsbDiagnosticStore.load(this)' \
+  "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'controlTransfer(0x22,0x01,0x0100' \
+  "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'TARGET_DEVICE_STILL_ENUMERATED=' \
+  "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+# Native JNI symbols are defined exclusively by the selected libusb host.
+test "$(grep -c 'Java_com_analoglav_amps_usb_UsbDirectEngine_nativeRun' \
+  "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp")" -eq 1
