@@ -1,5 +1,8 @@
 #include "AudioEngine.h"
 
+#include <cmath>
+#include <limits>
+
 AudioEngine::AudioEngine() {
     previewFormatManager_.registerBasicFormats();
     writerThread_.startThread();
