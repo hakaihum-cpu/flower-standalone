@@ -22,6 +22,7 @@ public:
 
 private:
     struct AudioInputOption { juce::String type; juce::String name; };
+    struct AudioOutputOption { juce::String type; juce::String name; };
     enum class DragParam {
         none, complex, bar, width, length, hold, effect,
         hazeMix, hazeTime, hazeAmount, hazeFilter, hazeRepeat, hazeMod,
@@ -40,6 +41,7 @@ private:
     void paintHaze (juce::Graphics&);
     void paintChordBot (juce::Graphics&);
     void paintConfig (juce::Graphics&);
+    void paintAudioConfig (juce::Graphics&);
     void paintMidiControlConfig (juce::Graphics&);
     void paintBar (juce::Graphics&, juce::Rectangle<float>, const juce::String&, float, const juce::String&);
     void setParameterFromX (DragParam, float designX);
@@ -52,6 +54,13 @@ private:
     int chordBotPadAtPoint (juce::Point<float>) const;
     void refreshAudioInputs();
     void selectAudioInput (int index);
+    void refreshAudioOutputs();
+    void selectAudioOutput (int index);
+    void refreshAudioBufferStatus();
+    bool applyAudioBufferMode (int mode);
+    bool resetAudioDevice();
+    juce::String makeAudioBufferStatus() const;
+    juce::String currentOutputName() const;
     void refreshMidiOutputs();
     void cycleMidiOutput (int direction);
     void updateMidiControllerFromPoint (juce::Point<float>);
@@ -75,12 +84,22 @@ private:
     float eurekaVisualPreviousActivity = 0.0f;
     uint32_t visualRandomState = 0x45464658u;
     bool configVisible = false;
+    bool audioConfigVisible = false;
     bool midiControlConfigVisible = false;
     bool xyDragging = false;
     DragParam dragging = DragParam::none;
     std::vector<AudioInputOption> audioInputs;
+    std::vector<AudioOutputOption> audioOutputs;
     juce::StringArray physicalInputNames;
     int selectedAudioInput = -1;
+    int selectedAudioOutput = -1;
+    int audioBufferMode = 0;
+    int audioDefaultBufferFrames = -1;
+    int audioFramesPerBurst = 0;
+    int audioActualBufferFrames = 0;
+    double audioActualSampleRate = 0.0;
+    juce::String audioDeviceMessage;
+    juce::String audioBufferError;
     juce::Array<juce::MidiDeviceInfo> midiOutputs;
     int selectedMidiOutput = -1;
     int midiPresetSlot = 1;
