@@ -9,10 +9,20 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.net.Uri;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.Build;
 import com.analoglav.amps.usb.UsbAudioDeviceProbe;
+import com.analoglav.amps.usb.UsbIsoTester;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -36,6 +46,7 @@ import java.util.Locale;
 /** Original amber-dot UI, designed at logical 720x720 and rescaled with touch. */
 public final class MainActivity extends Activity {
   private static final int PERMISSION=42;
+  private static final int SAVE_DIAGNOSTIC_TXT=107;
   private static final String USB_PERMISSION="com.analoglav.amps.USB_DIAG_PERMISSION";
   private static final int GOLD=Color.rgb(255,185,46), DIM=Color.rgb(133,88,25),
       LIT=Color.rgb(255,211,96), DARK=Color.rgb(10,10,8), CASE=Color.rgb(28,23,15);
@@ -58,7 +69,14 @@ public final class MainActivity extends Activity {
   private boolean config=false,tuningPage=false;
   private final TuningProfile tuning=new TuningProfile();
   private String usbReport="USB NOT PROBED; DIRECT USB ENGINE NOT IMPLEMENTED";
+  private String usbStatus="USB SCAN: NOT RUN";
+  private String pendingDiagnosticText;
   private UsbDevice selectedUsb;
+  private boolean directIsoRunning=false;
+  private boolean ranDirectIso=false;
+  private int usbNextAction=1; // 1=descriptor, 2=usbfs ISO transfer test
+  private int isoQueueDepth=3;
+
   private int grabbed=-1;
   private float startY,startValue;
   private long downAt;
@@ -67,9 +85,15 @@ public final class MainActivity extends Activity {
     @Override public void onReceive(Context context,Intent intent){
       if(!USB_PERMISSION.equals(intent.getAction()))return;
       UsbManager m=(UsbManager)getSystemService(Context.USB_SERVICE);
-      if(selectedUsb!=null&&m!=null&&m.hasPermission(selectedUsb))
-        probeSelectedUsb();
-      else usbReport="USB PERMISSION DENIED / NO DESCRIPTORS READ";
+      if(selectedUsb!=null&&m!=null&&m.hasPermission(selectedUsb)){
+        if(usbNextAction==2)runUsbIsoTest();
+        else probeSelectedUsb();
+      }
+      else {
+        usbReport="USB PERMISSION DENIED / NO DESCRIPTORS READ";
+        usbStatus="USB SCAN: PERMISSION DENIED";
+        showUsbReport();
+      }
       if(screen!=null)screen.postInvalidate();
     }
   };
@@ -99,6 +123,7 @@ public final class MainActivity extends Activity {
     for(int i=0;i<TuningProfile.OPTIONS.length;i++)
       tuning.setValue(i,prefs.getInt("tune-"+i,0));
     bridge.setTuning(tuning);
+    isoQueueDepth=Math.max(1,Math.min(4,prefs.getInt("usb-iso-depth",3)));
     IntentFilter usbFilter=new IntentFilter(USB_PERMISSION);
     if(Build.VERSION.SDK_INT>=33)
       registerReceiver(usbPermissionReceiver,usbFilter,Context.RECEIVER_NOT_EXPORTED);
@@ -121,7 +146,8 @@ public final class MainActivity extends Activity {
   @Override protected void onPause(){bridge.stop();super.onPause();}
   @Override protected void onResume(){
     super.onResume();
-    if(bridge!=null&&checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)
+    if(bridge!=null&&!directIsoRunning && !ranDirectIso &&
+       checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)
       bridge.start();
   }
   @Override protected void onDestroy(){
@@ -164,14 +190,14 @@ public final class MainActivity extends Activity {
           String key=dev==null?"":dev.getType()+"|"+dev.getProductName();
           prefs.edit().putString(input?"in-token":"out-token",key).apply();
           if(input)bridge.inputDevice=id;else bridge.outputDevice=id;
-          bridge.start();screen.invalidate();
+          restartBaselineAudio();screen.invalidate();
         }).setNegativeButton("CLOSE",null).show();
   }
   private void chooseBurst(){
     new AlertDialog.Builder(this).setTitle("AUDIO BUFFER / BURSTS")
       .setSingleChoiceItems(AudioBridge.BURST_LABELS,bridge.burstIndex,(d,index)->{
         bridge.burstIndex=index;prefs.edit().putInt("burst",index).apply();
-        d.dismiss();bridge.start();screen.invalidate();
+        d.dismiss();restartBaselineAudio();screen.invalidate();
       }).setNegativeButton("CLOSE",null).show();
   }
   private void selectTuneValue(int row){
@@ -189,25 +215,49 @@ public final class MainActivity extends Activity {
         screen.invalidate();
       }).setNegativeButton("CLOSE",null).show();
   }
+  private void restartBaselineAudio(){
+    if(directIsoRunning){
+      bridge.status="USBFS ISO TEST ACTIVE - WAIT";
+      return;
+    }
+    ranDirectIso=false;
+    bridge.start();
+  }
   private void applyTune(){
     SharedPreferences.Editor edit=prefs.edit();
     for(int i=0;i<TuningProfile.OPTIONS.length;i++)
       edit.putInt("tune-"+i,tuning.get(i));
     edit.apply();
     bridge.setTuning(tuning);
-    bridge.start();
+    restartBaselineAudio();
     screen.invalidate();
   }
   private void resetTune(){
     tuning.reset();
     applyTune();
   }
-  private void selectUsbProbe(){
+  private void selectUsbProbe(){selectUsbForAction(false);}
+  private void selectUsbTest(){
+    final String[] queue={
+      "1 ISO URB per direction",
+      "2 ISO URBs per direction",
+      "3 ISO URBs per direction",
+      "4 ISO URBs per direction"
+    };
+    new AlertDialog.Builder(this).setTitle("USBFS ISO QUEUE DEPTH")
+      .setSingleChoiceItems(queue,isoQueueDepth-1,(dialog,index)->{
+        isoQueueDepth=index+1;
+        prefs.edit().putInt("usb-iso-depth",isoQueueDepth).apply();
+        dialog.dismiss();
+        selectUsbForAction(true);
+      }).setNegativeButton("CLOSE",null).show();
+  }
+  private void selectUsbForAction(boolean direct){
     UsbManager manager=(UsbManager)getSystemService(Context.USB_SERVICE);
-    if(manager==null){usbReport="USB MANAGER UNAVAILABLE";screen.invalidate();return;}
+    if(manager==null){usbReport="USB MANAGER UNAVAILABLE";usbStatus="USB SCAN: MANAGER UNAVAILABLE";showUsbReport();screen.invalidate();return;}
     ArrayList<UsbDevice> candidates=new ArrayList<>(manager.getDeviceList().values());
     candidates.sort((a,b)->a.getDeviceName().compareTo(b.getDeviceName()));
-    if(candidates.isEmpty()){usbReport="NO USB DEVICE CONNECTED";screen.invalidate();return;}
+    if(candidates.isEmpty()){usbReport="NO USB DEVICE CONNECTED";usbStatus="USB SCAN: NO CONNECTED DEVICES";showUsbReport();screen.invalidate();return;}
     String[] labels=new String[candidates.size()];
     for(int i=0;i<candidates.size();i++){
       UsbDevice d=candidates.get(i);
@@ -217,10 +267,12 @@ public final class MainActivity extends Activity {
     new AlertDialog.Builder(this).setTitle("USB AUDIO / READ-ONLY PROBE")
       .setItems(labels,(dialog,index)->{
         selectedUsb=candidates.get(index);
+        usbNextAction=direct?2:1;
         if(manager.hasPermission(selectedUsb)){
-          probeSelectedUsb();
+          if(direct)runUsbIsoTest();else probeSelectedUsb();
         }else{
           usbReport="WAITING FOR USB PERMISSION";
+          usbStatus="USB SCAN: WAITING FOR PERMISSION";
           Intent action=new Intent(USB_PERMISSION).setPackage(getPackageName());
           PendingIntent pi=PendingIntent.getBroadcast(this,77,action,
               PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_MUTABLE);
@@ -229,19 +281,124 @@ public final class MainActivity extends Activity {
         screen.invalidate();
       }).setNegativeButton("CLOSE",null).show();
   }
+  private void runUsbIsoTest(){
+    if(directIsoRunning)return;
+    final UsbDevice device=selectedUsb;
+    if(device==null){
+      usbStatus="DIRECT USB ISO: NO SELECTED DEVICE";
+      showUsbReport();return;
+    }
+    // STOP AAudio BEFORE claiming USB audio interfaces. No AAudio read/write
+    // or callbacks can execute during the usbfs direct transfer test.
+    bridge.stop();
+    directIsoRunning=true;
+    ranDirectIso=true;
+    usbStatus="DIRECT USBFS ISO: RUNNING (AAUDIO OFF)";
+    usbReport="Native USBFS isochronous IN+OUT in progress. OUT is SILENCE.";
+    screen.invalidate();
+    new Thread(()->{
+      final String description=UsbAudioDeviceProbe.inspect(this,device);
+      final String outcome=UsbIsoTester.execute(this,device,350,isoQueueDepth);
+      runOnUiThread(()->{
+        directIsoRunning=false;
+        usbStatus="DIRECT USBFS ISO: FINISHED / CHECK COUNTERS";
+        usbReport=description+"\n\n"+outcome;
+        bridge.status="USBFS ISO TEST COMPLETED / AAUDIO STOPPED";
+        screen.invalidate();
+        if(!isFinishing())showUsbReport();
+      });
+    },"AMPS-USBFS-ISO").start();
+  }
   private void probeSelectedUsb(){
     usbReport=UsbAudioDeviceProbe.inspect(this,selectedUsb);
+    boolean isoInput=false,isoOutput=false;
+    if(selectedUsb!=null){
+      for(int i=0;i<selectedUsb.getInterfaceCount();i++){
+        android.hardware.usb.UsbInterface iface=selectedUsb.getInterface(i);
+        if(iface.getInterfaceClass()!=1||iface.getInterfaceSubclass()!=2)continue;
+        for(int j=0;j<iface.getEndpointCount();j++){
+          android.hardware.usb.UsbEndpoint ep=iface.getEndpoint(j);
+          if(ep.getType()!=1)continue;
+          if(ep.getDirection()==128)isoInput=true;else isoOutput=true;
+        }
+      }
+    }
+    boolean passed=usbReport.contains("RAW DESCRIPTORS HEX:");
+    usbStatus=passed?
+        "USB SCAN: SUCCESS / ISO IN "+(isoInput?"YES":"NOT LISTED")+
+        " / OUT "+(isoOutput?"YES":"NOT LISTED"):
+        "USB SCAN: FAILED / SEE REPORT";
     screen.invalidate();
+    showUsbReport();
+  }
+  private void showUsbReport(){
+    // This is the measured/decoded USB descriptor report, not a decorative
+    // READ ONLY label. Dialog content is scrollable and selectable.
+    TextView content=new TextView(this);
+    content.setText(usbStatus+"\n\n"+usbReport);
+    content.setTextSize(12f);
+    content.setTypeface(Typeface.MONOSPACE);
+    content.setTextIsSelectable(true);
+    content.setPadding(20,12,20,12);
+    ScrollView scroll=new ScrollView(this);
+    scroll.setFillViewport(false);
+    scroll.addView(content);
+    new AlertDialog.Builder(this)
+        .setTitle("USB DIAGNOSTIC RESULT")
+        .setView(scroll)
+        .setPositiveButton("SAVE .TXT",(dialog,which)->saveDiagnosticTxt())
+        .setNeutralButton("COPY",(dialog,which)->exportReport(false))
+        .setNegativeButton("CLOSE",null)
+        .show();
+  }
+  private void saveDiagnosticTxt(){
+    // Snapshot the report before the system document picker is opened.
+    // Android Storage Access Framework needs no broad storage permission.
+    pendingDiagnosticText=diagnosticReport();
+    String when=new SimpleDateFormat("yyyyMMdd_HHmmss",Locale.US).format(new Date());
+    Intent create=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+    create.addCategory(Intent.CATEGORY_OPENABLE);
+    create.setType("text/plain");
+    create.putExtra(Intent.EXTRA_TITLE,"AMPS_Diagnostic_"+when+".txt");
+    try{
+      startActivityForResult(create,SAVE_DIAGNOSTIC_TXT);
+    }catch(android.content.ActivityNotFoundException e){
+      pendingDiagnosticText=null;
+      Toast.makeText(this,"No text document provider installed",Toast.LENGTH_LONG).show();
+    }
+  }
+  @Override protected void onActivityResult(int request,int result,Intent data){
+    super.onActivityResult(request,result,data);
+    if(request!=SAVE_DIAGNOSTIC_TXT)return;
+    String report=pendingDiagnosticText;
+    pendingDiagnosticText=null;
+    if(result!=RESULT_OK||data==null||data.getData()==null||report==null)return;
+    Uri destination=data.getData();
+    try(OutputStream out=getContentResolver().openOutputStream(destination,"w")){
+      if(out==null)throw new IOException("Output stream unavailable");
+      out.write(report.getBytes(StandardCharsets.UTF_8));
+      out.flush();
+      bridge.status="DIAGNOSTIC .TXT SAVED";
+      Toast.makeText(this,"AMPS diagnostic saved as .txt",Toast.LENGTH_LONG).show();
+    }catch(Exception e){
+      bridge.status="DIAGNOSTIC SAVE FAILED";
+      new AlertDialog.Builder(this).setTitle("SAVE .TXT FAILED")
+          .setMessage(e.getClass().getSimpleName()+": "+e.getMessage())
+          .setPositiveButton("OK",null).show();
+    }
+    if(screen!=null)screen.invalidate();
   }
   private String diagnosticReport(){
     bridge.poll();
     StringBuilder s=new StringBuilder();
-    s.append("AMPS AN-68 / 0.5.0 INTERACTIVE USB + AAUDIO DIAG\n");
+    s.append("AMPS AN-68 / 0.6.0 NATIVE USBFS ISO TRANSPORT TEST\n");
     s.append("DATE_MS=").append(System.currentTimeMillis()).append('\n');
     s.append("ANDROID_SDK=").append(Build.VERSION.SDK_INT).append('\n');
     s.append("DEVICE=").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n');
     s.append("GOAL: <=10ms ANALOG INPUT-TO-OUTPUT; NOT MEASURED\n");
-    s.append("ACTIVE ENGINE=AAUDIO; DIRECT USB ISO DRIVER=NOT IMPLEMENTED\n");
+    s.append("DIRECT USBFS ISO TEST RUN="+ranDirectIso+" / BUSY="+directIsoRunning+"\n");
+    s.append("DIRECT USBFS ISO QUEUE DEPTH="+isoQueueDepth+"\n");
+    s.append("DIRECT TRANSFER IS NOT AUDIO LOOPBACK; RTT NOT MEASURED\n");
     s.append("DRAFT TUNING:\n").append(tuning.report());
     s.append("APPLIED OUT=").append(bridge.tuneOutFrames)
         .append(" CALLBACK=").append(bridge.tuneCallbackFrames)
@@ -476,7 +633,7 @@ public final class MainActivity extends Activity {
     private void tuning(Canvas c){
       header(c);
       title(c,"USB TUNING / AAUDIO ACTIVE",25,128);
-      txt(c,"DIRECT USB ISO DRIVER: NOT IMPLEMENTED",25,148,12,DIM);
+      txt(c,shorten(usbStatus,82),25,148,12,GOLD);
       for(int row=0;row<TuningProfile.OPTIONS.length;row++){
         int y=162+row*70;
         rect(c,20,y,680,62,CASE,GOLD);
@@ -487,12 +644,14 @@ public final class MainActivity extends Activity {
       }
       rect(c,20,446,680,42,DARK,GOLD);
       centered(c,"APPLY & RESTART AUDIO",360,473,17,LIT);
-      rect(c,20,497,680,42,DARK,GOLD);
-      centered(c,"READ USB DESCRIPTORS (NO CLAIM)",360,525,15,LIT);
+      rect(c,20,497,320,42,DARK,GOLD);
+      centered(c,"USB INFO",180,525,16,LIT);
+      rect(c,355,497,345,42,DARK,GOLD);
+      centered(c,"USBFS ISO TEST",526,525,16,LIT);
       rect(c,20,548,320,47,DARK,GOLD);
-      centered(c,"COPY REPORT",180,578,16,LIT);
+      centered(c,"VIEW USB RESULT",180,578,16,LIT);
       rect(c,355,548,345,47,DARK,GOLD);
-      centered(c,"SHARE REPORT",526,578,16,LIT);
+      centered(c,"SAVE REPORT .TXT",526,578,16,LIT);
       txt(c,"OUT FR "+bridge.outputFrames+" / REQ "+bridge.requestFrames+
           "    XRUN "+bridge.xruns+"    MISS "+bridge.ringStarvation,24,618,12,GOLD);
       rect(c,20,628,680,31,DARK,DIM);
@@ -568,9 +727,10 @@ public final class MainActivity extends Activity {
               invalidate();
             }
           }else if(within(x,y,20,446,680,42))applyTune();
-          else if(within(x,y,20,497,680,42))selectUsbProbe();
-          else if(within(x,y,20,548,320,47))exportReport(false);
-          else if(within(x,y,355,548,345,47))exportReport(true);
+          else if(within(x,y,20,497,320,42))selectUsbProbe();
+          else if(within(x,y,355,497,345,42))selectUsbTest();
+          else if(within(x,y,20,548,320,47))showUsbReport();
+          else if(within(x,y,355,548,345,47))saveDiagnosticTxt();
           else if(within(x,y,20,628,680,31))resetTune();
           else if(y>=666){tuningPage=false;invalidate();}
           performClick();return true;
@@ -588,7 +748,7 @@ public final class MainActivity extends Activity {
           else if(within(x,y,355,407,345,52)){
             if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
               requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},PERMISSION);
-            else bridge.start();
+            else restartBaselineAudio();
           }else if(y>=658){config=false;invalidate();}
         }else{
           if(within(x,y,34,166,173,45)){

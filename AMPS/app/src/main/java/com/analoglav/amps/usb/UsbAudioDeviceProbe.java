@@ -40,9 +40,13 @@ public final class UsbAudioDeviceProbe {
       connection=m.openDevice(selected);
       if(connection==null)return b.append("DEVICE OPEN FAILED\n").toString();
       byte[] raw=connection.getRawDescriptors();
+      if(raw==null||raw.length==0){
+        b.append("RAW DESCRIPTORS UNAVAILABLE; INTERFACE DETAILS ABOVE RETAINED\n");
+        return b.toString();
+      }
       b.append(UsbAudioDescriptorParser.parse(raw).summary());
       b.append("RAW DESCRIPTORS HEX:");
-      if(raw!=null){
+      {
         for(int i=0;i<raw.length && i<8192;i++)
           b.append(String.format(Locale.US,"%02X",raw[i]&255));
         if(raw.length>8192)b.append(" [TRUNCATED]");
@@ -53,7 +57,7 @@ public final class UsbAudioDeviceProbe {
     }finally{
       if(connection!=null)connection.close();
     }
-    b.append("READ ONLY. NO DIRECT USB AUDIO STREAM IS RUNNING.\n");
+    b.append("END OF USB DESCRIPTOR SCAN. CHECK USBFS TEST COUNTERS SEPARATELY.\n");
     return b.toString();
   }
 }

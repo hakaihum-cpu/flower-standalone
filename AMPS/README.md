@@ -89,3 +89,21 @@ usbfs/UAC audio driver. These parameters cannot be claimed to tune
 usbfs isochronous URB submission or native USB packet scheduling. A real
 analog loopback remains required to pass the <=10ms target. The 2025+
 source-only external research constraint remains in effect.
+
+## USBFS direct isochronous transport experiment (AN-68, 2026-10-12)
+CONFIG > USB TUNING > USBFS ISO TEST is an actual USB Host/usbfs
+transfer experiment, not an AAudio tuning value or descriptor-only scan.
+It requires user permission, stops the AAudio engine, force-claims the UAC
+Audio Streaming input and output interfaces, sets streaming alternates,
+submits isochronous URBs to both IN and OUT endpoints, and collects actual
+completion/error counters. Output transfers are SILENCE ONLY. Device may
+require a physical reconnect to restore Android's USB audio route.
+JNI receives UsbDeviceConnection.getFileDescriptor(). Host native source
+uses USBDEVFS_SUBMITURB, REAPURBNDELAY, DISCARDURB; no AAudio calls.
+The report, including USB descriptors and usbfs transfer counters, can be
+viewed and saved as a UTF-8 .txt using Android's document picker.
+This stage has not yet implemented PCM loopback, UAC clock/feedback control,
+amp DSP on USB, or analog round-trip latency measurement. ISO submission
+success is not equivalent to achieving 10ms. Unrecognized endpoints or
+permissions are reported as test errors rather than silently using AAudio.
+Test is deliberately manual, not automatically started with the app.

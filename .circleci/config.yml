@@ -30,6 +30,8 @@ jobs:
             test -f AMPS/test/UsbAudioDescriptorParserTest.java
             test -f AMPS/app/src/main/java/com/analoglav/amps/AmpDsp.java
             test -f AMPS/app/src/main/cpp/AAudioEngine.cpp
+            test -f AMPS/app/src/main/cpp/UsbIsoTester.cpp
+            test -f AMPS/app/src/main/java/com/analoglav/amps/usb/UsbIsoTester.java
             test -f AMPS/app/src/main/cpp/InputFade.h
             test -f AMPS/test/InputFadeSmoke.cpp
             test -f AMPS/app/src/main/cpp/AmpModel.h

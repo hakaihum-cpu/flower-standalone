@@ -45,3 +45,12 @@ grep -Fq 'AAudioStream_setBufferSizeInFrames(input_,inFrames)' "$ROOT/app/src/ma
 grep -Fq 'AAudioStream_setBufferSizeInFrames(output_,requestedOutput)' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
 grep -Fq 'AAudioStreamBuilder_setFramesPerDataCallback(builder,cbFrames)' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
 grep -Fq 'shareMode==1?' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
+
+# Compile usbfs JNI probe on Linux before expensive Gradle setup.
+JDK_TOP="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
+test -f "$JDK_TOP/include/jni.h"
+c++ -std=c++17 -O2 -Wall -Wextra -Werror \
+  -I "$JDK_TOP/include" -I "$JDK_TOP/include/linux" \
+  -c "$ROOT/app/src/main/cpp/UsbIsoTester.cpp" -o "$TMP/UsbIsoTester.o"
+grep -Fq 'USBDEVFS_SUBMITURB' "$ROOT/app/src/main/cpp/UsbIsoTester.cpp"
+grep -Fq 'AAUDIO=NOT_USED_DURING_USBFS_TEST' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbIsoTester.java"
