@@ -6,8 +6,8 @@
 
 namespace {
 void setLabel(juce::Label& l, const juce::String& text) { l.setText(text, juce::dontSendNotification); }
-juce::String passText(const juce::String& detail = {}) { return detail.isEmpty() ? "PASS" : "PASS — " + detail; }
-juce::String failText(const juce::String& detail) { return "FAIL — " + detail; }
+juce::String passText(const juce::String& detail = {}) { return detail.isEmpty() ? "PASS" : "PASS - " + detail; }
+juce::String failText(const juce::String& detail) { return "FAIL - " + detail; }
 }
 
 MainComponent::MainComponent() {
@@ -27,9 +27,9 @@ MainComponent::~MainComponent() {
 
 void MainComponent::configureUi() {
     setSize(980, 900);
-    setLabel(titleLabel_, "LIVE INSTRUMENT → EP-SAMPLE");
+    setLabel(titleLabel_, "LIVE INSTRUMENT -> EP-SAMPLE");
     titleLabel_.setFont(juce::FontOptions(24.0f, juce::Font::bold));
-    setLabel(stepLabel_, "ASIOを設定 → 鍵盤数を決める → 1鍵ずつREC/SET → FINISH");
+    setLabel(stepLabel_, "Set audio -> choose key range -> REC/SET each key -> FINISH");
     stepLabel_.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
 
     auto add = [this](juce::Component& c) { addAndMakeVisible(c); };
@@ -50,8 +50,8 @@ void MainComponent::configureUi() {
     juce::Label* diagnosticLabels[] = { &diagEnumerateLabel_, &diagOpenLabel_, &diagInputLabel_, &diagOutputLabel_, &diagReopenLabel_ };
     for (auto* label : diagnosticLabels)
         label->setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    setLabel(diagEnumerateLabel_, "ASIO driver: —"); setLabel(diagOpenLabel_, "48 kHz open: —");
-    setLabel(diagInputLabel_, "input signal: —"); setLabel(diagOutputLabel_, "output tone: —"); setLabel(diagReopenLabel_, "reopen: —");
+    setLabel(diagEnumerateLabel_, "ASIO driver: -"); setLabel(diagOpenLabel_, "48 kHz open: -");
+    setLabel(diagInputLabel_, "input signal: -"); setLabel(diagOutputLabel_, "output tone: -"); setLabel(diagReopenLabel_, "reopen: -");
     toneHeardButton_.setEnabled(false); toneNotHeardButton_.setEnabled(false); toneAgainButton_.setEnabled(false);
 
     driverBox_.onChange = [this] { refreshDeviceLists(); };
@@ -80,10 +80,10 @@ void MainComponent::configureUi() {
     };
     for (auto* component : recordComponents) add(*component);
     currentKeyLabel_.setFont(juce::FontOptions(22.0f, juce::Font::bold));
-    setLabel(currentKeyLabel_, "STARTを押すと録音を始められます");
+    setLabel(currentKeyLabel_, "Press START to begin the sampling session");
     setLabel(trimStartLabel_, "START sec"); setLabel(trimEndLabel_, "END sec");
     trimStartEditor_.setInputRestrictions(10, "0123456789."); trimEndEditor_.setInputRestrictions(10, "0123456789.");
-    setLabel(recordHintLabel_, "REC → STOP → 波形の範囲を指定 → SET。やり直しは RETAKE。");
+    setLabel(recordHintLabel_, "REC -> STOP -> choose the waveform range -> SET. Use RETAKE to record again.");
     recordHintLabel_.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
     recButton_.onClick = [this] { beginRecording(); };
     stopButton_.onClick = [this] { stopRecording(); };
