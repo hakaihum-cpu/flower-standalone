@@ -125,7 +125,6 @@ void MainComponent::stopRecording() {
         recButton_.setEnabled(true);
         return;
     }
-    previewButton_.setEnabled(true);
     if (writerDropouts > 0 || xruns > 0) {
         setButton_.setEnabled(false);
         retakeButton_.setEnabled(true);
@@ -135,6 +134,7 @@ void MainComponent::stopRecording() {
                                              + " / xrun=" + juce::String(xruns) + " - RETAKE is required"));
         return;
     }
+    previewButton_.setEnabled(true);
     auto& take = takes_[static_cast<std::size_t>(currentIndex_)];
     take.rawWav = std::filesystem::path(currentRawFile_.getFullPathName().toStdString());
     take.confirmed = false;
