@@ -6,8 +6,8 @@
 
 namespace {
 void setLabel(juce::Label& l, const juce::String& text) { l.setText(text, juce::dontSendNotification); }
-juce::String passText(const juce::String& detail = {}) { return detail.isEmpty() ? "PASS" : "PASS — " + detail; }
-juce::String failText(const juce::String& detail) { return "FAIL — " + detail; }
+juce::String passText(const juce::String& detail = {}) { return detail.isEmpty() ? "PASS" : "PASS - " + detail; }
+juce::String failText(const juce::String& detail) { return "FAIL - " + detail; }
 }
 
 void MainComponent::refreshDriverList() {
@@ -111,8 +111,8 @@ void MainComponent::applyAudioSettings() {
 
 void MainComponent::runAsioCheck() {
     setLabel(diagEnumerateLabel_, "ASIO driver: checking...");
-    setLabel(diagOpenLabel_, "48 kHz open: —"); setLabel(diagInputLabel_, "input signal: —");
-    setLabel(diagOutputLabel_, "output tone: —"); setLabel(diagReopenLabel_, "reopen: —");
+    setLabel(diagOpenLabel_, "48 kHz open: -"); setLabel(diagInputLabel_, "input signal: -");
+    setLabel(diagOutputLabel_, "output tone: -"); setLabel(diagReopenLabel_, "reopen: -");
     toneHeardButton_.setEnabled(false); toneNotHeardButton_.setEnabled(false); toneAgainButton_.setEnabled(false);
 
     const auto types = audio_.getDriverTypes();
@@ -141,7 +141,7 @@ void MainComponent::runAsioCheck() {
         return;
     }
     setLabel(diagOpenLabel_, passText(audio_.currentDeviceSummary()));
-    setLabel(diagInputLabel_, "INPUT TEST — 3秒間、楽器を鳴らしてください");
+    setLabel(diagInputLabel_, "INPUT TEST - play the instrument for 3 seconds");
     diagMaxInput_ = 0.0f;
     diagStartedMs_ = juce::Time::getMillisecondCounterHiRes();
     diagPhase_ = DiagnosticPhase::inputListen;
@@ -167,7 +167,7 @@ void MainComponent::timerCallback() {
         if (elapsed >= 3000.0) {
             if (diagMaxInput_ > 0.002f) {
                 setLabel(diagInputLabel_, passText("signal detected, peak " + juce::String(diagMaxInput_, 4)));
-                setLabel(diagOutputLabel_, "OUTPUT TEST — test toneを確認してください");
+                setLabel(diagOutputLabel_, "OUTPUT TEST - confirm that you can hear the test tone");
                 audio_.playOutputTestTone();
                 toneHeardButton_.setEnabled(true); toneNotHeardButton_.setEnabled(true); toneAgainButton_.setEnabled(true);
                 diagPhase_ = DiagnosticPhase::waitingForToneConfirm;
