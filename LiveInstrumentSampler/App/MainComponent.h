@@ -99,9 +99,9 @@ private:
     bool syncingTrimEditors_ = false;
 
     juce::GroupComponent finishGroup_{"finish", "4. FINISH / TUNING"};
-    juce::TextButton finishButton_{"FINISH → DIRECT BIN"};
+    juce::TextButton finishButton_{"FINISH -> DIRECT BIN"};
     juce::TextButton exportMasterButton_{"EXPORT MASTER WAV"};
-    juce::TextButton importTunedButton_{"IMPORT TUNED WAV → BIN"};
+    juce::TextButton importTunedButton_{"IMPORT TUNED WAV -> BIN"};
     juce::TextButton openFolderButton_{"OPEN SESSION FOLDER"};
     juce::Label finishStatusLabel_;
 
