@@ -6,8 +6,8 @@ android {
     applicationId 'com.analoglav.amps'
     minSdk 26
     targetSdk 35
-    versionCode 10
-    versionName '0.7.4-usb-iso-pipeline'
+    versionCode 11
+    versionName '0.7.5-usb-ac-claim'
     ndk { abiFilters 'arm64-v8a' }
   }
   ndkVersion '26.1.10909125'

@@ -250,3 +250,33 @@ prove that device/endpoint ESHUTDOWN will be resolved.
 
 Native host smoke/static tests must pass before one manual CircleCI
 run. Real Android build/audio/analog RTT still unverified here.
+
+## AN-68 / 0.7.5 USB audio-control claim + active ALT readback
+Actual 0.7.4 RG Rotate/iRig PRO DUO repeats native OUT URB
+-108 ESHUTDOWN, packet -18 EXDEV, with 0 IN/OUT completions.
+48kHz UAC1 SET_CUR/GET_CUR succeed; device stays enumerated. USB
+queue timing fixes alone were ineffective.
+
+The iRig UAC1 AudioControl HEADER at IF0 declares bInCollection=2
+streaming interfaces [1,2] (playback+capture). A SEPARATE
+AudioControl HEADER at IF3 declares only MIDIStreaming IF4.
+Therefore claim only the AudioControl interface matching the exact
+playback/capture pair via the UAC1 header descriptor's baInterfaceNr.
+For this iRig that is IF0. IF3/IF4 MIDI are NOT touched.
+
+Android UsbDeviceConnection.claimInterface(IF0,true) requests
+exclusive control and detaches the kernel driver if needed before
+claiming playback/capture streaming interfaces. Log success/failure;
+do not continue USB DIRECT if the matching control interface cannot
+be verified or claimed. Record standard GET_INTERFACE altsetting for
+both IN and OUT before and after USBFS native streaming. The readback
+may identify a concurrent reset from ALT1 to ALT0. On error,
+terminate fail-closed, release only claimed interfaces; no indiscriminate
+USB reset and no AAudio fallback.
+
+Online evidence: Android UsbDeviceConnection API documents force
+kernel driver detach; Linux USB audio endpoint code uses
+usb_set_interface to activate or deactivate streaming endpoints;
+Linux libusb treats -ESHUTDOWN as an unusable/disconnected USB stream.
+This is a targeted hypothesis, NOT a verified cure for the actual
+kernel's OUT endpoint shutdown. Tested failure may remain.

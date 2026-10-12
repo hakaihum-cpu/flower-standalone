@@ -92,3 +92,11 @@ grep -Fq 'ISO_PACKETS_PER_URB=' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
 grep -Fq 'FIRST_OUT_BAD_PACKET_INDEX=' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
 grep -Fq 'MAX_LOOP_GAP_US=' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
 ! grep -Fq 'int pollResult=poll(&pfd,1,20)' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
+
+# AN-68 USB IF0 AudioControl ownership is determined by UAC1 header
+# baInterfaceNr; MIDI AudioControl IF3 must remain untouched.
+grep -Fq 'findAudioControl(device,c.getRawDescriptors()' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'final int n=raw[p+7]' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'UAC_CONTROL_CLAIMED=true' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'GET_INTERFACE_' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'GET_INTERFACE_=' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java" || grep -Fq '"_IF"' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
