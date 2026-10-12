@@ -107,6 +107,8 @@ void MainComponent::beginRecording() {
 void MainComponent::stopRecording() {
     audio_.stopRecording();
     stopButton_.setEnabled(false);
+    const int writerDropouts = audio_.recordingWriteDropouts();
+    const int xruns = audio_.recordingXRuns();
     if (!currentRawFile_.existsAsFile() || currentRawFile_.getSize() <= 44) {
         setLabel(recordHintLabel_, failText("RAW WAV was not recorded"));
         recButton_.setEnabled(true);
@@ -115,6 +117,15 @@ void MainComponent::stopRecording() {
     if (!waveform_.loadFile(currentRawFile_)) {
         setLabel(recordHintLabel_, failText("Cannot read recorded WAV"));
         recButton_.setEnabled(true);
+        return;
+    }
+    if (writerDropouts > 0 || xruns > 0) {
+        setButton_.setEnabled(false);
+        retakeButton_.setEnabled(true);
+        trimStartEditor_.setEnabled(false);
+        trimEndEditor_.setEnabled(false);
+        setLabel(recordHintLabel_, failText("録音中に欠落を検出: writer=" + juce::String(writerDropouts)
+                                             + " / xrun=" + juce::String(xruns) + "。RETAKEしてください"));
         return;
     }
     auto& take = takes_[static_cast<std::size_t>(currentIndex_)];
