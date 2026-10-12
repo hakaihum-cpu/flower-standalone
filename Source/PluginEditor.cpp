@@ -1628,6 +1628,9 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setFont (juce::FontOptions (13.0f));
     g.setColour (uiColour (0.62f));
     g.drawText ("AUDIO INPUT", 54, 94, 180, 24, juce::Justification::centredLeft);
+    g.setColour (uiColour (0.82f));
+    g.drawText ("AUDIO SETTINGS  >", 438, 94, 202, 24,
+                juce::Justification::centredRight);
 
     int y = 126;
     const int maxRows = juce::jmin (6, (int) audioInputs.size());
@@ -1757,6 +1760,95 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.drawText (displayMode == 1 ? "DOT" : "MEDIA",
                 450, 674, 180, 28,
                 juce::Justification::centredRight);
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintAudioConfig (juce::Graphics& g)
+{
+    if (currentFrame.isValid())
+        paintMediaFrame (
+            g, currentFrame,
+            juce::Rectangle<float> (0, 0, design, design),
+            0, dotFrameRevision);
+
+    g.setColour (juce::Colours::black.withAlpha (0.84f));
+    g.fillAll();
+
+    refreshAudioBufferStatus();
+
+    g.setColour (uiColour (0.94f));
+    g.setFont (juce::FontOptions (20.0f).withStyle ("Bold"));
+    g.drawText ("AUDIO SETTINGS", 34, 26, 260, 32,
+                juce::Justification::centredLeft);
+
+    g.setFont (juce::FontOptions (13.0f));
+    g.drawText ("CLOSE", 620, 30, 70, 24,
+                juce::Justification::centredRight);
+
+    g.setColour (uiColour (0.62f));
+    g.setFont (juce::FontOptions (12.0f));
+    g.drawText ("AUDIO OUTPUT", 54, 104, 180, 24,
+                juce::Justification::centredLeft);
+
+    g.setColour (uiColour (0.92f));
+    g.setFont (juce::FontOptions (16.0f).withStyle ("Bold"));
+    g.drawText ("<", 54, 136, 44, 42, juce::Justification::centred);
+    g.drawFittedText (
+        currentOutputName(),
+        108, 136, 504, 42,
+        juce::Justification::centred, 1);
+    g.drawText (">", 622, 136, 44, 42, juce::Justification::centred);
+
+    g.setColour (uiColour (0.62f));
+    g.setFont (juce::FontOptions (12.0f));
+    g.drawText ("AUDIO BUFFER / BURST", 54, 216, 220, 24,
+                juce::Justification::centredLeft);
+
+    g.setColour (uiColour (0.92f));
+    g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
+    g.drawText ("<", 54, 248, 44, 42, juce::Justification::centred);
+    g.drawText (
+        audioBufferNames[juce::jlimit (0, 11, audioBufferMode)],
+        108, 248, 504, 42,
+        juce::Justification::centred);
+    g.drawText (">", 622, 248, 44, 42, juce::Justification::centred);
+
+    const juce::Rectangle<float> resetBounds (210.0f, 334.0f, 300.0f, 54.0f);
+    g.setColour (uiColour (0.10f));
+    g.fillRoundedRectangle (resetBounds, 6.0f);
+    g.setColour (uiColour (0.86f));
+    g.drawRoundedRectangle (resetBounds, 6.0f, 1.4f);
+    g.setFont (juce::FontOptions (15.0f).withStyle ("Bold"));
+    g.drawText ("RESET AUDIO", resetBounds, juce::Justification::centred);
+
+    g.setColour (uiColour (0.70f));
+    g.setFont (juce::FontOptions (12.5f));
+    g.drawFittedText (
+        "OUTPUT  " + currentOutputName(),
+        54, 430, 612, 28,
+        juce::Justification::centredLeft, 1);
+
+    g.setColour (uiColour (0.62f));
+    g.setFont (juce::FontOptions (11.5f));
+    g.drawFittedText (
+        makeAudioBufferStatus(),
+        54, 466, 612, 72,
+        juce::Justification::topLeft, 3);
+
+    if (audioDeviceMessage.isNotEmpty())
+    {
+        g.setColour (uiColour (0.82f));
+        g.drawFittedText (
+            audioDeviceMessage,
+            54, 548, 612, 48,
+            juce::Justification::centredLeft, 2);
+    }
+
+    g.setColour (uiColour (0.46f));
+    g.setFont (juce::FontOptions (10.5f));
+    g.drawFittedText (
+        "If EUREKA crackles, try 2–4 BURSTS. RESET reopens only the audio device; effect parameters and EUREKA state are kept.",
+        54, 620, 612, 52,
+        juce::Justification::centredLeft, 3);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
@@ -1901,6 +1993,72 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 {
     const auto p = toDesign (e.position);
     dragging = DragParam::none;
+
+    if (audioConfigVisible)
+    {
+        if (p.x >= 590.0f && p.y <= 74.0f)
+        {
+            audioConfigVisible = false;
+            configVisible = true;
+            repaint();
+            return;
+        }
+
+        if (p.y >= 126.0f && p.y < 188.0f)
+        {
+            refreshAudioOutputs();
+
+            if (! audioOutputs.empty())
+            {
+                int index = selectedAudioOutput;
+                if (! juce::isPositiveAndBelow (index, (int) audioOutputs.size()))
+                    index = 0;
+
+                const int direction = p.x < 360.0f ? -1 : 1;
+                index = (index + direction + (int) audioOutputs.size())
+                      % (int) audioOutputs.size();
+                selectAudioOutput (index);
+            }
+            else
+            {
+                audioDeviceMessage = "No selectable AUDIO OUTPUT reported by JUCE";
+            }
+
+            repaint();
+            return;
+        }
+
+        if (p.y >= 238.0f && p.y < 300.0f)
+        {
+            const int direction = p.x < 360.0f ? -1 : 1;
+            const int next = juce::jlimit (
+                0, 11, audioBufferMode + direction);
+
+            if (next != audioBufferMode)
+            {
+                setChoiceActual (ParamID::audioBufferMode, next);
+                audioBufferMode = next;
+                audioDeviceMessage =
+                    applyAudioBufferMode (next)
+                        ? "BUFFER APPLIED"
+                        : "BUFFER REQUEST FAILED";
+            }
+
+            repaint();
+            return;
+        }
+
+        if (juce::Rectangle<float> (
+                190.0f, 320.0f, 340.0f, 82.0f).contains (p))
+        {
+            resetAudioDevice();
+            repaint();
+            return;
+        }
+
+        return;
+    }
+
     if (midiControlConfigVisible)
     {
         if (p.x >= 590 && p.y <= 66) { midiControlConfigVisible = false; repaint(); return; }
@@ -2004,13 +2162,37 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         }
         if (juce::Rectangle<float> (450.0f, 20.0f, 86.0f, 42.0f).contains (p))
         {
-            globalPresetMessage = processor.loadUserPreset()
+            const bool loaded = processor.loadUserPreset();
+            globalPresetMessage = loaded
                 ? "PARAMETERS LOADED"
                 : (processor.hasUserPreset() ? "LOAD FAILED" : "NO SAVED PARAMETERS");
+
+            if (loaded)
+            {
+                audioBufferMode = juce::jlimit (0, 11, juce::roundToInt (
+                    processor.state().getRawParameterValue (
+                        ParamID::audioBufferMode)->load()));
+                applyAudioBufferMode (audioBufferMode);
+            }
+
             repaint();
             return;
         }
         if (p.x >= 590 && p.y <= 74) { configVisible = false; repaint(); return; }
+
+        if (p.y >= 86.0f && p.y < 124.0f && p.x >= 410.0f)
+        {
+            refreshAudioOutputs();
+            refreshAudioBufferStatus();
+            audioBufferMode = juce::jlimit (0, 11, juce::roundToInt (
+                processor.state().getRawParameterValue (
+                    ParamID::audioBufferMode)->load()));
+            configVisible = false;
+            audioConfigVisible = true;
+            repaint();
+            return;
+        }
+
         int y = 126;
         const int maxRows = juce::jmin (6, (int) audioInputs.size());
         for (int i = 0; i < maxRows; ++i, y += 38)
@@ -2104,6 +2286,8 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         chordBotEditSlot = -1;
         configVisible = true;
         refreshAudioInputs();
+        refreshAudioOutputs();
+        refreshAudioBufferStatus();
         repaint();
         return;
     }
