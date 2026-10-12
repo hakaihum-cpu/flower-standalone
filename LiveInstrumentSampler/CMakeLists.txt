@@ -37,7 +37,10 @@ if (NOT LIVE_SAMPLER_CORE_ONLY)
 
     target_sources(EP_Live_Instrument_Sampler PRIVATE
         App/Main.cpp
-        App/MainComponent.cpp
+        App/MainComponentUi.cpp
+        App/MainComponentAudio.cpp
+        App/MainComponentSession.cpp
+        App/MainComponentFinish.cpp
         App/MainComponent.h
         App/AudioEngine.cpp
         App/AudioEngine.h
