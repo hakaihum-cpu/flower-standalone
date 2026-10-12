@@ -109,8 +109,73 @@ namespace
         env->DeleteLocalRef (audioManager);
         return result;
     }
+
+    int getAndroidOutputFramesPerBuffer()
+    {
+        auto* env = juce::getEnv();
+        if (env == nullptr)
+            return 0;
+
+        const auto context = juce::getAppContext();
+        if (context == nullptr)
+            return 0;
+
+        jclass contextClass = env->GetObjectClass (context.get());
+        if (contextClass == nullptr)
+            return 0;
+
+        jmethodID getSystemService = env->GetMethodID (
+            contextClass, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
+        if (getSystemService == nullptr)
+        {
+            env->DeleteLocalRef (contextClass);
+            return 0;
+        }
+
+        jstring audioService = env->NewStringUTF ("audio");
+        jobject audioManager = env->CallObjectMethod (
+            context.get(), getSystemService, audioService);
+        env->DeleteLocalRef (audioService);
+        env->DeleteLocalRef (contextClass);
+        if (audioManager == nullptr)
+            return 0;
+
+        jclass audioManagerClass = env->FindClass ("android/media/AudioManager");
+        jmethodID getProperty = audioManagerClass != nullptr
+            ? env->GetMethodID (
+                audioManagerClass, "getProperty",
+                "(Ljava/lang/String;)Ljava/lang/String;")
+            : nullptr;
+
+        int frames = 0;
+        if (getProperty != nullptr)
+        {
+            jstring key = env->NewStringUTF (
+                "android.media.property.OUTPUT_FRAMES_PER_BUFFER");
+            jstring value = static_cast<jstring> (
+                env->CallObjectMethod (audioManager, getProperty, key));
+            env->DeleteLocalRef (key);
+
+            if (value != nullptr)
+            {
+                const char* chars = env->GetStringUTFChars (value, nullptr);
+                if (chars != nullptr)
+                {
+                    frames = juce::String::fromUTF8 (chars).getIntValue();
+                    env->ReleaseStringUTFChars (value, chars);
+                }
+                env->DeleteLocalRef (value);
+            }
+        }
+
+        if (audioManagerClass != nullptr)
+            env->DeleteLocalRef (audioManagerClass);
+        env->DeleteLocalRef (audioManager);
+        return juce::jmax (0, frames);
+    }
 #else
     juce::StringArray getAndroidPhysicalInputNames() { return {}; }
+    int getAndroidOutputFramesPerBuffer() { return 0; }
 #endif
 }
 
@@ -165,6 +230,13 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
         holder->getMuteInputValue().setValue (false);
    #endif
+
+    audioBufferMode = juce::jlimit (0, 11, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::audioBufferMode)->load()));
+    refreshAudioOutputs();
+    refreshAudioBufferStatus();
+    if (audioBufferMode != 0)
+        applyAudioBufferMode (audioBufferMode);
 
     startTimerHz (30);
 }
@@ -654,6 +726,8 @@ void RealtimeChordFxAudioProcessorEditor::paint (juce::Graphics& g)
     g.addTransform (juce::AffineTransform::scale ((float) getWidth() / design, (float) getHeight() / design));
     if (midiControlConfigVisible)
         paintMidiControlConfig (g);
+    else if (audioConfigVisible)
+        paintAudioConfig (g);
     else if (configVisible)
         paintConfig (g);
     else
