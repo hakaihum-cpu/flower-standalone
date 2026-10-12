@@ -119,15 +119,26 @@ juce::String AudioEngine::startRecording(const juce::File& file) {
         return "Could not create 24-bit WAV writer.";
 
     threadedWriter_ = std::make_unique<juce::AudioFormatWriter::ThreadedWriter>(writer, writerThread_, 32768);
+    writerDropouts_.store(0, std::memory_order_release);
+    xRunStart_ = deviceManager_.getXRunCount();
+    xRunEnd_ = xRunStart_;
     activeWriter_.store(threadedWriter_.get(), std::memory_order_release);
     recording_.store(true, std::memory_order_release);
     return {};
 }
 
 void AudioEngine::stopRecording() {
-    recording_.store(false, std::memory_order_release);
+    const bool wasRecording = recording_.exchange(false, std::memory_order_acq_rel);
     activeWriter_.store(nullptr, std::memory_order_release);
     threadedWriter_.reset();
+    if (wasRecording)
+        xRunEnd_ = deviceManager_.getXRunCount();
+}
+
+int AudioEngine::recordingXRuns() const noexcept {
+    if (xRunStart_ < 0 || xRunEnd_ < 0)
+        return 0;
+    return juce::jmax(0, xRunEnd_ - xRunStart_);
 }
 
 float AudioEngine::currentInputLevel() const noexcept {
@@ -175,8 +186,10 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     if (writer == nullptr || !recording_.load(std::memory_order_acquire) || numInputChannels <= 0)
         return;
 
-    if (stereoScratch_.getNumSamples() < numSamples)
+    if (stereoScratch_.getNumSamples() < numSamples) {
+        writerDropouts_.fetch_add(1, std::memory_order_relaxed);
         return; // resized only in audioDeviceAboutToStart, never allocate here
+    }
 
     stereoScratch_.clear();
     const float* left = nullptr;
@@ -192,7 +205,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     stereoScratch_.copyFrom(0, 0, left, numSamples);
     stereoScratch_.copyFrom(1, 0, right, numSamples);
     const float* channels[2] = { stereoScratch_.getReadPointer(0), stereoScratch_.getReadPointer(1) };
-    writer->write(channels, numSamples);
+    if (!writer->write(channels, numSamples))
+        writerDropouts_.fetch_add(1, std::memory_order_relaxed);
 }
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
