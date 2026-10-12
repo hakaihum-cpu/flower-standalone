@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/AN-72-live-instrument-sampler
+      - feature/AN-72-live-instrument-sampler-english
     paths:
       - ".github/live-instrument-sampler-build-trigger.txt"
 
