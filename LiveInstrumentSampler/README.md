@@ -5,7 +5,7 @@ Windows standalone sampling workstation for building EP-SAMPLE-compatible `EPBAN
 ## User flow
 
 1. **AUDIO / ASIO**
-   - Select driver, input/output device, input/output channel pair and buffer.
+   - Select driver, input/output device, input/output channel (MONO) or adjacent channel pair (STEREO), and buffer.
    - Capture rate is intentionally fixed at **48 kHz** for EP-SAMPLE compatibility.
    - Run **RUN ASIO CHECK**. A complete ASIO verification requires:
      - ASIO driver enumerated.
@@ -13,6 +13,7 @@ Windows standalone sampling workstation for building EP-SAMPLE-compatible `EPBAN
      - Real input signal detected while the user plays a key.
      - Test tone is physically heard from the selected output and confirmed by the user.
      - Device closes and reopens with the same setup.
+   - Passing this self-check is required before the build can be called ASIO VERIFIED on that Windows/interface combination.
 
 2. **SESSION**
    - Select START NOTE within the existing EP-SAMPLE range A0-C8 (MIDI 21-108).
@@ -26,8 +27,9 @@ Windows standalone sampling workstation for building EP-SAMPLE-compatible `EPBAN
    - The recorded waveform is shown.
    - Drag START/END handles (or enter seconds) to choose the region.
    - SET confirms that key and advances automatically.
-   - RETAKE discards that key's RAW WAV and records it again.
+   - RETAKE archives the rejected RAW WAV under `RAW/RETAKES` and records it again.
    - RAW recordings are preserved separately and never destructively trimmed.
+   - Writer FIFO dropouts and audio-device xruns are checked per take. If either is detected, SET is disabled and RETAKE is required.
 
 4. **FINISH / TUNING**
    - `FINISH → DIRECT BIN` builds an EPBANK1 directly from the confirmed takes.
