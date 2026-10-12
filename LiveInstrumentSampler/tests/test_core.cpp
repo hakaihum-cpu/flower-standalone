@@ -138,6 +138,8 @@ int main() {
         require(e.part <= 1, "entry part");
     }
 
+    bin.close();
+
     const auto tunedBin = root / "tuned.bin";
     lis::buildEpBankFromMaster(spec, rereadMaster, parsed, tunedBin);
     require(fs::file_size(tunedBin) == fs::file_size(directBin), "tuned/direct size mismatch");
