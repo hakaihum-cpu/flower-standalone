@@ -81,5 +81,12 @@ private:
     float plaitsPreviousSample = 0.0f;
     float plaitsNextSample = 0.0f;
     bool plaitsGate = false;
+    int activePlaitsModel = -1;
+    int pendingPlaitsModel = -1;
+    float plaitsModelGain = 1.0f;
+    float plaitsHarmonicsCurrent = 0.5f;
+    float plaitsTimbreCurrent = 0.5f;
+    float plaitsMorphCurrent = 0.5f;
+    bool plaitsParamsInitialised = false;
 #endif
 };
