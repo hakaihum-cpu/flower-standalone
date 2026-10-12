@@ -44,6 +44,17 @@ void SineVoice::startNote (int midiNoteNumber,
     plaitsStreamPhase = 1.0;
     plaitsFrameIndex = static_cast<int> (plaits::kBlockSize);
     plaitsPreviousSample = plaitsNextSample = 0.0f;
+    if (activePlaitsModel < 0)
+        activePlaitsModel = juce::jlimit (0, 23, params.plaitsModel);
+    pendingPlaitsModel = -1;
+    plaitsModelGain = 1.0f;
+    plaitsHarmonicsCurrent =
+        juce::jlimit (0.0f, 1.0f, params.plaitsHarmonics);
+    plaitsTimbreCurrent =
+        juce::jlimit (0.0f, 1.0f, params.plaitsTimbre);
+    plaitsMorphCurrent =
+        juce::jlimit (0.0f, 1.0f, params.plaitsMorph);
+    plaitsParamsInitialised = true;
 #endif
     velocityGain = juce::jlimit (0.0f, 1.0f, velocity);
     pitchWheelSemitones = pitchWheelToSemitones (currentPitchWheelPosition);
@@ -104,6 +115,44 @@ float SineVoice::modulationFor (LfoTarget target) const noexcept
 #if JUCE_ANDROID
 float SineVoice::renderPlaitsOscillator (float midiPitch) noexcept
 {
+    const int targetModel = juce::jlimit (0, 23, params.plaitsModel);
+
+    if (activePlaitsModel < 0)
+        activePlaitsModel = targetModel;
+
+    if (targetModel != activePlaitsModel)
+        pendingPlaitsModel = targetModel;
+    else
+        pendingPlaitsModel = -1;
+
+    // Original Plaits resets an engine when its model changes.  Do not expose
+    // that discontinuity directly: fade the voice to zero, switch/reset while
+    // silent, then fade it back in.  Six milliseconds is short enough to keep
+    // XY movement immediate without producing a hard step.
+    const float modelFadeStep = 1.0f / juce::jmax (
+        1.0f, static_cast<float> (sampleRateHz * 0.006));
+
+    if (pendingPlaitsModel >= 0)
+    {
+        plaitsModelGain = juce::jmax (
+            0.0f, plaitsModelGain - modelFadeStep);
+
+        if (plaitsModelGain <= 0.00001f)
+        {
+            activePlaitsModel = pendingPlaitsModel;
+            pendingPlaitsModel = -1;
+            plaitsFrameIndex = static_cast<int> (plaits::kBlockSize);
+            plaitsStreamPhase = 1.0;
+            plaitsPreviousSample = 0.0f;
+            plaitsNextSample = 0.0f;
+        }
+    }
+    else
+    {
+        plaitsModelGain = juce::jmin (
+            1.0f, plaitsModelGain + modelFadeStep);
+    }
+
     // Original Plaits runs at its calibrated physical rate in fixed 12-frame
     // blocks.  Host-rate output is linearly interpolated, matching MIYAKO.
     plaitsStreamPhase +=
@@ -117,13 +166,34 @@ float SineVoice::renderPlaitsOscillator (float midiPitch) noexcept
         if (plaitsFrameIndex >= static_cast<int> (plaits::kBlockSize))
         {
             plaits::Patch patch {};
-            patch.engine = juce::jlimit (0, 23, params.plaitsModel);
-            patch.harmonics =
-                juce::jlimit (0.0f, 1.0f, params.plaitsHarmonics);
-            patch.timbre =
-                juce::jlimit (0.0f, 1.0f, params.plaitsTimbre);
-            patch.morph =
-                juce::jlimit (0.0f, 1.0f, params.plaitsMorph);
+            if (! plaitsParamsInitialised)
+            {
+                plaitsHarmonicsCurrent =
+                    juce::jlimit (0.0f, 1.0f, params.plaitsHarmonics);
+                plaitsTimbreCurrent =
+                    juce::jlimit (0.0f, 1.0f, params.plaitsTimbre);
+                plaitsMorphCurrent =
+                    juce::jlimit (0.0f, 1.0f, params.plaitsMorph);
+                plaitsParamsInitialised = true;
+            }
+            else
+            {
+                constexpr float smooth = 0.22f;
+                plaitsHarmonicsCurrent += (
+                    juce::jlimit (0.0f, 1.0f, params.plaitsHarmonics)
+                    - plaitsHarmonicsCurrent) * smooth;
+                plaitsTimbreCurrent += (
+                    juce::jlimit (0.0f, 1.0f, params.plaitsTimbre)
+                    - plaitsTimbreCurrent) * smooth;
+                plaitsMorphCurrent += (
+                    juce::jlimit (0.0f, 1.0f, params.plaitsMorph)
+                    - plaitsMorphCurrent) * smooth;
+            }
+
+            patch.engine = activePlaitsModel;
+            patch.harmonics = plaitsHarmonicsCurrent;
+            patch.timbre = plaitsTimbreCurrent;
+            patch.morph = plaitsMorphCurrent;
             patch.note = 0.0f;
             patch.decay = 0.5f;
             patch.lpg_colour = 0.5f;
@@ -146,9 +216,11 @@ float SineVoice::renderPlaitsOscillator (float midiPitch) noexcept
             * (0.55f / 32768.0f);
     }
 
-    return plaitsPreviousSample
+    const float interpolated = plaitsPreviousSample
         + (plaitsNextSample - plaitsPreviousSample)
             * static_cast<float> (plaitsStreamPhase);
+
+    return interpolated * plaitsModelGain;
 }
 #endif
 
