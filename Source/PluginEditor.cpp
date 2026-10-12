@@ -247,8 +247,31 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
     audioBufferMode = juce::jlimit (0, 11, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::audioBufferMode)->load()));
     refreshAudioOutputs();
+
+    bool restoredOutput = false;
+    const auto savedOutputType =
+        processor.state().state.getProperty ("audioOutputType").toString();
+    const auto savedOutputName =
+        processor.state().state.getProperty ("audioOutputName").toString();
+
+    if (savedOutputType.isNotEmpty() && savedOutputName.isNotEmpty())
+    {
+        for (int i = 0; i < (int) audioOutputs.size(); ++i)
+        {
+            const auto& option = audioOutputs[(size_t) i];
+            if (option.type == savedOutputType
+                && option.name == savedOutputName)
+            {
+                if (i != selectedAudioOutput)
+                    selectAudioOutput (i);
+                restoredOutput = true;
+                break;
+            }
+        }
+    }
+
     refreshAudioBufferStatus();
-    if (audioBufferMode != 0)
+    if (! restoredOutput && audioBufferMode != 0)
         applyAudioBufferMode (audioBufferMode);
 
     startTimerHz (30);
@@ -1335,6 +1358,11 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioOutput (int index)
         selectedAudioOutput = index;
         audioDeviceMessage = "OUTPUT: " + option.name;
         holder->getMuteInputValue().setValue (false);
+
+        processor.state().state.setProperty (
+            "audioOutputType", option.type, nullptr);
+        processor.state().state.setProperty (
+            "audioOutputName", option.name, nullptr);
 
         audioDefaultBufferFrames = -1;
         refreshAudioBufferStatus();
