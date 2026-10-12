@@ -19,14 +19,18 @@ target_compile_features(LiveInstrumentSamplerCoreTests PRIVATE cxx_std_20)
 add_test(NAME LiveInstrumentSamplerCoreTests COMMAND LiveInstrumentSamplerCoreTests)
 
 if (NOT LIVE_SAMPLER_CORE_ONLY)
-    include(FetchContent)
-    FetchContent_Declare(
-        JUCE
-        GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-        GIT_TAG 9.0.3
-        GIT_SHALLOW TRUE
-    )
-    FetchContent_MakeAvailable(JUCE)
+    if (DEFINED JUCE_DIR AND EXISTS "${JUCE_DIR}/CMakeLists.txt")
+        add_subdirectory("${JUCE_DIR}" JUCE)
+    else()
+        include(FetchContent)
+        FetchContent_Declare(
+            JUCE
+            GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+            GIT_TAG 9.0.3
+            GIT_SHALLOW TRUE
+        )
+        FetchContent_MakeAvailable(JUCE)
+    endif()
 
     juce_add_gui_app(EP_Live_Instrument_Sampler
         PRODUCT_NAME "EP Live Instrument Sampler"
