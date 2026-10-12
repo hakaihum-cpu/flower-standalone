@@ -2,6 +2,10 @@
 
 #include <JuceHeader.h>
 #include "Modulation.h"
+#include <array>
+#if JUCE_ANDROID
+ #include "plaits/dsp/voice.h"
+#endif
 
 class SineSound final : public juce::SynthesiserSound
 {
@@ -25,8 +29,15 @@ public:
         float lfoRate = 1.0f;
         float lfoDepth = 0.0f;
         int lfoTarget = static_cast<int> (LfoTarget::None);
+
+        // FLOWER performance oscillator: original Mutable Instruments Plaits.
+        int plaitsModel = 0;
+        float plaitsHarmonics = 0.5f;
+        float plaitsTimbre = 0.5f;
+        float plaitsMorph = 0.5f;
     };
 
+    SineVoice();
     bool canPlaySound (juce::SynthesiserSound* sound) override;
     void setCurrentPlaybackSampleRate (double newRate) override;
     void startNote (int midiNoteNumber, float velocity, juce::SynthesiserSound*, int currentPitchWheelPosition) override;
@@ -41,6 +52,9 @@ private:
     static double wrap01 (double value) noexcept;
     float nextLfo() noexcept;
     float modulationFor (LfoTarget target) const noexcept;
+#if JUCE_ANDROID
+    float renderPlaitsOscillator (float midiPitch) noexcept;
+#endif
 
     Params params;
     juce::ADSR adsr;
@@ -53,6 +67,19 @@ private:
     float lfoCurrent = 0.0f;
     double baseFrequencyHz = 440.0;
     double sampleRateHz = 44100.0;
+    int currentMidiNote = 60;
     float velocityGain = 0.0f;
     float pitchWheelSemitones = 0.0f;
+
+#if JUCE_ANDROID
+    // Same preallocated hosted Plaits strategy as accepted MIYAKO.
+    alignas (16) std::array<uint8_t, 65536> plaitsWork {};
+    plaits::Voice plaitsVoice;
+    std::array<plaits::Voice::Frame, plaits::kBlockSize> plaitsFrames {};
+    int plaitsFrameIndex = static_cast<int> (plaits::kBlockSize);
+    double plaitsStreamPhase = 1.0;
+    float plaitsPreviousSample = 0.0f;
+    float plaitsNextSample = 0.0f;
+    bool plaitsGate = false;
+#endif
 };
