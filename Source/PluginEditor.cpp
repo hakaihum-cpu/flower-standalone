@@ -248,7 +248,7 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
         processor.state().getRawParameterValue (ParamID::audioBufferMode)->load()));
     refreshAudioOutputs();
 
-    bool restoredOutput = false;
+    bool burstAppliedByOutputRestore = false;
     const auto savedOutputType =
         processor.state().state.getProperty ("audioOutputType").toString();
     const auto savedOutputName =
@@ -263,15 +263,17 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
                 && option.name == savedOutputName)
             {
                 if (i != selectedAudioOutput)
+                {
                     selectAudioOutput (i);
-                restoredOutput = true;
+                    burstAppliedByOutputRestore = audioBufferMode != 0;
+                }
                 break;
             }
         }
     }
 
     refreshAudioBufferStatus();
-    if (! restoredOutput && audioBufferMode != 0)
+    if (! burstAppliedByOutputRestore && audioBufferMode != 0)
         applyAudioBufferMode (audioBufferMode);
 
     startTimerHz (30);
