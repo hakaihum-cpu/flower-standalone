@@ -129,26 +129,26 @@ def main() -> None:
     stmlib_url = f"https://codeload.github.com/pichenettes/stmlib/zip/{STMLIB}"
     with download_zip(stmlib_url) as z:
         archive_root = f"stmlib-{STMLIB}/"
-        extract_subtree(z, archive_root, "", root)
+        stmlib_root = root / "Source/stmlib"
+        stmlib_root.mkdir(parents=True, exist_ok=True)
 
-    # The stmlib archive extracts directly under its root. Move it under Source/stmlib.
-    # extract_subtree with an empty subtree writes paths without the leading "stmlib/".
-    # Re-home those files deterministically.
-    source_root = root / "Source"
-    stmlib_root = source_root / "stmlib"
-    stmlib_root.mkdir(parents=True, exist_ok=True)
-    for name in ("LICENSE", "stmlib.h"):
-        candidate = source_root / name
-        if candidate.exists():
-            candidate.replace(stmlib_root / name)
-    for directory in ("dsp", "fft", "utils"):
-        candidate = source_root / directory
-        destination = stmlib_root / directory
-        if candidate.exists():
-            if destination.exists():
-                import shutil
-                shutil.rmtree(destination)
-            candidate.replace(destination)
+        for directory in ("dsp", "fft", "utils"):
+            prefix = archive_root + directory + "/"
+            count = 0
+            for info in z.infolist():
+                if info.is_dir() or not info.filename.startswith(prefix):
+                    continue
+                relative = info.filename[len(archive_root):]
+                target = stmlib_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(z.read(info.filename))
+                count += 1
+            if count == 0:
+                raise RuntimeError(f"No stmlib files extracted for {directory}")
+
+        for name in ("LICENSE", "stmlib.h"):
+            stmlib_root.joinpath(name).write_bytes(
+                z.read(archive_root + name))
 
     patch_plaits_user_data(root)
     patch_clouds_debug_pin(root)
