@@ -62,3 +62,10 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror \
 grep -Fq 'UsbDirectFormat.find(device,c.getRawDescriptors())' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
 grep -Fq 'UsbDirectEngine.execute(this,device' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
 grep -Fq 'UsbDiagnosticStore.load(this)' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+
+# Regression guards for actual iRig PRO DUO endpoint shutdown report.
+grep -Fq 'FIRST_OUT_URB_STATUS' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
+grep -Fq 'failure==-ESHUTDOWN' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
+grep -Fq 'controlTransfer(0x22,0x01,0x0100' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'inputRateControl=fmtIn.rateCtrlIn' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectFormat.java"
+grep -Fq 'USB_DESCRIPTORS' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"

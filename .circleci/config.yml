@@ -35,6 +35,8 @@ jobs:
             test -f AMPS/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java
             test -f AMPS/app/src/main/java/com/analoglav/amps/usb/UsbDirectFormat.java
             test -f AMPS/app/src/main/java/com/analoglav/amps/usb/UsbDiagnosticStore.java
+            grep -Fq 'FIRST_OUT_URB_STATUS' AMPS/app/src/main/cpp/UsbPcmEngine.cpp
+            grep -Fq 'controlTransfer(0x22,0x01,0x0100' AMPS/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java
             test -f AMPS/app/src/main/java/com/analoglav/amps/usb/UsbIsoTester.java
             test -f AMPS/app/src/main/cpp/InputFade.h
             test -f AMPS/test/InputFadeSmoke.cpp

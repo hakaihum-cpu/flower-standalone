@@ -3,6 +3,7 @@ package com.analoglav.amps.usb;
 import android.content.Context;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
+import android.hardware.usb.UsbEndpoint;
 import android.hardware.usb.UsbManager;
 import com.analoglav.amps.AmpDsp;
 
@@ -34,6 +35,34 @@ public final class UsbDirectEngine {
     nativeControls(values,dsp.channel,dsp.cabinet,dsp.bypass?1:0);
   }
 
+  /**
+   * UAC1 endpoint Sampling Frequency Control (only if explicitly advertised).
+   * 48,000 Hz is encoded as 80 BB 00, SET_CUR to endpoint control selector 1.
+   */
+  private static boolean set48kWhenSupported(UsbDeviceConnection c,
+      UsbEndpoint ep,boolean advertised,StringBuilder report){
+    if(!advertised){
+      report.append("SAMPLE_RATE_CONTROL EP=0x")
+          .append(Integer.toHexString(ep.getAddress()))
+          .append(" FIXED_OR_UNADVERTISED\n");
+      return true;
+    }
+    byte[] rate=new byte[]{(byte)0x80,(byte)0xBB,0};
+    int rc=c.controlTransfer(0x22,0x01,0x0100,ep.getAddress(),rate,3,1200);
+    report.append("UAC1_SET_CUR_48K EP=0x")
+        .append(Integer.toHexString(ep.getAddress())).append(" RESULT=")
+        .append(rc).append('\n');
+    if(rc!=3)return false;
+    byte[] actual=new byte[3];
+    int got=c.controlTransfer(0xA2,0x81,0x0100,ep.getAddress(),actual,3,1200);
+    if(got==3){
+      int confirmed=(actual[0]&255)|((actual[1]&255)<<8)|((actual[2]&255)<<16);
+      report.append("UAC1_GET_CUR_HZ=").append(confirmed).append('\n');
+      return confirmed==48000;
+    }
+    report.append("UAC1_GET_CUR=UNAVAILABLE (SET_CUR ACKNOWLEDGED)\n");
+    return true;
+  }
   public static String execute(Context ctx,UsbDevice device,int depth,AmpDsp dsp) {
     if(device==null)return "USB_DIRECT_ERROR=NO_DEVICE\n";
     UsbManager manager=(UsbManager)ctx.getSystemService(Context.USB_SERVICE);
@@ -61,6 +90,12 @@ public final class UsbDirectEngine {
         return report.append("USB_DIRECT_ERROR=SET_INPUT_ALT_FAILED\n").toString();
       if(!c.setInterface(pair.outputInterface))
         return report.append("USB_DIRECT_ERROR=SET_OUTPUT_ALT_FAILED\n").toString();
+      if(!set48kWhenSupported(c,pair.input,pair.inputRateControl,report))
+        return report.append("USB_DIRECT_ERROR=INPUT_SAMPLE_RATE_SET_FAILED\n").toString();
+      if(!set48kWhenSupported(c,pair.output,pair.outputRateControl,report))
+        return report.append("USB_DIRECT_ERROR=OUTPUT_SAMPLE_RATE_SET_FAILED\n").toString();
+      if(((pair.output.getAttributes()>>2)&3)==1 && pair.outputFeedbackAddress!=0)
+        report.append("WARNING=ASYNC_OUTPUT_FEEDBACK_NOT_YET_IMPLEMENTED\n");
       update(dsp);
       report.append(nativeRun(c.getFileDescriptor(),
          pair.input.getAddress(),pair.output.getAddress(),

@@ -96,6 +96,10 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
   AmpModel model;model.setSampleRate(48000);model.reset();
   std::array<float,ringSize> fifo{};
   int rd=0,wr=0,fill=0,submitIn=0,submitOut=0,err=0,cleanupPending=0;
+  int inputErrors=0,outputErrors=0;
+  int firstInUrbStatus=0,firstInPacketStatus=0;
+  int firstOutUrbStatus=0,firstOutPacketStatus=0;
+  int firstSubmitInputError=0,firstSubmitOutputError=0;
   auto in=std::make_unique<std::array<Request,slots>>();
   auto out=std::make_unique<std::array<Request,slots>>();
   auto prepare=[&](Request& r) {
@@ -118,12 +122,12 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
   };
   for(int i=0;i<depth;i++){
     int rc=submit(fd,(*in)[i],epIn,inPacket);
-    if(rc){err=rc;break;}++submitIn;
+    if(rc){err=rc;firstSubmitInputError=rc;break;}++submitIn;
   }
   if(!err)for(int i=0;i<depth;i++){
     std::fill((*out)[i].pcm.begin(),(*out)[i].pcm.end(),0);
     int rc=submit(fd,(*out)[i],epOut,outPacket);
-    if(rc){err=rc;break;}++submitOut;
+    if(rc){err=rc;firstSubmitOutputError=rc;break;}++submitOut;
   }
   while(!err && running.load(std::memory_order_acquire)){
     pollfd pfd{fd,POLLIN,0};
@@ -142,8 +146,27 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
       r->pending=false;
       if(done->status!=0 || r->iso()->status!=0){
         usbErrors.fetch_add(1);
-        // Do not blindly re-queue a broken endpoint indefinitely.
-        if(usbErrors.load()>32){err=done->status?done->status:r->iso()->status;break;}
+        if(capture){
+          ++inputErrors;
+          if(inputErrors==1){
+            firstInUrbStatus=done->status;
+            firstInPacketStatus=r->iso()->status;
+          }
+        }else{
+          ++outputErrors;
+          if(outputErrors==1){
+            firstOutUrbStatus=done->status;
+            firstOutPacketStatus=r->iso()->status;
+          }
+        }
+        const int failure=done->status?done->status:r->iso()->status;
+        // Endpoint disabled/disconnected is terminal. Thirty-two blind
+        // retries hide the original cause and can disrupt the device.
+        if(failure==-ESHUTDOWN || failure==-ENODEV || failure==-EPIPE ||
+           failure==-EPERM || inputErrors+outputErrors>=3){
+          err=failure;
+          break;
+        }
       }else if(capture){
         const int bytes=std::max(0,std::min(static_cast<int>(r->iso()->actual_length),maxIn));
         rxBytes.fetch_add(bytes);completedIn.fetch_add(1);
@@ -160,11 +183,11 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
       }
       if(capture){
         const int rc=submit(fd,*r,epIn,inPacket);
-        if(rc){err=rc;break;}++submitIn;
+        if(rc){err=rc;if(!firstSubmitInputError)firstSubmitInputError=rc;break;}++submitIn;
       }else{
         prepare(*r);
         const int rc=submit(fd,*r,epOut,outPacket);
-        if(rc){err=rc;break;}++submitOut;
+        if(rc){err=rc;if(!firstSubmitOutputError)firstSubmitOutputError=rc;break;}++submitOut;
       }
     }
   }
@@ -190,10 +213,14 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
     "QUEUE_DEPTH=%d SUBMIT_IN=%d COMPLETE_IN=%d BYTES_IN=%d\n"
     "SUBMIT_OUT=%d COMPLETE_OUT=%d BYTES_OUT=%d\n"
     "DSP_UNDERRUN_FRAMES=%d USB_ERRORS=%d ERROR_CODE=%d CLEANUP_PENDING=%d\n"
+    "IN_ERR_COUNT=%d FIRST_IN_URB_STATUS=%d FIRST_IN_PACKET_STATUS=%d FIRST_IN_SUBMIT_ERR=%d\n"
+    "OUT_ERR_COUNT=%d FIRST_OUT_URB_STATUS=%d FIRST_OUT_PACKET_STATUS=%d FIRST_OUT_SUBMIT_ERR=%d\n"
     "ANALOG_ROUND_TRIP_LATENCY=NOT_MEASURED\n",
     speed,subBytes,bits,intervalIn,intervalOut,inPacket,outPacket,depth,
     submitIn,completedIn.load(),rxBytes.load(),submitOut,completedOut.load(),
-    txBytes.load(),underruns.load(),usbErrors.load(),err,cleanupPending);
+    txBytes.load(),underruns.load(),usbErrors.load(),err,cleanupPending,
+    inputErrors,firstInUrbStatus,firstInPacketStatus,firstSubmitInputError,
+    outputErrors,firstOutUrbStatus,firstOutPacketStatus,firstSubmitOutputError);
   return report;
 }
 }

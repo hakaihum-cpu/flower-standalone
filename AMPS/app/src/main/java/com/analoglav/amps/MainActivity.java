@@ -352,9 +352,17 @@ public final class MainActivity extends Activity {
             t.getMessage()+"\\n";
       }
       final String done=result;
+      // Preserve raw descriptors and USB endpoints even on transfer failure.
+      // Failure report must contain the information needed to fix OUT errors.
+      String details;
+      try{details=UsbAudioDeviceProbe.inspect(this,device);}
+      catch(Throwable t){details="USB_PROBE_ERROR="+t.toString();}
+      final String descriptorDetails=details;
       runOnUiThread(()->{
         directWorkerActive=false;
-        usbReport="USB_DIRECT_RESULT\n"+done;
+        usbReport="TARGET_USB VID="+device.getVendorId()+
+            " PID="+device.getProductId()+"\nUSB_DIRECT_RESULT\n"+
+            done+"\nUSB_DESCRIPTORS\n"+descriptorDetails;
         usbStatus="USB DIRECT: "+(done.contains("USB_DIRECT_ERROR=")||
             done.contains("USB_DIRECT_EXCEPTION=")||
             done.contains("ERROR_CODE=-")?"UNAVAILABLE / SEE REPORT":"STOPPED / SEE REPORT");
@@ -554,7 +562,7 @@ public final class MainActivity extends Activity {
   private String diagnosticReport(){
     bridge.poll();
     StringBuilder s=new StringBuilder();
-    s.append("AMPS AN-68 / 0.6.0 NATIVE USBFS ISO TRANSPORT TEST\n");
+    s.append("AMPS AN-68 / 0.7.1 USB DIRECT PCM OUT DIAGNOSTIC\n");
     s.append("DATE_MS=").append(System.currentTimeMillis()).append('\n');
     s.append("ANDROID_SDK=").append(Build.VERSION.SDK_INT).append('\n');
     s.append("DEVICE=").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n');

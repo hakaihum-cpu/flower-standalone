@@ -138,3 +138,36 @@ refuses to write a 0-byte report. Startup and terminal USB status are
 persisted. The mode reports native IN/OUT completions, bytes, underruns and
 errors as the basis for subsequent tuning. This revision adds NO automatic
 CI build and makes NO changes to Golden/main or other apps.
+
+## AN-68 iRig Pro Duo USB DIRECT report (2026-10-12, v0.7.1)
+On actual RG Rotate Android SDK31 / iRig PRO DUO (USB VID 6499 PID 16):
+- USB Full Speed, UAC1 48k/24bit stereo PCM Type I, 3-byte subframes.
+- Input streaming IF=2 ALT=1 ep=0x82, OUT IF=1 ALT=1 ep=0x01.
+- Both endpoints advertise maxPacket=288 bytes per 1ms (48 frames).
+- Native direct USB input completed 22 packets / 6336 bytes.
+- Native direct USB output completed ZERO packets despite 35 submit
+  attempts. The kernel reported ERROR_CODE=-108 (ESHUTDOWN), with
+  33 aggregate transfer errors; the first direction/URB/packet status
+  was not recorded. This does NOT prove physical USB output is impossible.
+- Native audio loopback NOT running, analog round trip still unmeasured.
+The prior 96/96/192 AAudio tweaks are unrelated to USBFS direct PCM.
+
+Fixes:
+- Native USB error reporting records FIRST_IN/OUT_URB_STATUS and
+  FIRST_IN/OUT_PACKET_STATUS separately and first submission failures,
+  instead of hiding the first failure behind 32 blind retries.
+  Fatal ESHUTDOWN/ENODEV/EPIPE/EPERM stops immediately.
+- UAC1 parser now reports output endpoint sync type and optional feedback
+  endpoint address, and class-specific sampling-frequency-control bit.
+- When UAC1 explicitly advertises the endpoint sampling rate control,
+  send standard class-specific SET_CUR 48000Hz (3 little-endian bytes)
+  after selecting the alternate interface. If GET_CUR succeeds, verify
+  actual rate. If SET_CUR fails or GET_CUR disagrees, fail closed.
+- Always persist the full USB descriptor scan alongside the terminal
+  direct PCM result in the diagnostic TXT rather than overwriting it.
+- No AAudio fallback, no modification to existing normal AAudio mode,
+  no guessed USB VID/PID wiring; external clock feedback implementation
+  remains pending, analog latency target <=10ms still unverified.
+
+This is source-level repair, NOT BUILT or USB-device verified at this
+checkpoint; needs the usual preflight and one manual CircleCI job.
