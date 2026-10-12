@@ -52,7 +52,7 @@ void WaveformTrimComponent::paint(juce::Graphics& g) {
 
     if (durationSec_ <= 0.0) {
         g.setColour(juce::Colours::grey);
-        g.drawFittedText("STOPするとここに波形が表示されます", r, juce::Justification::centred, 1);
+        g.drawFittedText("The waveform will appear here after STOP", r, juce::Justification::centred, 1);
         return;
     }
 
