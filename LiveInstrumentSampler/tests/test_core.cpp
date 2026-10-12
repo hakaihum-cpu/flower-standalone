@@ -51,9 +51,11 @@ static void requireThrows(const std::function<void()>& fn, const char* msg) {
     require(threw, msg);
 }
 
-int main() {
+static int runTests() {
     const auto root = fs::temp_directory_path() / "live_instrument_sampler_core_test";
-    fs::remove_all(root);
+    std::error_code cleanupEc;
+    fs::remove_all(root, cleanupEc);
+    std::cout << "[1/6] setup" << std::endl;
     fs::create_directories(root / "raw");
 
     lis::SessionSpec spec;
@@ -76,6 +78,7 @@ int main() {
         takes.push_back(t);
     }
 
+    std::cout << "[2/6] session validation" << std::endl;
     require(lis::noteName(60) == "C4", "noteName C4 failed");
     lis::validateSession(spec, takes);
 
@@ -102,6 +105,7 @@ int main() {
     tooHigh.startNote = 60;
     requireThrows([&] { lis::validateSession(tooHigh, c2Takes); }, "range above C8 must fail");
 
+    std::cout << "[3/6] master WAV + map" << std::endl;
     const auto masterWav = root / "master.wav";
     const auto mapJson = root / "master.epmap.json";
     auto master = lis::exportMasterWav(spec, takes, masterWav, mapJson);
@@ -120,6 +124,7 @@ int main() {
     require(mapRate == 48000 && mapStart == 60 && mapCount == 3, "map scalar parse");
     require(parsed.size() == 3 && parsed[2].midiNote == 62, "map segment parse");
 
+    std::cout << "[4/6] direct EPBANK1" << std::endl;
     const auto directBin = root / "direct.bin";
     lis::buildEpBankFromTakes(spec, takes, directBin);
     std::ifstream bin(directBin, std::ios::binary);
@@ -140,6 +145,7 @@ int main() {
 
     bin.close();
 
+    std::cout << "[5/6] tuned EPBANK1" << std::endl;
     const auto tunedBin = root / "tuned.bin";
     lis::buildEpBankFromMaster(spec, rereadMaster, parsed, tunedBin);
     require(fs::file_size(tunedBin) == fs::file_size(directBin), "tuned/direct size mismatch");
@@ -149,7 +155,24 @@ int main() {
     requireThrows([&] { lis::buildEpBankFromMaster(spec, shortMaster, parsed, root / "short.bin"); },
                   "short tuned master must fail");
 
-    fs::remove_all(root);
-    std::cout << "ALL CORE TESTS PASSED\n";
+    std::cout << "[6/6] cleanup" << std::endl;
+    cleanupEc.clear();
+    fs::remove_all(root, cleanupEc);
+    if (cleanupEc)
+        std::cerr << "WARNING: temp cleanup failed: " << cleanupEc.message() << std::endl;
+
+    std::cout << "ALL CORE TESTS PASSED" << std::endl;
     return 0;
+}
+
+int main() {
+    try {
+        return runTests();
+    } catch (const std::exception& e) {
+        std::cerr << "CORE TEST FAILURE: " << e.what() << std::endl;
+        return 1;
+    } catch (...) {
+        std::cerr << "CORE TEST FAILURE: unknown exception" << std::endl;
+        return 2;
+    }
 }
