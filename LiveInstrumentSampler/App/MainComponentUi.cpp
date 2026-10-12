@@ -26,7 +26,7 @@ MainComponent::~MainComponent() {
 }
 
 void MainComponent::configureUi() {
-    setSize(980, 900);
+    setSize(980, 990);
     setLabel(titleLabel_, "LIVE INSTRUMENT -> EP-SAMPLE");
     titleLabel_.setFont(juce::FontOptions(24.0f, juce::Font::bold));
     setLabel(stepLabel_, "Set audio -> choose key range -> REC/SET each key -> FINISH");
@@ -39,7 +39,8 @@ void MainComponent::configureUi() {
     juce::Component* audioComponents[] = {
         &driverBox_, &inputDeviceBox_, &outputDeviceBox_, &inputPairBox_, &outputPairBox_, &bufferBox_,
         &driverLabel_, &inputDeviceLabel_, &outputDeviceLabel_, &inputPairLabel_, &outputPairLabel_, &bufferLabel_,
-        &applyAudioButton_, &audioStatusLabel_, &asioCheckButton_, &toneHeardButton_, &toneNotHeardButton_, &toneAgainButton_,
+        &applyAudioButton_, &monitorButton_, &inputGainSlider_, &inputGainLabel_, &inputMeterLabel_, &clipLabel_,
+        &audioStatusLabel_, &asioCheckButton_, &toneHeardButton_, &toneNotHeardButton_, &toneAgainButton_,
         &diagEnumerateLabel_, &diagOpenLabel_, &diagInputLabel_, &diagOutputLabel_, &diagReopenLabel_
     };
     for (auto* component : audioComponents) add(*component);
@@ -53,6 +54,24 @@ void MainComponent::configureUi() {
     setLabel(diagEnumerateLabel_, "ASIO driver: -"); setLabel(diagOpenLabel_, "48 kHz open: -");
     setLabel(diagInputLabel_, "input signal: -"); setLabel(diagOutputLabel_, "output tone: -"); setLabel(diagReopenLabel_, "reopen: -");
     toneHeardButton_.setEnabled(false); toneNotHeardButton_.setEnabled(false); toneAgainButton_.setEnabled(false);
+
+    setLabel(inputGainLabel_, "INPUT GAIN");
+    setLabel(inputMeterLabel_, "LEVEL -inf dBFS");
+    setLabel(clipLabel_, "");
+    inputMeterLabel_.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    clipLabel_.setColour(juce::Label::textColourId, juce::Colours::red);
+
+    monitorButton_.setToggleState(false, juce::dontSendNotification);
+    monitorButton_.onClick = [this] { audio_.setMonitoringEnabled(monitorButton_.getToggleState()); };
+
+    inputGainSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
+    inputGainSlider_.setTextBoxStyle(juce::Slider::TextBoxRight, false, 72, 24);
+    inputGainSlider_.setRange(-24.0, 24.0, 0.1);
+    inputGainSlider_.setValue(0.0, juce::dontSendNotification);
+    inputGainSlider_.setTextValueSuffix(" dB");
+    inputGainSlider_.onValueChange = [this] {
+        audio_.setInputGainDb(static_cast<float>(inputGainSlider_.getValue()));
+    };
 
     driverBox_.onChange = [this] { refreshDeviceLists(); };
     inputDeviceBox_.onChange = [this] { refreshChannelAndBufferLists(); };
@@ -75,7 +94,7 @@ void MainComponent::configureUi() {
     startSessionButton_.onClick = [this] { startSession(); };
 
     juce::Component* recordComponents[] = {
-        &currentKeyLabel_, &recButton_, &stopButton_, &setButton_, &retakeButton_, &waveform_,
+        &currentKeyLabel_, &recButton_, &stopButton_, &previewButton_, &setButton_, &retakeButton_, &waveform_,
         &trimStartEditor_, &trimEndEditor_, &trimStartLabel_, &trimEndLabel_, &recordHintLabel_
     };
     for (auto* component : recordComponents) add(*component);
@@ -87,9 +106,11 @@ void MainComponent::configureUi() {
     recordHintLabel_.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
     recButton_.onClick = [this] { beginRecording(); };
     stopButton_.onClick = [this] { stopRecording(); };
+    previewButton_.onClick = [this] { togglePreview(); };
     setButton_.onClick = [this] { confirmTake(); };
     retakeButton_.onClick = [this] { retake(); };
-    stopButton_.setEnabled(false); setButton_.setEnabled(false); retakeButton_.setEnabled(false); recButton_.setEnabled(false);
+    stopButton_.setEnabled(false); previewButton_.setEnabled(false); setButton_.setEnabled(false);
+    retakeButton_.setEnabled(false); recButton_.setEnabled(false);
     trimStartEditor_.setEnabled(false); trimEndEditor_.setEnabled(false);
     waveform_.onTrimChanged = [this](double s, double e) { syncTrimEditorsFromWaveform(s, e); };
     trimStartEditor_.onReturnKey = [this] { syncWaveformFromTrimEditors(); };
@@ -126,7 +147,7 @@ void MainComponent::resized() {
     stepLabel_.setBounds(area.removeFromTop(24));
     area.removeFromTop(8);
 
-    auto audioArea = area.removeFromTop(235);
+    auto audioArea = area.removeFromTop(260);
     audioGroup_.setBounds(audioArea);
     auto a = audioArea.reduced(14, 30);
     const int labelW = 92;
@@ -135,28 +156,35 @@ void MainComponent::resized() {
     driverLabel_.setBounds(row1.removeFromLeft(labelW)); driverBox_.setBounds(row1.removeFromLeft(145)); row1.removeFromLeft(8);
     inputDeviceLabel_.setBounds(row1.removeFromLeft(95)); inputDeviceBox_.setBounds(row1.removeFromLeft(190)); row1.removeFromLeft(8);
     outputDeviceLabel_.setBounds(row1.removeFromLeft(105)); outputDeviceBox_.setBounds(row1.removeFromLeft(190));
-    a.removeFromTop(6);
+    a.removeFromTop(4);
     auto row2 = a.removeFromTop(rowH);
     inputPairLabel_.setBounds(row2.removeFromLeft(labelW)); inputPairBox_.setBounds(row2.removeFromLeft(250)); row2.removeFromLeft(10);
     outputPairLabel_.setBounds(row2.removeFromLeft(90)); outputPairBox_.setBounds(row2.removeFromLeft(250)); row2.removeFromLeft(10);
     bufferLabel_.setBounds(row2.removeFromLeft(58)); bufferBox_.setBounds(row2.removeFromLeft(80)); row2.removeFromLeft(8);
     applyAudioButton_.setBounds(row2.removeFromLeft(130));
-    a.removeFromTop(6);
-    audioStatusLabel_.setBounds(a.removeFromTop(24));
     a.removeFromTop(4);
-    auto diagButtons = a.removeFromTop(30);
+    auto gainRow = a.removeFromTop(30);
+    monitorButton_.setBounds(gainRow.removeFromLeft(110)); gainRow.removeFromLeft(12);
+    inputGainLabel_.setBounds(gainRow.removeFromLeft(85));
+    inputGainSlider_.setBounds(gainRow.removeFromLeft(320)); gainRow.removeFromLeft(12);
+    inputMeterLabel_.setBounds(gainRow.removeFromLeft(170)); gainRow.removeFromLeft(8);
+    clipLabel_.setBounds(gainRow.removeFromLeft(55));
+    a.removeFromTop(4);
+    audioStatusLabel_.setBounds(a.removeFromTop(22));
+    a.removeFromTop(2);
+    auto diagButtons = a.removeFromTop(28);
     asioCheckButton_.setBounds(diagButtons.removeFromLeft(145)); diagButtons.removeFromLeft(8);
     toneAgainButton_.setBounds(diagButtons.removeFromLeft(145)); diagButtons.removeFromLeft(8);
     toneHeardButton_.setBounds(diagButtons.removeFromLeft(170)); diagButtons.removeFromLeft(8);
     toneNotHeardButton_.setBounds(diagButtons.removeFromLeft(100));
-    a.removeFromTop(4);
-    auto diag1 = a.removeFromTop(23); diagEnumerateLabel_.setBounds(diag1.removeFromLeft(280)); diagOpenLabel_.setBounds(diag1.removeFromLeft(500));
-    auto diag2 = a.removeFromTop(23); diagInputLabel_.setBounds(diag2.removeFromLeft(360)); diagOutputLabel_.setBounds(diag2.removeFromLeft(300)); diagReopenLabel_.setBounds(diag2);
+    a.removeFromTop(2);
+    auto diag1 = a.removeFromTop(22); diagEnumerateLabel_.setBounds(diag1.removeFromLeft(280)); diagOpenLabel_.setBounds(diag1.removeFromLeft(500));
+    auto diag2 = a.removeFromTop(22); diagInputLabel_.setBounds(diag2.removeFromLeft(360)); diagOutputLabel_.setBounds(diag2.removeFromLeft(300)); diagReopenLabel_.setBounds(diag2);
 
     area.removeFromTop(8);
-    auto sessionArea = area.removeFromTop(100);
+    auto sessionArea = area.removeFromTop(105);
     sessionGroup_.setBounds(sessionArea);
-    auto s = sessionArea.reduced(14, 30);
+    auto s = sessionArea.reduced(14, 24);
     auto sr = s.removeFromTop(30);
     startNoteLabel_.setBounds(sr.removeFromLeft(85)); startNoteBox_.setBounds(sr.removeFromLeft(125)); sr.removeFromLeft(12);
     keyCountLabel_.setBounds(sr.removeFromLeft(48)); keyCountEditor_.setBounds(sr.removeFromLeft(58)); sr.removeFromLeft(12);
@@ -168,22 +196,23 @@ void MainComponent::resized() {
     auto recordArea = area.removeFromTop(360);
     recordGroup_.setBounds(recordArea);
     auto r = recordArea.reduced(14, 30);
-    auto keyRow = r.removeFromTop(36);
-    currentKeyLabel_.setBounds(keyRow.removeFromLeft(520));
-    recButton_.setBounds(keyRow.removeFromLeft(90)); keyRow.removeFromLeft(6);
-    stopButton_.setBounds(keyRow.removeFromLeft(90)); keyRow.removeFromLeft(6);
-    setButton_.setBounds(keyRow.removeFromLeft(90)); keyRow.removeFromLeft(6);
-    retakeButton_.setBounds(keyRow.removeFromLeft(100));
-    r.removeFromTop(6);
-    waveform_.setBounds(r.removeFromTop(220));
+    auto keyRow = r.removeFromTop(34);
+    currentKeyLabel_.setBounds(keyRow.removeFromLeft(390));
+    recButton_.setBounds(keyRow.removeFromLeft(70)); keyRow.removeFromLeft(6);
+    stopButton_.setBounds(keyRow.removeFromLeft(70)); keyRow.removeFromLeft(6);
+    previewButton_.setBounds(keyRow.removeFromLeft(105)); keyRow.removeFromLeft(6);
+    setButton_.setBounds(keyRow.removeFromLeft(70)); keyRow.removeFromLeft(6);
+    retakeButton_.setBounds(keyRow.removeFromLeft(85));
     r.removeFromTop(5);
-    auto tr = r.removeFromTop(30);
+    waveform_.setBounds(r.removeFromTop(180));
+    r.removeFromTop(4);
+    auto tr = r.removeFromTop(28);
     trimStartLabel_.setBounds(tr.removeFromLeft(75)); trimStartEditor_.setBounds(tr.removeFromLeft(100)); tr.removeFromLeft(15);
     trimEndLabel_.setBounds(tr.removeFromLeft(65)); trimEndEditor_.setBounds(tr.removeFromLeft(100));
-    recordHintLabel_.setBounds(r.removeFromTop(30));
+    recordHintLabel_.setBounds(r.removeFromTop(28));
 
     area.removeFromTop(8);
-    auto finishArea = area.removeFromTop(120);
+    auto finishArea = area.removeFromTop(135);
     finishGroup_.setBounds(finishArea);
     auto f = finishArea.reduced(14, 30);
     auto fr = f.removeFromTop(34);
