@@ -191,6 +191,21 @@ if ($workflow -notmatch 'live-instrument-sampler-build-trigger\.txt') {
     throw "Windows build must stay gated by the explicit trigger file."
 }
 
+
+# UI/source encoding guard: App source must stay ASCII-only to avoid mojibake
+# on Windows builds and systems with different active code pages.
+$appSourceFiles = Get-ChildItem "LiveInstrumentSampler/App" -File -Recurse |
+    Where-Object { $_.Extension -in @(".cpp", ".h") }
+
+foreach ($file in $appSourceFiles) {
+    $bytes = [IO.File]::ReadAllBytes($file.FullName)
+    foreach ($b in $bytes) {
+        if ($b -gt 0x7F) {
+            throw "Non-ASCII byte found in App source: $($file.FullName)"
+        }
+    }
+}
+
 Write-Host "Changed files:"
 $changed | ForEach-Object { Write-Host "  $_" }
 Write-Host "AN-72 preflight PASS"
