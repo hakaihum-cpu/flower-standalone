@@ -38,6 +38,17 @@ public:
     int recordingWriteDropouts() const noexcept { return writerDropouts_.load(); }
     int recordingXRuns() const noexcept;
 
+    void setMonitoringEnabled(bool enabled) noexcept { monitoringEnabled_.store(enabled); }
+    bool isMonitoringEnabled() const noexcept { return monitoringEnabled_.load(); }
+    void setInputGainDb(float db) noexcept;
+    float inputGainDb() const noexcept { return inputGainDb_.load(); }
+    float currentProcessedPeakDb() const noexcept;
+    bool consumeInputClip() noexcept { return inputClipped_.exchange(false); }
+
+    juce::String startPreview(const juce::File& file, double startSeconds, double endSeconds);
+    void stopPreview();
+    bool isPreviewing() const noexcept { return previewing_.load(); }
+
     float currentInputLevel() const noexcept;
     bool currentDeviceIsOpenAt48k() const noexcept;
     juce::String currentDeviceSummary() const;
@@ -54,8 +65,13 @@ public:
     void audioDeviceStopped() override;
 
 private:
+    struct PreviewData {
+        juce::AudioBuffer<float> audio;
+    };
+
     juce::AudioDeviceManager deviceManager_;
     juce::AudioDeviceManager::LevelMeter::Ptr inputLevelMeter_;
+    juce::AudioFormatManager previewFormatManager_;
     juce::TimeSliceThread writerThread_{"LiveSampler WAV writer"};
     std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> threadedWriter_;
     juce::CriticalSection writerLock_;
@@ -64,6 +80,16 @@ private:
     std::atomic<int> writerDropouts_{0};
     int xRunStart_ = -1;
     int xRunEnd_ = -1;
+
+    std::atomic<bool> monitoringEnabled_{false};
+    std::atomic<float> inputGainDb_{0.0f};
+    std::atomic<float> processedPeak_{0.0f};
+    std::atomic<bool> inputClipped_{false};
+
+    std::shared_ptr<PreviewData> previewData_;
+    std::atomic<int> previewPosition_{0};
+    std::atomic<bool> previewing_{false};
+
     juce::AudioBuffer<float> stereoScratch_;
     double currentSampleRate_ = 0.0;
     int currentBlockSize_ = 0;
