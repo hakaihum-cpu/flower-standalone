@@ -97,7 +97,7 @@ foreach ($required in @(
         throw "Audio safety path missing: $required"
     }
 }
-if ($audio -notmatch 'if\s*\(\s*!activeWriter_->write') {
+if ($audio -notmatch '!activeWriter_->write\s*\(') {
     throw "ThreadedWriter FIFO failure must be checked."
 }
 
