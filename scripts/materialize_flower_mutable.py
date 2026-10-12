@@ -46,7 +46,8 @@ def download_zip(url: str) -> ZipFile:
         return ZipFile(BytesIO(response.read()))
 
 def extract_subtree(z: ZipFile, archive_root: str, subtree: str, target_root: Path) -> None:
-    prefix = archive_root + subtree.rstrip("/") + "/"
+    clean = subtree.strip("/")
+    prefix = archive_root + (clean + "/" if clean else "")
     count = 0
     for info in z.infolist():
         if info.is_dir() or not info.filename.startswith(prefix):
