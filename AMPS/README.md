@@ -221,3 +221,32 @@ Changes in 0.7.3:
 This is an error-isolation and possible startup ordering fix, NOT proof
 that Android released the USB playback interface. If OUT remains zero,
 inspect first-error codes and USB enumeration before further changes.
+
+## AN-68 / 0.7.4 - Direct USBFS ISO scheduling repair, real iRig report
+
+The 0.7.3 USB direct hardware report (RG Rotate, iRig PRO DUO,
+VID 6499 PID 16, Android 31) confirmed that AAudio was CLOSED.
+Playback/capture UAC1 stereo 24-bit @ 48kHz, interface/alternate
+OUT=1/1 EP=0x01 and IN=2/1 EP=0x82; SET_CUR and GET_CUR for 48kHz
+BOTH succeeded. Native submissions=2 OUT/2 IN; completed=0.
+First OUT URB=-108 ESHUTDOWN, first OUT ISO packet=-18 EXDEV;
+device enumeration persisted. This demonstrates a USB endpoint/bus
+scheduling failure, not an AAudio routing or sample-rate error.
+It is not proof of the exact underlying kernel/host cause.
+
+The direct PCM engine had one 1ms packet per URB with queue depth 2
+and polled for up to 20ms BEFORE checking for completions. Such gaps
+can starve an ISO queue, which should remain scheduled ahead of time.
+Change: 2 packets/URB and a reap-first loop; after EAGAIN poll
+for at most 1ms. Requested depth remains configurable (depth=2
+offers 4ms nominal transfer queue per direction at full speed).
+Each successful ISO input packet decodes PCM from its individual
+offset; each output packet contributes to completion diagnostics.
+Add detailed packet success counts, first error packet index/start
+frame, max event-loop gap to the report. Preserve 0.7.3 output-first
+initialization, UAC1 rate controls, fail-closed behavior and no
+AAudio fallback. This might help USB host scheduling but does not
+prove that device/endpoint ESHUTDOWN will be resolved.
+
+Native host smoke/static tests must pass before one manual CircleCI
+run. Real Android build/audio/analog RTT still unverified here.

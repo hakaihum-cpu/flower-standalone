@@ -24,13 +24,16 @@ std::array<std::atomic<float>,9> controls{};
 std::atomic<int> channel{1},cabinet{0},bypass{0};
 std::atomic<int> completedIn{0},completedOut{0},underruns{0},usbErrors{0};
 std::atomic<int> rxBytes{0},txBytes{0};
-constexpr int slots=4, maxBytes=4096, ringSize=4096;
+// Two 1ms packets/URB at Full Speed; depth 2 = 4ms queued per direction.
+// This is a bounded-startup experiment, not an end-to-end RTT guarantee.
+constexpr int slots=4, packetsPerUrb=2, maxBytes=4096, ringSize=4096;
 struct Request {
-  alignas(8) unsigned char urbBytes[sizeof(usbdevfs_urb)+sizeof(usbdevfs_iso_packet_desc)]{};
+  alignas(8) unsigned char urbBytes[sizeof(usbdevfs_urb)+packetsPerUrb*sizeof(usbdevfs_iso_packet_desc)]{};
   alignas(8) std::array<unsigned char,maxBytes> pcm{};
   usbdevfs_urb* urb(){return reinterpret_cast<usbdevfs_urb*>(urbBytes);}
-  usbdevfs_iso_packet_desc* iso(){
-    return reinterpret_cast<usbdevfs_iso_packet_desc*>(urbBytes+sizeof(usbdevfs_urb));
+  usbdevfs_iso_packet_desc* iso(int index=0){
+    return reinterpret_cast<usbdevfs_iso_packet_desc*>(
+        urbBytes+sizeof(usbdevfs_urb)+index*sizeof(usbdevfs_iso_packet_desc));
   }
   bool pending=false;
 };
@@ -58,10 +61,10 @@ int submit(int fd,Request& r,unsigned endpoint,int packetBytes){
   u->endpoint=endpoint;
   u->flags=USBDEVFS_URB_ISO_ASAP;
   u->buffer=r.pcm.data();
-  u->buffer_length=packetBytes;
-  u->number_of_packets=1;
+  u->buffer_length=packetBytes*packetsPerUrb;
+  u->number_of_packets=packetsPerUrb;
   u->usercontext=&r;
-  r.iso()->length=packetBytes;
+  for(int p=0;p<packetsPerUrb;p++)r.iso(p)->length=packetBytes;
   if(ioctl(fd,USBDEVFS_SUBMITURB,u)!=0)return -errno;
   r.pending=true;return 0;
 }
@@ -85,7 +88,8 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
   const int framesIn=frames(intervalIn), framesOut=frames(intervalOut);
   const int frameBytes=2*subBytes;
   const int inPacket=framesIn*frameBytes, outPacket=framesOut*frameBytes;
-  if(inPacket>maxIn||outPacket>maxOut||inPacket>maxBytes||outPacket>maxBytes)
+  if(inPacket>maxIn||outPacket>maxOut||
+     inPacket*packetsPerUrb>maxBytes||outPacket*packetsPerUrb>maxBytes)
     return "USB_DIRECT_ERROR=PACKET_CAPACITY_TOO_SMALL expectedIn="+
        std::to_string(inPacket)+" expectedOut="+std::to_string(outPacket)+
        " maxIn="+std::to_string(maxIn)+" maxOut="+std::to_string(maxOut)+"\n";
@@ -100,6 +104,10 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
   int firstInUrbStatus=0,firstInPacketStatus=0;
   int firstOutUrbStatus=0,firstOutPacketStatus=0;
   int firstSubmitInputError=0,firstSubmitOutputError=0;
+  int firstOutBadPacketIndex=-1,firstInBadPacketIndex=-1;
+  int firstOutStartFrame=-1,firstInStartFrame=-1;
+  int completedOutPackets=0,completedInPackets=0;
+  int maxLoopDelayUs=0;
   auto in=std::make_unique<std::array<Request,slots>>();
   auto out=std::make_unique<std::array<Request,slots>>();
   auto prepare=[&](Request& r) {
@@ -111,7 +119,7 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
     c.tremDepth=controls[8].load();
     c.channel=channel.load();c.cabinet=cabinet.load();c.bypass=bypass.load();
     model.setControls(c);
-    for(int i=0;i<framesOut;i++){
+    for(int i=0;i<framesOut*packetsPerUrb;i++){
       float x=0;
       if(fill>0){x=fifo[rd];rd=(rd+1)%ringSize;--fill;}
       else underruns.fetch_add(1);
@@ -132,71 +140,115 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
   }
   const auto noOutputDeadline=std::chrono::steady_clock::now()+
       std::chrono::milliseconds(250);
+  // Reap first, wait at most 1ms only when there was no completion.
+  // Former 20ms poll stalled a queue containing only 2ms of ISO audio.
+  auto previousLoop=std::chrono::steady_clock::now();
   while(!err && running.load(std::memory_order_acquire)){
+    const auto now=std::chrono::steady_clock::now();
+    maxLoopDelayUs=std::max(maxLoopDelayUs,static_cast<int>(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            now-previousLoop).count()));
+    previousLoop=now;
     if(completedOut.load(std::memory_order_relaxed)==0 &&
-       std::chrono::steady_clock::now()>=noOutputDeadline){
+       now>=noOutputDeadline){
       err=-ETIMEDOUT;
       break;
     }
-    pollfd pfd{fd,POLLIN,0};
-    int pollResult=poll(&pfd,1,20);
-    if(pollResult<0 && errno!=EINTR){err=-errno;break;}
+    bool gotCompletion=false;
     for(int k=0;k<2*slots;k++){
       usbdevfs_urb* done=nullptr;
       if(ioctl(fd,USBDEVFS_REAPURBNDELAY,&done)!=0){
         if(errno!=EAGAIN && errno!=EINTR)err=-errno;
         break;
       }
+      gotCompletion=true;
       Request* r=nullptr;bool capture=false;
       for(auto& q:*in)if(q.urb()==done){r=&q;capture=true;break;}
       if(!r)for(auto& q:*out)if(q.urb()==done){r=&q;break;}
       if(!r){err=-20000;break;}
       r->pending=false;
-      if(done->status!=0 || r->iso()->status!=0){
+      int badPacket=-1;
+      int firstBadCode=0;
+      for(int p=0;p<packetsPerUrb;p++){
+        const int packetStatus=static_cast<int>(r->iso(p)->status);
+        if(packetStatus!=0 && badPacket<0){
+          badPacket=p;firstBadCode=packetStatus;
+        }
+      }
+      if(done->status!=0 || badPacket>=0){
         usbErrors.fetch_add(1);
         if(capture){
           ++inputErrors;
           if(inputErrors==1){
             firstInUrbStatus=done->status;
-            firstInPacketStatus=r->iso()->status;
+            firstInPacketStatus=firstBadCode;
+            firstInBadPacketIndex=badPacket;
+            firstInStartFrame=done->start_frame;
           }
         }else{
           ++outputErrors;
           if(outputErrors==1){
             firstOutUrbStatus=done->status;
-            firstOutPacketStatus=r->iso()->status;
+            firstOutPacketStatus=firstBadCode;
+            firstOutBadPacketIndex=badPacket;
+            firstOutStartFrame=done->start_frame;
           }
         }
-        const int failure=done->status?done->status:r->iso()->status;
-        // Endpoint disabled/disconnected is terminal. Thirty-two blind
-        // retries hide the original cause and can disrupt the device.
+        const int failure=done->status!=0?done->status:firstBadCode;
         if(failure==-ESHUTDOWN || failure==-ENODEV || failure==-EPIPE ||
            failure==-EPERM || inputErrors+outputErrors>=3){
           err=failure;
           break;
         }
       }else if(capture){
-        const int bytes=std::max(0,std::min(static_cast<int>(r->iso()->actual_length),maxIn));
-        rxBytes.fetch_add(bytes);completedIn.fetch_add(1);
-        const int n=bytes/frameBytes;
-        for(int i=0;i<n;i++){
-          const unsigned char* sample=r->pcm.data()+i*frameBytes;
-          const float audio=decode(sample,subBytes,bits); // Input ch 1
-          if(fill==ringSize){rd=(rd+1)%ringSize;--fill;}
-          fifo[wr]=audio;wr=(wr+1)%ringSize;++fill;
+        for(int p=0;p<packetsPerUrb;p++){
+          const int bytes=std::max(0,std::min(
+             static_cast<int>(r->iso(p)->actual_length),inPacket));
+          rxBytes.fetch_add(bytes);
+          ++completedInPackets;
+          const int n=bytes/frameBytes;
+          for(int i=0;i<n;i++){
+            const unsigned char* sample=r->pcm.data()+
+                 p*inPacket+i*frameBytes;
+            const float audio=decode(sample,subBytes,bits);
+            if(fill==ringSize){rd=(rd+1)%ringSize;--fill;}
+            fifo[wr]=audio;wr=(wr+1)%ringSize;++fill;
+          }
         }
+        completedIn.fetch_add(1);
       }else{
-        txBytes.fetch_add(std::max(0,static_cast<int>(r->iso()->actual_length)));
+        // usbfs ISO gives valid OUT length in each iso descriptor.
+        for(int p=0;p<packetsPerUrb;p++){
+          txBytes.fetch_add(std::max(0,static_cast<int>(
+              r->iso(p)->actual_length)));
+          ++completedOutPackets;
+        }
         completedOut.fetch_add(1);
       }
       if(capture){
         const int rc=submit(fd,*r,epIn,inPacket);
-        if(rc){err=rc;if(!firstSubmitInputError)firstSubmitInputError=rc;break;}++submitIn;
+        if(rc){
+          err=rc;
+          if(!firstSubmitInputError)firstSubmitInputError=rc;
+          break;
+        }
+        ++submitIn;
       }else{
         prepare(*r);
         const int rc=submit(fd,*r,epOut,outPacket);
-        if(rc){err=rc;if(!firstSubmitOutputError)firstSubmitOutputError=rc;break;}++submitOut;
+        if(rc){
+          err=rc;
+          if(!firstSubmitOutputError)firstSubmitOutputError=rc;
+          break;
+        }
+        ++submitOut;
       }
+    }
+    if(err)break;
+    if(!gotCompletion){
+      pollfd pfd{fd,POLLIN|POLLOUT,0};
+      const int rc=poll(&pfd,1,1);
+      if(rc<0 && errno!=EINTR){err=-errno;break;}
     }
   }
   // Signal stop to UI before waiting for USB controller URB cancellation.
@@ -224,12 +276,18 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
     "IN_ERR_COUNT=%d FIRST_IN_URB_STATUS=%d FIRST_IN_PACKET_STATUS=%d FIRST_IN_SUBMIT_ERR=%d\n"
     "OUT_ERR_COUNT=%d FIRST_OUT_URB_STATUS=%d FIRST_OUT_PACKET_STATUS=%d FIRST_OUT_SUBMIT_ERR=%d\n"
     "OUTPUT_FIRST_STARTUP=1 OUT_ZERO_COMPLETION_TIMEOUT_MS=250\n"
+    "ISO_PACKETS_PER_URB=%d IN_PACKETS_OK=%d OUT_PACKETS_OK=%d MAX_LOOP_GAP_US=%d\n"
+    "FIRST_IN_START_FRAME=%d FIRST_IN_BAD_PACKET_INDEX=%d\n"
+    "FIRST_OUT_START_FRAME=%d FIRST_OUT_BAD_PACKET_INDEX=%d\n"
     "ANALOG_ROUND_TRIP_LATENCY=NOT_MEASURED\n",
     speed,subBytes,bits,intervalIn,intervalOut,inPacket,outPacket,depth,
     submitIn,completedIn.load(),rxBytes.load(),submitOut,completedOut.load(),
     txBytes.load(),underruns.load(),usbErrors.load(),err,cleanupPending,
     inputErrors,firstInUrbStatus,firstInPacketStatus,firstSubmitInputError,
-    outputErrors,firstOutUrbStatus,firstOutPacketStatus,firstSubmitOutputError);
+    outputErrors,firstOutUrbStatus,firstOutPacketStatus,firstSubmitOutputError,
+    packetsPerUrb,completedInPackets,completedOutPackets,maxLoopDelayUs,
+    firstInStartFrame,firstInBadPacketIndex,
+    firstOutStartFrame,firstOutBadPacketIndex);
   return report;
 }
 }

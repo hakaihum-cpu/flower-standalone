@@ -83,3 +83,12 @@ grep -Fq 'TARGET_DEVICE_STILL_ENUMERATED=' "$ROOT/app/src/main/java/com/analogla
 grep -Fq 'OUTPUT_FIRST_STARTUP=1' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
 grep -Fq 'err=-ETIMEDOUT' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
 grep -Fq 'completedOut.load()>0 ? 1:0' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
+
+# AN-68 iRig OUT -EXDEV/-ESHUTDOWN: maintain millisecond-scale USBFS
+# isochronous queue and record the first failing scheduled frame.
+grep -Fq 'packetsPerUrb=2' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
+grep -Fq 'const int rc=poll(&pfd,1,1)' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
+grep -Fq 'ISO_PACKETS_PER_URB=' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
+grep -Fq 'FIRST_OUT_BAD_PACKET_INDEX=' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
+grep -Fq 'MAX_LOOP_GAP_US=' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
+! grep -Fq 'int pollResult=poll(&pfd,1,20)' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
