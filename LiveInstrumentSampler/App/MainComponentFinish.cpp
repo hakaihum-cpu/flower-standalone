@@ -6,8 +6,8 @@
 
 namespace {
 void setLabel(juce::Label& l, const juce::String& text) { l.setText(text, juce::dontSendNotification); }
-juce::String passText(const juce::String& detail = {}) { return detail.isEmpty() ? "PASS" : "PASS — " + detail; }
-juce::String failText(const juce::String& detail) { return "FAIL — " + detail; }
+juce::String passText(const juce::String& detail = {}) { return detail.isEmpty() ? "PASS" : "PASS - " + detail; }
+juce::String failText(const juce::String& detail) { return "FAIL - " + detail; }
 }
 
 void MainComponent::finishDirectBin() {
@@ -15,7 +15,7 @@ void MainComponent::finishDirectBin() {
     const auto out = sessionDir_.getChildFile(safeBankName() + "_direct_epbank.bin");
     const auto spec = spec_;
     const auto takes = takes_;
-    runBackground("DIRECT BINを作成中...", [spec, takes, out] {
+    runBackground("Building DIRECT BIN...", [spec, takes, out] {
         lis::buildEpBankFromTakes(spec, takes, std::filesystem::path(out.getFullPathName().toStdString()));
     }, [this, out] {
         setLabel(finishStatusLabel_, passText("BIN: " + out.getFullPathName()));
@@ -31,7 +31,7 @@ void MainComponent::exportMaster() {
     const auto takes = takes_;
     const auto wav = masterWavFile_;
     const auto map = epMapFile_;
-    runBackground("MASTER WAVを作成中...", [spec, takes, wav, map] {
+    runBackground("Building MASTER WAV...", [spec, takes, wav, map] {
         lis::exportMasterWav(spec, takes,
                              std::filesystem::path(wav.getFullPathName().toStdString()),
                              std::filesystem::path(map.getFullPathName().toStdString()));
@@ -54,7 +54,7 @@ void MainComponent::importTunedAndBuild() {
             const auto out = safe->sessionDir_.getChildFile(safe->safeBankName() + "_tuned_epbank.bin");
             const auto map = safe->epMapFile_;
             const auto spec = safe->spec_;
-            safe->runBackground("TUNED WAVからBINを作成中...", [spec, tuned, map, out] {
+            safe->runBackground("Building BIN from TUNED WAV...", [spec, tuned, map, out] {
                 int sr = 0, start = 0, count = 0;
                 const auto segs = lis::parseEpMapJson(std::filesystem::path(map.getFullPathName().toStdString()), sr, start, count);
                 if (sr != spec.sampleRate || start != spec.startNote || count != spec.keyCount)
