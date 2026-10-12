@@ -1642,6 +1642,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterChoice> (
         ParamID::displayMode, "DISPLAY",
         juce::StringArray { "MEDIA", "DOT" }, 0));
+    p.add (std::make_unique<juce::AudioParameterChoice> (
+        ParamID::audioBufferMode, "AUDIO BUFFER",
+        juce::StringArray { "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST",
+                            "1.5 BURSTS", "2 BURSTS", "3 BURSTS", "4 BURSTS",
+                            "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS" },
+        0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeMix, "HAZE MIX", 0.0f, 1.0f, 0.55f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeTime, "HAZE TIME", 0.0f, 1.0f, 0.50f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeAmount, "HAZE AMOUNT", 0.0f, 1.0f, 0.50f));
