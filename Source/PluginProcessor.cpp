@@ -40,6 +40,9 @@ FlowerStandaloneAudioProcessor::FlowerStandaloneAudioProcessor()
         synthesiser.addVoice (new SineVoice());
     synthesiser.addSound (new SineSound());
 
+    performanceCloudsEnabled.store (
+        getConfiguredCloudsEnabled(), std::memory_order_relaxed);
+
     static constexpr int defaultMachines[carnivalTrackCount]
     {
         0, 1, 2, 3, 4, 5, 6, 0, 2, 4
@@ -93,6 +96,7 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int sampl
 {
     currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
     synthesiser.setCurrentPlaybackSampleRate (currentSampleRate);
+    cloudsEngine.prepare (currentSampleRate);
 
     const int flowerSamples = juce::jmax (4096, juce::roundToInt (currentSampleRate * 16.0));
     flowerLoopBuffer.setSize (2, flowerSamples, false, true, false);
@@ -224,6 +228,28 @@ void FlowerStandaloneAudioProcessor::updateSynthParams()
         params.lfoRate = 0.35f + x * 5.5f;
         params.lfoDepth = y * 0.10f;
         params.lfoTarget = static_cast<int> (LfoTarget::Cutoff);
+
+        // 6 x 4 XY grid = all 24 original Plaits engines.
+        // Within each engine cell X/Y continue into TIMBRE/MORPH, while
+        // HARMONICS follows the overall surface.
+        const float gridX =
+            juce::jlimit (0.0f, 0.999999f, x) * 6.0f;
+        const float gridY =
+            juce::jlimit (0.0f, 0.999999f, 1.0f - y) * 4.0f;
+        const int modelColumn = juce::jlimit (
+            0, 5, static_cast<int> (std::floor (gridX)));
+        const int modelRow = juce::jlimit (
+            0, 3, static_cast<int> (std::floor (gridY)));
+
+        params.plaitsModel = modelRow * 6 + modelColumn;
+        params.plaitsTimbre = juce::jlimit (
+            0.0f, 1.0f, gridX - static_cast<float> (modelColumn));
+        params.plaitsMorph = juce::jlimit (
+            0.0f, 1.0f,
+            1.0f - (gridY - static_cast<float> (modelRow)));
+        params.plaitsHarmonics = juce::jlimit (
+            0.05f, 0.95f,
+            0.10f + 0.80f * (0.55f * x + 0.45f * y));
     }
 
     for (int i = 0; i < synthesiser.getNumVoices(); ++i)
@@ -283,6 +309,14 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
     // Delay is deliberately after the granular stage so one gesture moves
     // synthesis, granulation and echo as one performance surface.
     processPerformanceDelay (buffer);
+
+    // Original Mutable Instruments Clouds DSP. FULL/DOT remain visual-only
+    // modes; CLOUDS audio is controlled solely by its own button/MIDI state.
+    cloudsEngine.process (
+        buffer,
+        performanceCloudsEnabled.load (std::memory_order_acquire),
+        performanceX.load (std::memory_order_relaxed),
+        performanceY.load (std::memory_order_relaxed));
 
     // Raise the final listening level without sacrificing the internal
     // headroom that removed the earlier crackle.  Make-up gain is applied only
@@ -846,6 +880,12 @@ bool FlowerStandaloneAudioProcessor::getConfiguredDotMode() const noexcept
         ParamIDs::performanceUiModeConfig)->load() > 0.5f;
 }
 
+bool FlowerStandaloneAudioProcessor::getConfiguredCloudsEnabled() const noexcept
+{
+    return apvts.getRawParameterValue (
+        ParamIDs::cloudsEnabled)->load() > 0.5f;
+}
+
 void FlowerStandaloneAudioProcessor::setConfiguredRoot (int noteClass)
 {
     noteClass = juce::jlimit (0, 11, noteClass);
@@ -908,6 +948,14 @@ void FlowerStandaloneAudioProcessor::setConfiguredDotMode (bool enabled)
         parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
 }
 
+void FlowerStandaloneAudioProcessor::setConfiguredCloudsEnabled (bool enabled)
+{
+    performanceCloudsEnabled.store (enabled, std::memory_order_release);
+
+    if (auto* parameter = apvts.getParameter (ParamIDs::cloudsEnabled))
+        parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
+}
+
 void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC (juce::MidiBuffer& midi)
 {
     const int configuredChannel = getConfiguredMidiChannel();
@@ -933,7 +981,8 @@ void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC (juce::MidiBuffer& 
         // CC85 ROOT, CC86 SCALE, CC87 DEFAULT EFFECT,
         // CC88 Y EFFECT MODE (GRANULAR/DREAMY),
         // CC89 UI MODE (FULL/DOT),
-        // CC90 Y EFFECT MODE TOGGLE, CC91 UI MODE TOGGLE.
+        // CC90 Y EFFECT MODE TOGGLE, CC91 UI MODE TOGGLE,
+        // CC92 CLOUDS absolute ON/OFF, CC93 CLOUDS TOGGLE.
         switch (cc)
         {
             case 10:
@@ -1052,6 +1101,27 @@ void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC (juce::MidiBuffer& 
                     midiUiModeToggleCount.fetch_add (
                         1, std::memory_order_release);
                 performanceCcGate[91] = on;
+                break;
+
+            case 92:
+                performanceCloudsEnabled.store (
+                    on, std::memory_order_release);
+                midiCloudsConfigRequest.store (
+                    on ? 1 : 0, std::memory_order_release);
+                break;
+
+            case 93:
+                if (on && ! performanceCcGate[93])
+                {
+                    const bool clouds =
+                        ! performanceCloudsEnabled.load (
+                            std::memory_order_relaxed);
+                    performanceCloudsEnabled.store (
+                        clouds, std::memory_order_release);
+                    midiCloudsToggleCount.fetch_add (
+                        1, std::memory_order_release);
+                }
+                performanceCcGate[93] = on;
                 break;
 
             default:
@@ -2497,6 +2567,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout FlowerStandaloneAudioProcess
         "UI Mode",
         juce::StringArray { "FULL", "DOT" },
         0));
+    parameters.push_back (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParamIDs::cloudsEnabled, 1 },
+        "Clouds", false));
 
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamIDs::flowerEnabled, 1 }, "Flower On", false));
