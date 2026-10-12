@@ -1,0 +1,96 @@
+name: Build Live Instrument Sampler Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/AN-72-live-instrument-sampler
+    paths:
+      - ".github/live-instrument-sampler-build-trigger.txt"
+
+concurrency:
+  group: live-instrument-sampler-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Static preflight
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $required = @(
+            "LiveInstrumentSampler/CMakeLists.txt",
+            "LiveInstrumentSampler/App/Main.cpp",
+            "LiveInstrumentSampler/App/MainComponent.h",
+            "LiveInstrumentSampler/App/AudioEngine.cpp",
+            "LiveInstrumentSampler/Core/SamplerCore.cpp",
+            "LiveInstrumentSampler/Core/WavIO.cpp",
+            "LiveInstrumentSampler/tests/test_core.cpp"
+          )
+          foreach ($f in $required) {
+            if (-not (Test-Path $f)) { throw "Missing required file: $f" }
+          }
+          Write-Host "SOURCE_COMMIT=$env:GITHUB_SHA"
+
+      - name: Checkout JUCE 9.0.3
+        shell: pwsh
+        run: git clone --depth 1 --branch 9.0.3 https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure
+        shell: pwsh
+        run: cmake -S LiveInstrumentSampler -B build-live -DJUCE_DIR="${{ github.workspace }}/JUCE"
+
+      - name: Build Release
+        shell: pwsh
+        run: |
+          cmake --build build-live --config Release --target LiveInstrumentSamplerCoreTests
+          cmake --build build-live --config Release --target EP_Live_Instrument_Sampler
+
+      - name: Run Core tests
+        shell: pwsh
+        run: ctest --test-dir build-live -C Release --output-on-failure
+
+      - name: Inspect Windows executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = Get-ChildItem -Path build-live -Filter "*.exe" -Recurse |
+            Where-Object { $_.Name -like "*Live*Instrument*Sampler*" -or $_.Name -like "*EP*Sampler*" } |
+            Sort-Object Length -Descending |
+            Select-Object -First 1
+
+          if ($null -eq $exe) { throw "Live Instrument Sampler executable was not produced." }
+          if ($exe.Length -lt 100000) { throw "Executable is unexpectedly small: $($exe.Length) bytes" }
+
+          $bytes = [IO.File]::ReadAllBytes($exe.FullName)
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
+            throw "Output is not a Windows PE executable."
+          }
+
+          Write-Host "EXE=$($exe.FullName)"
+          Write-Host "SIZE=$($exe.Length)"
+          Copy-Item $exe.FullName "${{ github.workspace }}/EP-Live-Instrument-Sampler-Windows.exe"
+
+          Get-FileHash "${{ github.workspace }}/EP-Live-Instrument-Sampler-Windows.exe" -Algorithm SHA256 |
+            Format-List | Out-String | Set-Content "${{ github.workspace }}/SHA256.txt"
+          "${{ github.sha }}" | Set-Content "${{ github.workspace }}/SOURCE_COMMIT.txt"
+
+      - name: Upload Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: EP-Live-Instrument-Sampler-Windows
+          path: |
+            EP-Live-Instrument-Sampler-Windows.exe
+            SHA256.txt
+            SOURCE_COMMIT.txt
+            LiveInstrumentSampler/ASIO_TEST.md
+          if-no-files-found: error
+          compression-level: 6
