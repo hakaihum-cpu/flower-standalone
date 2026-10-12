@@ -9,6 +9,19 @@
 
 namespace
 {
+    constexpr const char* audioBufferNames[]
+    {
+        "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST",
+        "1.5 BURSTS", "2 BURSTS", "3 BURSTS", "4 BURSTS",
+        "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS"
+    };
+
+    constexpr float audioBufferBursts[]
+    {
+        0.0f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f,
+        3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f
+    };
+
 #if JUCE_ANDROID
     juce::StringArray getAndroidPhysicalInputNames()
     {
@@ -1239,6 +1252,298 @@ juce::String RealtimeChordFxAudioProcessorEditor::currentInputName() const
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
         if (auto* dev = holder->deviceManager.getCurrentAudioDevice()) return dev->getName();
     return "Unavailable";
+}
+
+juce::String RealtimeChordFxAudioProcessorEditor::currentOutputName() const
+{
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+    {
+        juce::AudioDeviceManager::AudioDeviceSetup setup;
+        holder->deviceManager.getAudioDeviceSetup (setup);
+        if (setup.outputDeviceName.isNotEmpty())
+            return setup.outputDeviceName;
+
+        if (auto* dev = holder->deviceManager.getCurrentAudioDevice())
+            return dev->getName();
+    }
+
+    return "Unavailable";
+}
+
+void RealtimeChordFxAudioProcessorEditor::refreshAudioOutputs()
+{
+    audioOutputs.clear();
+    selectedAudioOutput = -1;
+
+    auto* holder = juce::StandalonePluginHolder::getInstance();
+    if (holder == nullptr)
+        return;
+
+    auto& dm = holder->deviceManager;
+    const auto currentType = dm.getCurrentAudioDeviceType();
+    juce::AudioDeviceManager::AudioDeviceSetup setup;
+    dm.getAudioDeviceSetup (setup);
+
+    for (auto* type : dm.getAvailableDeviceTypes())
+    {
+        if (type == nullptr)
+            continue;
+
+        type->scanForDevices();
+        const auto names = type->getDeviceNames (false);
+
+        for (const auto& name : names)
+        {
+            const int index = (int) audioOutputs.size();
+            audioOutputs.push_back ({ type->getTypeName(), name });
+
+            if (type->getTypeName() == currentType
+                && name == setup.outputDeviceName)
+                selectedAudioOutput = index;
+        }
+    }
+}
+
+void RealtimeChordFxAudioProcessorEditor::selectAudioOutput (int index)
+{
+    if (! juce::isPositiveAndBelow (index, (int) audioOutputs.size()))
+        return;
+
+    auto* holder = juce::StandalonePluginHolder::getInstance();
+    if (holder == nullptr)
+        return;
+
+    auto& dm = holder->deviceManager;
+    const auto option = audioOutputs[(size_t) index];
+
+    dm.setCurrentAudioDeviceType (option.type, false);
+
+    juce::AudioDeviceManager::AudioDeviceSetup setup;
+    dm.getAudioDeviceSetup (setup);
+    setup.outputDeviceName = option.name;
+    setup.useDefaultOutputChannels = true;
+
+    const auto error = dm.setAudioDeviceSetup (setup, true);
+    if (error.isNotEmpty())
+    {
+        audioDeviceMessage = "OUTPUT FAILED: " + error;
+    }
+    else
+    {
+        selectedAudioOutput = index;
+        audioDeviceMessage = "OUTPUT: " + option.name;
+        holder->getMuteInputValue().setValue (false);
+
+        audioDefaultBufferFrames = -1;
+        refreshAudioBufferStatus();
+        if (audioBufferMode != 0)
+            applyAudioBufferMode (audioBufferMode);
+    }
+
+    refreshAudioInputs();
+    refreshAudioOutputs();
+    refreshAudioBufferStatus();
+}
+
+void RealtimeChordFxAudioProcessorEditor::refreshAudioBufferStatus()
+{
+#if JUCE_ANDROID
+    if (auto* holder = juce::StandalonePluginHolder::getInstance())
+    {
+        juce::AudioDeviceManager::AudioDeviceSetup setup;
+        holder->deviceManager.getAudioDeviceSetup (setup);
+
+        auto* device = holder->deviceManager.getCurrentAudioDevice();
+        const int currentFrames = device != nullptr
+            ? device->getCurrentBufferSizeSamples()
+            : setup.bufferSize;
+        const double currentRate = device != nullptr
+            ? device->getCurrentSampleRate()
+            : setup.sampleRate;
+
+        if (audioDefaultBufferFrames < 0 && currentFrames > 0)
+            audioDefaultBufferFrames = currentFrames;
+
+        audioFramesPerBurst = getAndroidOutputFramesPerBuffer();
+        if (audioFramesPerBurst <= 0 && currentFrames > 0)
+            audioFramesPerBurst = currentFrames;
+
+        audioActualBufferFrames = currentFrames;
+        audioActualSampleRate = currentRate;
+    }
+#endif
+}
+
+juce::String RealtimeChordFxAudioProcessorEditor::makeAudioBufferStatus() const
+{
+    if (audioActualBufferFrames <= 0 || audioActualSampleRate <= 0.0)
+        return "Buffer information unavailable"
+            + (audioBufferError.isNotEmpty()
+                   ? "\n" + audioBufferError
+                   : juce::String());
+
+    const double ms =
+        1000.0 * (double) audioActualBufferFrames / audioActualSampleRate;
+    const double bursts = audioFramesPerBurst > 0
+        ? (double) audioActualBufferFrames / (double) audioFramesPerBurst
+        : 0.0;
+
+    juce::String result =
+        juce::String (audioActualBufferFrames) + " frames / "
+        + juce::String (ms, 2) + " ms"
+        + "\nBASE BURST " + juce::String (audioFramesPerBurst)
+        + " / ACTUAL " + juce::String (bursts, 2);
+
+    if (audioBufferError.isNotEmpty())
+        result += "\n" + audioBufferError;
+
+    return result;
+}
+
+bool RealtimeChordFxAudioProcessorEditor::applyAudioBufferMode (int mode)
+{
+#if JUCE_ANDROID
+    auto* holder = juce::StandalonePluginHolder::getInstance();
+    if (holder == nullptr)
+    {
+        audioBufferError = "BUFFER FAILED: standalone holder unavailable";
+        return false;
+    }
+
+    mode = juce::jlimit (0, 11, mode);
+    refreshAudioBufferStatus();
+
+    juce::AudioDeviceManager::AudioDeviceSetup setup;
+    holder->deviceManager.getAudioDeviceSetup (setup);
+
+    int targetFrames = audioDefaultBufferFrames;
+    if (mode > 0)
+    {
+        if (audioFramesPerBurst <= 0)
+        {
+            audioBufferError = "BUFFER FAILED: base burst unavailable";
+            return false;
+        }
+
+        targetFrames = juce::jmax (
+            1, juce::roundToInt (
+                (float) audioFramesPerBurst * audioBufferBursts[mode]));
+
+        if (auto* device = holder->deviceManager.getCurrentAudioDevice())
+        {
+            const auto available = device->getAvailableBufferSizes();
+            if (! available.isEmpty())
+            {
+                int nearest = available[0];
+                int nearestDistance = std::abs (nearest - targetFrames);
+
+                for (const int candidate : available)
+                {
+                    const int distance = std::abs (candidate - targetFrames);
+                    if (distance < nearestDistance)
+                    {
+                        nearest = candidate;
+                        nearestDistance = distance;
+                    }
+                }
+
+                targetFrames = nearest;
+            }
+        }
+    }
+
+    if (targetFrames <= 0)
+    {
+        audioBufferError = "BUFFER FAILED: default unavailable";
+        return false;
+    }
+
+    setup.bufferSize = targetFrames;
+    const auto error =
+        holder->deviceManager.setAudioDeviceSetup (setup, true);
+
+    if (error.isNotEmpty())
+    {
+        audioBufferError = "BUFFER FAILED: " + error;
+        refreshAudioBufferStatus();
+        return false;
+    }
+
+    audioBufferError.clear();
+    audioBufferMode = mode;
+    refreshAudioBufferStatus();
+    return true;
+#else
+    juce::ignoreUnused (mode);
+    audioBufferError = "AUDIO BUFFER is Android-only";
+    return false;
+#endif
+}
+
+bool RealtimeChordFxAudioProcessorEditor::resetAudioDevice()
+{
+#if JUCE_ANDROID
+    auto* holder = juce::StandalonePluginHolder::getInstance();
+    if (holder == nullptr)
+    {
+        audioDeviceMessage = "RESET FAILED: standalone holder unavailable";
+        return false;
+    }
+
+    juce::AudioDeviceManager::AudioDeviceSetup previousSetup;
+    holder->deviceManager.getAudioDeviceSetup (previousSetup);
+    const auto previousType =
+        holder->deviceManager.getCurrentAudioDeviceType();
+
+    holder->stopPlaying();
+    holder->deviceManager.closeAudioDevice();
+
+    auto error =
+        holder->deviceManager.initialise (2, 2, nullptr, true);
+    if (error.isNotEmpty())
+        error = holder->deviceManager.initialise (1, 2, nullptr, true);
+
+    juce::String restoreError;
+    if (error.isEmpty())
+    {
+        if (previousType.isNotEmpty())
+            holder->deviceManager.setCurrentAudioDeviceType (
+                previousType, false);
+
+        restoreError =
+            holder->deviceManager.setAudioDeviceSetup (
+                previousSetup, true);
+    }
+
+    holder->getMuteInputValue().setValue (false);
+    holder->startPlaying();
+
+    refreshAudioInputs();
+    refreshAudioOutputs();
+    refreshAudioBufferStatus();
+
+    if (error.isNotEmpty())
+    {
+        audioDeviceMessage = "RESET FAILED: " + error;
+        return false;
+    }
+
+    if (restoreError.isNotEmpty())
+    {
+        audioDeviceMessage =
+            "RESET OPEN / ROUTE RESTORE FAILED: " + restoreError;
+        return false;
+    }
+
+    if (audioBufferMode != 0)
+        applyAudioBufferMode (audioBufferMode);
+
+    audioDeviceMessage = "AUDIO RESET OK";
+    return true;
+#else
+    audioDeviceMessage = "AUDIO RESET is Android-only";
+    return false;
+#endif
 }
 
 void RealtimeChordFxAudioProcessorEditor::refreshAudioInputs()
