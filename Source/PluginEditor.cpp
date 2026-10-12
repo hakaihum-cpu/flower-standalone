@@ -232,6 +232,52 @@ void PerformancePadComponent::setDotMode (bool enabled)
     repaint();
 }
 
+void PerformancePadComponent::setCloudsEnabled (bool enabled)
+{
+    if (cloudsEnabled == enabled)
+        return;
+
+    cloudsEnabled = enabled;
+    repaint();
+}
+
+juce::Rectangle<int> PerformancePadComponent::getCloudsButtonBounds() const noexcept
+{
+    const float unit = juce::jmax (
+        0.60f, juce::jmin (getWidth(), getHeight()) / 720.0f);
+
+    return {
+        juce::roundToInt (12.0f * unit),
+        getHeight() - juce::roundToInt (88.0f * unit),
+        juce::roundToInt (132.0f * unit),
+        juce::roundToInt (34.0f * unit)
+    };
+}
+
+void PerformancePadComponent::drawCloudsButton (juce::Graphics& g)
+{
+    const auto bounds = getCloudsButtonBounds();
+    if (bounds.isEmpty())
+        return;
+
+    const auto dark = juce::Colour (0xff100e08);
+    const auto amber = juce::Colour (0xffffdb46);
+    const auto bright = juce::Colour (0xffffe57a);
+
+    g.setColour (cloudsEnabled
+        ? amber.withAlpha (0.94f)
+        : dark.withAlpha (0.88f));
+    g.fillRect (bounds);
+
+    g.setColour (cloudsEnabled ? bright : amber);
+    g.drawRect (bounds, cloudsEnabled ? 2 : 1);
+
+    FlowerTechnicalFont::draw (
+        g, "CLOUDS", bounds.reduced (5, 3),
+        cloudsEnabled ? dark : amber,
+        juce::Justification::centred);
+}
+
 void PerformancePadComponent::updateVisualTimer()
 {
     const bool animated =
@@ -337,6 +383,8 @@ void PerformancePadComponent::paint (juce::Graphics& g)
             g, getLocalBounds(), frame, visualSourceKey, visualPhase,
             arpIndicatorOn, delayIndicatorOn, yEffectIndicatorOn,
             dreamyIndicatorMode, bpmDisplayValue, bpmDisplayVisible);
+
+        drawCloudsButton (g);
 
         if (physicalPointerVisible)
         {
@@ -569,6 +617,8 @@ void PerformancePadComponent::paint (juce::Graphics& g)
             juce::Justification::centred);
     }
 
+    drawCloudsButton (g);
+
     if (physicalPointerVisible)
     {
         const float px = xValue * static_cast<float> (getWidth());
@@ -591,6 +641,13 @@ void PerformancePadComponent::paint (juce::Graphics& g)
 
 void PerformancePadComponent::mouseDown (const juce::MouseEvent& e)
 {
+    if (getCloudsButtonBounds().contains (e.getPosition()))
+    {
+        if (onCloudsRequested)
+            onCloudsRequested();
+        return;
+    }
+
     if (dotMode
         && FlowerDotRenderer::getConfigTouchBounds (getLocalBounds())
                .contains (e.getPosition()))
@@ -2274,7 +2331,9 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     midiChannel = processor.getConfiguredMidiChannel();
     audioBufferMode = processor.getAudioBufferMode();
     dotMode = processor.getConfiguredDotMode();
+    cloudsEnabled = processor.getConfiguredCloudsEnabled();
     performancePad.setDotMode (dotMode);
+    performancePad.setCloudsEnabled (cloudsEnabled);
     refreshAudioBufferStatus();
     if (audioBufferMode != 0)
         applyAudioBufferMode (audioBufferMode);
@@ -2318,6 +2377,17 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
         {
             if (! configVisible && ! carnivalVisible)
                 toggleConfig();
+        };
+
+    performancePad.onCloudsRequested =
+        [this]
+        {
+            if (configVisible || carnivalVisible)
+                return;
+
+            cloudsEnabled = ! cloudsEnabled;
+            processor.setConfiguredCloudsEnabled (cloudsEnabled);
+            performancePad.setCloudsEnabled (cloudsEnabled);
         };
 
     configScreen.onRootChanged =
@@ -2451,6 +2521,7 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     processor.setPerformanceGranularEnabled (granularEnabled);
     processor.setPerformanceDreamyMode (yEffectDreamy);
     processor.setConfiguredMidiChannel (midiChannel);
+    processor.setConfiguredCloudsEnabled (cloudsEnabled);
 
     startTimer (40);
     grabKeyboardFocus();
@@ -2894,6 +2965,23 @@ void FlowerStandaloneAudioProcessorEditor::timerCallback()
         dotMode = ! dotMode;
         processor.setConfiguredDotMode (dotMode);
         midiConfigChanged = true;
+    }
+
+    if (const int request = processor.consumeMidiCloudsConfigRequest();
+        request >= 0)
+    {
+        cloudsEnabled = request != 0;
+        processor.setConfiguredCloudsEnabled (cloudsEnabled);
+        performancePad.setCloudsEnabled (cloudsEnabled);
+    }
+
+    const int cloudsToggleCount =
+        processor.consumeMidiCloudsToggleCount();
+    if ((cloudsToggleCount & 1) != 0)
+    {
+        cloudsEnabled = ! cloudsEnabled;
+        processor.setConfiguredCloudsEnabled (cloudsEnabled);
+        performancePad.setCloudsEnabled (cloudsEnabled);
     }
 
     if (midiConfigChanged)
