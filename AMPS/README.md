@@ -200,3 +200,24 @@ even when USB DIRECT was selected. These are misleading and were fixed:
   code are unchanged from v0.7.1. No auto-CI build. Manual APK
   version must be verified to avoid mistaking old installed APK for
   new code; no claims of working audio or <=10ms roundtrip.
+
+## AN-68 / 0.7.3 USB OUT-first playback startup experiment
+
+RG Rotate with iRig PRO DUO on v0.7.0 provided real USBFS traffic:
+IN IF=2 ALT=1 EP=0x82, 22 received ISO packets (6336 bytes);
+OUT IF=1 ALT=1 EP=0x01, 35 submitted but no ISO packet completed.
+Terminal error -108 (ESHUTDOWN) with 33 transfer errors.
+No working amp output or analog round-trip <=10ms was measured.
+
+Changes in 0.7.3:
+- Configure the UAC1 playback alternate interface BEFORE capture.
+- Submit playback SILENCE URBs before capture URBs.
+- Treat zero output packet completions after 250ms as -ETIMEDOUT.
+- Record TARGET_DEVICE_STILL_ENUMERATED for bus failure diagnosis.
+- Native RUN only indicates both IN and OUT completed a packet.
+- Keep per-direction initial URB/packet error diagnostics.
+- No implicit AAudio fallback, no DSP/UI redesign, no new CI system.
+
+This is an error-isolation and possible startup ordering fix, NOT proof
+that Android released the USB playback interface. If OUT remains zero,
+inspect first-error codes and USB enumeration before further changes.

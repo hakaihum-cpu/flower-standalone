@@ -120,16 +120,24 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
       encode(y,r.pcm.data()+i*frameBytes+subBytes,subBytes,bits);
     }
   };
+  // Submit silent playback URBs before starting USB capture.
   for(int i=0;i<depth;i++){
-    int rc=submit(fd,(*in)[i],epIn,inPacket);
-    if(rc){err=rc;firstSubmitInputError=rc;break;}++submitIn;
-  }
-  if(!err)for(int i=0;i<depth;i++){
     std::fill((*out)[i].pcm.begin(),(*out)[i].pcm.end(),0);
     int rc=submit(fd,(*out)[i],epOut,outPacket);
     if(rc){err=rc;firstSubmitOutputError=rc;break;}++submitOut;
   }
+  if(!err)for(int i=0;i<depth;i++){
+    int rc=submit(fd,(*in)[i],epIn,inPacket);
+    if(rc){err=rc;firstSubmitInputError=rc;break;}++submitIn;
+  }
+  const auto noOutputDeadline=std::chrono::steady_clock::now()+
+      std::chrono::milliseconds(250);
   while(!err && running.load(std::memory_order_acquire)){
+    if(completedOut.load(std::memory_order_relaxed)==0 &&
+       std::chrono::steady_clock::now()>=noOutputDeadline){
+      err=-ETIMEDOUT;
+      break;
+    }
     pollfd pfd{fd,POLLIN,0};
     int pollResult=poll(&pfd,1,20);
     if(pollResult<0 && errno!=EINTR){err=-errno;break;}
@@ -215,6 +223,7 @@ std::string run(int fd,int epIn,int epOut,int maxIn,int maxOut,
     "DSP_UNDERRUN_FRAMES=%d USB_ERRORS=%d ERROR_CODE=%d CLEANUP_PENDING=%d\n"
     "IN_ERR_COUNT=%d FIRST_IN_URB_STATUS=%d FIRST_IN_PACKET_STATUS=%d FIRST_IN_SUBMIT_ERR=%d\n"
     "OUT_ERR_COUNT=%d FIRST_OUT_URB_STATUS=%d FIRST_OUT_PACKET_STATUS=%d FIRST_OUT_SUBMIT_ERR=%d\n"
+    "OUTPUT_FIRST_STARTUP=1 OUT_ZERO_COMPLETION_TIMEOUT_MS=250\n"
     "ANALOG_ROUND_TRIP_LATENCY=NOT_MEASURED\n",
     speed,subBytes,bits,intervalIn,intervalOut,inPacket,outPacket,depth,
     submitIn,completedIn.load(),rxBytes.load(),submitOut,completedOut.load(),
@@ -238,7 +247,8 @@ Java_com_analoglav_amps_usb_UsbDirectEngine_nativeStop(JNIEnv*,jclass) {
 }
 extern "C" JNIEXPORT jintArray JNICALL
 Java_com_analoglav_amps_usb_UsbDirectEngine_nativeCounters(JNIEnv* env,jclass) {
-  jint out[]={running.load()?1:0,completedIn.load(),completedOut.load(),
+  jint out[]={running.load() && completedIn.load()>0 &&
+              completedOut.load()>0 ? 1:0,completedIn.load(),completedOut.load(),
               rxBytes.load(),txBytes.load(),underruns.load(),usbErrors.load()};
   jintArray arr=env->NewIntArray(7);
   if(arr)env->SetIntArrayRegion(arr,0,7,out);

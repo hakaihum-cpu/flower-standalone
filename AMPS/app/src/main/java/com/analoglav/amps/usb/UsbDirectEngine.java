@@ -84,20 +84,22 @@ public final class UsbDirectEngine {
         return "USB_DIRECT_ERROR=NO_VERIFIED_UAC1_48K_STEREO_PCM_PAIR\n"+
             "No AAudio fallback. USB descriptor export required.\n";
       report.append(pair.summary());
-      if(!c.claimInterface(pair.inputInterface,true))
-        return report.append("USB_DIRECT_ERROR=CLAIM_INPUT_FAILED\n").toString();
-      claimInput=true;
+      // Configure USB playback before enabling capture on its separate interface.
+      report.append("DIRECT_INIT_ORDER=OUT_FIRST\n");
       if(!c.claimInterface(pair.outputInterface,true))
         return report.append("USB_DIRECT_ERROR=CLAIM_OUTPUT_FAILED\n").toString();
       claimOutput=true;
-      if(!c.setInterface(pair.inputInterface))
-        return report.append("USB_DIRECT_ERROR=SET_INPUT_ALT_FAILED\n").toString();
       if(!c.setInterface(pair.outputInterface))
         return report.append("USB_DIRECT_ERROR=SET_OUTPUT_ALT_FAILED\n").toString();
-      if(!set48kWhenSupported(c,pair.input,pair.inputRateControl,report))
-        return report.append("USB_DIRECT_ERROR=INPUT_SAMPLE_RATE_SET_FAILED\n").toString();
       if(!set48kWhenSupported(c,pair.output,pair.outputRateControl,report))
         return report.append("USB_DIRECT_ERROR=OUTPUT_SAMPLE_RATE_SET_FAILED\n").toString();
+      if(!c.claimInterface(pair.inputInterface,true))
+        return report.append("USB_DIRECT_ERROR=CLAIM_INPUT_FAILED\n").toString();
+      claimInput=true;
+      if(!c.setInterface(pair.inputInterface))
+        return report.append("USB_DIRECT_ERROR=SET_INPUT_ALT_FAILED\n").toString();
+      if(!set48kWhenSupported(c,pair.input,pair.inputRateControl,report))
+        return report.append("USB_DIRECT_ERROR=INPUT_SAMPLE_RATE_SET_FAILED\n").toString();
       if(((pair.output.getAttributes()>>2)&3)==1 && pair.outputFeedbackAddress!=0)
         report.append("WARNING=ASYNC_OUTPUT_FEEDBACK_NOT_YET_IMPLEMENTED\n");
       update(dsp);
@@ -116,6 +118,16 @@ public final class UsbDirectEngine {
         c.close();
       }
     }
+    boolean stillEnumerated=false;
+    for(UsbDevice d:manager.getDeviceList().values()){
+      if(d.getDeviceName().equals(device.getDeviceName()) &&
+          d.getVendorId()==device.getVendorId() &&
+          d.getProductId()==device.getProductId()){
+        stillEnumerated=true;break;
+      }
+    }
+    report.append("TARGET_DEVICE_STILL_ENUMERATED=").append(stillEnumerated)
+          .append('\n');
     report.append("ENGINE_PATH=USBFS_ONLY; NO_AAUDIO_FALLBACK\n");
     return report.toString();
   }

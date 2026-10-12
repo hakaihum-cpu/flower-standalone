@@ -76,3 +76,10 @@ grep -Fq 'AAUDIO_RUNTIME_RUNNING=' "$ROOT/app/src/main/java/com/analoglav/amps/M
 grep -Fq 'INSTALLED_APK_VERSION=' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
 grep -Fq 'if(usbDirectEnabled)chooseUsbQueueDepth();else chooseBurst();' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
 grep -Fq 'aaudioRunning=s[0]==1' "$ROOT/app/src/main/java/com/analoglav/amps/AudioBridge.java"
+
+# AN-68: USB OUT-first implementation guards. Fail before expensive Gradle.
+grep -Fq 'DIRECT_INIT_ORDER=OUT_FIRST' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'TARGET_DEVICE_STILL_ENUMERATED=' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'OUTPUT_FIRST_STARTUP=1' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
+grep -Fq 'err=-ETIMEDOUT' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
+grep -Fq 'completedOut.load()>0 ? 1:0' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
