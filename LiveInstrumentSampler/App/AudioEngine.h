@@ -58,7 +58,8 @@ private:
     juce::AudioDeviceManager::LevelMeter::Ptr inputLevelMeter_;
     juce::TimeSliceThread writerThread_{"LiveSampler WAV writer"};
     std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> threadedWriter_;
-    std::atomic<juce::AudioFormatWriter::ThreadedWriter*> activeWriter_{nullptr};
+    juce::CriticalSection writerLock_;
+    juce::AudioFormatWriter::ThreadedWriter* activeWriter_ = nullptr;
     std::atomic<bool> recording_{false};
     std::atomic<int> writerDropouts_{0};
     int xRunStart_ = -1;
