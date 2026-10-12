@@ -6,8 +6,8 @@
 
 namespace {
 void setLabel(juce::Label& l, const juce::String& text) { l.setText(text, juce::dontSendNotification); }
-juce::String passText(const juce::String& detail = {}) { return detail.isEmpty() ? "PASS" : "PASS — " + detail; }
-juce::String failText(const juce::String& detail) { return "FAIL — " + detail; }
+juce::String passText(const juce::String& detail = {}) { return detail.isEmpty() ? "PASS" : "PASS - " + detail; }
+juce::String failText(const juce::String& detail) { return "FAIL - " + detail; }
 }
 
 juce::String MainComponent::safeBankName() const {
@@ -85,7 +85,7 @@ void MainComponent::updateCurrentKeyUi() {
         recButton_.setEnabled(!busy_.load());
         finishButton_.setEnabled(false);
     } else if (currentIndex_ == static_cast<int>(takes_.size())) {
-        setLabel(currentKeyLabel_, "ALL KEYS SET — FINISHでBINを作成できます");
+        setLabel(currentKeyLabel_, "ALL KEYS SET - press FINISH to build the BIN");
         recButton_.setEnabled(false);
         finishButton_.setEnabled(!busy_.load());
     }
@@ -101,7 +101,7 @@ void MainComponent::beginRecording() {
         return;
     }
     recButton_.setEnabled(false); stopButton_.setEnabled(true); setButton_.setEnabled(false); retakeButton_.setEnabled(false);
-    setLabel(recordHintLabel_, "RECORDING... 演奏が終わったら STOP");
+    setLabel(recordHintLabel_, "RECORDING... press STOP when the performance is finished");
 }
 
 void MainComponent::stopRecording() {
@@ -124,8 +124,8 @@ void MainComponent::stopRecording() {
         retakeButton_.setEnabled(true);
         trimStartEditor_.setEnabled(false);
         trimEndEditor_.setEnabled(false);
-        setLabel(recordHintLabel_, failText("録音中に欠落を検出: writer=" + juce::String(writerDropouts)
-                                             + " / xrun=" + juce::String(xruns) + "。RETAKEしてください"));
+        setLabel(recordHintLabel_, failText("Recording dropout detected: writer=" + juce::String(writerDropouts)
+                                             + " / xrun=" + juce::String(xruns) + " - RETAKE is required"));
         return;
     }
     auto& take = takes_[static_cast<std::size_t>(currentIndex_)];
@@ -134,7 +134,7 @@ void MainComponent::stopRecording() {
     syncTrimEditorsFromWaveform(0.0, waveform_.durationSeconds());
     trimStartEditor_.setEnabled(true); trimEndEditor_.setEnabled(true);
     setButton_.setEnabled(true); retakeButton_.setEnabled(true);
-    setLabel(recordHintLabel_, "波形のSTART/ENDをドラッグ、または秒数を入力して SET");
+    setLabel(recordHintLabel_, "Drag START/END on the waveform, or enter seconds, then press SET");
 }
 
 void MainComponent::syncTrimEditorsFromWaveform(double start, double end) {
@@ -165,7 +165,7 @@ void MainComponent::confirmTake() {
     t.confirmed = true;
     saveSessionManifest();
     ++currentIndex_;
-    setLabel(recordHintLabel_, "SETしました。次の鍵盤へ進みます。");
+    setLabel(recordHintLabel_, "SET complete. Move to the next key.");
     updateCurrentKeyUi();
 }
 
@@ -189,7 +189,7 @@ void MainComponent::retake() {
     waveform_.clear();
     trimStartEditor_.clear(); trimEndEditor_.clear(); trimStartEditor_.setEnabled(false); trimEndEditor_.setEnabled(false);
     setButton_.setEnabled(false); retakeButton_.setEnabled(false); recButton_.setEnabled(true);
-    setLabel(recordHintLabel_, "RETAKE ready — 元RAWはRETAKESへ保存しました。RECで録り直してください");
+    setLabel(recordHintLabel_, "RETAKE ready - the rejected RAW file was archived. Press REC to record again.");
 }
 
 void MainComponent::saveSessionManifest() {
