@@ -173,8 +173,10 @@ void MainComponent::timerCallback() {
         --clipHoldTicks_;
     setLabel(clipLabel_, clipHoldTicks_ > 0 ? "CLIP" : "");
 
-    if (!audio_.isPreviewing() && previewButton_.getButtonText() == "STOP PREVIEW")
+    if (!audio_.isPreviewing() && previewButton_.getButtonText() == "STOP PREVIEW") {
         previewButton_.setButtonText("PREVIEW");
+        setLabel(recordHintLabel_, "Preview finished.");
+    }
 
     if (diagPhase_ == DiagnosticPhase::inputListen) {
         diagMaxInput_ = juce::jmax(diagMaxInput_, audio_.currentInputLevel());
