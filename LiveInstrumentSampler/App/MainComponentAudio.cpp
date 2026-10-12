@@ -161,6 +161,21 @@ void MainComponent::markToneHeard(bool heard) {
 }
 
 void MainComponent::timerCallback() {
+    const auto peakDb = audio_.currentProcessedPeakDb();
+    if (peakDb <= -99.0f)
+        setLabel(inputMeterLabel_, "LEVEL -inf dBFS");
+    else
+        setLabel(inputMeterLabel_, "LEVEL " + juce::String(peakDb, 1) + " dBFS");
+
+    if (audio_.consumeInputClip())
+        clipHoldTicks_ = 20;
+    else if (clipHoldTicks_ > 0)
+        --clipHoldTicks_;
+    setLabel(clipLabel_, clipHoldTicks_ > 0 ? "CLIP" : "");
+
+    if (!audio_.isPreviewing() && previewButton_.getButtonText() == "STOP PREVIEW")
+        previewButton_.setButtonText("PREVIEW");
+
     if (diagPhase_ == DiagnosticPhase::inputListen) {
         diagMaxInput_ = juce::jmax(diagMaxInput_, audio_.currentInputLevel());
         const auto elapsed = juce::Time::getMillisecondCounterHiRes() - diagStartedMs_;
