@@ -1,6 +1,15 @@
 #include "SynthVoice.h"
 #include <cmath>
 
+SineVoice::SineVoice()
+{
+#if JUCE_ANDROID
+    stmlib::BufferAllocator allocator (
+        plaitsWork.data(), plaitsWork.size());
+    plaitsVoice.Init (&allocator);
+#endif
+}
+
 bool SineVoice::canPlaySound (juce::SynthesiserSound* sound)
 {
     return dynamic_cast<SineSound*> (sound) != nullptr;
@@ -29,6 +38,13 @@ void SineVoice::startNote (int midiNoteNumber,
                            int currentPitchWheelPosition)
 {
     baseFrequencyHz = juce::MidiMessage::getMidiNoteInHertz (midiNoteNumber);
+    currentMidiNote = midiNoteNumber;
+#if JUCE_ANDROID
+    plaitsGate = true;
+    plaitsStreamPhase = 1.0;
+    plaitsFrameIndex = static_cast<int> (plaits::kBlockSize);
+    plaitsPreviousSample = plaitsNextSample = 0.0f;
+#endif
     velocityGain = juce::jlimit (0.0f, 1.0f, velocity);
     pitchWheelSemitones = pitchWheelToSemitones (currentPitchWheelPosition);
     phase = 0.0;
@@ -42,6 +58,9 @@ void SineVoice::startNote (int midiNoteNumber,
 
 void SineVoice::stopNote (float, bool allowTailOff)
 {
+#if JUCE_ANDROID
+    plaitsGate = false;
+#endif
     if (allowTailOff)
         adsr.noteOff();
     else
@@ -82,6 +101,57 @@ float SineVoice::modulationFor (LfoTarget target) const noexcept
     return juce::jlimit (-1.0f, 1.0f, lfoCurrent * params.lfoDepth);
 }
 
+#if JUCE_ANDROID
+float SineVoice::renderPlaitsOscillator (float midiPitch) noexcept
+{
+    // Original Plaits runs at its calibrated physical rate in fixed 12-frame
+    // blocks.  Host-rate output is linearly interpolated, matching MIYAKO.
+    plaitsStreamPhase +=
+        static_cast<double> (plaits::kCorrectedSampleRate) / sampleRateHz;
+
+    while (plaitsStreamPhase >= 1.0)
+    {
+        plaitsStreamPhase -= 1.0;
+        plaitsPreviousSample = plaitsNextSample;
+
+        if (plaitsFrameIndex >= static_cast<int> (plaits::kBlockSize))
+        {
+            plaits::Patch patch {};
+            patch.engine = juce::jlimit (0, 23, params.plaitsModel);
+            patch.harmonics =
+                juce::jlimit (0.0f, 1.0f, params.plaitsHarmonics);
+            patch.timbre =
+                juce::jlimit (0.0f, 1.0f, params.plaitsTimbre);
+            patch.morph =
+                juce::jlimit (0.0f, 1.0f, params.plaitsMorph);
+            patch.note = 0.0f;
+            patch.decay = 0.5f;
+            patch.lpg_colour = 0.5f;
+
+            plaits::Modulations mod {};
+            mod.note = juce::jlimit (0.0f, 127.0f, midiPitch);
+            mod.level = 0.8f;
+            mod.trigger = plaitsGate ? 1.0f : 0.0f;
+            mod.trigger_patched = true;
+            mod.level_patched = true;
+
+            plaitsVoice.Render (
+                patch, mod, plaitsFrames.data(), plaits::kBlockSize);
+            plaitsFrameIndex = 0;
+        }
+
+        plaitsNextSample =
+            static_cast<float> (
+                plaitsFrames[static_cast<size_t> (plaitsFrameIndex++)].out)
+            * (0.55f / 32768.0f);
+    }
+
+    return plaitsPreviousSample
+        + (plaitsNextSample - plaitsPreviousSample)
+            * static_cast<float> (plaitsStreamPhase);
+}
+#endif
+
 void SineVoice::renderNextBlock (juce::AudioBuffer<float>& outputBuffer,
                                  int startSample,
                                  int numSamples)
@@ -99,8 +169,15 @@ void SineVoice::renderNextBlock (juce::AudioBuffer<float>& outputBuffer,
         const float pitchModSemitones = pitchWheelSemitones + modulationFor (LfoTarget::Pitch) * 2.0f;
         const double frequency = baseFrequencyHz * std::pow (2.0, pitchModSemitones / 12.0);
 
-        const float oscillatorSample = std::sin (juce::MathConstants<float>::twoPi * static_cast<float> (phase));
+        float oscillatorSample = 0.0f;
+#if JUCE_ANDROID
+        oscillatorSample = renderPlaitsOscillator (
+            static_cast<float> (currentMidiNote) + pitchModSemitones);
+#else
+        oscillatorSample = std::sin (
+            juce::MathConstants<float>::twoPi * static_cast<float> (phase));
         phase = wrap01 (phase + frequency / sampleRateHz);
+#endif
 
         float cutoff = params.cutoff * std::pow (2.0f, modulationFor (LfoTarget::Cutoff) * 3.0f);
         cutoff = juce::jlimit (20.0f, static_cast<float> (sampleRateHz * 0.45), cutoff);
