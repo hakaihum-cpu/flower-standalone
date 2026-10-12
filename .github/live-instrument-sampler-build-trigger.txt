@@ -1,1 +1,1 @@
-AN-72 Windows build trigger 3
+AN-72 Windows build trigger 4 - ASCII English UI after full preflight
