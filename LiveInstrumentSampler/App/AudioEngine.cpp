@@ -118,19 +118,25 @@ juce::String AudioEngine::startRecording(const juce::File& file) {
     if (writer == nullptr)
         return "Could not create 24-bit WAV writer.";
 
-    threadedWriter_ = std::make_unique<juce::AudioFormatWriter::ThreadedWriter>(writer, writerThread_, 32768);
+    {
+        const juce::ScopedLock sl(writerLock_);
+        threadedWriter_ = std::make_unique<juce::AudioFormatWriter::ThreadedWriter>(writer, writerThread_, 32768);
+        activeWriter_ = threadedWriter_.get();
+    }
     writerDropouts_.store(0, std::memory_order_release);
     xRunStart_ = deviceManager_.getXRunCount();
     xRunEnd_ = xRunStart_;
-    activeWriter_.store(threadedWriter_.get(), std::memory_order_release);
     recording_.store(true, std::memory_order_release);
     return {};
 }
 
 void AudioEngine::stopRecording() {
     const bool wasRecording = recording_.exchange(false, std::memory_order_acq_rel);
-    activeWriter_.store(nullptr, std::memory_order_release);
-    threadedWriter_.reset();
+    {
+        const juce::ScopedLock sl(writerLock_);
+        activeWriter_ = nullptr;
+        threadedWriter_.reset();
+    }
     if (wasRecording)
         xRunEnd_ = deviceManager_.getXRunCount();
 }
@@ -182,8 +188,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         if (outputChannelData[c] != nullptr)
             juce::FloatVectorOperations::clear(outputChannelData[c], numSamples);
 
-    auto* writer = activeWriter_.load(std::memory_order_acquire);
-    if (writer == nullptr || !recording_.load(std::memory_order_acquire) || numInputChannels <= 0)
+    if (!recording_.load(std::memory_order_acquire) || numInputChannels <= 0)
         return;
 
     if (stereoScratch_.getNumSamples() < numSamples) {
@@ -205,7 +210,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     stereoScratch_.copyFrom(0, 0, left, numSamples);
     stereoScratch_.copyFrom(1, 0, right, numSamples);
     const float* channels[2] = { stereoScratch_.getReadPointer(0), stereoScratch_.getReadPointer(1) };
-    if (!writer->write(channels, numSamples))
+
+    const juce::ScopedLock sl(writerLock_);
+    if (activeWriter_ != nullptr && !activeWriter_->write(channels, numSamples))
         writerDropouts_.fetch_add(1, std::memory_order_relaxed);
 }
 
