@@ -1298,7 +1298,9 @@ void RealtimeChordFxAudioProcessorEditor::refreshAudioOutputs()
             audioOutputs.push_back ({ type->getTypeName(), name });
 
             if (type->getTypeName() == currentType
-                && name == setup.outputDeviceName)
+                && (name == setup.outputDeviceName
+                    || (setup.outputDeviceName.isEmpty()
+                        && name == currentOutputName())))
                 selectedAudioOutput = index;
         }
     }
@@ -1377,10 +1379,12 @@ void RealtimeChordFxAudioProcessorEditor::refreshAudioBufferStatus()
 juce::String RealtimeChordFxAudioProcessorEditor::makeAudioBufferStatus() const
 {
     if (audioActualBufferFrames <= 0 || audioActualSampleRate <= 0.0)
-        return "Buffer information unavailable"
-            + (audioBufferError.isNotEmpty()
-                   ? "\n" + audioBufferError
-                   : juce::String());
+    {
+        juce::String unavailable ("Buffer information unavailable");
+        if (audioBufferError.isNotEmpty())
+            unavailable += "\n" + audioBufferError;
+        return unavailable;
+    }
 
     const double ms =
         1000.0 * (double) audioActualBufferFrames / audioActualSampleRate;
@@ -2008,11 +2012,12 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
             if (! audioOutputs.empty())
             {
-                int index = selectedAudioOutput;
-                if (! juce::isPositiveAndBelow (index, (int) audioOutputs.size()))
-                    index = 0;
-
                 const int direction = p.x < 360.0f ? -1 : 1;
+                int index = selectedAudioOutput;
+
+                if (! juce::isPositiveAndBelow (index, (int) audioOutputs.size()))
+                    index = direction > 0 ? -1 : 0;
+
                 index = (index + direction + (int) audioOutputs.size())
                       % (int) audioOutputs.size();
                 selectAudioOutput (index);
@@ -2034,12 +2039,21 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
             if (next != audioBufferMode)
             {
-                setChoiceActual (ParamID::audioBufferMode, next);
-                audioBufferMode = next;
-                audioDeviceMessage =
-                    applyAudioBufferMode (next)
-                        ? "BUFFER APPLIED"
-                        : "BUFFER REQUEST FAILED";
+                if (applyAudioBufferMode (next))
+                {
+                    if (auto* parameter =
+                            processor.state().getParameter (
+                                ParamID::audioBufferMode))
+                    {
+                        parameter->setValueNotifyingHost (
+                            parameter->convertTo0to1 ((float) next));
+                    }
+                    audioDeviceMessage = "BUFFER APPLIED";
+                }
+                else
+                {
+                    audioDeviceMessage = "BUFFER REQUEST FAILED";
+                }
             }
 
             repaint();
