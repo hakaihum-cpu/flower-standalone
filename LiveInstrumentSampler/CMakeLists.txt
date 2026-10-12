@@ -62,7 +62,7 @@ if (NOT LIVE_SAMPLER_CORE_ONLY)
     )
 
     if (WIN32)
-        target_compile_definitions(EP_Live_Instrument_Sampler PRIVATE JUCE_ASIO=1 JUCE_WASAPI=1)
+        target_compile_definitions(EP_Live_Instrument_Sampler PRIVATE JUCE_ASIO=1 JUCE_ASIO_USE_EXTERNAL_SDK=0 JUCE_WASAPI=1)
     endif()
 
     target_link_libraries(EP_Live_Instrument_Sampler PRIVATE
