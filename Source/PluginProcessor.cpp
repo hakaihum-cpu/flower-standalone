@@ -2608,8 +2608,14 @@ void FlowerStandaloneAudioProcessor::getStateInformation (juce::MemoryBlock& des
 void FlowerStandaloneAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
+    {
         if (xml->hasTagName (apvts.state.getType()))
+        {
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            performanceCloudsEnabled.store (
+                getConfiguredCloudsEnabled(), std::memory_order_release);
+        }
+    }
 }
 
 juce::AudioProcessorEditor* FlowerStandaloneAudioProcessor::createEditor()
