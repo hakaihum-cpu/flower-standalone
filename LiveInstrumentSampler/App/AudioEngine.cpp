@@ -1,6 +1,7 @@
 #include "AudioEngine.h"
 
 AudioEngine::AudioEngine() {
+    previewFormatManager_.registerBasicFormats();
     writerThread_.startThread();
     deviceManager_.initialise(2, 2, nullptr, true);
     deviceManager_.closeAudioDevice();
@@ -9,6 +10,7 @@ AudioEngine::AudioEngine() {
 }
 
 AudioEngine::~AudioEngine() {
+    stopPreview();
     stopRecording();
     deviceManager_.removeAudioCallback(this);
     deviceManager_.closeAudioDevice();
@@ -66,6 +68,7 @@ juce::String AudioEngine::applyDeviceSetup(const juce::String& driverType,
                                            int firstOutputChannel,
                                            int outputChannelCount,
                                            int bufferSize) {
+    stopPreview();
     stopRecording();
     deviceManager_.closeAudioDevice();
     deviceManager_.setCurrentAudioDeviceType(driverType, true);
@@ -100,6 +103,7 @@ juce::String AudioEngine::applyDeviceSetup(const juce::String& driverType,
 }
 
 juce::String AudioEngine::startRecording(const juce::File& file) {
+    stopPreview();
     stopRecording();
     auto* device = deviceManager_.getCurrentAudioDevice();
     if (device == nullptr || !device->isOpen())
@@ -147,6 +151,68 @@ int AudioEngine::recordingXRuns() const noexcept {
     return juce::jmax(0, xRunEnd_ - xRunStart_);
 }
 
+void AudioEngine::setInputGainDb(float db) noexcept {
+    inputGainDb_.store(juce::jlimit(-24.0f, 24.0f, db));
+}
+
+float AudioEngine::currentProcessedPeakDb() const noexcept {
+    const auto peak = processedPeak_.load();
+    return peak > 0.00001f ? juce::Decibels::gainToDecibels(peak, -100.0f) : -100.0f;
+}
+
+juce::String AudioEngine::startPreview(const juce::File& file, double startSeconds, double endSeconds) {
+    stopPreview();
+
+    if (recording_.load())
+        return "Stop recording before preview.";
+
+    auto* device = deviceManager_.getCurrentAudioDevice();
+    if (device == nullptr || !device->isOpen())
+        return "Open an audio device first.";
+
+    if (!file.existsAsFile())
+        return "Preview file does not exist.";
+
+    std::unique_ptr<juce::AudioFormatReader> reader(previewFormatManager_.createReaderFor(file));
+    if (reader == nullptr)
+        return "Could not read preview WAV.";
+
+    if (std::abs(reader->sampleRate - 48000.0) > 0.5)
+        return "Preview requires a 48000 Hz WAV.";
+
+    const auto startFrame = juce::jlimit<juce::int64>(
+        0, reader->lengthInSamples,
+        static_cast<juce::int64>(std::llround(startSeconds * reader->sampleRate)));
+    const auto endFrame = juce::jlimit<juce::int64>(
+        startFrame, reader->lengthInSamples,
+        static_cast<juce::int64>(std::llround(endSeconds * reader->sampleRate)));
+
+    const auto frameCount64 = endFrame - startFrame;
+    if (frameCount64 <= 0)
+        return "Preview range is empty.";
+    if (frameCount64 > static_cast<juce::int64>(std::numeric_limits<int>::max()))
+        return "Preview range is too long.";
+
+    const int frameCount = static_cast<int>(frameCount64);
+    auto data = std::make_shared<PreviewData>();
+    data->audio.setSize(2, frameCount);
+    data->audio.clear();
+
+    if (!reader->read(&data->audio, 0, frameCount, startFrame, true, true))
+        return "Could not read the selected preview range.";
+
+    std::atomic_store_explicit(&previewData_, data, std::memory_order_release);
+    previewPosition_.store(0);
+    previewing_.store(true);
+    return {};
+}
+
+void AudioEngine::stopPreview() {
+    previewing_.store(false);
+    previewPosition_.store(0);
+    std::atomic_store_explicit(&previewData_, std::shared_ptr<PreviewData>{}, std::memory_order_release);
+}
+
 float AudioEngine::currentInputLevel() const noexcept {
     return inputLevelMeter_ != nullptr ? static_cast<float>(inputLevelMeter_->getCurrentLevel()) : 0.0f;
 }
@@ -188,15 +254,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         if (outputChannelData[c] != nullptr)
             juce::FloatVectorOperations::clear(outputChannelData[c], numSamples);
 
-    if (!recording_.load(std::memory_order_acquire) || numInputChannels <= 0)
-        return;
+    const bool recording = recording_.load(std::memory_order_acquire);
+    const bool monitoring = monitoringEnabled_.load(std::memory_order_acquire);
 
-    if (stereoScratch_.getNumSamples() < numSamples) {
-        writerDropouts_.fetch_add(1, std::memory_order_relaxed);
-        return; // resized only in audioDeviceAboutToStart, never allocate here
-    }
-
-    stereoScratch_.clear();
     const float* left = nullptr;
     const float* right = nullptr;
     for (int c = 0; c < numInputChannels; ++c) {
@@ -205,15 +265,90 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         if (left == nullptr) left = inputChannelData[c];
         else if (right == nullptr) { right = inputChannelData[c]; break; }
     }
-    if (left == nullptr) return;
-    if (right == nullptr) right = left;
-    stereoScratch_.copyFrom(0, 0, left, numSamples);
-    stereoScratch_.copyFrom(1, 0, right, numSamples);
-    const float* channels[2] = { stereoScratch_.getReadPointer(0), stereoScratch_.getReadPointer(1) };
 
-    const juce::ScopedLock sl(writerLock_);
-    if (activeWriter_ != nullptr && !activeWriter_->write(channels, numSamples))
-        writerDropouts_.fetch_add(1, std::memory_order_relaxed);
+    if (left != nullptr) {
+        if (right == nullptr)
+            right = left;
+
+        if (stereoScratch_.getNumSamples() >= numSamples) {
+            const float gain = std::pow(10.0f, inputGainDb_.load(std::memory_order_relaxed) / 20.0f);
+            float peak = 0.0f;
+            bool clipped = false;
+
+            for (int i = 0; i < numSamples; ++i) {
+                const float l = left[i] * gain;
+                const float r = right[i] * gain;
+                peak = juce::jmax(peak, juce::jmax(std::abs(l), std::abs(r)));
+                clipped = clipped || std::abs(l) > 1.0f || std::abs(r) > 1.0f;
+                stereoScratch_.setSample(0, i, juce::jlimit(-1.0f, 1.0f, l));
+                stereoScratch_.setSample(1, i, juce::jlimit(-1.0f, 1.0f, r));
+            }
+
+            processedPeak_.store(peak, std::memory_order_relaxed);
+            if (clipped)
+                inputClipped_.store(true, std::memory_order_relaxed);
+
+            if (monitoring) {
+                int activeOut = 0;
+                for (int c = 0; c < numOutputChannels; ++c) {
+                    if (outputChannelData[c] == nullptr)
+                        continue;
+                    const int src = activeOut == 0 ? 0 : 1;
+                    juce::FloatVectorOperations::add(outputChannelData[c], stereoScratch_.getReadPointer(src), numSamples);
+                    ++activeOut;
+                }
+            }
+
+            if (recording) {
+                const float* channels[2] = { stereoScratch_.getReadPointer(0), stereoScratch_.getReadPointer(1) };
+                const juce::ScopedLock sl(writerLock_);
+                if (activeWriter_ != nullptr && !activeWriter_->write(channels, numSamples))
+                    writerDropouts_.fetch_add(1, std::memory_order_relaxed);
+            }
+        } else {
+            processedPeak_.store(0.0f, std::memory_order_relaxed);
+            if (recording)
+                writerDropouts_.fetch_add(1, std::memory_order_relaxed);
+        }
+    } else {
+        processedPeak_.store(0.0f, std::memory_order_relaxed);
+    }
+
+    if (previewing_.load(std::memory_order_acquire)) {
+        auto data = std::atomic_load_explicit(&previewData_, std::memory_order_acquire);
+        if (data != nullptr) {
+            const int position = previewPosition_.load(std::memory_order_relaxed);
+            const int remaining = data->audio.getNumSamples() - position;
+            const int amount = juce::jmin(numSamples, juce::jmax(0, remaining));
+
+            if (amount > 0) {
+                int activeOut = 0;
+                for (int c = 0; c < numOutputChannels; ++c) {
+                    if (outputChannelData[c] == nullptr)
+                        continue;
+                    const int src = activeOut == 0 ? 0 : 1;
+                    juce::FloatVectorOperations::add(
+                        outputChannelData[c],
+                        data->audio.getReadPointer(src, position),
+                        amount);
+                    ++activeOut;
+                }
+                previewPosition_.store(position + amount, std::memory_order_relaxed);
+            }
+
+            if (amount <= 0 || position + amount >= data->audio.getNumSamples())
+                previewing_.store(false, std::memory_order_release);
+        } else {
+            previewing_.store(false, std::memory_order_release);
+        }
+    }
+
+    for (int c = 0; c < numOutputChannels; ++c) {
+        if (outputChannelData[c] == nullptr)
+            continue;
+        for (int i = 0; i < numSamples; ++i)
+            outputChannelData[c][i] = juce::jlimit(-1.0f, 1.0f, outputChannelData[c][i]);
+    }
 }
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
@@ -223,6 +358,7 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
 }
 
 void AudioEngine::audioDeviceStopped() {
+    stopPreview();
     stopRecording();
     currentSampleRate_ = 0.0;
     currentBlockSize_ = 0;
