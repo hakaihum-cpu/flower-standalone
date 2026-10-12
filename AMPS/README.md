@@ -107,3 +107,34 @@ amp DSP on USB, or analog round-trip latency measurement. ISO submission
 success is not equivalent to achieving 10ms. Unrecognized endpoints or
 permissions are reported as test errors rather than silently using AAudio.
 Test is deliberately manual, not automatically started with the app.
+
+## AN-68 USB DIRECT engine (v0.7.0 experimental)
+Existing CONFIG includes an AUDIO ENGINE selector (AAUDIO / USB DIRECT).
+When USB DIRECT is selected, the application stops AAudio and attempts to
+identify iRig Pro Duo via USB Host, obtain device permissions, verify UAC1
+AudioStreaming Type-I signed PCM with 48kHz, exactly 2 channels, and matching
+input/output subframe size and resolution; claim the UAC interfaces, set
+alternate settings and use linux USBDEVFS_SUBMITURB/REAPURBNDELAY for a
+continuous native input -> AmpModel AC30 DSP -> output path. This stream never
+uses AudioRecord, AudioTrack, or AAudio, and NEVER silently falls back when
+USB support is insufficient.
+
+48k PCM is supported for explicitly verified USB Full Speed and High Speed.
+Format and speed are checked at runtime; unsupported UAC2 and uncertain formats
+do not start direct output. Output is hard-limited through existing AmpModel.
+The USB data endpoint choice excludes feedback endpoints. External clock
+feedback and asynchronous long-term drift management are not yet implemented,
+so audible stability and <=10ms analog roundtrip are NOT verified. Initial
+output contains silent packets; subsequent packets contain processed samples.
+USB device may require replug after interface claim; use low volume on testing.
+
+The existing manual USBFS ISO TEST remains available only in AAudio mode.
+The existing AAudio amp behavior is preserved when explicitly selected.
+
+TXT export fixes: before opening ACTION_CREATE_DOCUMENT, diagnostic contents
+are atomically persisted in private app files. If Activity is recreated while
+the Android document picker is open, onActivityResult loads this snapshot and
+refuses to write a 0-byte report. Startup and terminal USB status are
+persisted. The mode reports native IN/OUT completions, bytes, underruns and
+errors as the basis for subsequent tuning. This revision adds NO automatic
+CI build and makes NO changes to Golden/main or other apps.

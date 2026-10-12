@@ -31,6 +31,10 @@ jobs:
             test -f AMPS/app/src/main/java/com/analoglav/amps/AmpDsp.java
             test -f AMPS/app/src/main/cpp/AAudioEngine.cpp
             test -f AMPS/app/src/main/cpp/UsbIsoTester.cpp
+            test -f AMPS/app/src/main/cpp/UsbPcmEngine.cpp
+            test -f AMPS/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java
+            test -f AMPS/app/src/main/java/com/analoglav/amps/usb/UsbDirectFormat.java
+            test -f AMPS/app/src/main/java/com/analoglav/amps/usb/UsbDiagnosticStore.java
             test -f AMPS/app/src/main/java/com/analoglav/amps/usb/UsbIsoTester.java
             test -f AMPS/app/src/main/cpp/InputFade.h
             test -f AMPS/test/InputFadeSmoke.cpp

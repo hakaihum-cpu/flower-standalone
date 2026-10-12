@@ -54,3 +54,11 @@ c++ -std=c++17 -O2 -Wall -Wextra -Werror \
   -c "$ROOT/app/src/main/cpp/UsbIsoTester.cpp" -o "$TMP/UsbIsoTester.o"
 grep -Fq 'USBDEVFS_SUBMITURB' "$ROOT/app/src/main/cpp/UsbIsoTester.cpp"
 grep -Fq 'AAUDIO=NOT_USED_DURING_USBFS_TEST' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbIsoTester.java"
+
+# USB Direct transport/DSP; native JNI compilation is mandatory before Gradle.
+c++ -std=c++17 -O2 -Wall -Wextra -Werror \
+  -I "$JDK_TOP/include" -I "$JDK_TOP/include/linux" \
+  -c "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp" -o "$TMP/UsbPcmEngine.o"
+grep -Fq 'UsbDirectFormat.find(device,c.getRawDescriptors())' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
+grep -Fq 'UsbDirectEngine.execute(this,device' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'UsbDiagnosticStore.load(this)' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
