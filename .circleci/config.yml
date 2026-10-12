@@ -23,6 +23,11 @@ jobs:
             test -f AMPS/app/src/main/AndroidManifest.xml
             test -f AMPS/app/src/main/java/com/analoglav/amps/MainActivity.java
             test -f AMPS/app/src/main/java/com/analoglav/amps/AudioBridge.java
+            test -f AMPS/app/src/main/java/com/analoglav/amps/TuningProfile.java
+            test -f AMPS/app/src/main/java/com/analoglav/amps/usb/UsbAudioDescriptorParser.java
+            test -f AMPS/app/src/main/java/com/analoglav/amps/usb/UsbAudioDeviceProbe.java
+            test -f AMPS/test/TuningProfileTest.java
+            test -f AMPS/test/UsbAudioDescriptorParserTest.java
             test -f AMPS/app/src/main/java/com/analoglav/amps/AmpDsp.java
             test -f AMPS/app/src/main/cpp/AAudioEngine.cpp
             test -f AMPS/app/src/main/cpp/InputFade.h

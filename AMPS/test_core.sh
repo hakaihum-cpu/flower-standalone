@@ -32,3 +32,16 @@ grep -Fq 'AAudioStream_read(e.input_,input,count,0)' "$ROOT/app/src/main/cpp/AAu
 ! grep -Fq 'inputCallback(' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
 ! grep -Fq 'fifo_.pop(' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
 grep -Fq 'AAudioStream_getTimestamp(' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
+
+# Same settings and descriptor parser used by AMPS TUNING page.
+javac -d "$TMP" "$ROOT/app/src/main/java/com/analoglav/amps/TuningProfile.java" \
+  "$ROOT/test/TuningProfileTest.java"
+java -cp "$TMP" com.analoglav.amps.TuningProfileTest
+javac -d "$TMP" "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbAudioDescriptorParser.java" \
+  "$ROOT/test/UsbAudioDescriptorParserTest.java"
+java -cp "$TMP" com.analoglav.amps.usb.UsbAudioDescriptorParserTest
+# All four adjustable fields must be used by the native AAudio engine.
+grep -Fq 'AAudioStream_setBufferSizeInFrames(input_,inFrames)' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
+grep -Fq 'AAudioStream_setBufferSizeInFrames(output_,requestedOutput)' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
+grep -Fq 'AAudioStreamBuilder_setFramesPerDataCallback(builder,cbFrames)' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"
+grep -Fq 'shareMode==1?' "$ROOT/app/src/main/cpp/AAudioEngine.cpp"

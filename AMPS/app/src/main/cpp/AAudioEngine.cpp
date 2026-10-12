@@ -19,7 +19,8 @@ class LowLatencyEngine {
 public:
   static constexpr uint32_t CAPACITY=8192;
   static constexpr int ST_STOPPED=0, ST_RUNNING=1, ST_FAILED=2;
-  int start(int requestedIn,int requestedOut,int burstSelection) {
+  int start(int requestedIn,int requestedOut,int burstSelection,
+            int outFrames,int callbackFrames,int inFrames,int shareMode) {
     std::lock_guard<std::mutex> lock(mutex_);
     closeLocked();
     selectedIn_=requestedIn; selectedOut_=requestedOut;
@@ -29,24 +30,24 @@ public:
     inputFade_.reset();
     maxCallbackUs_.store(0);
     maxInputFrames_.store(0);maxOutputFrames_.store(0);
-    int result = openStream(AAUDIO_DIRECTION_OUTPUT, AAUDIO_SHARING_MODE_EXCLUSIVE,
-                            requestedOut,0,&output_);
-    if(result!=AAUDIO_OK) {
-      result=openStream(AAUDIO_DIRECTION_OUTPUT, AAUDIO_SHARING_MODE_SHARED,
-                        requestedOut,0,&output_);
-    }
+    int result=shareMode==1?-1:openStream(
+        AAUDIO_DIRECTION_OUTPUT,AAUDIO_SHARING_MODE_EXCLUSIVE,
+        requestedOut,0,callbackFrames,&output_);
+    if(result!=AAUDIO_OK) result=openStream(
+        AAUDIO_DIRECTION_OUTPUT,AAUDIO_SHARING_MODE_SHARED,
+        requestedOut,0,callbackFrames,&output_);
     if(result!=AAUDIO_OK) return failLocked(result);
     const int sampleRate=AAudioStream_getSampleRate(output_);
     const int32_t burst=AAudioStream_getFramesPerBurst(output_);
     if(sampleRate<16000||burst<1) return failLocked(-20001);
     model_.setSampleRate(sampleRate);
     model_.reset();
-    result=openStream(AAUDIO_DIRECTION_INPUT, AAUDIO_SHARING_MODE_EXCLUSIVE,
-                      requestedIn,sampleRate,&input_);
-    if(result!=AAUDIO_OK) {
-      result=openStream(AAUDIO_DIRECTION_INPUT, AAUDIO_SHARING_MODE_SHARED,
-                        requestedIn,sampleRate,&input_);
-    }
+    result=shareMode==1?-1:openStream(
+        AAUDIO_DIRECTION_INPUT,AAUDIO_SHARING_MODE_EXCLUSIVE,
+        requestedIn,sampleRate,0,&input_);
+    if(result!=AAUDIO_OK) result=openStream(
+        AAUDIO_DIRECTION_INPUT,AAUDIO_SHARING_MODE_SHARED,
+        requestedIn,sampleRate,0,&input_);
     if(result!=AAUDIO_OK) return failLocked(result);
     if(AAudioStream_getSampleRate(input_)!=sampleRate ||
        AAudioStream_getFormat(input_)!=AAUDIO_FORMAT_PCM_I16 ||
@@ -57,10 +58,15 @@ public:
     if(burstSelection<0||burstSelection>=static_cast<int>(sizeof(ratios)/sizeof(ratios[0])))
       burstSelection=0;
     // AAudio may round/clamp this value. Query actual from the stream.
-    const int reqFrames=std::max(1,(int)std::lround(
+    const int burstFramesRequested=std::max(1,(int)std::lround(
        burst*(burstSelection==0?2.0f:ratios[burstSelection])));
-    const int actual=AAudioStream_setBufferSizeInFrames(output_,reqFrames);
-    if(actual<0) return failLocked(actual);
+    const int requestedOutput=outFrames>0?outFrames:burstFramesRequested;
+    const int actual=AAudioStream_setBufferSizeInFrames(output_,requestedOutput);
+    if(actual<0)return failLocked(actual);
+    if(inFrames>0){
+      const int actualInput=AAudioStream_setBufferSizeInFrames(input_,inFrames);
+      if(actualInput<0)return failLocked(actualInput);
+    }
     // Output drives one real-time thread; no app-side input FIFO and no
     // artificial input prefill. Android/USB buffering remains measurable.
     running_.store(true,std::memory_order_release);
@@ -205,7 +211,7 @@ private:
     // AAudio callbacks MUST NOT close/reopen streams. UI may restart later.
   }
   int openStream(aaudio_direction_t direction,aaudio_sharing_mode_t sharing,
-                 int deviceId,int sampleRate,AAudioStream** dest){
+                 int deviceId,int sampleRate,int cbFrames,AAudioStream** dest){
     AAudioStreamBuilder* builder=nullptr;
     int r=AAudio_createStreamBuilder(&builder);
     if(r!=AAUDIO_OK)return r;
@@ -217,6 +223,8 @@ private:
                                AAUDIO_FORMAT_PCM_FLOAT:AAUDIO_FORMAT_PCM_I16);
     if(sampleRate>0)AAudioStreamBuilder_setSampleRate(builder,sampleRate);
     if(deviceId>0)AAudioStreamBuilder_setDeviceId(builder,deviceId);
+    if(direction==AAUDIO_DIRECTION_OUTPUT && cbFrames>0)
+      AAudioStreamBuilder_setFramesPerDataCallback(builder,cbFrames);
     if(direction==AAUDIO_DIRECTION_OUTPUT)
       AAudioStreamBuilder_setDataCallback(builder,outputCallback,this);
     AAudioStreamBuilder_setErrorCallback(builder,errorCallback,this);
@@ -266,8 +274,10 @@ private:
 static LowLatencyEngine engine;
 extern "C" JNIEXPORT jint JNICALL
 Java_com_analoglav_amps_AudioBridge_nativeStart(JNIEnv*,jobject,
-                                                jint inId,jint outId,jint burst){
-  return engine.start(inId,outId,burst);
+                                                jint inId,jint outId,jint burst,
+                                                jint outFrames,jint cbFrames,
+                                                jint inFrames,jint shareMode){
+  return engine.start(inId,outId,burst,outFrames,cbFrames,inFrames,shareMode);
 }
 extern "C" JNIEXPORT void JNICALL
 Java_com_analoglav_amps_AudioBridge_nativeStop(JNIEnv*,jobject){

@@ -17,7 +17,9 @@ public final class AudioBridge {
   public static final float[] BURSTS={0,.5f,.75f,1f,1.5f,2f,3f,4f,5f,6f,7f,8f};
   public static final String[] BURST_LABELS={
       "AUTO","0.5","0.75","1","1.5","2","3","4","5","6","7","8"};
-  private native int nativeStart(int inputId,int outputId,int burstSelection);
+  private native int nativeStart(int inputId,int outputId,int burstSelection,
+      int requestedOutputFrames,int requestedCallbackFrames,
+      int requestedInputFrames,int sharingPreference);
   private native void nativeStop();
   private native int[] nativeStats();
   private native void nativeControls(float[] controlValues,int channel,int cabinet,int bypass);
@@ -26,6 +28,9 @@ public final class AudioBridge {
   public final boolean hasLowLatencyFeature,hasProAudioFeature;
   public final AmpDsp dsp=new AmpDsp(); // UI/preset parameters, native DSP owns audio.
   public volatile int inputDevice=-1,outputDevice=-1,burstIndex=0;
+  // Applied AAudio trial values. USB direct transfer has not been implemented.
+  public volatile int tuneOutFrames=0,tuneCallbackFrames=0,
+      tuneInputFrames=0,tuneSharingPreference=0;
   public volatile String status="NOT STARTED",actualIn="--",actualOut="--";
   public volatile int actualInId=-1,actualOutId=-1,outputFrames=0,inputFrames=0,
       xruns=0,burstFrames=0,outputCapacity=0,inputCapacity=0,
@@ -71,6 +76,12 @@ public final class AudioBridge {
         dsp.master,dsp.spring,dsp.tremSpeed,dsp.tremDepth};
     nativeControls(vals,dsp.channel,dsp.cabinet,dsp.bypass?1:0);
   }
+  public void setTuning(TuningProfile trial){
+    tuneOutFrames=trial.get(0);
+    tuneCallbackFrames=trial.get(1);
+    tuneInputFrames=trial.get(2);
+    tuneSharingPreference=trial.get(3);
+  }
   public synchronized void stop(){
     nativeStop();
     started=false;
@@ -93,7 +104,8 @@ public final class AudioBridge {
       return;
     }
     updateControls();
-    int result=nativeStart(inputDevice,outputDevice,burstIndex);
+    int result=nativeStart(inputDevice,outputDevice,burstIndex,
+        tuneOutFrames,tuneCallbackFrames,tuneInputFrames,tuneSharingPreference);
     if(result!=0){
       status="AAUDIO OPEN FAILED "+result;
       return;
@@ -127,7 +139,8 @@ public final class AudioBridge {
     if(actualOutId>0&&!hasVisibleDevice(actualOutId,false))
       actualOut="SYSTEM DEFAULT / ID "+actualOutId;
     int ratioIndex=Math.max(0,Math.min(burstIndex,BURSTS.length-1));
-    requestFrames=burstFrames>0?Math.max(1,Math.round(burstFrames*
+    requestFrames=tuneOutFrames>0?tuneOutFrames:
+        burstFrames>0?Math.max(1,Math.round(burstFrames*
         (ratioIndex==0?2.0f:BURSTS[ratioIndex]))):0;
     if(s[0]==2){
       started=false;

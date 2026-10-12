@@ -64,3 +64,28 @@ Findings:
 - Reference: Android AAudio/Oboe FullGuide and AAudio NDK buffer/timestamp
   API docs. App code was reviewed against these; static and native helper
   tests do not establish actual device latency or audible quality.
+
+## AN-68 Interactive TUNING & read-only USB descriptor probe
+CONFIG > USB TUNING / DIAGNOSTICS enters an independent 720x720 panel.
+AAudio tuning parameters are *actually wired* to the native stream creation:
+OUT BUFFER FRAMES (0=AUTO existing BURST setting), CALLBACK FRAMES
+(0=platform default), INPUT BUFFER FRAMES (0=platform default), SHARING MODE
+(PREFER EXCLUSIVE with SHARED fallback / SHARED ONLY). Press APPLY & RESTART
+AUDIO to persist values and reopen streams. Each value can be cycled by
+the left/right arrows, or selected from a complete list by tapping its
+centre. RESET DEFAULTS & APPLY is a recovery path. All choices have safe
+whitelisted bounds.
+
+READ USB DESCRIPTORS queries the chosen connected device, requesting
+Android USB permission when necessary. Parsing is non-invasive: no interface
+is claimed; no ISO URB is submitted. Captured report includes the raw USB
+descriptor bytes in hex and decoded Audio Streaming alternate settings and
+ISO endpoint directions. The copy and share buttons generate a complete
+text report with applied/draft tuning parameters, actual AAudio settings,
+timestamps estimates, buffer frames, selected device IDs and USB descriptors.
+
+This is ***AAudio tuning plus USB reconnaissance***, not yet a direct
+usbfs/UAC audio driver. These parameters cannot be claimed to tune
+usbfs isochronous URB submission or native USB packet scheduling. A real
+analog loopback remains required to pass the <=10ms target. The 2025+
+source-only external research constraint remains in effect.
