@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include "SynthVoice.h"
+#include "FlowerCloudsEngine.h"
 
 class FlowerStandaloneAudioProcessor final : public juce::AudioProcessor
 {
@@ -88,6 +89,7 @@ public:
     int getConfiguredMidiChannel() const noexcept;
     int getAudioBufferMode() const noexcept;
     bool getConfiguredDotMode() const noexcept;
+    bool getConfiguredCloudsEnabled() const noexcept;
     float getPerformanceX() const noexcept { return performanceX.load (std::memory_order_relaxed); }
     float getPerformanceY() const noexcept { return performanceY.load (std::memory_order_relaxed); }
     float getPerformanceBpm() const noexcept { return performanceBpm.load (std::memory_order_relaxed); }
@@ -102,6 +104,7 @@ public:
     void setConfiguredMidiChannel (int channel);
     void setAudioBufferMode (int mode);
     void setConfiguredDotMode (bool enabled);
+    void setConfiguredCloudsEnabled (bool enabled);
 
     int consumeMidiRootConfigRequest() noexcept
     {
@@ -130,6 +133,15 @@ public:
     int consumeMidiUiModeToggleCount() noexcept
     {
         return midiUiModeToggleCount.exchange (0, std::memory_order_acq_rel);
+    }
+
+    int consumeMidiCloudsConfigRequest() noexcept
+    {
+        return midiCloudsConfigRequest.exchange (-1, std::memory_order_acq_rel);
+    }
+    int consumeMidiCloudsToggleCount() noexcept
+    {
+        return midiCloudsToggleCount.exchange (0, std::memory_order_acq_rel);
     }
 
     void setCarnivalEnabled (bool enabled) noexcept;
@@ -278,6 +290,7 @@ private:
     std::atomic<bool> performanceDelayEnabled { true };
     std::atomic<bool> performanceGranularEnabled { true };
     std::atomic<bool> performanceDreamyMode { false };
+    std::atomic<bool> performanceCloudsEnabled { false };
     std::atomic<bool> performanceStopRequested { false };
     static constexpr int performancePolyTouchCount = 8;
     std::array<std::atomic<bool>, performancePolyTouchCount> performancePolyTouchActive {};
@@ -298,6 +311,8 @@ private:
     std::atomic<int> midiUiModeConfigRequest { -1 };
     std::atomic<int> midiYEffectModeToggleCount { 0 };
     std::atomic<int> midiUiModeToggleCount { 0 };
+    std::atomic<int> midiCloudsConfigRequest { -1 };
+    std::atomic<int> midiCloudsToggleCount { 0 };
 
     std::atomic<bool> carnivalEnabled { false };
     std::atomic<bool> carnivalPlaying { false };
@@ -370,6 +385,7 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> performanceDelaySamplesSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> performanceDelayFeedbackSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> performanceDelayWetSmoothed;
+    FlowerCloudsEngine cloudsEngine;
     juce::dsp::Limiter<float> performanceOutputLimiter;
     int performanceDelayWritePosition = 0;
     double performanceSamplesUntilStep = 0.0;
