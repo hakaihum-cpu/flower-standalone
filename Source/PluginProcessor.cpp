@@ -1584,6 +1584,8 @@ bool RealtimeChordFxAudioProcessor::saveUserPreset()
 {
     auto snapshot = apvts.copyState();
     snapshot.removeProperty ("userPresetXml", nullptr);
+    snapshot.removeProperty ("audioOutputType", nullptr);
+    snapshot.removeProperty ("audioOutputName", nullptr);
 
     if (auto xml = snapshot.createXml())
     {
@@ -1609,7 +1611,17 @@ bool RealtimeChordFxAudioProcessor::loadUserPreset()
     if (! restored.isValid())
         return false;
 
+    const auto audioOutputType =
+        apvts.state.getProperty ("audioOutputType");
+    const auto audioOutputName =
+        apvts.state.getProperty ("audioOutputName");
+
     restored.setProperty ("userPresetXml", stored, nullptr);
+    if (! audioOutputType.isVoid())
+        restored.setProperty ("audioOutputType", audioOutputType, nullptr);
+    if (! audioOutputName.isVoid())
+        restored.setProperty ("audioOutputName", audioOutputName, nullptr);
+
     apvts.replaceState (restored);
     notifyMidiControllerConfigChanged();
     chordAHoldRefreshRequested.store (true, std::memory_order_release);
