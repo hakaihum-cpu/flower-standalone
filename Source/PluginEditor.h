@@ -37,6 +37,7 @@ public:
     void setEffectState (bool arpOn, bool delayOn, bool yEffectOn, bool dreamyMode);
     void setBpmDisplay (float bpm, bool visible);
     void setDotMode (bool enabled);
+    void setCloudsEnabled (bool enabled);
     float getXValue() const noexcept { return xValue; }
     float getYValue() const noexcept { return yValue; }
     int getPatternIndex() const noexcept;
@@ -47,6 +48,7 @@ public:
     std::function<void()> onTouchStarted;
     std::function<void()> onTapStopRequested;
     std::function<void()> onConfigRequested;
+    std::function<void()> onCloudsRequested;
 
 private:
     static constexpr int tileColumns = 10;
@@ -60,6 +62,8 @@ private:
     void updateVisualTimer();
     void timerCallback() override;
     void chooseNextMixedVisual();
+    juce::Rectangle<int> getCloudsButtonBounds() const noexcept;
+    void drawCloudsButton (juce::Graphics& g);
 
     std::array<juce::Image, 100> frameImages;
     FramePack videoFrames;
@@ -73,6 +77,7 @@ private:
     bool delayIndicatorOn = true;
     bool yEffectIndicatorOn = true;
     bool dreamyIndicatorMode = false;
+    bool cloudsEnabled = false;
     float visualPhase = 0.0f;
     float bpmDisplayValue = 112.0f;
     bool bpmDisplayVisible = false;
@@ -263,6 +268,7 @@ private:
     int midiChannel = 1;
     int audioBufferMode = 0;
     bool dotMode = false;
+    bool cloudsEnabled = false;
     int audioDefaultBufferFrames = -1;
     int audioFramesPerBurst = 0;
     int audioActualBufferFrames = 0;
