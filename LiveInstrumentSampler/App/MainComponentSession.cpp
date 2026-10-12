@@ -74,6 +74,9 @@ void MainComponent::startSession() {
 }
 
 void MainComponent::updateCurrentKeyUi() {
+    audio_.stopPreview();
+    previewButton_.setButtonText("PREVIEW");
+    previewButton_.setEnabled(false);
     waveform_.clear(); trimStartEditor_.clear(); trimEndEditor_.clear();
     trimStartEditor_.setEnabled(false); trimEndEditor_.setEnabled(false);
     setButton_.setEnabled(false); retakeButton_.setEnabled(false); stopButton_.setEnabled(false);
@@ -93,6 +96,9 @@ void MainComponent::updateCurrentKeyUi() {
 
 void MainComponent::beginRecording() {
     if (currentIndex_ < 0 || currentIndex_ >= static_cast<int>(takes_.size())) return;
+    audio_.stopPreview();
+    previewButton_.setButtonText("PREVIEW");
+    previewButton_.setEnabled(false);
     const auto midi = takes_[static_cast<std::size_t>(currentIndex_)].midiNote;
     currentRawFile_ = sessionDir_.getChildFile("RAW").getChildFile(juce::String(midi).paddedLeft('0', 3) + "_" + juce::String(lis::noteName(midi)).replace("#", "s") + "_RAW.wav");
     const auto err = audio_.startRecording(currentRawFile_);
@@ -119,6 +125,7 @@ void MainComponent::stopRecording() {
         recButton_.setEnabled(true);
         return;
     }
+    previewButton_.setEnabled(true);
     if (writerDropouts > 0 || xruns > 0) {
         setButton_.setEnabled(false);
         retakeButton_.setEnabled(true);
@@ -150,8 +157,34 @@ void MainComponent::syncWaveformFromTrimEditors() {
     waveform_.setTrimSeconds(trimStartEditor_.getText().getDoubleValue(), trimEndEditor_.getText().getDoubleValue());
 }
 
+void MainComponent::togglePreview() {
+    if (audio_.isPreviewing()) {
+        audio_.stopPreview();
+        previewButton_.setButtonText("PREVIEW");
+        setLabel(recordHintLabel_, "Preview stopped.");
+        return;
+    }
+
+    if (!currentRawFile_.existsAsFile() || waveform_.durationSeconds() <= 0.0) {
+        setLabel(recordHintLabel_, failText("No recorded waveform is available for preview"));
+        return;
+    }
+
+    syncWaveformFromTrimEditors();
+    const auto err = audio_.startPreview(currentRawFile_, waveform_.startSeconds(), waveform_.endSeconds());
+    if (err.isNotEmpty()) {
+        setLabel(recordHintLabel_, failText(err));
+        return;
+    }
+
+    previewButton_.setButtonText("STOP PREVIEW");
+    setLabel(recordHintLabel_, "Previewing the selected START/END range.");
+}
+
 void MainComponent::confirmTake() {
     if (currentIndex_ < 0 || currentIndex_ >= static_cast<int>(takes_.size()) || waveform_.durationSeconds() <= 0.0) return;
+    audio_.stopPreview();
+    previewButton_.setButtonText("PREVIEW");
     syncWaveformFromTrimEditors();
     const auto start = waveform_.startSeconds();
     const auto end = waveform_.endSeconds();
@@ -170,7 +203,10 @@ void MainComponent::confirmTake() {
 }
 
 void MainComponent::retake() {
+    audio_.stopPreview();
     audio_.stopRecording();
+    previewButton_.setButtonText("PREVIEW");
+    previewButton_.setEnabled(false);
     if (currentRawFile_.existsAsFile()) {
         const auto retakesDir = sessionDir_.getChildFile("RAW").getChildFile("RETAKES");
         retakesDir.createDirectory();
