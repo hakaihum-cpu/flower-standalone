@@ -4,6 +4,7 @@
 #if JUCE_ANDROID
 #include "clouds/dsp/granular_processor.h"
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 
@@ -27,6 +28,8 @@ public:
         inputCount = 0;
         outputRead = outputWrite = 0;
         wetMix = 0.0f;
+        smoothedX = 0.5f;
+        smoothedY = 0.5f;
         visualEnvelope = 0.0f;
         activity.store (0.0f, std::memory_order_relaxed);
 
@@ -70,31 +73,60 @@ public:
         x = juce::jlimit (0.0f, 1.0f, x);
         y = juce::jlimit (0.0f, 1.0f, y);
 
+        const int channels = buffer.getNumChannels();
+        const int length = buffer.getNumSamples();
+
+        // After the 35 ms wet fade reaches true bypass, stop running the
+        // original Clouds DSP entirely.  This matters on RG Rotate: Plaits
+        // already increases synth CPU, so an inaudible Clouds instance must
+        // not keep consuming cycles and cause underrun crackle.
+        if (! enabled && wetMix < 0.0001f)
+        {
+            wetMix = 0.0f;
+            activity.store (0.0f, std::memory_order_relaxed);
+            return;
+        }
+
+        // Smooth XY before it reaches Clouds' grain controls.  Large MIDI or
+        // touch jumps otherwise alter several grain parameters on one host
+        // block boundary and can sound like a click.
+        const float xyAlpha = juce::jlimit (
+            0.0f, 1.0f,
+            static_cast<float> (
+                1.0 - std::exp (
+                    -static_cast<double> (juce::jmax (1, length))
+                    / juce::jmax (1.0, hostRate * 0.025))));
+        smoothedX += (x - smoothedX) * xyAlpha;
+        smoothedY += (y - smoothedY) * xyAlpha;
+
         auto* params = engine.mutable_parameters();
 
         // FLOWER performance mapping.  X/Y remain the single performance
         // surface; Clouds follows the gesture instead of introducing another
         // hidden control page.
-        params->position = x;
-        params->size = juce::jlimit (0.0f, 1.0f, 0.16f + y * 0.74f);
-        params->density = juce::jlimit (0.0f, 1.0f, 0.24f + y * 0.66f);
-        params->texture = juce::jlimit (0.0f, 1.0f, 0.20f + x * 0.72f);
+        params->position = smoothedX;
+        params->size = juce::jlimit (
+            0.0f, 1.0f, 0.16f + smoothedY * 0.74f);
+        params->density = juce::jlimit (
+            0.0f, 1.0f, 0.24f + smoothedY * 0.66f);
+        params->texture = juce::jlimit (
+            0.0f, 1.0f, 0.20f + smoothedX * 0.72f);
         params->pitch = 0.0f;
         params->stereo_spread = 0.72f;
-        params->feedback = juce::jlimit (0.0f, 0.55f, 0.12f + y * 0.28f);
-        params->reverb = juce::jlimit (0.0f, 0.75f, 0.28f + y * 0.36f);
+        params->feedback = juce::jlimit (
+            0.0f, 0.55f, 0.12f + smoothedY * 0.28f);
+        params->reverb = juce::jlimit (
+            0.0f, 0.75f, 0.28f + smoothedY * 0.36f);
         params->dry_wet = 1.0f;
         params->freeze = false;
         params->trigger = false;
         params->gate = true;
 
-        const float targetWet = enabled ? (0.22f + y * 0.16f) : 0.0f;
+        const float targetWet =
+            enabled ? (0.22f + smoothedY * 0.16f) : 0.0f;
         const float step = static_cast<float> (
             1.0 / juce::jmax (1.0, 0.035 * hostRate));
         const double ratio = nativeRate / hostRate;
-
-        const int channels = buffer.getNumChannels();
-        const int length = buffer.getNumSamples();
         float* left = buffer.getWritePointer (0);
         float* right = channels > 1 ? buffer.getWritePointer (1) : nullptr;
 
@@ -234,6 +266,8 @@ private:
     StereoFloat nextOutput;
 
     float wetMix = 0.0f;
+    float smoothedX = 0.5f;
+    float smoothedY = 0.5f;
     float visualEnvelope = 0.0f;
     bool prepared = false;
 };
