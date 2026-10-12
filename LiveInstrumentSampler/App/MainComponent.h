@@ -49,6 +49,7 @@ private:
     void runBackground(const juce::String& taskName, std::function<void()> job, std::function<void()> onSuccess = {});
     void setBusy(bool busy, const juce::String& message = {});
 
+    struct ChannelChoice { int first = 0; int count = 1; };
     int selectedFirstInputChannel() const;
     int selectedFirstOutputChannel() const;
     int selectedInputChannelCount();
@@ -63,6 +64,7 @@ private:
 
     juce::GroupComponent audioGroup_{"audio", "1. AUDIO / ASIO"};
     juce::ComboBox driverBox_, inputDeviceBox_, outputDeviceBox_, inputPairBox_, outputPairBox_, bufferBox_;
+    std::vector<ChannelChoice> inputChannelChoices_, outputChannelChoices_;
     juce::Label driverLabel_, inputDeviceLabel_, outputDeviceLabel_, inputPairLabel_, outputPairLabel_, bufferLabel_;
     juce::TextButton applyAudioButton_{"APPLY AUDIO"};
     juce::Label audioStatusLabel_;
