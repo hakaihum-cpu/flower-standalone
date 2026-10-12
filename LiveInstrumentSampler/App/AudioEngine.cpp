@@ -176,7 +176,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         return;
 
     if (stereoScratch_.getNumSamples() < numSamples)
-        return;
+        return; // resized only in audioDeviceAboutToStart, never allocate here
 
     stereoScratch_.clear();
     const float* left = nullptr;
