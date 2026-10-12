@@ -69,3 +69,10 @@ grep -Fq 'failure==-ESHUTDOWN' "$ROOT/app/src/main/cpp/UsbPcmEngine.cpp"
 grep -Fq 'controlTransfer(0x22,0x01,0x0100' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
 grep -Fq 'inputRateControl=fmtIn.rateCtrlIn' "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectFormat.java"
 grep -Fq 'USB_DESCRIPTORS' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+
+# Avoid misleading AAudio reports when USB DIRECT is selected.
+grep -Fq 'ENGINE_ACTUALLY_RUNNING=' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'AAUDIO_RUNTIME_RUNNING=' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'INSTALLED_APK_VERSION=' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'if(usbDirectEnabled)chooseUsbQueueDepth();else chooseBurst();' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'aaudioRunning=s[0]==1' "$ROOT/app/src/main/java/com/analoglav/amps/AudioBridge.java"

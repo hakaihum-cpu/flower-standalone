@@ -22,6 +22,10 @@ public final class UsbDirectEngine {
   private static native void nativeControls(float[] values,int channel,int cabinet,int bypass);
 
   public static void stop(){nativeStop();}
+  public static boolean isRunning(){
+    int[] nativeValues=nativeCounters();
+    return nativeValues!=null && nativeValues.length>=1 && nativeValues[0]==1;
+  }
   public static String stats(){
     int[] s=nativeCounters();
     if(s==null||s.length!=7)return "USB DIRECT STATS UNAVAILABLE";

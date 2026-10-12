@@ -41,6 +41,7 @@ public final class AudioBridge {
       inputReadErrors=0,outputCallbackFrames=0,inputBurstFrames=0,
       inputPerfMode=0,outputPerfMode=0;
   public volatile float inputPeak=0,outputPeak=0;
+  public volatile boolean aaudioRunning=false;
   private boolean started;
   public AudioBridge(Context c){
     context=c;manager=(AudioManager)c.getSystemService(Context.AUDIO_SERVICE);
@@ -85,11 +86,13 @@ public final class AudioBridge {
   public synchronized void stop(){
     nativeStop();
     started=false;
+    aaudioRunning=false;
     status="STOPPED";
   }
   public synchronized void start(){
     nativeStop();
     started=false;
+    aaudioRunning=false;
     if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=
         PackageManager.PERMISSION_GRANTED){
       status="RECORD_AUDIO PERMISSION REQUIRED";
@@ -117,7 +120,8 @@ public final class AudioBridge {
   /** Poll on the UI, never on an audio callback. */
   public void poll(){
     int[] s=nativeStats();
-    if(s==null||s.length<33)return;
+    if(s==null||s.length<33){aaudioRunning=false;return;}
+    aaudioRunning=s[0]==1;
     inputFrames=s[3];outputFrames=s[4];burstFrames=s[5];sampleRate=s[6];
     xruns=s[7];outputCapacity=s[9];inputCapacity=s[10];
     outputMode=s[11];inputMode=s[12];

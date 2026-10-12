@@ -171,3 +171,32 @@ Fixes:
 
 This is source-level repair, NOT BUILT or USB-device verified at this
 checkpoint; needs the usual preflight and one manual CircleCI job.
+
+## AN-68 Engine-path audit v0.7.2 (2026-10-12)
+User still perceives AAudio-like behavior, with no audible output change.
+Previous RG Rotate report explicitly showed USBFS_DIRECT_PCM_DSP, USB input
+22 successful URBs (6,336 bytes), USB output 0 completed URBs and -108.
+Hence the native IN was USBFS, not AAudio; the actual problem is USB
+output completion, not a proven AAudio fallback.
+
+Code audit shows USB DIRECT mode calls bridge.stop() and does not invoke
+bridge.start() automatically on failure. However CONFIG always displayed
+AAudio burst/latency values, and DIAGNOSTICS title said AAUDIO ACTIVE
+even when USB DIRECT was selected. These are misleading and were fixed:
+- USB DIRECT CONFIG now shows engine selected vs actually running;
+  native AAudio state is read from nativeStats()[0], shown separately.
+- AAudio INPUT/OUTPUT and burst controls are not usable in USB DIRECT.
+  Instead, show USB queue depth, explicit restart, USB device info,
+  native IN/OUT/underrun/error counters, and link to USB DIAGNOSTICS.
+- USB DIAGNOSTICS no longer says AAUDIO ACTIVE while in USB DIRECT
+  and no longer shows inactive AAudio tuning controls.
+- TXT report identifies INSTALLED_APK_VERSION, ENGINE_CONFIG,
+  ENGINE_ACTUALLY_RUNNING, AAUDIO_RUNTIME_RUNNING and USB_DIRECT_STATS;
+  AAudio buffer metrics are only included when AAudio is selected.
+- USB DIRECT mode does NOT claim success when USB output fails. The
+  OUTPUT 0 URB -108 ESHUTDOWN hardware issue remains unresolved until
+  a v0.7.1-or-newer real-device error report is available.
+- Only AMPS UI/Java diagnostics changed; native DSP and USB transfer
+  code are unchanged from v0.7.1. No auto-CI build. Manual APK
+  version must be verified to avoid mistaking old installed APK for
+  new code; no claims of working audio or <=10ms roundtrip.
