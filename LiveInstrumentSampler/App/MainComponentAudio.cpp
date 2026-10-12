@@ -36,19 +36,39 @@ void MainComponent::refreshDeviceLists() {
 
 void MainComponent::refreshChannelAndBufferLists() {
     inputPairBox_.clear(); outputPairBox_.clear(); bufferBox_.clear();
+    inputChannelChoices_.clear(); outputChannelChoices_.clear();
     const auto caps = audio_.getDeviceCapabilities(driverBox_.getText(), inputDeviceBox_.getText(), outputDeviceBox_.getText());
-    for (int i = 0; i < caps.inputChannels.size(); i += 2) {
-        auto text = juce::String(i + 1) + ": " + caps.inputChannels[i];
-        if (i + 1 < caps.inputChannels.size()) text += " + " + juce::String(i + 2) + ": " + caps.inputChannels[i + 1];
-        inputPairBox_.addItem(text, i + 1);
+
+    for (int i = 0; i < caps.inputChannels.size(); ++i) {
+        inputChannelChoices_.push_back({i, 1});
+        inputPairBox_.addItem("MONO " + juce::String(i + 1) + ": " + caps.inputChannels[i], static_cast<int>(inputChannelChoices_.size()));
     }
-    for (int i = 0; i < caps.outputChannels.size(); i += 2) {
-        auto text = juce::String(i + 1) + ": " + caps.outputChannels[i];
-        if (i + 1 < caps.outputChannels.size()) text += " + " + juce::String(i + 2) + ": " + caps.outputChannels[i + 1];
-        outputPairBox_.addItem(text, i + 1);
+    for (int i = 0; i + 1 < caps.inputChannels.size(); i += 2) {
+        inputChannelChoices_.push_back({i, 2});
+        inputPairBox_.addItem("STEREO " + juce::String(i + 1) + "+" + juce::String(i + 2) + ": "
+                              + caps.inputChannels[i] + " / " + caps.inputChannels[i + 1],
+                              static_cast<int>(inputChannelChoices_.size()));
     }
-    if (inputPairBox_.getNumItems() > 0) inputPairBox_.setSelectedId(1);
-    if (outputPairBox_.getNumItems() > 0) outputPairBox_.setSelectedId(1);
+
+    for (int i = 0; i < caps.outputChannels.size(); ++i) {
+        outputChannelChoices_.push_back({i, 1});
+        outputPairBox_.addItem("MONO " + juce::String(i + 1) + ": " + caps.outputChannels[i], static_cast<int>(outputChannelChoices_.size()));
+    }
+    for (int i = 0; i + 1 < caps.outputChannels.size(); i += 2) {
+        outputChannelChoices_.push_back({i, 2});
+        outputPairBox_.addItem("STEREO " + juce::String(i + 1) + "+" + juce::String(i + 2) + ": "
+                               + caps.outputChannels[i] + " / " + caps.outputChannels[i + 1],
+                               static_cast<int>(outputChannelChoices_.size()));
+    }
+
+    if (!inputChannelChoices_.empty()) {
+        const int stereoId = caps.inputChannels.size() >= 2 ? caps.inputChannels.size() + 1 : 1;
+        inputPairBox_.setSelectedId(stereoId);
+    }
+    if (!outputChannelChoices_.empty()) {
+        const int stereoId = caps.outputChannels.size() >= 2 ? caps.outputChannels.size() + 1 : 1;
+        outputPairBox_.setSelectedId(stereoId);
+    }
 
     juce::Array<int> buffers = caps.bufferSizes;
     if (buffers.isEmpty()) buffers.addArray({64, 128, 256, 512, 1024});
@@ -64,10 +84,22 @@ void MainComponent::refreshChannelAndBufferLists() {
     setLabel(audioStatusLabel_, supports48 || caps.sampleRates.isEmpty() ? "EP-SAMPLE capture rate: 48000 Hz" : "WARNING: selected device does not report 48 kHz support");
 }
 
-int MainComponent::selectedFirstInputChannel() const { return juce::jmax(0, inputPairBox_.getSelectedId() - 1); }
-int MainComponent::selectedFirstOutputChannel() const { return juce::jmax(0, outputPairBox_.getSelectedId() - 1); }
-int MainComponent::selectedInputChannelCount() { return inputPairBox_.getText().contains("+") ? 2 : 1; }
-int MainComponent::selectedOutputChannelCount() { return outputPairBox_.getText().contains("+") ? 2 : 1; }
+int MainComponent::selectedFirstInputChannel() const {
+    const int i = inputPairBox_.getSelectedItemIndex();
+    return i >= 0 && i < static_cast<int>(inputChannelChoices_.size()) ? inputChannelChoices_[static_cast<std::size_t>(i)].first : 0;
+}
+int MainComponent::selectedFirstOutputChannel() const {
+    const int i = outputPairBox_.getSelectedItemIndex();
+    return i >= 0 && i < static_cast<int>(outputChannelChoices_.size()) ? outputChannelChoices_[static_cast<std::size_t>(i)].first : 0;
+}
+int MainComponent::selectedInputChannelCount() {
+    const int i = inputPairBox_.getSelectedItemIndex();
+    return i >= 0 && i < static_cast<int>(inputChannelChoices_.size()) ? inputChannelChoices_[static_cast<std::size_t>(i)].count : 1;
+}
+int MainComponent::selectedOutputChannelCount() {
+    const int i = outputPairBox_.getSelectedItemIndex();
+    return i >= 0 && i < static_cast<int>(outputChannelChoices_.size()) ? outputChannelChoices_[static_cast<std::size_t>(i)].count : 1;
+}
 int MainComponent::selectedBufferSize() const { return bufferBox_.getText().getIntValue() > 0 ? bufferBox_.getText().getIntValue() : 128; }
 
 void MainComponent::applyAudioSettings() {
