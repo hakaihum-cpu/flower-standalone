@@ -1773,8 +1773,6 @@ void RealtimeChordFxAudioProcessorEditor::paintAudioConfig (juce::Graphics& g)
     g.setColour (juce::Colours::black.withAlpha (0.84f));
     g.fillAll();
 
-    refreshAudioBufferStatus();
-
     g.setColour (uiColour (0.94f));
     g.setFont (juce::FontOptions (20.0f).withStyle ("Bold"));
     g.drawText ("AUDIO SETTINGS", 34, 26, 260, 32,
@@ -1846,7 +1844,7 @@ void RealtimeChordFxAudioProcessorEditor::paintAudioConfig (juce::Graphics& g)
     g.setColour (uiColour (0.46f));
     g.setFont (juce::FontOptions (10.5f));
     g.drawFittedText (
-        "If EUREKA crackles, try 2–4 BURSTS. RESET reopens only the audio device; effect parameters and EUREKA state are kept.",
+        "If EUREKA crackles, try 2–4 BURSTS. RESET reopens the audio device while keeping the current parameter settings.",
         54, 620, 612, 52,
         juce::Justification::centredLeft, 3);
 }
@@ -2530,7 +2528,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
 void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 {
-    if (midiControlConfigVisible || configVisible)
+    if (midiControlConfigVisible || audioConfigVisible || configVisible)
         return;
 
     const int effectMode = juce::jlimit (0, 3, juce::roundToInt (
