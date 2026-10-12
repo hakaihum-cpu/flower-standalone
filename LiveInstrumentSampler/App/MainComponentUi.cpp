@@ -36,16 +36,20 @@ void MainComponent::configureUi() {
     add(titleLabel_); add(stepLabel_);
     add(audioGroup_); add(sessionGroup_); add(recordGroup_); add(finishGroup_);
 
-    for (auto* c : { static_cast<juce::Component*>(&driverBox_), &inputDeviceBox_, &outputDeviceBox_, &inputPairBox_, &outputPairBox_, &bufferBox_,
-                     &driverLabel_, &inputDeviceLabel_, &outputDeviceLabel_, &inputPairLabel_, &outputPairLabel_, &bufferLabel_,
-                     &applyAudioButton_, &audioStatusLabel_, &asioCheckButton_, &toneHeardButton_, &toneNotHeardButton_, &toneAgainButton_,
-                     &diagEnumerateLabel_, &diagOpenLabel_, &diagInputLabel_, &diagOutputLabel_, &diagReopenLabel_ }) add(*c);
+    juce::Component* audioComponents[] = {
+        &driverBox_, &inputDeviceBox_, &outputDeviceBox_, &inputPairBox_, &outputPairBox_, &bufferBox_,
+        &driverLabel_, &inputDeviceLabel_, &outputDeviceLabel_, &inputPairLabel_, &outputPairLabel_, &bufferLabel_,
+        &applyAudioButton_, &audioStatusLabel_, &asioCheckButton_, &toneHeardButton_, &toneNotHeardButton_, &toneAgainButton_,
+        &diagEnumerateLabel_, &diagOpenLabel_, &diagInputLabel_, &diagOutputLabel_, &diagReopenLabel_
+    };
+    for (auto* component : audioComponents) add(*component);
 
     setLabel(driverLabel_, "DRIVER"); setLabel(inputDeviceLabel_, "INPUT DEVICE"); setLabel(outputDeviceLabel_, "OUTPUT DEVICE");
     setLabel(inputPairLabel_, "INPUT CH"); setLabel(outputPairLabel_, "OUTPUT CH"); setLabel(bufferLabel_, "BUFFER");
     audioStatusLabel_.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    for (auto* l : {&diagEnumerateLabel_, &diagOpenLabel_, &diagInputLabel_, &diagOutputLabel_, &diagReopenLabel_})
-        l->setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    juce::Label* diagnosticLabels[] = { &diagEnumerateLabel_, &diagOpenLabel_, &diagInputLabel_, &diagOutputLabel_, &diagReopenLabel_ };
+    for (auto* label : diagnosticLabels)
+        label->setColour(juce::Label::textColourId, juce::Colours::lightgrey);
     setLabel(diagEnumerateLabel_, "ASIO driver: —"); setLabel(diagOpenLabel_, "48 kHz open: —");
     setLabel(diagInputLabel_, "input signal: —"); setLabel(diagOutputLabel_, "output tone: —"); setLabel(diagReopenLabel_, "reopen: —");
     toneHeardButton_.setEnabled(false); toneNotHeardButton_.setEnabled(false); toneAgainButton_.setEnabled(false);
@@ -59,15 +63,22 @@ void MainComponent::configureUi() {
     toneNotHeardButton_.onClick = [this] { markToneHeard(false); };
     toneAgainButton_.onClick = [this] { audio_.playOutputTestTone(); };
 
-    for (auto* c : { static_cast<juce::Component*>(&startNoteBox_), &keyCountEditor_, &bankNameEditor_, &startNoteLabel_, &keyCountLabel_, &bankNameLabel_, &startSessionButton_, &sessionPathLabel_ }) add(*c);
+    juce::Component* sessionComponents[] = {
+        &startNoteBox_, &keyCountEditor_, &bankNameEditor_, &startNoteLabel_,
+        &keyCountLabel_, &bankNameLabel_, &startSessionButton_, &sessionPathLabel_
+    };
+    for (auto* component : sessionComponents) add(*component);
     setLabel(startNoteLabel_, "START NOTE"); setLabel(keyCountLabel_, "KEYS"); setLabel(bankNameLabel_, "BANK NAME");
     keyCountEditor_.setInputRestrictions(3, "0123456789"); keyCountEditor_.setText("61");
     bankNameEditor_.setText("Instrument");
     sessionPathLabel_.setColour(juce::Label::textColourId, juce::Colours::grey);
     startSessionButton_.onClick = [this] { startSession(); };
 
-    for (auto* c : { static_cast<juce::Component*>(&currentKeyLabel_), &recButton_, &stopButton_, &setButton_, &retakeButton_, &waveform_,
-                     &trimStartEditor_, &trimEndEditor_, &trimStartLabel_, &trimEndLabel_, &recordHintLabel_ }) add(*c);
+    juce::Component* recordComponents[] = {
+        &currentKeyLabel_, &recButton_, &stopButton_, &setButton_, &retakeButton_, &waveform_,
+        &trimStartEditor_, &trimEndEditor_, &trimStartLabel_, &trimEndLabel_, &recordHintLabel_
+    };
+    for (auto* component : recordComponents) add(*component);
     currentKeyLabel_.setFont(juce::FontOptions(22.0f, juce::Font::bold));
     setLabel(currentKeyLabel_, "STARTを押すと録音を始められます");
     setLabel(trimStartLabel_, "START sec"); setLabel(trimEndLabel_, "END sec");
@@ -86,7 +97,10 @@ void MainComponent::configureUi() {
     trimStartEditor_.onFocusLost = [this] { syncWaveformFromTrimEditors(); };
     trimEndEditor_.onFocusLost = [this] { syncWaveformFromTrimEditors(); };
 
-    for (auto* c : { static_cast<juce::Component*>(&finishButton_), &exportMasterButton_, &importTunedButton_, &openFolderButton_, &finishStatusLabel_ }) add(*c);
+    juce::Component* finishComponents[] = {
+        &finishButton_, &exportMasterButton_, &importTunedButton_, &openFolderButton_, &finishStatusLabel_
+    };
+    for (auto* component : finishComponents) add(*component);
     finishButton_.setEnabled(false); exportMasterButton_.setEnabled(false); importTunedButton_.setEnabled(false); openFolderButton_.setEnabled(false);
     finishButton_.onClick = [this] { finishDirectBin(); };
     exportMasterButton_.onClick = [this] { exportMaster(); };
