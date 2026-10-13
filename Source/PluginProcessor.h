@@ -96,6 +96,7 @@ public:
     bool getPerformanceArpEnabled() const noexcept { return performanceArpEnabled.load (std::memory_order_relaxed); }
     bool getPerformanceDelayEnabled() const noexcept { return performanceDelayEnabled.load (std::memory_order_relaxed); }
     bool getPerformanceYEffectEnabled() const noexcept { return performanceGranularEnabled.load (std::memory_order_relaxed); }
+    bool getPerformanceCloudsEnabled() const noexcept { return performanceCloudsEnabled.load (std::memory_order_relaxed); }
     bool getPerformanceHold() const noexcept { return performanceHold.load (std::memory_order_relaxed); }
     void setConfiguredRoot (int noteClass);
     void setConfiguredScale (int scaleIndex);
