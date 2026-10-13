@@ -61,6 +61,9 @@ private:
     juce::ADSR::Parameters adsrParams;
     juce::dsp::StateVariableTPTFilter<float> filter;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> deClick;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> cutoffSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> resonanceSmoothed;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> levelSmoothed;
 
     double phase = 0.0;
     double lfoPhase = 0.0;
@@ -70,6 +73,12 @@ private:
     int currentMidiNote = 60;
     float velocityGain = 0.0f;
     float pitchWheelSemitones = 0.0f;
+    int controlUpdateCounter = 0;
+    static constexpr int controlUpdateInterval = 8;
+    float heldPitchModSemitones = 0.0f;
+    float heldCutoff = 3000.0f;
+    float heldResonance = 0.7071f;
+    float heldLevelMod = 1.0f;
 
 #if JUCE_ANDROID
     // Same preallocated hosted Plaits strategy as accepted MIYAKO.
