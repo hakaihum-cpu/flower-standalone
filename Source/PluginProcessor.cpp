@@ -399,7 +399,9 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
 
     if (flowerClearRequested.exchange (false, std::memory_order_acq_rel))
     {
-        flowerLoopBuffer.clear();
+        // Do not memset the full ~16 second stereo loop buffer on the audio
+        // callback.  resetFlowerState() invalidates loopLength, so stale memory
+        // is unreachable until fresh recording overwrites it.
         resetFlowerState();
     }
 
@@ -411,7 +413,8 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
     {
         if (transportState == 0) // EMPTY -> REC
         {
-            flowerLoopBuffer.clear();
+            // No full-buffer clear here: loopLength starts at zero and each
+            // valid sample is overwritten by the new recording.
             flowerRecordWritePosition = 0;
             flowerLoopReadLength = 0;
             flowerLoopLengthSamples.store (0, std::memory_order_relaxed);
@@ -509,6 +512,19 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
     auto* loopL = flowerLoopBuffer.getWritePointer (0);
     auto* loopR = flowerLoopBuffer.getWritePointer (1);
 
+    // Keep audio-path bookkeeping local and publish UI telemetry once per
+    // callback instead of performing several atomic stores for every sample.
+    int loopLength =
+        flowerLoopLengthSamples.load (std::memory_order_relaxed);
+    float lastBasePosition =
+        flowerBasePosition.load (std::memory_order_relaxed);
+    int lastActiveGrains = 0;
+    std::array<float, flowerGrainCount> lastGrainPositions {};
+    for (int grain = 0; grain < flowerGrainCount; ++grain)
+        lastGrainPositions[static_cast<size_t> (grain)] =
+            flowerGrainPositions[static_cast<size_t> (grain)].load (
+                std::memory_order_relaxed);
+
     const auto wrapPosition = [] (float position, int length)
     {
         const float n = static_cast<float> (length);
@@ -521,8 +537,6 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
     {
         const float dryL = outL[i];
         const float dryR = outR != nullptr ? outR[i] : dryL;
-
-        int loopLength = flowerLoopLengthSamples.load (std::memory_order_relaxed);
 
         if (transportState == 1)
         {
@@ -540,8 +554,8 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
                 std::memory_order_relaxed);
 
             ++flowerRecordWritePosition;
-            loopLength = juce::jmin (capacity, juce::jmax (loopLength, flowerRecordWritePosition));
-            flowerLoopLengthSamples.store (loopLength, std::memory_order_relaxed);
+            loopLength = juce::jmin (
+                capacity, juce::jmax (loopLength, flowerRecordWritePosition));
             flowerLoopReadLength = loopLength;
 
             if (flowerRecordWritePosition >= capacity)
@@ -574,21 +588,9 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
             flowerRecordWritePosition = (writePos + 1) % loopLength;
         }
 
-        loopLength = flowerLoopLengthSamples.load (std::memory_order_relaxed);
-
-        flowerLoopValidFraction.store (
-            static_cast<float> (loopLength) / static_cast<float> (capacity),
-            std::memory_order_relaxed);
-        flowerRecordProgress.store (
-            loopLength > 0
-                ? static_cast<float> (flowerRecordWritePosition)
-                    / static_cast<float> (juce::jmax (1, loopLength))
-                : 0.0f,
-            std::memory_order_relaxed);
-
         if (! enabled || loopLength <= 64)
         {
-            flowerActiveGrains.store (0, std::memory_order_relaxed);
+            lastActiveGrains = 0;
             continue;
         }
 
@@ -614,7 +616,7 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
             1, flowerGrainCount,
             1 + juce::roundToInt (
                 density * static_cast<float> (flowerGrainCount - 1)));
-        flowerActiveGrains.store (activeGrains, std::memory_order_relaxed);
+        lastActiveGrains = activeGrains;
 
         const float grainSamples = juce::jlimit (
             64.0f, static_cast<float> (juce::jmax (64, loopLength)),
@@ -638,7 +640,7 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
             flowerAnchorsInitialised = true;
         }
 
-        flowerBasePosition.store (position, std::memory_order_relaxed);
+        lastBasePosition = position;
 
         float wetL = 0.0f;
         float wetR = 0.0f;
@@ -661,9 +663,8 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
             const float normalizedRead =
                 wrapPosition (readPos, loopLength)
                 / static_cast<float> (juce::jmax (1, loopLength - 1));
-            flowerGrainPositions[static_cast<size_t> (grain)].store (
-                juce::jlimit (0.0f, 1.0f, normalizedRead),
-                std::memory_order_relaxed);
+            lastGrainPositions[static_cast<size_t> (grain)] =
+                juce::jlimit (0.0f, 1.0f, normalizedRead);
 
             phaseValue += 1.0f / grainSamples;
             if (phaseValue >= 1.0f)
@@ -687,8 +688,7 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
         }
 
         for (int grain = activeGrains; grain < flowerGrainCount; ++grain)
-            flowerGrainPositions[static_cast<size_t> (grain)].store (
-                position, std::memory_order_relaxed);
+            lastGrainPositions[static_cast<size_t> (grain)] = position;
 
         if (weightSum > 0.0001f)
         {
@@ -700,6 +700,26 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
         if (outR != nullptr)
             outR[i] = dryR + (wetR - dryR) * mix;
     }
+
+    flowerLoopLengthSamples.store (
+        loopLength, std::memory_order_relaxed);
+    flowerLoopValidFraction.store (
+        static_cast<float> (loopLength) / static_cast<float> (capacity),
+        std::memory_order_relaxed);
+    flowerRecordProgress.store (
+        loopLength > 0
+            ? static_cast<float> (flowerRecordWritePosition)
+                / static_cast<float> (juce::jmax (1, loopLength))
+            : 0.0f,
+        std::memory_order_relaxed);
+    flowerBasePosition.store (
+        lastBasePosition, std::memory_order_relaxed);
+    flowerActiveGrains.store (
+        lastActiveGrains, std::memory_order_relaxed);
+    for (int grain = 0; grain < flowerGrainCount; ++grain)
+        flowerGrainPositions[static_cast<size_t> (grain)].store (
+            lastGrainPositions[static_cast<size_t> (grain)],
+            std::memory_order_relaxed);
 }
 
 
