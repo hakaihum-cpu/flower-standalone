@@ -1117,10 +1117,25 @@ bool FlowerStandaloneAudioProcessor::getConfiguredDotMode() const noexcept
         ParamIDs::performanceUiModeConfig)->load() > 0.5f;
 }
 
+int FlowerStandaloneAudioProcessor::getConfiguredSynthMode() const noexcept
+{
+    return juce::jlimit (
+        0, 1,
+        juce::roundToInt (
+            apvts.getRawParameterValue (
+                ParamIDs::performanceSynthModeConfig)->load()));
+}
+
 bool FlowerStandaloneAudioProcessor::getConfiguredCloudsEnabled() const noexcept
 {
     return apvts.getRawParameterValue (
         ParamIDs::cloudsEnabled)->load() > 0.5f;
+}
+
+bool FlowerStandaloneAudioProcessor::getPlaitsReverbEnabled() const noexcept
+{
+    return apvts.getRawParameterValue (
+        ParamIDs::plaitsReverbEnabled)->load() > 0.5f;
 }
 
 void FlowerStandaloneAudioProcessor::setConfiguredRoot (int noteClass)
@@ -1185,11 +1200,32 @@ void FlowerStandaloneAudioProcessor::setConfiguredDotMode (bool enabled)
         parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
 }
 
+void FlowerStandaloneAudioProcessor::setConfiguredSynthMode (int mode)
+{
+    mode = juce::jlimit (0, 1, mode);
+    performanceSynthMode.store (mode, std::memory_order_release);
+
+    if (auto* parameter = apvts.getParameter (
+            ParamIDs::performanceSynthModeConfig))
+        parameter->setValueNotifyingHost (
+            parameter->convertTo0to1 (static_cast<float> (mode)));
+}
+
 void FlowerStandaloneAudioProcessor::setConfiguredCloudsEnabled (bool enabled)
 {
     performanceCloudsEnabled.store (enabled, std::memory_order_release);
 
     if (auto* parameter = apvts.getParameter (ParamIDs::cloudsEnabled))
+        parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
+}
+
+void FlowerStandaloneAudioProcessor::setPlaitsReverbEnabled (bool enabled)
+{
+    performancePlaitsReverbEnabled.store (
+        enabled, std::memory_order_release);
+
+    if (auto* parameter = apvts.getParameter (
+            ParamIDs::plaitsReverbEnabled))
         parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
 }
 
@@ -1219,7 +1255,9 @@ void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC (juce::MidiBuffer& 
         // CC88 Y EFFECT MODE (GRANULAR/DREAMY),
         // CC89 UI MODE (FULL/DOT),
         // CC90 Y EFFECT MODE TOGGLE, CC91 UI MODE TOGGLE,
-        // CC92 CLOUDS absolute ON/OFF, CC93 CLOUDS TOGGLE.
+        // CC92 CLOUDS absolute ON/OFF, CC93 CLOUDS TOGGLE,
+        // CC94 SYNTH MODE absolute, CC95 SYNTH MODE TOGGLE,
+        // CC96 PLAITS REVERB absolute, CC97 PLAITS REVERB TOGGLE.
         switch (cc)
         {
             case 10:
@@ -1359,6 +1397,53 @@ void FlowerStandaloneAudioProcessor::handlePerformanceMidiCC (juce::MidiBuffer& 
                         1, std::memory_order_release);
                 }
                 performanceCcGate[93] = on;
+                break;
+
+            case 94:
+            {
+                const int mode = on ? 1 : 0;
+                performanceSynthMode.store (
+                    mode, std::memory_order_release);
+                midiSynthModeConfigRequest.store (
+                    mode, std::memory_order_release);
+                break;
+            }
+
+            case 95:
+                if (on && ! performanceCcGate[95])
+                {
+                    const int mode =
+                        1 - juce::jlimit (
+                            0, 1,
+                            performanceSynthMode.load (
+                                std::memory_order_relaxed));
+                    performanceSynthMode.store (
+                        mode, std::memory_order_release);
+                    midiSynthModeToggleCount.fetch_add (
+                        1, std::memory_order_release);
+                }
+                performanceCcGate[95] = on;
+                break;
+
+            case 96:
+                performancePlaitsReverbEnabled.store (
+                    on, std::memory_order_release);
+                midiPlaitsReverbConfigRequest.store (
+                    on ? 1 : 0, std::memory_order_release);
+                break;
+
+            case 97:
+                if (on && ! performanceCcGate[97])
+                {
+                    const bool enabled =
+                        ! performancePlaitsReverbEnabled.load (
+                            std::memory_order_relaxed);
+                    performancePlaitsReverbEnabled.store (
+                        enabled, std::memory_order_release);
+                    midiPlaitsReverbToggleCount.fetch_add (
+                        1, std::memory_order_release);
+                }
+                performanceCcGate[97] = on;
                 break;
 
             default:
@@ -2811,9 +2896,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout FlowerStandaloneAudioProcess
         "UI Mode",
         juce::StringArray { "FULL", "DOT" },
         0));
+    parameters.push_back (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParamIDs::performanceSynthModeConfig, 1 },
+        "Synth Mode",
+        juce::StringArray { "SINE", "PLAITS" },
+        0));
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamIDs::cloudsEnabled, 1 },
         "Clouds", false));
+    parameters.push_back (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { ParamIDs::plaitsReverbEnabled, 1 },
+        "Plaits Reverb", false));
 
     parameters.push_back (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { ParamIDs::flowerEnabled, 1 }, "Flower On", false));
@@ -2858,6 +2951,10 @@ void FlowerStandaloneAudioProcessor::setStateInformation (const void* data, int 
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
             performanceCloudsEnabled.store (
                 getConfiguredCloudsEnabled(), std::memory_order_release);
+            performanceSynthMode.store (
+                getConfiguredSynthMode(), std::memory_order_release);
+            performancePlaitsReverbEnabled.store (
+                getPlaitsReverbEnabled(), std::memory_order_release);
         }
     }
 }
