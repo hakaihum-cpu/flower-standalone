@@ -446,6 +446,7 @@ private:
     juce::AudioBuffer<float> plaitsReverbDryBuffer;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
         plaitsReverbWetSmoothed;
+    bool plaitsReverbDspActive = false; // audio thread only
     int lastRenderedSynthMode = -1;
     juce::dsp::Limiter<float> performanceOutputLimiter;
     int performanceDelayWritePosition = 0;
