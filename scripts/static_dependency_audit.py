@@ -431,6 +431,8 @@ for required_midi_config in [
     "midiUiModeConfigRequest.store",
     "midiYEffectModeToggleCount.fetch_add",
     "midiUiModeToggleCount.fetch_add",
+    "midiCloudsConfigRequest.store",
+    "midiCloudsToggleCount.fetch_add",
 ]:
     if required_midi_config not in processor_text:
         fail(f"MIDI CONFIG CC contract missing: {required_midi_config}")
@@ -545,12 +547,17 @@ process_flower_text = processor_text[process_flower_start:process_flower_end]
 if "flowerLoopBuffer.clear()" in process_flower_text:
     fail("full loop-buffer clear reintroduced on audio callback")
 
+if "for (auto& bin : flowerWaveform)" in process_flower_text:
+    fail("waveform telemetry bulk clear reintroduced on audio callback")
+
 synth_voice_text = (ROOT / "Source/SynthVoice.cpp").read_text(encoding="utf-8")
 for required_audio_guard in [
     "plaitsModelGain",
     "modelFadeStep",
     "cutoffSmoothed",
     "controlUpdateInterval",
+    "performanceDreamyWetSmoothed",
+    "flowerGrainDirection",
 ]:
     if required_audio_guard not in synth_voice_text and required_audio_guard not in (ROOT / "Source/SynthVoice.h").read_text(encoding="utf-8"):
         fail(f"audio de-click/CPU guard missing: {required_audio_guard}")
