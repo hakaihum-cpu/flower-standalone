@@ -234,6 +234,7 @@ private:
     void generatePerformanceMidi (juce::MidiBuffer& midi, int numSamples);
     void processPerformanceDelay (juce::AudioBuffer<float>& buffer);
     void processPerformanceDreamy (juce::AudioBuffer<float>& buffer);
+    float performanceHannWindow (float phase) const noexcept;
     bool isPerformanceGateOpen() const noexcept;
     int nextPerformanceNote (int patternIndex);
     int performanceScaleLength() const noexcept;
@@ -258,6 +259,8 @@ private:
     std::array<float, flowerGrainCount> flowerGrainDirection { 1.0f, 1.0f, 1.0f, 1.0f };
     std::array<int, flowerGrainCount> flowerRepeatCounter { 0, 0, 0, 0 };
     uint32_t flowerRandomState = 0x514D4959u;
+    int flowerPitchControlCounter = 0;
+    float flowerPitchRatioCurrent = 1.0f;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> flowerPositionSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> flowerSizeSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> flowerDensitySmoothed;
@@ -314,6 +317,9 @@ private:
     std::atomic<int> midiUiModeToggleCount { 0 };
     std::atomic<int> midiCloudsConfigRequest { -1 };
     std::atomic<int> midiCloudsToggleCount { 0 };
+
+    static constexpr int performanceWindowTableSize = 1024;
+    std::array<float, performanceWindowTableSize> performanceWindowTable {};
 
     std::atomic<bool> carnivalEnabled { false };
     std::atomic<bool> carnivalPlaying { false };
