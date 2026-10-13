@@ -594,6 +594,9 @@ for realtime_region_name, realtime_region_text in [
     ("processDelay", processor_text[
         processor_text.find("void FlowerStandaloneAudioProcessor::processPerformanceDelay"):
         processor_text.find("juce::AudioProcessorValueTreeState::ParameterLayout")]),
+    ("processCarnival", processor_text[
+        processor_text.find("void FlowerStandaloneAudioProcessor::processCarnival"):
+        processor_text.find("bool FlowerStandaloneAudioProcessor::isPerformanceGateOpen")]),
 ]:
     for forbidden_realtime_token in [
         "setSize (",
