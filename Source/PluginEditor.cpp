@@ -3004,7 +3004,14 @@ void FlowerStandaloneAudioProcessorEditor::timerCallback()
     const bool externalArp = processor.getPerformanceArpEnabled();
     const bool externalDelay = processor.getPerformanceDelayEnabled();
     const bool externalYEffect = processor.getPerformanceYEffectEnabled();
+    const bool externalClouds = processor.getPerformanceCloudsEnabled();
     const bool externalHold = processor.getPerformanceHold();
+
+    if (externalClouds != cloudsEnabled)
+    {
+        cloudsEnabled = externalClouds;
+        performancePad.setCloudsEnabled (cloudsEnabled);
+    }
 
     if (externalArp != arpEnabled
         || externalDelay != delayEnabled
