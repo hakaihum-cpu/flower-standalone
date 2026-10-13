@@ -18,6 +18,8 @@
       <FILE id="modu01" name="Modulation.h" compile="0" resource="0" file="Source/Modulation.h"/>
       <FILE id="svh001" name="SynthVoice.h" compile="0" resource="0" file="Source/SynthVoice.h"/>
       <FILE id="svc001" name="SynthVoice.cpp" compile="1" resource="0" file="Source/SynthVoice.cpp"/>
+      <FILE id="pvh001" name="PlaitsVoice.h" compile="0" resource="0" file="Source/PlaitsVoice.h"/>
+      <FILE id="pvc001" name="PlaitsVoice.cpp" compile="1" resource="0" file="Source/PlaitsVoice.cpp"/>
       <FILE id="retroh" name="RetroLookAndFeel.h" compile="0" resource="0" file="Source/RetroLookAndFeel.h"/>
       <FILE id="retroc" name="RetroLookAndFeel.cpp" compile="1" resource="0" file="Source/RetroLookAndFeel.cpp"/>
       <FILE id="proch1" name="PluginProcessor.h" compile="0" resource="0" file="Source/PluginProcessor.h"/>
