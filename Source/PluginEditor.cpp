@@ -1257,7 +1257,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
     juce::String footer = audioStatus.isNotEmpty()
         ? audioStatus
         : "AUDIO: waiting for Android output buffer information";
-    footer += "\nY EFFECT: GRANULAR / DREAMY.  CARNIVAL: drum machine mode.";
+    footer += "\nSYNTH MODE: SINE / PLAITS.  Y EFFECT: GRANULAR / DREAMY.";
     g.drawFittedText (
         footer,
         72, 556, 420, 70,
@@ -1285,7 +1285,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    for (int row = 0; row < 8; ++row)
+    for (int row = 0; row < 9; ++row)
     {
         const auto bounds = getRowBounds (row);
         if (! bounds.contains (designPoint))
@@ -1293,7 +1293,7 @@ void ConfigScreenComponent::mouseDown (const juce::MouseEvent& e)
 
         selectedRow = row;
 
-        if (row == 2 || row == 3 || row == 6 || row == 7)
+        if (row == 2 || row == 3 || row == 4 || row == 7 || row == 8)
         {
             activateSelected();
         }
