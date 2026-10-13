@@ -19,6 +19,11 @@ jobs:
             python3 scripts/materialize_flower_video_pack.py
 
       - run:
+          name: Materialize pinned Mutable Instruments DSP
+          command: |
+            python3 scripts/materialize_flower_mutable.py
+
+      - run:
           name: Static dependency audit
           command: |
             python3 scripts/static_dependency_audit.py
