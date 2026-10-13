@@ -363,6 +363,23 @@ private:
         float envelope = 0.0f;
         float filterStateL = 0.0f;
         float filterStateR = 0.0f;
+
+        // Derived at trigger time; these do not change while a hit is active.
+        float decaySeconds = 0.30f;
+        float attackSeconds = 0.003f;
+        float decayCoefficient = 0.999f;
+        float attackIncrement = 0.01f;
+        float filterCoefficient = 0.5f;
+        float chordRatio2 = 1.259921f;
+        float chordRatio3 = 1.498307f;
+
+        // Slow modulation does not need audio-rate transcendental math.
+        int modulationControlCounter = 0;
+        float heldLfo = 0.0f;
+        float heldVibrato = 1.0f;
+        float heldGainL = 0.7071f;
+        float heldGainR = 0.7071f;
+
         uint32_t noiseState = 0x12345678u;
     };
 
