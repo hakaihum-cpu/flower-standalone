@@ -208,10 +208,32 @@ void FlowerStandaloneAudioProcessor::updateSynthParams()
     params.lfoDepth = apvts.getRawParameterValue (ParamIDs::lfoDepth)->load();
     params.lfoTarget = juce::roundToInt (apvts.getRawParameterValue (ParamIDs::lfoTarget)->load());
 
+    const float x = performanceX.load (std::memory_order_relaxed);
+    const float y = performanceY.load (std::memory_order_relaxed);
+
+    // Plaits timbre always follows the current XY position, including when
+    // notes arrive from external MIDI while the touch gate itself is idle.
+    const float gridX =
+        juce::jlimit (0.0f, 0.999999f, x) * 6.0f;
+    const float gridY =
+        juce::jlimit (0.0f, 0.999999f, 1.0f - y) * 4.0f;
+    const int modelColumn = juce::jlimit (
+        0, 5, static_cast<int> (std::floor (gridX)));
+    const int modelRow = juce::jlimit (
+        0, 3, static_cast<int> (std::floor (gridY)));
+
+    params.plaitsModel = modelRow * 6 + modelColumn;
+    params.plaitsTimbre = juce::jlimit (
+        0.0f, 1.0f, gridX - static_cast<float> (modelColumn));
+    params.plaitsMorph = juce::jlimit (
+        0.0f, 1.0f,
+        1.0f - (gridY - static_cast<float> (modelRow)));
+    params.plaitsHarmonics = juce::jlimit (
+        0.05f, 0.95f,
+        0.10f + 0.80f * (0.55f * x + 0.45f * y));
+
     if (isPerformanceGateOpen())
     {
-        const float x = performanceX.load (std::memory_order_relaxed);
-        const float y = performanceY.load (std::memory_order_relaxed);
 
         // Keep enough headroom for arp release tails, granular wet signal and
         // feedback delay.  The previous 0.26 level could stack several release
@@ -231,27 +253,6 @@ void FlowerStandaloneAudioProcessor::updateSynthParams()
         params.lfoDepth = y * 0.10f;
         params.lfoTarget = static_cast<int> (LfoTarget::Cutoff);
 
-        // 6 x 4 XY grid = all 24 original Plaits engines.
-        // Within each engine cell X/Y continue into TIMBRE/MORPH, while
-        // HARMONICS follows the overall surface.
-        const float gridX =
-            juce::jlimit (0.0f, 0.999999f, x) * 6.0f;
-        const float gridY =
-            juce::jlimit (0.0f, 0.999999f, 1.0f - y) * 4.0f;
-        const int modelColumn = juce::jlimit (
-            0, 5, static_cast<int> (std::floor (gridX)));
-        const int modelRow = juce::jlimit (
-            0, 3, static_cast<int> (std::floor (gridY)));
-
-        params.plaitsModel = modelRow * 6 + modelColumn;
-        params.plaitsTimbre = juce::jlimit (
-            0.0f, 1.0f, gridX - static_cast<float> (modelColumn));
-        params.plaitsMorph = juce::jlimit (
-            0.0f, 1.0f,
-            1.0f - (gridY - static_cast<float> (modelRow)));
-        params.plaitsHarmonics = juce::jlimit (
-            0.05f, 0.95f,
-            0.10f + 0.80f * (0.55f * x + 0.45f * y));
     }
 
     for (int i = 0; i < synthesiser.getNumVoices(); ++i)
