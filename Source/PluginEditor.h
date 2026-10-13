@@ -38,6 +38,8 @@ public:
     void setBpmDisplay (float bpm, bool visible);
     void setDotMode (bool enabled);
     void setCloudsEnabled (bool enabled);
+    void setSynthMode (int mode);
+    void setPlaitsReverbEnabled (bool enabled);
     float getXValue() const noexcept { return xValue; }
     float getYValue() const noexcept { return yValue; }
     int getPatternIndex() const noexcept;
@@ -49,6 +51,7 @@ public:
     std::function<void()> onTapStopRequested;
     std::function<void()> onConfigRequested;
     std::function<void()> onCloudsRequested;
+    std::function<void()> onPlaitsReverbRequested;
 
 private:
     static constexpr int tileColumns = 10;
@@ -63,7 +66,9 @@ private:
     void timerCallback() override;
     void chooseNextMixedVisual();
     juce::Rectangle<int> getCloudsButtonBounds() const noexcept;
+    juce::Rectangle<int> getPlaitsReverbButtonBounds() const noexcept;
     void drawCloudsButton (juce::Graphics& g);
+    void drawPlaitsReverbButton (juce::Graphics& g);
 
     std::array<juce::Image, 100> frameImages;
     FramePack videoFrames;
@@ -78,6 +83,8 @@ private:
     bool yEffectIndicatorOn = true;
     bool dreamyIndicatorMode = false;
     bool cloudsEnabled = false;
+    int synthMode = 0;
+    bool plaitsReverbEnabled = false;
     float visualPhase = 0.0f;
     float bpmDisplayValue = 112.0f;
     bool bpmDisplayVisible = false;
@@ -114,6 +121,7 @@ public:
                     int audioBufferMode,
                     bool dotMode,
                     const juce::String& audioStatus);
+    void setSynthMode (int mode);
     void moveSelection (int delta);
     void adjustSelected (int delta);
     void activateSelected();
@@ -122,6 +130,7 @@ public:
     std::function<void(int)> onScaleChanged;
     std::function<void(bool)> onEffectsChanged;
     std::function<void(bool)> onYEffectModeChanged;
+    std::function<void(int)> onSynthModeChanged;
     std::function<void(int)> onMidiChannelChanged;
     std::function<void(int)> onAudioBufferChanged;
     std::function<void(bool)> onDotModeChanged;
@@ -133,6 +142,7 @@ private:
     int scaleIndex = 0;
     bool effectsEnabled = true;
     bool yEffectDreamy = false;
+    int synthMode = 0;
     int midiChannel = 1;
     int audioBufferMode = 0;
     bool dotMode = false;
@@ -268,7 +278,9 @@ private:
     int midiChannel = 1;
     int audioBufferMode = 0;
     bool dotMode = false;
+    int synthMode = 0;
     bool cloudsEnabled = false;
+    bool plaitsReverbEnabled = false;
     int audioDefaultBufferFrames = -1;
     int audioFramesPerBurst = 0;
     int audioActualBufferFrames = 0;
