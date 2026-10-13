@@ -380,6 +380,8 @@ private:
     std::array<float, performanceDreamyVoiceCount> performanceDreamyPlaybackSpeed { 1.3348398f, 2.0f };
     std::array<bool, performanceDreamyVoiceCount> performanceDreamyVoiceActive { false, false };
     uint32_t performanceDreamyRandomState = 0x44524541u;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        performanceDreamyWetSmoothed;
 
     juce::AudioBuffer<float> performanceDelayBuffer;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> performanceDelaySamplesSmoothed;
