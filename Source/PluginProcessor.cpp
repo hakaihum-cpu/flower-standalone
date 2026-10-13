@@ -334,7 +334,8 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
     performanceOutputLimiter.process (outputContext);
 }
 
-void FlowerStandaloneAudioProcessor::resetFlowerState() noexcept
+void FlowerStandaloneAudioProcessor::resetFlowerState (
+    bool clearVisualTelemetry) noexcept
 {
     flowerRecordWritePosition = 0;
     flowerLoopReadLength = 0;
@@ -356,8 +357,10 @@ void FlowerStandaloneAudioProcessor::resetFlowerState() noexcept
     flowerTransportRequest.store (0, std::memory_order_relaxed);
     flowerTransportState.store (0, std::memory_order_relaxed);
 
-    for (auto& bin : flowerWaveform)
-        bin.store (0.0f, std::memory_order_relaxed);
+    if (clearVisualTelemetry)
+        for (auto& bin : flowerWaveform)
+            bin.store (0.0f, std::memory_order_relaxed);
+
     for (auto& position : flowerGrainPositions)
         position.store (0.0f, std::memory_order_relaxed);
 }
@@ -376,9 +379,21 @@ float FlowerStandaloneAudioProcessor::nextFlowerRandomBipolar() noexcept
 void FlowerStandaloneAudioProcessor::getFlowerWaveform (
     std::array<float, flowerWaveformBins>& destination) const noexcept
 {
+    const float valid = flowerLoopValidFraction.load (
+        std::memory_order_relaxed);
+
     for (int i = 0; i < flowerWaveformBins; ++i)
+    {
+        const float endFraction =
+            static_cast<float> (i + 1)
+            / static_cast<float> (flowerWaveformBins);
+
         destination[static_cast<size_t> (i)] =
-            flowerWaveform[static_cast<size_t> (i)].load (std::memory_order_relaxed);
+            endFraction <= valid + (1.0f / flowerWaveformBins)
+                ? flowerWaveform[static_cast<size_t> (i)].load (
+                    std::memory_order_relaxed)
+                : 0.0f;
+    }
 }
 
 float FlowerStandaloneAudioProcessor::getFlowerGrainPosition (int index) const noexcept
@@ -405,7 +420,7 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
         // Do not memset the full ~16 second stereo loop buffer on the audio
         // callback.  resetFlowerState() invalidates loopLength, so stale memory
         // is unreachable until fresh recording overwrites it.
-        resetFlowerState();
+        resetFlowerState (false);
     }
 
     int transportState = flowerTransportState.load (std::memory_order_relaxed);
@@ -424,8 +439,9 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
             flowerLoopValidFraction.store (0.0f, std::memory_order_relaxed);
             flowerRecordProgress.store (0.0f, std::memory_order_relaxed);
             flowerAnchorsInitialised = false;
-            for (auto& bin : flowerWaveform)
-                bin.store (0.0f, std::memory_order_relaxed);
+            // Old waveform bins are hidden by valid-fraction masking and are
+            // overwritten progressively by the new recording. Avoid 256
+            // atomic stores in the audio callback here.
             transportState = 1;
         }
         else if (transportState == 1) // REC -> STOP
