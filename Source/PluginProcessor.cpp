@@ -40,8 +40,16 @@ FlowerStandaloneAudioProcessor::FlowerStandaloneAudioProcessor()
         synthesiser.addVoice (new SineVoice());
     synthesiser.addSound (new SineSound());
 
+    for (int i = 0; i < 8; ++i)
+        plaitsSynthesiser.addVoice (new PlaitsVoice());
+    plaitsSynthesiser.addSound (new PlaitsSound());
+
     performanceCloudsEnabled.store (
         getConfiguredCloudsEnabled(), std::memory_order_relaxed);
+    performanceSynthMode.store (
+        getConfiguredSynthMode(), std::memory_order_relaxed);
+    performancePlaitsReverbEnabled.store (
+        getPlaitsReverbEnabled(), std::memory_order_relaxed);
 
     static constexpr int defaultMachines[carnivalTrackCount]
     {
@@ -96,7 +104,33 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int sampl
 {
     currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
     synthesiser.setCurrentPlaybackSampleRate (currentSampleRate);
+    plaitsSynthesiser.setCurrentPlaybackSampleRate (currentSampleRate);
     cloudsEngine.prepare (currentSampleRate);
+
+    juce::dsp::ProcessSpec reverbSpec;
+    reverbSpec.sampleRate = currentSampleRate;
+    reverbSpec.maximumBlockSize =
+        static_cast<juce::uint32> (juce::jmax (1, samplesPerBlock));
+    reverbSpec.numChannels = 2;
+    plaitsReverb.prepare (reverbSpec);
+    plaitsReverb.reset();
+
+    juce::dsp::Reverb::Parameters reverbParams;
+    reverbParams.roomSize = 0.58f;
+    reverbParams.damping = 0.46f;
+    reverbParams.wetLevel = 1.0f;
+    reverbParams.dryLevel = 0.0f;
+    reverbParams.width = 0.82f;
+    reverbParams.freezeMode = 0.0f;
+    plaitsReverb.setParameters (reverbParams);
+
+    plaitsReverbDryBuffer.setSize (
+        2, juce::jmax (8192, samplesPerBlock), false, true, false);
+    plaitsReverbDryBuffer.clear();
+    plaitsReverbWetSmoothed.reset (currentSampleRate, 0.035);
+    plaitsReverbWetSmoothed.setCurrentAndTargetValue (0.0f);
+    plaitsReverbDspActive = false;
+    lastRenderedSynthMode = -1;
 
     for (int i = 0; i < performanceWindowTableSize; ++i)
     {
@@ -206,6 +240,9 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int sampl
 
 void FlowerStandaloneAudioProcessor::updateSynthParams()
 {
+    // ORIGINAL FLOWER SINE PARAMETER PATH.
+    // This block is intentionally kept equivalent to the pre-Plaits
+    // b49645bc implementation. Plaits never replaces or rewrites it.
     SineVoice::Params params;
     params.level = apvts.getRawParameterValue (ParamIDs::level)->load();
     params.attack = apvts.getRawParameterValue (ParamIDs::attack)->load();
@@ -218,32 +255,10 @@ void FlowerStandaloneAudioProcessor::updateSynthParams()
     params.lfoDepth = apvts.getRawParameterValue (ParamIDs::lfoDepth)->load();
     params.lfoTarget = juce::roundToInt (apvts.getRawParameterValue (ParamIDs::lfoTarget)->load());
 
-    const float x = performanceX.load (std::memory_order_relaxed);
-    const float y = performanceY.load (std::memory_order_relaxed);
-
-    // Plaits timbre always follows the current XY position, including when
-    // notes arrive from external MIDI while the touch gate itself is idle.
-    const float gridX =
-        juce::jlimit (0.0f, 0.999999f, x) * 6.0f;
-    const float gridY =
-        juce::jlimit (0.0f, 0.999999f, 1.0f - y) * 4.0f;
-    const int modelColumn = juce::jlimit (
-        0, 5, static_cast<int> (std::floor (gridX)));
-    const int modelRow = juce::jlimit (
-        0, 3, static_cast<int> (std::floor (gridY)));
-
-    params.plaitsModel = modelRow * 6 + modelColumn;
-    params.plaitsTimbre = juce::jlimit (
-        0.0f, 1.0f, gridX - static_cast<float> (modelColumn));
-    params.plaitsMorph = juce::jlimit (
-        0.0f, 1.0f,
-        1.0f - (gridY - static_cast<float> (modelRow)));
-    params.plaitsHarmonics = juce::jlimit (
-        0.05f, 0.95f,
-        0.10f + 0.80f * (0.55f * x + 0.45f * y));
-
     if (isPerformanceGateOpen())
     {
+        const float x = performanceX.load (std::memory_order_relaxed);
+        const float y = performanceY.load (std::memory_order_relaxed);
 
         // Keep enough headroom for arp release tails, granular wet signal and
         // feedback delay.  The previous 0.26 level could stack several release
@@ -262,12 +277,62 @@ void FlowerStandaloneAudioProcessor::updateSynthParams()
         params.lfoRate = 0.35f + x * 5.5f;
         params.lfoDepth = y * 0.10f;
         params.lfoTarget = static_cast<int> (LfoTarget::Cutoff);
-
     }
 
     for (int i = 0; i < synthesiser.getNumVoices(); ++i)
         if (auto* voice = dynamic_cast<SineVoice*> (synthesiser.getVoice (i)))
             voice->setParams (params);
+
+    // PLAITS is a separate engine. XY selects all 24 official Plaits models
+    // on a 6 x 4 grid; position inside each cell controls TIMBRE / MORPH.
+    PlaitsVoice::Params plaitsParams;
+    plaitsParams.level = apvts.getRawParameterValue (ParamIDs::level)->load();
+    plaitsParams.attack = apvts.getRawParameterValue (ParamIDs::attack)->load();
+    plaitsParams.decay = apvts.getRawParameterValue (ParamIDs::decay)->load();
+    plaitsParams.sustain = apvts.getRawParameterValue (ParamIDs::sustain)->load();
+    plaitsParams.release = apvts.getRawParameterValue (ParamIDs::release)->load();
+    plaitsParams.cutoff = apvts.getRawParameterValue (ParamIDs::cutoff)->load();
+    plaitsParams.resonance = apvts.getRawParameterValue (ParamIDs::resonance)->load();
+
+    const float x = performanceX.load (std::memory_order_relaxed);
+    const float y = performanceY.load (std::memory_order_relaxed);
+    const float gridX = juce::jlimit (0.0f, 0.999999f, x) * 6.0f;
+    const float gridY = juce::jlimit (0.0f, 0.999999f, 1.0f - y) * 4.0f;
+    const int modelColumn = juce::jlimit (
+        0, 5, static_cast<int> (std::floor (gridX)));
+    const int modelRow = juce::jlimit (
+        0, 3, static_cast<int> (std::floor (gridY)));
+
+    plaitsParams.model = modelRow * 6 + modelColumn;
+    plaitsParams.timbre = juce::jlimit (
+        0.0f, 1.0f, gridX - static_cast<float> (modelColumn));
+    plaitsParams.morph = juce::jlimit (
+        0.0f, 1.0f,
+        1.0f - (gridY - static_cast<float> (modelRow)));
+    plaitsParams.harmonics = juce::jlimit (
+        0.05f, 0.95f,
+        0.10f + 0.80f * (0.55f * x + 0.45f * y));
+
+    if (isPerformanceGateOpen())
+    {
+        plaitsParams.level = 0.18f;
+        plaitsParams.attack = 0.003f;
+        plaitsParams.decay = 0.10f + (1.0f - y) * 0.16f;
+        plaitsParams.sustain = 0.58f;
+        plaitsParams.release = 0.045f + (1.0f - y) * 0.16f;
+
+        const float filterCurve = std::pow (
+            juce::jlimit (0.0f, 1.0f, y), 1.35f);
+        plaitsParams.cutoff = juce::jlimit (
+            120.0f, 18000.0f,
+            240.0f + filterCurve * 14500.0f + x * 1200.0f);
+        plaitsParams.resonance = 0.72f + y * 2.30f;
+    }
+
+    for (int i = 0; i < plaitsSynthesiser.getNumVoices(); ++i)
+        if (auto* voice = dynamic_cast<PlaitsVoice*> (
+                plaitsSynthesiser.getVoice (i)))
+            voice->setParams (plaitsParams);
 }
 
 void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
@@ -308,8 +373,90 @@ void FlowerStandaloneAudioProcessor::processBlock (juce::AudioBuffer<float>& buf
     generatePerformanceMidi (midiMessages, buffer.getNumSamples());
 
     updateSynthParams();
-    keyboardState.processNextMidiBuffer (midiMessages, 0, buffer.getNumSamples(), true);
-    synthesiser.renderNextBlock (buffer, midiMessages, 0, buffer.getNumSamples());
+    keyboardState.processNextMidiBuffer (
+        midiMessages, 0, buffer.getNumSamples(), true);
+
+    const int synthMode = juce::jlimit (
+        0, 1, performanceSynthMode.load (std::memory_order_acquire));
+
+    if (synthMode != lastRenderedSynthMode)
+    {
+        // CONFIG mode changes are discrete. Kill old-engine voices at the
+        // boundary so switching back cannot revive a stale held note.
+        synthesiser.allNotesOff (0, false);
+        plaitsSynthesiser.allNotesOff (0, false);
+
+        if (synthMode == 0)
+        {
+            plaitsReverb.reset();
+            plaitsReverbWetSmoothed.setCurrentAndTargetValue (0.0f);
+            plaitsReverbDspActive = false;
+        }
+
+        lastRenderedSynthMode = synthMode;
+    }
+
+    if (synthMode == 0)
+    {
+        // ORIGINAL FLOWER SINE ENGINE.
+        synthesiser.renderNextBlock (
+            buffer, midiMessages, 0, buffer.getNumSamples());
+    }
+    else
+    {
+        plaitsSynthesiser.renderNextBlock (
+            buffer, midiMessages, 0, buffer.getNumSamples());
+
+        const bool reverbEnabled =
+            performancePlaitsReverbEnabled.load (
+                std::memory_order_acquire);
+
+        plaitsReverbWetSmoothed.setTargetValue (
+            reverbEnabled ? 0.26f : 0.0f);
+
+        if (reverbEnabled)
+            plaitsReverbDspActive = true;
+
+        if (plaitsReverbDspActive
+            && buffer.getNumSamples() <= plaitsReverbDryBuffer.getNumSamples())
+        {
+            const int channels = juce::jmin (
+                buffer.getNumChannels(),
+                plaitsReverbDryBuffer.getNumChannels());
+
+            for (int channel = 0; channel < channels; ++channel)
+                plaitsReverbDryBuffer.copyFrom (
+                    channel, 0, buffer, channel, 0, buffer.getNumSamples());
+
+            juce::dsp::AudioBlock<float> reverbBlock (buffer);
+            juce::dsp::ProcessContextReplacing<float> reverbContext (
+                reverbBlock);
+            plaitsReverb.process (reverbContext);
+
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            {
+                const float wet =
+                    plaitsReverbWetSmoothed.getNextValue();
+
+                for (int channel = 0; channel < channels; ++channel)
+                {
+                    const float dry =
+                        plaitsReverbDryBuffer.getSample (channel, sample);
+                    const float wetSample =
+                        buffer.getSample (channel, sample);
+                    buffer.setSample (
+                        channel, sample, dry + wetSample * wet);
+                }
+            }
+
+            if (! reverbEnabled
+                && plaitsReverbWetSmoothed.getCurrentValue() <= 0.0001f)
+            {
+                plaitsReverb.reset();
+                plaitsReverbDspActive = false;
+            }
+        }
+    }
 
     // The XY performance path reuses FLOWER's proven granular core, but maps
     // pad gesture state directly to position/size/density/spread/hold/mix.
