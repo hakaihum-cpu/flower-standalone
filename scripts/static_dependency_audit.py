@@ -576,12 +576,11 @@ for required_clouds_guard in [
     "smoothedY",
     "0.035 * hostRate",
 ]:
+    if required_clouds_guard not in clouds_text:
+        fail(f"Clouds de-click/CPU guard missing: {required_clouds_guard}")
 
 if "getPerformanceCloudsEnabled" not in processor_header_text or "externalClouds" not in editor_text:
     fail("Clouds runtime/editor state synchronization missing")
-
-    if required_clouds_guard not in clouds_text:
-        fail(f"Clouds de-click/CPU guard missing: {required_clouds_guard}")
 
 for realtime_region_name, realtime_region_text in [
     ("processBlock", processor_text[
