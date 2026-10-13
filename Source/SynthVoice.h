@@ -77,6 +77,7 @@ private:
     int lfoUpdateCounter = 0;
     static constexpr int controlUpdateInterval = 8;
     float heldPitchModSemitones = 0.0f;
+    double heldFrequency = 440.0;
     float heldCutoff = 3000.0f;
     float heldResonance = 0.7071f;
     float heldLevelMod = 1.0f;
