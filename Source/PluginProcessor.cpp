@@ -345,6 +345,7 @@ void FlowerStandaloneAudioProcessor::resetFlowerState (
     flowerAnchorsInitialised = false;
     flowerPhase = { 0.0f, 0.25f, 0.5f, 0.75f };
     flowerAnchor = { 0.0f, 0.25f, 0.5f, 0.75f };
+    flowerGrainDirection = { 1.0f, 1.0f, 1.0f, 1.0f };
     flowerRepeatCounter = { 0, 0, 0, 0 };
     flowerRandomState = 0x514D4959u;
     flowerLoopLengthSamples.store (0, std::memory_order_relaxed);
@@ -641,10 +642,9 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
             64.0f, static_cast<float> (juce::jmax (64, loopLength)),
             sizeSeconds * static_cast<float> (currentSampleRate));
         const float pitchRatio = std::pow (2.0f, pitch / 12.0f);
-        const float direction = reverse ? -1.0f : 1.0f;
+        const float requestedDirection = reverse ? -1.0f : 1.0f;
         const int repeats = 1 + juce::roundToInt (holdAmount * 15.0f);
         const float centreSample = position * static_cast<float> (loopLength - 1);
-        const float grainTravel = direction * grainSamples * pitchRatio;
 
         if (! flowerAnchorsInitialised)
         {
@@ -652,6 +652,10 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
             {
                 const float scatter = nextFlowerRandomBipolar()
                                     * spread * 0.5f * static_cast<float> (loopLength);
+                flowerGrainDirection[static_cast<size_t> (grain)] =
+                    requestedDirection;
+                const float grainTravel =
+                    requestedDirection * grainSamples * pitchRatio;
                 flowerAnchor[static_cast<size_t> (grain)] =
                     wrapPosition (
                         centreSample + scatter - 0.5f * grainTravel, loopLength);
@@ -671,9 +675,11 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
             const float window =
                 std::sin (juce::MathConstants<float>::pi * phaseValue);
             const float weight = window * window;
+            const float grainDirection =
+                flowerGrainDirection[static_cast<size_t> (grain)];
             const float readPos =
                 flowerAnchor[static_cast<size_t> (grain)]
-                + direction * phaseValue * grainSamples * pitchRatio;
+                + grainDirection * phaseValue * grainSamples * pitchRatio;
 
             wetL += readLinear (loopL, readPos) * weight;
             wetR += readLinear (loopR, readPos) * weight;
@@ -698,6 +704,10 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
                     const float scatter = nextFlowerRandomBipolar()
                                         * spread * 0.5f
                                         * static_cast<float> (loopLength);
+                    flowerGrainDirection[static_cast<size_t> (grain)] =
+                        requestedDirection;
+                    const float grainTravel =
+                        requestedDirection * grainSamples * pitchRatio;
                     flowerAnchor[static_cast<size_t> (grain)] =
                         wrapPosition (
                             centreSample + scatter - 0.5f * grainTravel,
