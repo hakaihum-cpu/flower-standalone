@@ -2464,9 +2464,13 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     midiChannel = processor.getConfiguredMidiChannel();
     audioBufferMode = processor.getAudioBufferMode();
     dotMode = processor.getConfiguredDotMode();
+    synthMode = processor.getConfiguredSynthMode();
     cloudsEnabled = processor.getConfiguredCloudsEnabled();
+    plaitsReverbEnabled = processor.getPlaitsReverbEnabled();
     performancePad.setDotMode (dotMode);
+    performancePad.setSynthMode (synthMode);
     performancePad.setCloudsEnabled (cloudsEnabled);
+    performancePad.setPlaitsReverbEnabled (plaitsReverbEnabled);
     refreshAudioBufferStatus();
     if (audioBufferMode != 0)
         applyAudioBufferMode (audioBufferMode);
@@ -2476,6 +2480,7 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     configScreen.setValues (
         rootClass, scaleIndex, delayEnabled, yEffectDreamy, midiChannel,
         audioBufferMode, dotMode, makeAudioBufferStatus());
+    configScreen.setSynthMode (synthMode);
 
     performancePad.onPadChanged =
         [this] (float x, float y, float speed, float horizontalDirection, bool active)
@@ -2523,6 +2528,18 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             performancePad.setCloudsEnabled (cloudsEnabled);
         };
 
+    performancePad.onPlaitsReverbRequested =
+        [this]
+        {
+            if (configVisible || carnivalVisible || synthMode != 1)
+                return;
+
+            plaitsReverbEnabled = ! plaitsReverbEnabled;
+            processor.setPlaitsReverbEnabled (plaitsReverbEnabled);
+            performancePad.setPlaitsReverbEnabled (
+                plaitsReverbEnabled);
+        };
+
     configScreen.onRootChanged =
         [this] (int value)
         {
@@ -2554,6 +2571,15 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             processor.setConfiguredYEffectDreamy (yEffectDreamy);
             performancePad.setEffectState (
                 arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
+        };
+
+    configScreen.onSynthModeChanged =
+        [this] (int mode)
+        {
+            synthMode = juce::jlimit (0, 1, mode);
+            processor.setConfiguredSynthMode (synthMode);
+            performancePad.setSynthMode (synthMode);
+            configScreen.setSynthMode (synthMode);
         };
 
     configScreen.onMidiChannelChanged =
@@ -2654,7 +2680,9 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     processor.setPerformanceGranularEnabled (granularEnabled);
     processor.setPerformanceDreamyMode (yEffectDreamy);
     processor.setConfiguredMidiChannel (midiChannel);
+    processor.setConfiguredSynthMode (synthMode);
     processor.setConfiguredCloudsEnabled (cloudsEnabled);
+    processor.setPlaitsReverbEnabled (plaitsReverbEnabled);
 
     startTimer (40);
     grabKeyboardFocus();
@@ -2900,6 +2928,7 @@ void FlowerStandaloneAudioProcessorEditor::toggleConfig()
             audioBufferMode,
             dotMode,
             makeAudioBufferStatus());
+        configScreen.setSynthMode (synthMode);
 
         // SELECT-opened CONFIG must use the exact same fullscreen bounds as
         // the performance surface. The CONFIG UI itself is authored in a
@@ -3117,9 +3146,52 @@ void FlowerStandaloneAudioProcessorEditor::timerCallback()
         performancePad.setCloudsEnabled (cloudsEnabled);
     }
 
+    if (const int request =
+            processor.consumeMidiSynthModeConfigRequest();
+        request >= 0)
+    {
+        synthMode = juce::jlimit (0, 1, request);
+        processor.setConfiguredSynthMode (synthMode);
+        performancePad.setSynthMode (synthMode);
+        configScreen.setSynthMode (synthMode);
+        midiConfigChanged = true;
+    }
+
+    const int synthModeToggleCount =
+        processor.consumeMidiSynthModeToggleCount();
+    if ((synthModeToggleCount & 1) != 0)
+    {
+        synthMode = 1 - synthMode;
+        processor.setConfiguredSynthMode (synthMode);
+        performancePad.setSynthMode (synthMode);
+        configScreen.setSynthMode (synthMode);
+        midiConfigChanged = true;
+    }
+
+    if (const int request =
+            processor.consumeMidiPlaitsReverbConfigRequest();
+        request >= 0)
+    {
+        plaitsReverbEnabled = request != 0;
+        processor.setPlaitsReverbEnabled (plaitsReverbEnabled);
+        performancePad.setPlaitsReverbEnabled (
+            plaitsReverbEnabled);
+    }
+
+    const int plaitsReverbToggleCount =
+        processor.consumeMidiPlaitsReverbToggleCount();
+    if ((plaitsReverbToggleCount & 1) != 0)
+    {
+        plaitsReverbEnabled = ! plaitsReverbEnabled;
+        processor.setPlaitsReverbEnabled (plaitsReverbEnabled);
+        performancePad.setPlaitsReverbEnabled (
+            plaitsReverbEnabled);
+    }
+
     if (midiConfigChanged)
     {
         performancePad.setDotMode (dotMode);
+        performancePad.setSynthMode (synthMode);
         performancePad.setEffectState (
             arpEnabled, delayEnabled, granularEnabled, yEffectDreamy);
         configScreen.setValues (
@@ -3127,6 +3199,7 @@ void FlowerStandaloneAudioProcessorEditor::timerCallback()
             processor.getDefaultEffectsEnabled(),
             yEffectDreamy, midiChannel,
             audioBufferMode, dotMode, makeAudioBufferStatus());
+        configScreen.setSynthMode (synthMode);
         configScreen.repaint();
     }
 
@@ -3138,7 +3211,24 @@ void FlowerStandaloneAudioProcessorEditor::timerCallback()
     const bool externalDelay = processor.getPerformanceDelayEnabled();
     const bool externalYEffect = processor.getPerformanceYEffectEnabled();
     const bool externalClouds = processor.getPerformanceCloudsEnabled();
+    const int configuredSynthMode = processor.getConfiguredSynthMode();
+    const bool configuredPlaitsReverb =
+        processor.getPlaitsReverbEnabled();
     const bool externalHold = processor.getPerformanceHold();
+
+    if (configuredSynthMode != synthMode)
+    {
+        synthMode = configuredSynthMode;
+        performancePad.setSynthMode (synthMode);
+        configScreen.setSynthMode (synthMode);
+    }
+
+    if (configuredPlaitsReverb != plaitsReverbEnabled)
+    {
+        plaitsReverbEnabled = configuredPlaitsReverb;
+        performancePad.setPlaitsReverbEnabled (
+            plaitsReverbEnabled);
+    }
 
     if (externalClouds != cloudsEnabled)
     {
