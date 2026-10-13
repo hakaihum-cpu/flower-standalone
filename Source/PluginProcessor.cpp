@@ -1650,6 +1650,55 @@ void FlowerStandaloneAudioProcessor::triggerCarnivalTrack (
     voice.frequency =
         baseFrequencies[voice.instrument]
         * std::pow (2.0f, semitones / 12.0f);
+
+    const float sampleRate =
+        static_cast<float> (juce::jmax (1.0, currentSampleRate));
+
+    voice.decaySeconds =
+        voice.instrument == static_cast<int> (CarnivalInstrument::Hihat)
+            ? 0.025f + voice.decay * 0.38f
+            : voice.instrument == static_cast<int> (CarnivalInstrument::Kick)
+                ? 0.055f + voice.decay * 0.72f
+                : 0.08f + voice.decay * 1.25f;
+
+    voice.attackSeconds =
+        voice.instrument == static_cast<int> (CarnivalInstrument::Hihat)
+            ? 0.0008f
+            : voice.instrument == static_cast<int> (CarnivalInstrument::Kick)
+                ? 0.0012f
+                : voice.instrument == static_cast<int> (CarnivalInstrument::Chord)
+                    ? 0.0060f
+                    : 0.0030f;
+
+    voice.decayCoefficient = std::exp (
+        -6.0f / juce::jmax (1.0f, voice.decaySeconds * sampleRate));
+    voice.attackIncrement =
+        1.0f / juce::jmax (1.0f, voice.attackSeconds * sampleRate);
+
+    const float cutoff =
+        180.0f + std::pow (voice.filter, 2.0f) * 15500.0f;
+    voice.filterCoefficient = std::exp (
+        -2.0f * juce::MathConstants<float>::pi
+        * cutoff / sampleRate);
+
+    static constexpr int chordIntervals[6][2]
+    {
+        { 4, 7 }, { 3, 7 }, { 2, 7 },
+        { 5, 7 }, { 7, 12 }, { 12, 19 }
+    };
+    const int chord = juce::jlimit (
+        0, 5, juce::roundToInt (voice.character * 5.0f));
+    voice.chordRatio2 = std::pow (
+        2.0f, static_cast<float> (chordIntervals[chord][0]) / 12.0f);
+    voice.chordRatio3 = std::pow (
+        2.0f, static_cast<float> (chordIntervals[chord][1]) / 12.0f);
+
+    voice.modulationControlCounter = 0;
+    voice.heldLfo = 0.0f;
+    voice.heldVibrato = 1.0f;
+    const float initialPan = juce::jlimit (0.0f, 1.0f, voice.pan);
+    voice.heldGainL = std::sqrt (1.0f - initialPan);
+    voice.heldGainR = std::sqrt (initialPan);
 }
 
 void FlowerStandaloneAudioProcessor::triggerCarnivalStep (int step) noexcept
@@ -1748,71 +1797,53 @@ void FlowerStandaloneAudioProcessor::processCarnival (
             if (! voice.active)
                 continue;
 
-            const float baseDecay =
-                voice.instrument == static_cast<int> (CarnivalInstrument::Hihat)
-                    ? 0.025f + voice.decay * 0.38f
-                    : voice.instrument == static_cast<int> (CarnivalInstrument::Kick)
-                        ? 0.055f + voice.decay * 0.72f
-                        : 0.08f + voice.decay * 1.25f;
-
-            if (voice.ageSeconds >= baseDecay)
+            if (voice.ageSeconds >= voice.decaySeconds)
             {
                 voice.active = false;
                 voice.envelope = 0.0f;
                 continue;
             }
 
-            const float attackSeconds =
-                voice.instrument == static_cast<int> (
-                    CarnivalInstrument::Hihat)
-                    ? 0.0008f
-                    : voice.instrument == static_cast<int> (
-                        CarnivalInstrument::Kick)
-                        ? 0.0012f
-                        : voice.instrument == static_cast<int> (
-                            CarnivalInstrument::Chord)
-                            ? 0.0060f
-                            : 0.0030f;
-
-            if (voice.ageSeconds < attackSeconds)
+            if (voice.ageSeconds < voice.attackSeconds)
             {
-                const float attackIncrement =
-                    1.0f
-                    / juce::jmax (
-                        1.0f,
-                        attackSeconds
-                        * static_cast<float> (sampleRate));
-
                 voice.envelope =
                     juce::jmin (
                         1.0f,
-                        voice.envelope + attackIncrement);
+                        voice.envelope + voice.attackIncrement);
             }
             else
             {
-                const float decayCoefficient =
-                    std::exp (
-                        -6.0f
-                        / (baseDecay
-                           * static_cast<float> (sampleRate)));
-
-                voice.envelope *= decayCoefficient;
+                voice.envelope *= voice.decayCoefficient;
             }
 
             const float envelope = voice.envelope;
 
             const float lfoHz = 0.10f + voice.lfoRate * 15.9f;
-            const float lfo =
-                std::sin (static_cast<float> (voice.lfoPhase))
-                * voice.lfoDepth;
 
+            if (voice.modulationControlCounter <= 0)
+            {
+                voice.heldLfo =
+                    std::sin (static_cast<float> (voice.lfoPhase))
+                    * voice.lfoDepth;
+                voice.heldVibrato =
+                    std::pow (
+                        2.0f,
+                        (voice.heldLfo * 2.0f) / 12.0f);
+
+                const float heldPan = juce::jlimit (
+                    0.0f, 1.0f,
+                    voice.pan + voice.heldLfo * 0.08f);
+                voice.heldGainL = std::sqrt (1.0f - heldPan);
+                voice.heldGainR = std::sqrt (heldPan);
+                voice.modulationControlCounter = 8;
+            }
+
+            --voice.modulationControlCounter;
             voice.lfoPhase += twoPi * lfoHz / sampleRate;
             if (voice.lfoPhase >= twoPi)
                 voice.lfoPhase -= twoPi;
 
-            const float vibrato =
-                std::pow (2.0f, (lfo * 2.0f) / 12.0f);
-            float frequency = voice.frequency * vibrato;
+            float frequency = voice.frequency * voice.heldVibrato;
             float mono = 0.0f;
 
             const auto advancePhase =
@@ -1890,32 +1921,11 @@ void FlowerStandaloneAudioProcessor::processCarnival (
 
                 case static_cast<int> (CarnivalInstrument::Chord):
                 {
-                    static constexpr int intervals[6][2]
-                    {
-                        { 4, 7 },   // MAJ
-                        { 3, 7 },   // MIN
-                        { 2, 7 },   // SUS2
-                        { 5, 7 },   // SUS4
-                        { 7, 12 },  // 5TH
-                        { 12, 19 }  // OCT
-                    };
-
-                    const int chord =
-                        juce::jlimit (
-                            0, 5,
-                            juce::roundToInt (voice.character * 5.0f));
-                    const float ratio2 =
-                        std::pow (
-                            2.0f,
-                            static_cast<float> (intervals[chord][0]) / 12.0f);
-                    const float ratio3 =
-                        std::pow (
-                            2.0f,
-                            static_cast<float> (intervals[chord][1]) / 12.0f);
-
                     advancePhase (voice.phase1, frequency);
-                    advancePhase (voice.phase2, frequency * ratio2);
-                    advancePhase (voice.phase3, frequency * ratio3);
+                    advancePhase (
+                        voice.phase2, frequency * voice.chordRatio2);
+                    advancePhase (
+                        voice.phase3, frequency * voice.chordRatio3);
 
                     const float a =
                         std::sin (static_cast<float> (voice.phase1));
@@ -1988,13 +1998,7 @@ void FlowerStandaloneAudioProcessor::processCarnival (
 
             mono *= envelope * voice.volume * 0.38f;
 
-            const float cutoff =
-                180.0f
-                + std::pow (voice.filter, 2.0f) * 15500.0f;
-            const float coefficient =
-                std::exp (
-                    -2.0f * juce::MathConstants<float>::pi
-                    * cutoff / static_cast<float> (sampleRate));
+            const float coefficient = voice.filterCoefficient;
             const float filteredL =
                 (1.0f - coefficient) * mono
                 + coefficient * voice.filterStateL;
@@ -2004,13 +2008,8 @@ void FlowerStandaloneAudioProcessor::processCarnival (
             voice.filterStateL = filteredL;
             voice.filterStateR = filteredR;
 
-            const float pan =
-                juce::jlimit (0.0f, 1.0f, voice.pan + lfo * 0.08f);
-            const float gainL = std::sqrt (1.0f - pan);
-            const float gainR = std::sqrt (pan);
-
-            left += filteredL * gainL;
-            right += filteredR * gainR;
+            left += filteredL * voice.heldGainL;
+            right += filteredR * voice.heldGainR;
 
             voice.ageSeconds +=
                 1.0f / static_cast<float> (sampleRate);
