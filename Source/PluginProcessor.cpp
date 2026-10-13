@@ -98,6 +98,16 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int sampl
     synthesiser.setCurrentPlaybackSampleRate (currentSampleRate);
     cloudsEngine.prepare (currentSampleRate);
 
+    for (int i = 0; i < performanceWindowTableSize; ++i)
+    {
+        const float phase =
+            static_cast<float> (i)
+            / static_cast<float> (performanceWindowTableSize - 1);
+        performanceWindowTable[static_cast<size_t> (i)] =
+            0.5f - 0.5f * std::cos (
+                juce::MathConstants<float>::twoPi * phase);
+    }
+
     const int flowerSamples = juce::jmax (4096, juce::roundToInt (currentSampleRate * 16.0));
     flowerLoopBuffer.setSize (2, flowerSamples, false, true, false);
     flowerLoopBuffer.clear();
@@ -348,6 +358,8 @@ void FlowerStandaloneAudioProcessor::resetFlowerState (
     flowerGrainDirection = { 1.0f, 1.0f, 1.0f, 1.0f };
     flowerRepeatCounter = { 0, 0, 0, 0 };
     flowerRandomState = 0x514D4959u;
+    flowerPitchControlCounter = 0;
+    flowerPitchRatioCurrent = 1.0f;
     flowerLoopLengthSamples.store (0, std::memory_order_relaxed);
     flowerRecordingActive.store (false, std::memory_order_relaxed);
     flowerRecordProgress.store (0.0f, std::memory_order_relaxed);
@@ -375,6 +387,29 @@ float FlowerStandaloneAudioProcessor::nextFlowerRandomBipolar() noexcept
     flowerRandomState = x;
     const float unit = static_cast<float> (x & 0x00ffffffu) / static_cast<float> (0x00ffffffu);
     return unit * 2.0f - 1.0f;
+}
+
+float FlowerStandaloneAudioProcessor::performanceHannWindow (
+    float phase) const noexcept
+{
+    phase -= std::floor (phase);
+    if (phase < 0.0f)
+        phase += 1.0f;
+
+    const float position =
+        phase * static_cast<float> (performanceWindowTableSize - 1);
+    const int i0 = juce::jlimit (
+        0, performanceWindowTableSize - 1,
+        static_cast<int> (position));
+    const int i1 = juce::jmin (
+        performanceWindowTableSize - 1, i0 + 1);
+    const float fraction = position - static_cast<float> (i0);
+
+    const float a =
+        performanceWindowTable[static_cast<size_t> (i0)];
+    const float b =
+        performanceWindowTable[static_cast<size_t> (i1)];
+    return a + (b - a) * fraction;
 }
 
 void FlowerStandaloneAudioProcessor::getFlowerWaveform (
@@ -641,7 +676,14 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
         const float grainSamples = juce::jlimit (
             64.0f, static_cast<float> (juce::jmax (64, loopLength)),
             sizeSeconds * static_cast<float> (currentSampleRate));
-        const float pitchRatio = std::pow (2.0f, pitch / 12.0f);
+        if (flowerPitchControlCounter <= 0)
+        {
+            flowerPitchRatioCurrent =
+                std::pow (2.0f, pitch / 12.0f);
+            flowerPitchControlCounter = 16;
+        }
+        --flowerPitchControlCounter;
+        const float pitchRatio = flowerPitchRatioCurrent;
         const float requestedDirection = reverse ? -1.0f : 1.0f;
         const int repeats = 1 + juce::roundToInt (holdAmount * 15.0f);
         const float centreSample = position * static_cast<float> (loopLength - 1);
@@ -672,9 +714,8 @@ void FlowerStandaloneAudioProcessor::processFlower (juce::AudioBuffer<float>& bu
         for (int grain = 0; grain < activeGrains; ++grain)
         {
             auto& phaseValue = flowerPhase[static_cast<size_t> (grain)];
-            const float window =
-                std::sin (juce::MathConstants<float>::pi * phaseValue);
-            const float weight = window * window;
+            const float weight =
+                performanceHannWindow (phaseValue);
             const float grainDirection =
                 flowerGrainDirection[static_cast<size_t> (grain)];
             const float readPos =
@@ -2437,8 +2478,7 @@ void FlowerStandaloneAudioProcessor::processPerformanceDreamy (
                 const float phase =
                     localPosition / static_cast<float> (loopLength);
                 const float window =
-                    0.5f - 0.5f * std::cos (
-                        juce::MathConstants<float>::twoPi * phase);
+                    performanceHannWindow (phase);
 
                 const float readPosition =
                     static_cast<float> (loopStart) + localPosition;
