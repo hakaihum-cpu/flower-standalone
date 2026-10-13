@@ -73,8 +73,7 @@ grep -Fq 'libusb_submit_transfer' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
 grep -Fq 'libusb_handle_events_timeout_completed' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
 grep -Fq 'libusb_cancel_transfer' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
 grep -Fq 'ENGINE=LIBUSB_UAC1_HOST_ASYNC_DSP' "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp"
-grep -Fq 'ENGINE_CONFIG="+(usbDirectEnabled?"LIBUSB_UAC1_HOST":"AAUDIO")' \
-  "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'append(engineLabel())' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
 grep -Fq 'UsbDirectFormat.find(device,c.getRawDescriptors())' \
   "$ROOT/app/src/main/java/com/analoglav/amps/usb/UsbDirectEngine.java"
 grep -Fq 'findAudioControl(device,c.getRawDescriptors()' \
@@ -96,3 +95,12 @@ grep -Fq 'TARGET_DEVICE_STILL_ENUMERATED=' \
 # Native JNI symbols are defined exclusively by the selected libusb host.
 test "$(grep -c 'Java_com_analoglav_amps_usb_UsbDirectEngine_nativeRun' \
   "$ROOT/app/src/main/cpp/UsbLibusbHost.cpp")" -eq 1
+
+# Three real selectable modes, Superpowered USB path independent from AAudio.
+grep -Fq 'SuperpoweredUsbEngine.execute(this,device' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'UsbDirectEngine.execute(this,device' "$ROOT/app/src/main/java/com/analoglav/amps/MainActivity.java"
+grep -Fq 'Superpowered::AndroidUSB::onConnect' "$ROOT/app/src/main/cpp/SuperpoweredUsbEngine.cpp"
+grep -Fq 'Superpowered::AndroidUSBAudio::easyIO' "$ROOT/app/src/main/cpp/SuperpoweredUsbEngine.cpp"
+grep -Fq 'Superpowered::AndroidUSBAudio::stopIO' "$ROOT/app/src/main/cpp/SuperpoweredUsbEngine.cpp"
+grep -Fq 'GIT_TAG 7f3d2f1ec15334b2424e2a60e0af457aa3f76620' "$ROOT/app/src/main/cpp/CMakeLists.txt"
+grep -Fq 'libSuperpoweredAndroid${ANDROID_ABI}.a' "$ROOT/app/src/main/cpp/CMakeLists.txt"

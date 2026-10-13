@@ -28,6 +28,20 @@ FetchContent_Declare(amps_libusb
 FetchContent_MakeAvailable(amps_libusb)
 set_target_properties(usb-1.0 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# Superpowered private evaluation SDK 2.8.2 (2026-09-09); SDK binaries are
+# fetched from upstream at build-time, never redistributed in this repository.
+# Use AndroidUSB (actual USB host stack), not SuperpoweredAndroidAudioIO (AAudio).
+FetchContent_Declare(amps_superpowered
+  GIT_REPOSITORY https://github.com/superpoweredSDK/Low-Latency-Android-iOS-Linux-Windows-tvOS-macOS-Interactive-Audio-Platform.git
+  GIT_TAG 7f3d2f1ec15334b2424e2a60e0af457aa3f76620
+  GIT_SHALLOW FALSE
+  GIT_PROGRESS FALSE
+)
+FetchContent_MakeAvailable(amps_superpowered)
+add_library(amps_superpowered_static STATIC IMPORTED)
+set_target_properties(amps_superpowered_static PROPERTIES
+  IMPORTED_LOCATION "${amps_superpowered_SOURCE_DIR}/Superpowered/libSuperpoweredAndroid${ANDROID_ABI}.a"
+)
 # AAudio remains available solely for the explicitly selected AAudio mode.
 # UsbPcmEngine.cpp is deliberately NOT linked: its legacy USBFS JNI symbol
 # would collide with UsbLibusbHost.cpp and reintroduce old direct transport.
@@ -35,6 +49,8 @@ add_library(amps_audio SHARED
   AAudioEngine.cpp
   UsbIsoTester.cpp
   UsbLibusbHost.cpp
+  SuperpoweredUsbEngine.cpp
 )
 target_compile_options(amps_audio PRIVATE -O3 -Wall -Wextra)
-target_link_libraries(amps_audio PRIVATE aaudio log libusb::usb-1.0)
+target_include_directories(amps_audio PRIVATE "${amps_superpowered_SOURCE_DIR}/Superpowered")
+target_link_libraries(amps_audio PRIVATE aaudio log android OpenSLES libusb::usb-1.0 amps_superpowered_static)

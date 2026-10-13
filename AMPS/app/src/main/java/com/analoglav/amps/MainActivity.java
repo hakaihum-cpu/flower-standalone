@@ -24,6 +24,7 @@ import android.os.Build;
 import com.analoglav.amps.usb.UsbAudioDeviceProbe;
 import com.analoglav.amps.usb.UsbIsoTester;
 import com.analoglav.amps.usb.UsbDirectEngine;
+import com.analoglav.amps.usb.SuperpoweredUsbEngine;
 import com.analoglav.amps.usb.UsbDiagnosticStore;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -70,7 +71,7 @@ public final class MainActivity extends Activity {
   private int preset=0;
   private boolean config=false,tuningPage=false;
   private final TuningProfile tuning=new TuningProfile();
-  private String usbReport="USB NOT PROBED; DIRECT USB ENGINE NOT IMPLEMENTED";
+  private String usbReport="USB NOT PROBED";
   private String usbStatus="USB SCAN: NOT RUN";
   private String pendingDiagnosticText;
   private UsbDevice selectedUsb;
@@ -79,6 +80,8 @@ public final class MainActivity extends Activity {
   private int usbNextAction=1; // 1=descriptor, 2=usbfs ISO transfer test
   private int isoQueueDepth=3;
   private boolean usbDirectEnabled=false;
+  private int engineMode=0; // 0 AAudio, 1 libusb, 2 Superpowered USB
+  private int superpoweredBuffer=0; // 0 128fr, 1 256fr, 2 512fr
   private boolean appForeground=false;
   private String installedVersion="UNKNOWN";
   private volatile boolean directWorkerActive=false;
@@ -140,7 +143,10 @@ public final class MainActivity extends Activity {
       tuning.setValue(i,prefs.getInt("tune-"+i,0));
     bridge.setTuning(tuning);
     isoQueueDepth=Math.max(1,Math.min(4,prefs.getInt("usb-iso-depth",3)));
-    usbDirectEnabled=prefs.getBoolean("usb-direct-enabled",false);
+    engineMode=Math.max(0,Math.min(2,prefs.getInt("audio-engine-mode",
+        prefs.getBoolean("usb-direct-enabled",false)?1:0)));
+    usbDirectEnabled=engineMode!=0;
+    superpoweredBuffer=Math.max(0,Math.min(2,prefs.getInt("sp-buffer",0)));
     IntentFilter usbFilter=new IntentFilter(USB_PERMISSION);
     if(Build.VERSION.SDK_INT>=33)
       registerReceiver(usbPermissionReceiver,usbFilter,Context.RECEIVER_NOT_EXPORTED);
@@ -272,22 +278,45 @@ public final class MainActivity extends Activity {
     directGeneration++;
     directPermissionPending=false;
     UsbDirectEngine.stop();
+    SuperpoweredUsbEngine.stop();
+  }
+  private String engineLabel(){
+    return engineMode==0?"AAUDIO":engineMode==1?"LIBUSB_UAC1_HOST":"SUPERPOWERED_USB_EVAL";
+  }
+  private String directEngineStats(){
+    return engineMode==2?SuperpoweredUsbEngine.stats():UsbDirectEngine.stats();
+  }
+  private boolean directEngineRunning(){
+    return engineMode==2?SuperpoweredUsbEngine.isRunning():UsbDirectEngine.isRunning();
+  }
+  private String queueDescription(){
+    return engineMode==2?
+      new String[]{"128 FR / VERY LOW","256 FR / LOW","512 FR / MID"}[superpoweredBuffer]:
+      isoQueueDepth+" ISO URBs / DIRECTION";
+  }
+  private void changeAudioEngine(int mode){
+    if(mode==engineMode)return;
+    stopDirectWorker();
+    bridge.stop();
+    engineMode=mode;
+    usbDirectEnabled=mode!=0;
+    prefs.edit().putInt("audio-engine-mode",mode)
+        .putBoolean("usb-direct-enabled",usbDirectEnabled).apply();
+    usbStatus="ENGINE CHANGED: "+engineLabel();
+    if(usbDirectEnabled){
+      if(!directWorkerActive && !directIsoRunning)startDirectIfPossible();
+    }else if(!directWorkerActive)restartBaselineAudio();
+    else bridge.status="WAIT FOR USB RELEASE";
+    screen.invalidate();
   }
   private void chooseAudioEngine(){
-    usbDirectEnabled=!usbDirectEnabled;
-    prefs.edit().putBoolean("usb-direct-enabled",usbDirectEnabled).apply();
-    if(usbDirectEnabled){
-      bridge.stop();
-      if(directIsoRunning){
-        usbStatus="USB DIRECT: WAIT FOR USBFS TEST";
-      }else startDirectIfPossible();
-    }else{
-      stopDirectWorker();
-      usbStatus="USB DIRECT DISABLED BY USER";
-      if(!directWorkerActive)restartBaselineAudio();
-      else bridge.status="WAIT USB DIRECT RELEASE BEFORE AAUDIO";
-    }
-    screen.invalidate();
+    final String[] modes={"AAUDIO / ANDROID STANDARD",
+        "LIBUSB / DIRECT USB HOST","SUPERPOWERED / DIRECT USB (EVAL)"};
+    new AlertDialog.Builder(this).setTitle("SELECT AUDIO ENGINE")
+      .setSingleChoiceItems(modes,engineMode,(d,index)->{
+        d.dismiss();
+        changeAudioEngine(index);
+      }).setNegativeButton("CLOSE",null).show();
   }
   private UsbDevice preferredDirectDevice(){
     UsbManager manager=(UsbManager)getSystemService(Context.USB_SERVICE);
@@ -341,7 +370,10 @@ public final class MainActivity extends Activity {
     directWorkerActive=true;
     final int generation=++directGeneration;
     final UsbDevice device=selectedUsb;
-    usbStatus="USB HOST: STARTING LIBUSB ASYNC ISO";
+    final int selectedEngine=engineMode;
+    final int selectedBuffer=superpoweredBuffer;
+    final long spEpoch=SuperpoweredUsbEngine.epoch();
+    usbStatus="STARTING "+engineLabel();
     usbReport="USB_DIRECT_START_REQUESTED\n"+UsbAudioDeviceProbe.inspect(this,device);
     try{
       UsbDiagnosticStore.save(this,diagnosticReport());
@@ -352,7 +384,9 @@ public final class MainActivity extends Activity {
     new Thread(()->{
       String result;
       try{
-        result=UsbDirectEngine.execute(this,device,isoQueueDepth,bridge.dsp);
+        result=selectedEngine==2?
+            SuperpoweredUsbEngine.execute(this,device,selectedBuffer,bridge.dsp,spEpoch):
+            UsbDirectEngine.execute(this,device,isoQueueDepth,bridge.dsp);
       }catch(Throwable t){
         result="USB_DIRECT_WORKER_ERROR="+t.getClass().getSimpleName()+": "+
             t.getMessage()+"\\n";
@@ -369,7 +403,8 @@ public final class MainActivity extends Activity {
         usbReport="TARGET_USB VID="+device.getVendorId()+
             " PID="+device.getProductId()+"\nUSB_DIRECT_RESULT\n"+
             done+"\nUSB_DESCRIPTORS\n"+descriptorDetails;
-        usbStatus="USB DIRECT: "+(done.contains("USB_DIRECT_ERROR=")||
+        usbStatus="USB DIRECT: "+(done.contains("SUPERPOWERED_ERROR=")||
+            done.contains("USB_DIRECT_ERROR=")||
             done.contains("USB_DIRECT_EXCEPTION=")||
             done.contains("ERROR_CODE=-")?"UNAVAILABLE / SEE REPORT":"STOPPED / SEE REPORT");
         try{UsbDiagnosticStore.save(this,diagnosticReport());}
@@ -388,18 +423,26 @@ public final class MainActivity extends Activity {
     },"AMPS-USB-DIRECT-PCM").start();
   }
   private void chooseUsbQueueDepth(){
-    final String[] labels={
-        "1 ISO URB per direction","2 ISO URBs per direction",
-        "3 ISO URBs per direction","4 ISO URBs per direction"};
-    new AlertDialog.Builder(this).setTitle("USB DIRECT QUEUE DEPTH")
-      .setSingleChoiceItems(labels,isoQueueDepth-1,(dialog,index)->{
-        dialog.dismiss();
-        if(isoQueueDepth==index+1)return;
-        isoQueueDepth=index+1;
-        prefs.edit().putInt("usb-iso-depth",isoQueueDepth).apply();
+    final boolean sp=engineMode==2;
+    final String[] choices=sp?
+        new String[]{"128 frames (VERY LOW)","256 frames (LOW)","512 frames (MID)"}:
+        new String[]{"1 ISO URB / direction","2 ISO URBs / direction",
+            "3 ISO URBs / direction","4 ISO URBs / direction"};
+    new AlertDialog.Builder(this).setTitle(sp?"SUPERPOWERED BUFFER":"LIBUSB QUEUE DEPTH")
+      .setSingleChoiceItems(choices,sp?superpoweredBuffer:isoQueueDepth-1,(d,index)->{
+        d.dismiss();
+        if(sp){
+          if(superpoweredBuffer==index)return;
+          superpoweredBuffer=index;
+          prefs.edit().putInt("sp-buffer",index).apply();
+        }else{
+          if(isoQueueDepth==index+1)return;
+          isoQueueDepth=index+1;
+          prefs.edit().putInt("usb-iso-depth",isoQueueDepth).apply();
+        }
         if(usbDirectEnabled){
           stopDirectWorker();
-          usbStatus="USB DIRECT: RESTARTING DEPTH "+isoQueueDepth;
+          usbStatus="USB DIRECT: BUFFER RESTART REQUESTED";
           if(!directWorkerActive)startDirectIfPossible();
         }
         screen.invalidate();
@@ -603,12 +646,12 @@ public final class MainActivity extends Activity {
     s.append("GOAL: <=10ms ANALOG INPUT-TO-OUTPUT; NOT MEASURED\n");
     s.append("DIRECT USBFS ISO TEST RUN="+ranDirectIso+" / BUSY="+directIsoRunning+"\n");
     s.append("DIRECT USBFS ISO QUEUE DEPTH="+isoQueueDepth+"\n");
-    s.append("ENGINE_CONFIG="+(usbDirectEnabled?"LIBUSB_UAC1_HOST":"AAUDIO")+"\n");
+    s.append("ENGINE_CONFIG=").append(engineLabel()).append('\n');
     s.append("AAUDIO_RUNTIME_RUNNING="+bridge.aaudioRunning+"\n");
     String runtime=bridge.aaudioRunning?"AAUDIO":
-        (UsbDirectEngine.isRunning()?"LIBUSB_UAC1_HOST":"NO_ACTIVE_STREAM");
+        (directEngineRunning()?engineLabel():"NO_ACTIVE_STREAM");
     s.append("ENGINE_ACTUALLY_RUNNING="+runtime+"\n");
-    s.append("USB_DIRECT_STATS="+UsbDirectEngine.stats()+"\n");
+    s.append("USB_DIRECT_STATS="+directEngineStats()+"\n");
     s.append("USB_STATUS="+usbStatus+"\n");
     s.append("DIRECT TRANSFER IS NOT AUDIO LOOPBACK; RTT NOT MEASURED\n");
     if(!usbDirectEnabled){
@@ -678,7 +721,10 @@ public final class MainActivity extends Activity {
       case 6:a.spring=v;break; case 7:a.tremSpeed=v;break; case 8:a.tremDepth=v;break;
     }
     bridge.updateControls();
-    if(usbDirectEnabled)UsbDirectEngine.update(bridge.dsp);
+    if(usbDirectEnabled){
+      if(engineMode==2)SuperpoweredUsbEngine.update(bridge.dsp);
+      else UsbDirectEngine.update(bridge.dsp);
+    }
     screen.invalidate();
   }
   private void loadPreset(int selected){
@@ -813,20 +859,21 @@ public final class MainActivity extends Activity {
     }
     private void config(Canvas c){
       header(c);
-      title(c,usbDirectEnabled?"CONFIG / USB HOST":"CONFIG / AAUDIO",25,130);
+      title(c,"CONFIG / "+engineLabel(),25,130);
       txt(c,"APK "+shorten(installedVersion,24),440,128,10,DIM);
       if(usbDirectEnabled){
         rect(c,20,150,680,75,CASE,GOLD);
-        txt(c,"ENGINE SELECTED: USB HOST",38,174,16,GOLD);
+        txt(c,"ENGINE SELECTED: "+engineLabel(),38,174,16,GOLD);
         txt(c,shorten(usbStatus,57),38,204,15,LIT);
         rect(c,20,235,680,75,CASE,GOLD);
         txt(c,"ACTIVE AUDIO ENGINE (NATIVE)",38,259,15,GOLD);
         String active=bridge.aaudioRunning?"AAUDIO (UNEXPECTED)":
-          (UsbDirectEngine.isRunning()?"LIBUSB ASYNC PCM":"NONE / FAILED OR STOPPED");
+          (directEngineRunning()?engineLabel():"NONE / FAILED OR STOPPED");
         txt(c,active,38,290,18,bridge.aaudioRunning?Color.RED:LIT);
         rect(c,20,321,680,72,CASE,GOLD);
-        txt(c,"USB ISO QUEUE DEPTH (TAP TO CHANGE)",38,345,15,GOLD);
-        txt(c,isoQueueDepth+" URBs / DIRECTION",38,376,18,LIT);
+        txt(c,engineMode==2?"SUPERPOWERED BUFFER (TAP TO CHANGE)":
+            "USB ISO QUEUE DEPTH (TAP TO CHANGE)",38,345,15,GOLD);
+        txt(c,queueDescription(),38,376,18,LIT);
         rect(c,20,407,320,51,DARK,GOLD);
         centered(c,"USB INFO",180,440,17,LIT);
         rect(c,355,407,345,51,DARK,GOLD);
@@ -849,16 +896,16 @@ public final class MainActivity extends Activity {
         centered(c,"RESTART AUDIO",526,440,17,GOLD);
       }
       rect(c,20,468,320,38,usbDirectEnabled?GOLD:DARK,GOLD);
-      centered(c,usbDirectEnabled?"ENGINE: USB HOST":"ENGINE: AAUDIO",180,493,15,
+      centered(c,"ENGINE: "+(usbDirectEnabled?(engineMode==2?"SUPERPOWERED":"LIBUSB"):"AAUDIO"),180,493,15,
           usbDirectEnabled?DARK:LIT);
       rect(c,355,468,345,38,DARK,GOLD);
       centered(c,"USB DIAGNOSTICS >",526,493,15,LIT);
       if(usbDirectEnabled){
         txt(c,shorten(usbStatus,74),24,522,12,LIT);
-        txt(c,shorten(UsbDirectEngine.stats(),82),24,546,11,GOLD);
+        txt(c,shorten(directEngineStats(),82),24,546,11,GOLD);
         txt(c,"AAUDIO RUNTIME: "+(bridge.aaudioRunning?"ACTIVE - ERROR":"STOPPED"),24,573,16,
             bridge.aaudioRunning?Color.RED:GOLD);
-        txt(c,"USB PATH: UAC1 / LIBUSB ASYNC ISO / 48kHz",24,595,12,LIT);
+        txt(c,"USB PATH: "+(engineMode==2?"SUPERPOWERED USB EVAL":"LIBUSB UAC1 ISO"),24,595,12,LIT);
         txt(c,"USB ERRORS: "+shorten(usbReport,61),24,619,11,DIM);
         txt(c,"FULL FAILURE REASON: USB DIAGNOSTICS > VIEW RESULT",24,644,12,GOLD);
       }else{
@@ -884,17 +931,17 @@ public final class MainActivity extends Activity {
     }
     private void tuning(Canvas c){
       header(c);
-      title(c,usbDirectEnabled?"USB HOST / DIAGNOSTICS":"USB TUNING / AAUDIO",25,128);
+      title(c,usbDirectEnabled?engineLabel()+" / DIAGNOSTICS":"USB TUNING / AAUDIO",25,128);
       txt(c,shorten(usbStatus,78),25,148,12,GOLD);
       if(usbDirectEnabled){
         rect(c,20,162,680,272,CASE,GOLD);
-        txt(c,"LIBUSB UAC1 HOST - NOT AAUDIO",35,197,18,GOLD);
+        txt(c,engineLabel()+" - NOT AAUDIO",35,197,17,GOLD);
         txt(c,"iRig PRO DUO / USB HOST / 48000Hz",35,232,15,LIT);
-        txt(c,"ACTIVE: "+(UsbDirectEngine.isRunning()?"YES":"NO / TRANSFER FAILED"),35,270,16,LIT);
+        txt(c,"ACTIVE: "+(directEngineRunning()?"YES":"NO / TRANSFER FAILED"),35,270,16,LIT);
         txt(c,"AAUDIO STREAM: "+(bridge.aaudioRunning?"ACTIVE - BUG":"CLOSED"),35,310,16,
             bridge.aaudioRunning?Color.RED:GOLD);
-        txt(c,"QUEUE DEPTH: "+isoQueueDepth,35,350,16,LIT);
-        txt(c,shorten(UsbDirectEngine.stats(),85),35,397,11,DIM);
+        txt(c,"QUEUE / BUFFER: "+queueDescription(),35,350,16,LIT);
+        txt(c,shorten(directEngineStats(),85),35,397,11,DIM);
       }else{
         for(int row=0;row<TuningProfile.OPTIONS.length;row++){
           int y=162+row*70;
@@ -910,19 +957,19 @@ public final class MainActivity extends Activity {
       rect(c,20,497,320,42,DARK,GOLD);
       centered(c,"USB INFO",180,525,16,LIT);
       rect(c,355,497,345,42,DARK,GOLD);
-      centered(c,usbDirectEnabled?"USB QUEUE CONFIG":"USBFS ISO TEST",526,525,16,LIT);
+      centered(c,usbDirectEnabled?(engineMode==2?"USB BUFFER CONFIG":"USB QUEUE CONFIG"):"USBFS ISO TEST",526,525,16,LIT);
       rect(c,20,548,320,47,DARK,GOLD);
       centered(c,"VIEW USB RESULT",180,578,16,LIT);
       rect(c,355,548,345,47,DARK,GOLD);
       centered(c,"SAVE REPORT .TXT",526,578,16,LIT);
       if(usbDirectEnabled){
-        txt(c,"LIBUSB HOST    "+shorten(UsbDirectEngine.stats(),60),24,618,11,GOLD);
+        txt(c,engineLabel()+"    "+shorten(directEngineStats(),60),24,618,11,GOLD);
       }else{
         txt(c,"OUT FR "+bridge.outputFrames+" / REQ "+bridge.requestFrames+
             "    XRUN "+bridge.xruns+"    MISS "+bridge.ringStarvation,24,618,12,GOLD);
       }
       rect(c,20,628,680,31,DARK,DIM);
-      centered(c,usbDirectEnabled?"CHANGE USB QUEUE DEPTH":"RESET DEFAULTS & APPLY",
+      centered(c,usbDirectEnabled?(engineMode==2?"CHANGE USB BUFFER":"CHANGE USB QUEUE DEPTH"):"RESET DEFAULTS & APPLY",
           360,650,13,GOLD);
       rect(c,20,666,680,41,CASE,GOLD);
       centered(c,"BACK TO CONFIG",360,693,18,LIT);

@@ -324,3 +324,33 @@ Only built/verified APK and loopback measurement can establish results.
 Preflight source and invariants: AMPS/test_core.sh (existing CircleCI).
 Run exactly one manual CircleCI manual_android_build with
 run_build=true on the identified feature HEAD, after preflight.
+
+## AN-68 — 0.9.0 private USB audio transport comparison (2026-10-13)
+
+CONFIG > ENGINE displays AAudio (Android OS), libusb direct UAC1 and
+Superpowered direct USB Host in one real mode-selection dialog. Selected mode
+persists. Switching calls stop on both direct backends, closes AAudio, and
+waits for the old worker to finish before reopening the selected transport.
+No silent AAudio fallback exists in direct modes.
+
+The Superpowered USB path uses Android UsbManager permission, openDevice,
+raw USB descriptors + file descriptor -> Superpowered::AndroidUSB::onConnect
+-> AndroidUSBAudio::easyIO(48000, 24, 2, 2, bufferSize, callback).
+Callback runs the SAME AmpModel C++ AC30 DSP. stopIO/onDisconnect run before
+USB connection close. Private evaluation options: 128/256/512 frame
+Superpowered buffers; libusb's separate ISO URB depth remains 1–4.
+Active stream requires delivered PCM callbacks; failed native start shows
+SUPERPOWERED_ERROR instead of pretending AAudio playback. Existing USBFS
+ISO TEST is still a transport diagnostic, not a proven USBFS DSP engine.
+
+2026-09-09 upstream Superpowered SDK 2.8.2 is pinned to
+7f3d2f1ec15334b2424e2a60e0af457aa3f76620. The arm64 SDK static
+library is fetched at NDK configure time and is never copied into this repo.
+The vendor evaluation license is for private R&D ONLY; no public release
+without a paid license: https://superpowered.com/licensing .
+Neither libusb nor Superpowered bypass the USB host controller or assure
+working iRig playback. This revision does NOT implement analog RTT measurement;
+software callback counters and buffer values must not be called measured RTT.
+
+Status before CircleCI/real-device tests: READY FOR CI / NOT BUILT.
+Do not merge, trigger CI or claim latency gains without real evidence.
