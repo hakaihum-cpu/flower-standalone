@@ -209,7 +209,7 @@ public:
 private:
     void updateSynthParams();
     void processFlower (juce::AudioBuffer<float>& buffer);
-    void resetFlowerState() noexcept;
+    void resetFlowerState (bool clearVisualTelemetry = true) noexcept;
     float nextFlowerRandomBipolar() noexcept;
 
     void handlePerformanceMidiCC (juce::MidiBuffer& midi);
