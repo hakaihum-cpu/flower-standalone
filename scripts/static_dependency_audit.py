@@ -603,6 +603,11 @@ for realtime_region_name, realtime_region_text in [
         processor_text.find("void FlowerStandaloneAudioProcessor::processCarnival"):
         processor_text.find("bool FlowerStandaloneAudioProcessor::isPerformanceGateOpen")]),
 ]:
+    realtime_code_only = "\n".join(
+        line.split("//", 1)[0]
+        for line in realtime_region_text.splitlines()
+    )
+
     for forbidden_realtime_token in [
         "setSize (",
         "std::vector<",
@@ -610,7 +615,7 @@ for realtime_region_name, realtime_region_text in [
         "malloc(",
         "realloc(",
     ]:
-        if forbidden_realtime_token in realtime_region_text:
+        if forbidden_realtime_token in realtime_code_only:
             fail(
                 f"realtime allocation/resize token in {realtime_region_name}: "
                 + forbidden_realtime_token)
