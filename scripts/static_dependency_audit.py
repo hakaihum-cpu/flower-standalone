@@ -24,11 +24,22 @@ REQUIRED = [
     "Source/FramePack.cpp",
     "Source/FlowerTechnicalFont.h",
     "Source/FlowerDotRenderer.h",
+    "Source/FlowerCloudsEngine.h",
+    "Source/plaits/dsp/voice.h",
+    "Source/plaits/dsp/voice.cc",
+    "Source/plaits/resources.cc",
+    "Source/clouds/dsp/granular_processor.h",
+    "Source/clouds/dsp/granular_processor.cc",
+    "Source/clouds/resources.cc",
+    "Source/stmlib/dsp/dsp.h",
+    "Source/stmlib/utils/random.cc",
+    "Source/stmlib/LICENSE",
     "Source/RetroLookAndFeel.h",
     "Source/RetroLookAndFeel.cpp",
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_juce_android_gamepad_keys.py",
     "scripts/materialize_flower_video_pack.py",
+    "scripts/materialize_flower_mutable.py",
 ]
 
 FORBIDDEN_SOURCE_TOKENS = [
@@ -100,6 +111,10 @@ for required_ref in [
     "Source/FramePack.cpp",
     "Source/FlowerTechnicalFont.h",
     "Source/FlowerDotRenderer.h",
+    "Source/FlowerCloudsEngine.h",
+    "Source/plaits/dsp/voice.cc",
+    "Source/clouds/dsp/granular_processor.cc",
+    "Source/stmlib/utils/random.cc",
     "Source/PluginEditor.cpp",
     "Resources/flower_video_frames.pack",
 ]:
@@ -134,6 +149,7 @@ for required_ci in [
     "native-job-pools.txt",
     "ndk;28.1.13356709",
     'ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.1.13356709"',
+    "python3 scripts/materialize_flower_mutable.py",
 ]:
     if required_ci not in circle:
         fail(f"CircleCI build contract missing: {required_ci}")
@@ -406,6 +422,8 @@ for required_midi_config in [
     "case 89:",
     "case 90:",
     "case 91:",
+    "case 92:",
+    "case 93:",
     "midiRootConfigRequest.store",
     "midiScaleConfigRequest.store",
     "midiDefaultEffectsConfigRequest.store",
@@ -426,6 +444,8 @@ for required_midi_consume in [
     "consumeMidiUiModeConfigRequest",
     "consumeMidiYEffectModeToggleCount",
     "consumeMidiUiModeToggleCount",
+    "consumeMidiCloudsConfigRequest",
+    "consumeMidiCloudsToggleCount",
 ]:
     if required_midi_consume not in processor_header_text or required_midi_consume not in editor_text:
         fail(f"MIDI CONFIG request handoff missing: {required_midi_consume}")
@@ -483,6 +503,8 @@ for required_engine in [
     "synthesiser.renderNextBlock",
     "processFlower (buffer)",
     "processPerformanceDelay (buffer)",
+    "cloudsEngine.process",
+    "params.plaitsModel",
     "setPerformancePad",
     "setPerformanceHold",
     "setPerformanceArpEnabled",
@@ -507,10 +529,49 @@ order = [
     processor_text.find("generatePerformanceMidi (midiMessages"),
     processor_text.find("synthesiser.renderNextBlock"),
     processor_text.find("processFlower (buffer)"),
+    processor_text.find("processPerformanceDreamy (buffer)"),
     processor_text.find("processPerformanceDelay (buffer)"),
+    processor_text.find("cloudsEngine.process"),
 ]
 if any(position < 0 for position in order) or order != sorted(order):
-    fail("XY audio order must be arp MIDI -> synth -> granular -> delay")
+    fail("XY audio order must be arp MIDI -> synth -> granular -> dreamy -> delay -> clouds")
+
+process_flower_start = processor_text.find(
+    "void FlowerStandaloneAudioProcessor::processFlower")
+process_flower_end = processor_text.find(
+    "void FlowerStandaloneAudioProcessor::setPerformancePad",
+    process_flower_start)
+process_flower_text = processor_text[process_flower_start:process_flower_end]
+if "flowerLoopBuffer.clear()" in process_flower_text:
+    fail("full loop-buffer clear reintroduced on audio callback")
+
+synth_voice_text = (ROOT / "Source/SynthVoice.cpp").read_text(encoding="utf-8")
+for required_audio_guard in [
+    "plaitsModelGain",
+    "modelFadeStep",
+    "cutoffSmoothed",
+    "controlUpdateInterval",
+]:
+    if required_audio_guard not in synth_voice_text and required_audio_guard not in (ROOT / "Source/SynthVoice.h").read_text(encoding="utf-8"):
+        fail(f"audio de-click/CPU guard missing: {required_audio_guard}")
+
+clouds_text = (ROOT / "Source/FlowerCloudsEngine.h").read_text(encoding="utf-8")
+for required_clouds_guard in [
+    "wetMix < 0.0001f",
+    "smoothedX",
+    "smoothedY",
+    "0.035 * hostRate",
+]:
+    if required_clouds_guard not in clouds_text:
+        fail(f"Clouds de-click/CPU guard missing: {required_clouds_guard}")
+
+for required_mutable_anchor in [
+    "08460a69a7e1f7a81c5a2abcc7189c9a6b7208d4",
+    "e3bd7c9cc00e4364166f9905c0509b6ffd0535ec",
+    "Validated",
+]:
+    if required_mutable_anchor not in (ROOT / "scripts/materialize_flower_mutable.py").read_text(encoding="utf-8"):
+        fail(f"pinned Mutable materializer contract missing: {required_mutable_anchor}")
 
 print("[PASS] Flower XY standalone static dependency audit")
 print("[PASS] obsolete contact-sheet resource excluded from generated target")
@@ -537,7 +598,10 @@ print("[PASS] optional FULL/DOT UI mode added without audio-processor presentati
 print("[PASS] MIYAKO #204 512x384 luma / Bayer4 / amber 4-level DOT contract present")
 print("[PASS] DOT technical bitmap UI font present")
 print("[PASS] DOT CONFIG footer tap uses existing CONFIG path before XY touch handling")
-print("[PASS] MIDI CC85-91 CONFIG/mode map uses lock-free audio-to-UI handoff")
+print("[PASS] MIDI CC85-93 CONFIG/mode/CLOUDS map uses lock-free audio-to-UI handoff")
+print("[PASS] pinned MIYAKO-equivalent Plaits/Clouds/stmlib source materialized")
+print("[PASS] Plaits model-switch, Dreamy wet, Clouds wet/XY and synth control de-click guards present")
+print("[PASS] no full FLOWER loop-buffer memset remains on audio callback")
 print("[PASS] all CONFIG setValues call sites use the 8-argument current signature")
-print("[PASS] XY audio order: arp MIDI -> synth -> granular -> delay")
+print("[PASS] XY audio order: arp MIDI -> synth -> granular -> dreamy -> delay -> clouds")
 print("[PASS] CircleCI native parallelism controls present")
