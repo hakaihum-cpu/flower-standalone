@@ -121,6 +121,8 @@ void FlowerStandaloneAudioProcessor::prepareToPlay (double sampleRate, int sampl
     performanceDreamyPlaybackSpeed = { 1.3348398f, 2.0f };
     performanceDreamyVoiceActive = { false, false };
     performanceDreamyRandomState = 0x44524541u;
+    performanceDreamyWetSmoothed.reset (currentSampleRate, 0.025);
+    performanceDreamyWetSmoothed.setCurrentAndTargetValue (0.0f);
 
     performanceDelaySamplesSmoothed.reset (currentSampleRate, 0.035);
     performanceDelayFeedbackSmoothed.reset (currentSampleRate, 0.025);
@@ -2300,6 +2302,24 @@ void FlowerStandaloneAudioProcessor::processPerformanceDreamy (
     const float y = performanceY.load (std::memory_order_relaxed);
     const float bpm = performanceBpm.load (std::memory_order_relaxed);
 
+    const int minimumHistory =
+        juce::roundToInt (currentSampleRate * 0.75);
+    const bool historyReady =
+        performanceDreamySamplesFilled > minimumHistory;
+    const float targetWet =
+        enabled && historyReady
+            ? juce::jlimit (0.20f, 0.58f, 0.24f + y * 0.34f)
+            : 0.0f;
+    performanceDreamyWetSmoothed.setTargetValue (targetWet);
+
+    const float beatSamples =
+        static_cast<float> (currentSampleRate)
+        * 60.0f / juce::jmax (50.0f, bpm);
+    const int baseLoopLength = juce::jlimit (
+        juce::roundToInt (currentSampleRate * 0.070),
+        juce::roundToInt (currentSampleRate * 0.340),
+        juce::roundToInt (beatSamples / (2.0f + y * 2.0f)));
+
     const auto wrapIndex = [capacity] (int position)
     {
         while (position < 0)
@@ -2328,19 +2348,12 @@ void FlowerStandaloneAudioProcessor::processPerformanceDreamy (
         float dreamyWet[2] { 0.0f, 0.0f };
         float totalWindow = 0.0f;
 
-        const int minimumHistory =
-            juce::roundToInt (currentSampleRate * 0.75);
+        const float wetMix = performanceDreamyWetSmoothed.getNextValue();
+        const bool renderWet =
+            historyReady && (enabled || wetMix > 0.0001f);
 
-        if (enabled && performanceDreamySamplesFilled > minimumHistory)
+        if (renderWet)
         {
-            const float beatSamples =
-                static_cast<float> (currentSampleRate)
-                * 60.0f / juce::jmax (50.0f, bpm);
-            const int baseLoopLength = juce::jlimit (
-                juce::roundToInt (currentSampleRate * 0.070),
-                juce::roundToInt (currentSampleRate * 0.340),
-                juce::roundToInt (beatSamples / (2.0f + y * 2.0f)));
-
             for (int voice = 0; voice < performanceDreamyVoiceCount; ++voice)
             {
                 auto& active = performanceDreamyVoiceActive[static_cast<size_t> (voice)];
@@ -2425,8 +2438,6 @@ void FlowerStandaloneAudioProcessor::processPerformanceDreamy (
 
             if (totalWindow > 0.0001f)
             {
-                const float wetMix =
-                    juce::jlimit (0.20f, 0.58f, 0.24f + y * 0.34f);
                 const float drift =
                     0.90f + x * 0.10f;
 
@@ -2440,7 +2451,7 @@ void FlowerStandaloneAudioProcessor::processPerformanceDreamy (
                 }
             }
         }
-        else
+        else if (wetMix <= 0.0001f)
         {
             performanceDreamyVoiceActive = { false, false };
         }
