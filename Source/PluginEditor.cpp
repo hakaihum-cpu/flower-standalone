@@ -911,9 +911,9 @@ void PerformancePadComponent::notify()
 
 juce::Rectangle<int> ConfigScreenComponent::getRowBounds (int row) const
 {
-    constexpr int rowStep = 49;
+    constexpr int rowStep = 44;
     constexpr int firstY = 150;
-    return { 72, firstY + row * rowStep, 576, 40 };
+    return { 72, firstY + row * rowStep, 576, 36 };
 }
 
 juce::Rectangle<int> ConfigScreenComponent::getCloseBounds() const
@@ -941,11 +941,17 @@ void ConfigScreenComponent::setValues (int newRootKey,
     repaint();
 }
 
+void ConfigScreenComponent::setSynthMode (int mode)
+{
+    synthMode = juce::jlimit (0, 1, mode);
+    repaint();
+}
+
 void ConfigScreenComponent::moveSelection (int delta)
 {
-    selectedRow = (selectedRow + delta) % 8;
+    selectedRow = (selectedRow + delta) % 9;
     if (selectedRow < 0)
-        selectedRow += 8;
+        selectedRow += 9;
     repaint();
 }
 
@@ -983,6 +989,12 @@ void ConfigScreenComponent::adjustSelected (int delta)
     }
     else if (selectedRow == 4)
     {
+        synthMode = 1 - synthMode;
+        if (onSynthModeChanged)
+            onSynthModeChanged (synthMode);
+    }
+    else if (selectedRow == 5)
+    {
         midiChannel += delta;
         while (midiChannel < 1)
             midiChannel += 16;
@@ -992,7 +1004,7 @@ void ConfigScreenComponent::adjustSelected (int delta)
         if (onMidiChannelChanged)
             onMidiChannelChanged (midiChannel);
     }
-    else if (selectedRow == 5)
+    else if (selectedRow == 6)
     {
         audioBufferMode = (audioBufferMode + delta) % 12;
         if (audioBufferMode < 0)
@@ -1001,7 +1013,7 @@ void ConfigScreenComponent::adjustSelected (int delta)
         if (onAudioBufferChanged)
             onAudioBufferChanged (audioBufferMode);
     }
-    else if (selectedRow == 6)
+    else if (selectedRow == 7)
     {
         dotMode = ! dotMode;
         if (onDotModeChanged)
@@ -1017,7 +1029,7 @@ void ConfigScreenComponent::adjustSelected (int delta)
 
 void ConfigScreenComponent::activateSelected()
 {
-    if (selectedRow == 7)
+    if (selectedRow == 8)
     {
         if (onCarnivalRequested)
             onCarnivalRequested();
@@ -1051,15 +1063,20 @@ void ConfigScreenComponent::notifyCurrentRow()
     }
     else if (selectedRow == 4)
     {
+        if (onSynthModeChanged)
+            onSynthModeChanged (synthMode);
+    }
+    else if (selectedRow == 5)
+    {
         if (onMidiChannelChanged)
             onMidiChannelChanged (midiChannel);
     }
-    else if (selectedRow == 5)
+    else if (selectedRow == 6)
     {
         if (onAudioBufferChanged)
             onAudioBufferChanged (audioBufferMode);
     }
-    else if (selectedRow == 6)
+    else if (selectedRow == 7)
     {
         if (onDotModeChanged)
             onDotModeChanged (dotMode);
@@ -1097,7 +1114,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
             {72, 112, 576, 26}, mid,
             juce::Justification::centredLeft);
 
-        for (int row = 0; row < 8; ++row)
+        for (int row = 0; row < 9; ++row)
         {
             const auto bounds = getRowBounds (row);
             const bool selected = row == selectedRow;
@@ -1110,9 +1127,10 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
             else if (row == 1) { label = "SCALE"; value = scaleNames[scaleIndex]; }
             else if (row == 2) { label = "DEFAULT EFFECT"; value = effectsEnabled ? "ON" : "OFF"; }
             else if (row == 3) { label = "Y EFFECT"; value = yEffectDreamy ? "DREAMY" : "GRANULAR"; }
-            else if (row == 4) { label = "MIDI CHANNEL"; value = juce::String (midiChannel); }
-            else if (row == 5) { label = "AUDIO BUFFER"; value = audioBufferNames[audioBufferMode]; }
-            else if (row == 6) { label = "UI MODE"; value = uiModeNames[dotMode ? 1 : 0]; }
+            else if (row == 4) { label = "SYNTH MODE"; value = synthModeNames[synthMode]; }
+            else if (row == 5) { label = "MIDI CHANNEL"; value = juce::String (midiChannel); }
+            else if (row == 6) { label = "AUDIO BUFFER"; value = audioBufferNames[audioBufferMode]; }
+            else if (row == 7) { label = "UI MODE"; value = uiModeNames[dotMode ? 1 : 0]; }
             else { label = "CARNIVAL"; value = "ENTER"; }
 
             FlowerTechnicalFont::draw (
@@ -1155,7 +1173,7 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
                 72, 124, 576, 28,
                 juce::Justification::centredLeft);
 
-    for (int row = 0; row < 8; ++row)
+    for (int row = 0; row < 9; ++row)
     {
         const auto bounds = getRowBounds (row);
         const bool selected = row == selectedRow;
@@ -1195,15 +1213,20 @@ void ConfigScreenComponent::paint (juce::Graphics& g)
         }
         else if (row == 4)
         {
+            label = "SYNTH MODE";
+            value = synthModeNames[synthMode];
+        }
+        else if (row == 5)
+        {
             label = "MIDI CHANNEL";
             value = juce::String (midiChannel);
         }
-        else if (row == 5)
+        else if (row == 6)
         {
             label = "AUDIO BUFFER";
             value = audioBufferNames[audioBufferMode];
         }
-        else if (row == 6)
+        else if (row == 7)
         {
             label = "UI MODE";
             value = uiModeNames[dotMode ? 1 : 0];
