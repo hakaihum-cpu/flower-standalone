@@ -46,6 +46,8 @@ void SineVoice::startNote (int midiNoteNumber,
                            int currentPitchWheelPosition)
 {
     baseFrequencyHz = juce::MidiMessage::getMidiNoteInHertz (midiNoteNumber);
+    heldFrequency = baseFrequencyHz;
+    heldPitchModSemitones = pitchWheelToSemitones (currentPitchWheelPosition);
     currentMidiNote = midiNoteNumber;
 #if JUCE_ANDROID
     plaitsGate = true;
@@ -268,30 +270,24 @@ void SineVoice::renderNextBlock (juce::AudioBuffer<float>& outputBuffer,
     {
         nextLfo();
 
-        const float pitchModSemitones = pitchWheelSemitones + modulationFor (LfoTarget::Pitch) * 2.0f;
-        const double frequency = baseFrequencyHz * std::pow (2.0, pitchModSemitones / 12.0);
-
-        float oscillatorSample = 0.0f;
-#if JUCE_ANDROID
-        oscillatorSample = renderPlaitsOscillator (
-            static_cast<float> (currentMidiNote) + pitchModSemitones);
-#else
-        oscillatorSample = std::sin (
-            juce::MathConstants<float>::twoPi * static_cast<float> (phase));
-        phase = wrap01 (phase + frequency / sampleRateHz);
-#endif
-
         const float baseCutoff = cutoffSmoothed.getNextValue();
         const float baseResonance = resonanceSmoothed.getNextValue();
         const float baseLevel = levelSmoothed.getNextValue();
 
-        // JUCE's TPT cutoff setter recalculates coefficients.  Doing that for
-        // every sample on every active voice is needlessly expensive on the
-        // Android target and can contribute to callback underruns.  LFO/XY
-        // controls are low-rate, so an 8-sample control interval is still
-        // >5 kHz at 44.1 kHz while substantially reducing coefficient work.
+        // Pitch, filter coefficients and slow modulation do not need
+        // transcendental recalculation on every sample.  An 8-sample control
+        // interval remains above 5 kHz at 44.1 kHz.
         if (controlUpdateCounter <= 0)
         {
+            heldPitchModSemitones =
+                pitchWheelSemitones
+                + modulationFor (LfoTarget::Pitch) * 2.0f;
+            heldFrequency =
+                baseFrequencyHz
+                * std::pow (
+                    2.0,
+                    static_cast<double> (heldPitchModSemitones) / 12.0);
+
             heldCutoff = juce::jlimit (
                 20.0f,
                 static_cast<float> (sampleRateHz * 0.45),
@@ -311,6 +307,19 @@ void SineVoice::renderNextBlock (juce::AudioBuffer<float>& outputBuffer,
             filter.setResonance (heldResonance);
             controlUpdateCounter = controlUpdateInterval;
         }
+
+        float oscillatorSample = 0.0f;
+#if JUCE_ANDROID
+        oscillatorSample = renderPlaitsOscillator (
+            static_cast<float> (currentMidiNote)
+            + heldPitchModSemitones);
+#else
+        oscillatorSample = std::sin (
+            juce::MathConstants<float>::twoPi
+            * static_cast<float> (phase));
+        phase = wrap01 (phase + heldFrequency / sampleRateHz);
+#endif
+
         --controlUpdateCounter;
 
         float sample = filter.processSample (0, oscillatorSample);
