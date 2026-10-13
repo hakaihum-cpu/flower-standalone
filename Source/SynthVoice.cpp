@@ -30,6 +30,14 @@ void SineVoice::setCurrentPlaybackSampleRate (double newRate)
 
     adsr.setSampleRate (sampleRateHz);
     deClick.reset (sampleRateHz, 0.003);
+
+    cutoffSmoothed.reset (sampleRateHz, 0.018);
+    resonanceSmoothed.reset (sampleRateHz, 0.018);
+    levelSmoothed.reset (sampleRateHz, 0.012);
+    cutoffSmoothed.setCurrentAndTargetValue (params.cutoff);
+    resonanceSmoothed.setCurrentAndTargetValue (params.resonance);
+    levelSmoothed.setCurrentAndTargetValue (params.level);
+    controlUpdateCounter = 0;
 }
 
 void SineVoice::startNote (int midiNoteNumber,
@@ -61,6 +69,7 @@ void SineVoice::startNote (int midiNoteNumber,
     phase = 0.0;
     lfoPhase = 0.0;
     lfoCurrent = 0.0f;
+    controlUpdateCounter = 0;
     filter.reset();
     adsr.noteOn();
     deClick.setCurrentAndTargetValue (0.0f);
@@ -95,6 +104,13 @@ void SineVoice::setParams (const Params& newParams) noexcept
     adsrParams.sustain = params.sustain;
     adsrParams.release = params.release;
     adsr.setParameters (adsrParams);
+
+    cutoffSmoothed.setTargetValue (
+        juce::jlimit (20.0f, 20000.0f, params.cutoff));
+    resonanceSmoothed.setTargetValue (
+        juce::jlimit (0.1f, 12.0f, params.resonance));
+    levelSmoothed.setTargetValue (
+        juce::jlimit (0.0f, 1.0f, params.level));
 }
 
 float SineVoice::nextLfo() noexcept
@@ -251,17 +267,44 @@ void SineVoice::renderNextBlock (juce::AudioBuffer<float>& outputBuffer,
         phase = wrap01 (phase + frequency / sampleRateHz);
 #endif
 
-        float cutoff = params.cutoff * std::pow (2.0f, modulationFor (LfoTarget::Cutoff) * 3.0f);
-        cutoff = juce::jlimit (20.0f, static_cast<float> (sampleRateHz * 0.45), cutoff);
-        const float resonance = juce::jlimit (0.1f, 12.0f,
-                                              params.resonance + modulationFor (LfoTarget::Resonance) * 5.0f);
-        filter.setCutoffFrequency (cutoff);
-        filter.setResonance (resonance);
+        const float baseCutoff = cutoffSmoothed.getNextValue();
+        const float baseResonance = resonanceSmoothed.getNextValue();
+        const float baseLevel = levelSmoothed.getNextValue();
+
+        // JUCE's TPT cutoff setter recalculates coefficients.  Doing that for
+        // every sample on every active voice is needlessly expensive on the
+        // Android target and can contribute to callback underruns.  LFO/XY
+        // controls are low-rate, so an 8-sample control interval is still
+        // >5 kHz at 44.1 kHz while substantially reducing coefficient work.
+        if (controlUpdateCounter <= 0)
+        {
+            heldCutoff = juce::jlimit (
+                20.0f,
+                static_cast<float> (sampleRateHz * 0.45),
+                baseCutoff
+                    * std::pow (
+                        2.0f,
+                        modulationFor (LfoTarget::Cutoff) * 3.0f));
+            heldResonance = juce::jlimit (
+                0.1f, 12.0f,
+                baseResonance
+                    + modulationFor (LfoTarget::Resonance) * 5.0f);
+            heldLevelMod = juce::jlimit (
+                0.0f, 2.0f,
+                1.0f + modulationFor (LfoTarget::Level) * 0.90f);
+
+            filter.setCutoffFrequency (heldCutoff);
+            filter.setResonance (heldResonance);
+            controlUpdateCounter = controlUpdateInterval;
+        }
+        --controlUpdateCounter;
 
         float sample = filter.processSample (0, oscillatorSample);
-        const float levelMod = juce::jlimit (0.0f, 2.0f,
-                                             1.0f + modulationFor (LfoTarget::Level) * 0.90f);
-        sample *= adsr.getNextSample() * velocityGain * params.level * levelMod * deClick.getNextValue();
+        sample *= adsr.getNextSample()
+               * velocityGain
+               * baseLevel
+               * heldLevelMod
+               * deClick.getNextValue();
 
         left[startSample + i] += sample;
         if (right != nullptr)
