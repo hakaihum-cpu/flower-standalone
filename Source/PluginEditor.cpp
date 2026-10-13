@@ -43,6 +43,11 @@ constexpr const char* uiModeNames[]
     "FULL", "DOT"
 };
 
+constexpr const char* synthModeNames[]
+{
+    "SINE", "PLAITS"
+};
+
 constexpr float audioBufferBursts[]
 {
     0.0f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f,
@@ -241,6 +246,25 @@ void PerformancePadComponent::setCloudsEnabled (bool enabled)
     repaint();
 }
 
+void PerformancePadComponent::setSynthMode (int mode)
+{
+    mode = juce::jlimit (0, 1, mode);
+    if (synthMode == mode)
+        return;
+
+    synthMode = mode;
+    repaint();
+}
+
+void PerformancePadComponent::setPlaitsReverbEnabled (bool enabled)
+{
+    if (plaitsReverbEnabled == enabled)
+        return;
+
+    plaitsReverbEnabled = enabled;
+    repaint();
+}
+
 juce::Rectangle<int> PerformancePadComponent::getCloudsButtonBounds() const noexcept
 {
     const float unit = juce::jmax (
@@ -248,9 +272,22 @@ juce::Rectangle<int> PerformancePadComponent::getCloudsButtonBounds() const noex
 
     return {
         juce::roundToInt (12.0f * unit),
-        getHeight() - juce::roundToInt (88.0f * unit),
-        juce::roundToInt (132.0f * unit),
-        juce::roundToInt (34.0f * unit)
+        getHeight() - juce::roundToInt (96.0f * unit),
+        juce::roundToInt (116.0f * unit),
+        juce::roundToInt (22.0f * unit)
+    };
+}
+
+juce::Rectangle<int> PerformancePadComponent::getPlaitsReverbButtonBounds() const noexcept
+{
+    const float unit = juce::jmax (
+        0.60f, juce::jmin (getWidth(), getHeight()) / 720.0f);
+
+    return {
+        juce::roundToInt (12.0f * unit),
+        getHeight() - juce::roundToInt (70.0f * unit),
+        juce::roundToInt (116.0f * unit),
+        juce::roundToInt (22.0f * unit)
     };
 }
 
@@ -260,22 +297,85 @@ void PerformancePadComponent::drawCloudsButton (juce::Graphics& g)
     if (bounds.isEmpty())
         return;
 
-    const auto dark = juce::Colour (0xff100e08);
-    const auto amber = juce::Colour (0xffffdb46);
-    const auto bright = juce::Colour (0xffffe57a);
+    const float unit = juce::jmax (
+        0.60f, juce::jmin (getWidth(), getHeight()) / 720.0f);
+    const int indicator = juce::jmax (5, juce::roundToInt (7.0f * unit));
+    const auto indicatorBounds = juce::Rectangle<int> (
+        bounds.getX(),
+        bounds.getCentreY() - indicator / 2,
+        indicator, indicator);
+    const auto textBounds = bounds.withTrimmedLeft (
+        indicator + juce::roundToInt (7.0f * unit));
 
-    g.setColour (cloudsEnabled
-        ? amber.withAlpha (0.94f)
-        : dark.withAlpha (0.88f));
-    g.fillRect (bounds);
+    g.setColour (juce::Colours::white.withAlpha (
+        cloudsEnabled ? 0.88f : 0.48f));
+    if (cloudsEnabled)
+        g.fillRect (indicatorBounds);
+    else
+        g.drawRect (indicatorBounds, 1);
 
-    g.setColour (cloudsEnabled ? bright : amber);
-    g.drawRect (bounds, cloudsEnabled ? 2 : 1);
+    if (dotMode)
+    {
+        FlowerTechnicalFont::draw (
+            g, "CLOUDS", textBounds,
+            juce::Colours::white.withAlpha (
+                cloudsEnabled ? 0.90f : 0.66f),
+            juce::Justification::centredLeft);
+    }
+    else
+    {
+        g.setFont (juce::FontOptions (12.0f * unit));
+        g.setColour (juce::Colours::white.withAlpha (
+            cloudsEnabled ? 0.90f : 0.66f));
+        g.drawText (
+            "CLOUDS", textBounds,
+            juce::Justification::centredLeft);
+    }
+}
 
-    FlowerTechnicalFont::draw (
-        g, "CLOUDS", bounds.reduced (5, 3),
-        cloudsEnabled ? dark : amber,
-        juce::Justification::centred);
+void PerformancePadComponent::drawPlaitsReverbButton (juce::Graphics& g)
+{
+    if (synthMode != 1)
+        return;
+
+    const auto bounds = getPlaitsReverbButtonBounds();
+    if (bounds.isEmpty())
+        return;
+
+    const float unit = juce::jmax (
+        0.60f, juce::jmin (getWidth(), getHeight()) / 720.0f);
+    const int indicator = juce::jmax (5, juce::roundToInt (7.0f * unit));
+    const auto indicatorBounds = juce::Rectangle<int> (
+        bounds.getX(),
+        bounds.getCentreY() - indicator / 2,
+        indicator, indicator);
+    const auto textBounds = bounds.withTrimmedLeft (
+        indicator + juce::roundToInt (7.0f * unit));
+
+    g.setColour (juce::Colours::white.withAlpha (
+        plaitsReverbEnabled ? 0.88f : 0.48f));
+    if (plaitsReverbEnabled)
+        g.fillRect (indicatorBounds);
+    else
+        g.drawRect (indicatorBounds, 1);
+
+    if (dotMode)
+    {
+        FlowerTechnicalFont::draw (
+            g, "REVERB", textBounds,
+            juce::Colours::white.withAlpha (
+                plaitsReverbEnabled ? 0.90f : 0.66f),
+            juce::Justification::centredLeft);
+    }
+    else
+    {
+        g.setFont (juce::FontOptions (12.0f * unit));
+        g.setColour (juce::Colours::white.withAlpha (
+            plaitsReverbEnabled ? 0.90f : 0.66f));
+        g.drawText (
+            "REVERB", textBounds,
+            juce::Justification::centredLeft);
+    }
 }
 
 void PerformancePadComponent::updateVisualTimer()
@@ -385,6 +485,7 @@ void PerformancePadComponent::paint (juce::Graphics& g)
             dreamyIndicatorMode, bpmDisplayValue, bpmDisplayVisible);
 
         drawCloudsButton (g);
+        drawPlaitsReverbButton (g);
 
         if (physicalPointerVisible)
         {
@@ -618,6 +719,7 @@ void PerformancePadComponent::paint (juce::Graphics& g)
     }
 
     drawCloudsButton (g);
+    drawPlaitsReverbButton (g);
 
     if (physicalPointerVisible)
     {
@@ -645,6 +747,14 @@ void PerformancePadComponent::mouseDown (const juce::MouseEvent& e)
     {
         if (onCloudsRequested)
             onCloudsRequested();
+        return;
+    }
+
+    if (synthMode == 1
+        && getPlaitsReverbButtonBounds().contains (e.getPosition()))
+    {
+        if (onPlaitsReverbRequested)
+            onPlaitsReverbRequested();
         return;
     }
 
