@@ -255,6 +255,7 @@ private:
     bool flowerAnchorsInitialised = false;
     std::array<float, flowerGrainCount> flowerPhase { 0.0f, 0.25f, 0.5f, 0.75f };
     std::array<float, flowerGrainCount> flowerAnchor { 0.0f, 0.25f, 0.5f, 0.75f };
+    std::array<float, flowerGrainCount> flowerGrainDirection { 1.0f, 1.0f, 1.0f, 1.0f };
     std::array<int, flowerGrainCount> flowerRepeatCounter { 0, 0, 0, 0 };
     uint32_t flowerRandomState = 0x514D4959u;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> flowerPositionSmoothed;
