@@ -551,13 +551,19 @@ if "for (auto& bin : flowerWaveform)" in process_flower_text:
     fail("waveform telemetry bulk clear reintroduced on audio callback")
 
 synth_voice_text = (ROOT / "Source/SynthVoice.cpp").read_text(encoding="utf-8")
-for required_audio_guard in [
+synth_voice_header_text = (ROOT / "Source/SynthVoice.h").read_text(encoding="utf-8")
+for required_synth_guard in [
     "plaitsModelGain",
     "modelFadeStep",
     "cutoffSmoothed",
     "controlUpdateInterval",
     "lfoUpdateCounter",
     "heldFrequency",
+]:
+    if required_synth_guard not in synth_voice_text and required_synth_guard not in synth_voice_header_text:
+        fail(f"synth de-click/CPU guard missing: {required_synth_guard}")
+
+for required_processor_audio_guard in [
     "performanceDreamyWetSmoothed",
     "flowerGrainDirection",
     "performanceWindowTable",
@@ -566,8 +572,8 @@ for required_audio_guard in [
     "filterCoefficient",
     "decayCoefficient",
 ]:
-    if required_audio_guard not in synth_voice_text and required_audio_guard not in (ROOT / "Source/SynthVoice.h").read_text(encoding="utf-8"):
-        fail(f"audio de-click/CPU guard missing: {required_audio_guard}")
+    if required_processor_audio_guard not in processor_text and required_processor_audio_guard not in processor_header_text:
+        fail(f"processor audio de-click/CPU guard missing: {required_processor_audio_guard}")
 
 clouds_text = (ROOT / "Source/FlowerCloudsEngine.h").read_text(encoding="utf-8")
 for required_clouds_guard in [
