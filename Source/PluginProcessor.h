@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include "SynthVoice.h"
+#include "PlaitsVoice.h"
 #include "FlowerCloudsEngine.h"
 
 class FlowerStandaloneAudioProcessor final : public juce::AudioProcessor
@@ -89,7 +90,9 @@ public:
     int getConfiguredMidiChannel() const noexcept;
     int getAudioBufferMode() const noexcept;
     bool getConfiguredDotMode() const noexcept;
+    int getConfiguredSynthMode() const noexcept;
     bool getConfiguredCloudsEnabled() const noexcept;
+    bool getPlaitsReverbEnabled() const noexcept;
     float getPerformanceX() const noexcept { return performanceX.load (std::memory_order_relaxed); }
     float getPerformanceY() const noexcept { return performanceY.load (std::memory_order_relaxed); }
     float getPerformanceBpm() const noexcept { return performanceBpm.load (std::memory_order_relaxed); }
@@ -105,7 +108,9 @@ public:
     void setConfiguredMidiChannel (int channel);
     void setAudioBufferMode (int mode);
     void setConfiguredDotMode (bool enabled);
+    void setConfiguredSynthMode (int mode);
     void setConfiguredCloudsEnabled (bool enabled);
+    void setPlaitsReverbEnabled (bool enabled);
 
     int consumeMidiRootConfigRequest() noexcept
     {
@@ -143,6 +148,23 @@ public:
     int consumeMidiCloudsToggleCount() noexcept
     {
         return midiCloudsToggleCount.exchange (0, std::memory_order_acq_rel);
+    }
+
+    int consumeMidiSynthModeConfigRequest() noexcept
+    {
+        return midiSynthModeConfigRequest.exchange (-1, std::memory_order_acq_rel);
+    }
+    int consumeMidiSynthModeToggleCount() noexcept
+    {
+        return midiSynthModeToggleCount.exchange (0, std::memory_order_acq_rel);
+    }
+    int consumeMidiPlaitsReverbConfigRequest() noexcept
+    {
+        return midiPlaitsReverbConfigRequest.exchange (-1, std::memory_order_acq_rel);
+    }
+    int consumeMidiPlaitsReverbToggleCount() noexcept
+    {
+        return midiPlaitsReverbToggleCount.exchange (0, std::memory_order_acq_rel);
     }
 
     void setCarnivalEnabled (bool enabled) noexcept;
@@ -244,7 +266,8 @@ private:
     int performanceNoteForTouch (float x, float y) const noexcept;
 
     juce::AudioProcessorValueTreeState apvts;
-    juce::Synthesiser synthesiser;
+    juce::Synthesiser synthesiser;       // Original FLOWER SINE engine.
+    juce::Synthesiser plaitsSynthesiser; // Added engine; never replaces SINE.
     juce::MidiKeyboardState keyboardState;
     double currentSampleRate = 44100.0;
 
@@ -296,6 +319,8 @@ private:
     std::atomic<bool> performanceGranularEnabled { true };
     std::atomic<bool> performanceDreamyMode { false };
     std::atomic<bool> performanceCloudsEnabled { false };
+    std::atomic<int> performanceSynthMode { 0 }; // 0=SINE, 1=PLAITS
+    std::atomic<bool> performancePlaitsReverbEnabled { false };
     std::atomic<bool> performanceStopRequested { false };
     static constexpr int performancePolyTouchCount = 8;
     std::array<std::atomic<bool>, performancePolyTouchCount> performancePolyTouchActive {};
@@ -318,6 +343,10 @@ private:
     std::atomic<int> midiUiModeToggleCount { 0 };
     std::atomic<int> midiCloudsConfigRequest { -1 };
     std::atomic<int> midiCloudsToggleCount { 0 };
+    std::atomic<int> midiSynthModeConfigRequest { -1 };
+    std::atomic<int> midiSynthModeToggleCount { 0 };
+    std::atomic<int> midiPlaitsReverbConfigRequest { -1 };
+    std::atomic<int> midiPlaitsReverbToggleCount { 0 };
 
     static constexpr int performanceWindowTableSize = 1024;
     std::array<float, performanceWindowTableSize> performanceWindowTable {};
@@ -413,6 +442,11 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> performanceDelayFeedbackSmoothed;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> performanceDelayWetSmoothed;
     FlowerCloudsEngine cloudsEngine;
+    juce::dsp::Reverb plaitsReverb;
+    juce::AudioBuffer<float> plaitsReverbDryBuffer;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        plaitsReverbWetSmoothed;
+    int lastRenderedSynthMode = -1;
     juce::dsp::Limiter<float> performanceOutputLimiter;
     int performanceDelayWritePosition = 0;
     double performanceSamplesUntilStep = 0.0;
