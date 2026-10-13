@@ -556,8 +556,15 @@ for required_audio_guard in [
     "modelFadeStep",
     "cutoffSmoothed",
     "controlUpdateInterval",
+    "lfoUpdateCounter",
+    "heldFrequency",
     "performanceDreamyWetSmoothed",
     "flowerGrainDirection",
+    "performanceWindowTable",
+    "flowerPitchControlCounter",
+    "modulationControlCounter",
+    "filterCoefficient",
+    "decayCoefficient",
 ]:
     if required_audio_guard not in synth_voice_text and required_audio_guard not in (ROOT / "Source/SynthVoice.h").read_text(encoding="utf-8"):
         fail(f"audio de-click/CPU guard missing: {required_audio_guard}")
@@ -569,8 +576,36 @@ for required_clouds_guard in [
     "smoothedY",
     "0.035 * hostRate",
 ]:
+
+if "getPerformanceCloudsEnabled" not in processor_header_text or "externalClouds" not in editor_text:
+    fail("Clouds runtime/editor state synchronization missing")
+
     if required_clouds_guard not in clouds_text:
         fail(f"Clouds de-click/CPU guard missing: {required_clouds_guard}")
+
+for realtime_region_name, realtime_region_text in [
+    ("processBlock", processor_text[
+        processor_text.find("void FlowerStandaloneAudioProcessor::processBlock"):
+        processor_text.find("void FlowerStandaloneAudioProcessor::resetFlowerState")]),
+    ("processFlower", process_flower_text),
+    ("processDreamy", processor_text[
+        processor_text.find("void FlowerStandaloneAudioProcessor::processPerformanceDreamy"):
+        processor_text.find("void FlowerStandaloneAudioProcessor::processPerformanceDelay")]),
+    ("processDelay", processor_text[
+        processor_text.find("void FlowerStandaloneAudioProcessor::processPerformanceDelay"):
+        processor_text.find("juce::AudioProcessorValueTreeState::ParameterLayout")]),
+]:
+    for forbidden_realtime_token in [
+        "setSize (",
+        "std::vector<",
+        "new ",
+        "malloc(",
+        "realloc(",
+    ]:
+        if forbidden_realtime_token in realtime_region_text:
+            fail(
+                f"realtime allocation/resize token in {realtime_region_name}: "
+                + forbidden_realtime_token)
 
 for required_mutable_anchor in [
     "08460a69a7e1f7a81c5a2abcc7189c9a6b7208d4",
@@ -609,6 +644,8 @@ print("[PASS] MIDI CC85-93 CONFIG/mode/CLOUDS map uses lock-free audio-to-UI han
 print("[PASS] pinned MIYAKO-equivalent Plaits/Clouds/stmlib source materialized")
 print("[PASS] Plaits model-switch, Dreamy wet, Clouds wet/XY and synth control de-click guards present")
 print("[PASS] no full FLOWER loop-buffer memset remains on audio callback")
+print("[PASS] synth/granular/Dreamy/Carnival control-rate CPU reductions present")
+print("[PASS] realtime audio regions contain no dynamic resize/allocation tokens")
 print("[PASS] all CONFIG setValues call sites use the 8-argument current signature")
 print("[PASS] XY audio order: arp MIDI -> synth -> granular -> dreamy -> delay -> clouds")
 print("[PASS] CircleCI native parallelism controls present")
