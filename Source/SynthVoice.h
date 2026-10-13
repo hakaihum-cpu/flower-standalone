@@ -2,10 +2,6 @@
 
 #include <JuceHeader.h>
 #include "Modulation.h"
-#include <array>
-#if JUCE_ANDROID
- #include "plaits/dsp/voice.h"
-#endif
 
 class SineSound final : public juce::SynthesiserSound
 {
@@ -29,15 +25,8 @@ public:
         float lfoRate = 1.0f;
         float lfoDepth = 0.0f;
         int lfoTarget = static_cast<int> (LfoTarget::None);
-
-        // FLOWER performance oscillator: original Mutable Instruments Plaits.
-        int plaitsModel = 0;
-        float plaitsHarmonics = 0.5f;
-        float plaitsTimbre = 0.5f;
-        float plaitsMorph = 0.5f;
     };
 
-    SineVoice();
     bool canPlaySound (juce::SynthesiserSound* sound) override;
     void setCurrentPlaybackSampleRate (double newRate) override;
     void startNote (int midiNoteNumber, float velocity, juce::SynthesiserSound*, int currentPitchWheelPosition) override;
@@ -52,52 +41,18 @@ private:
     static double wrap01 (double value) noexcept;
     float nextLfo() noexcept;
     float modulationFor (LfoTarget target) const noexcept;
-#if JUCE_ANDROID
-    float renderPlaitsOscillator (float midiPitch) noexcept;
-#endif
 
     Params params;
     juce::ADSR adsr;
     juce::ADSR::Parameters adsrParams;
     juce::dsp::StateVariableTPTFilter<float> filter;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> deClick;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> cutoffSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> resonanceSmoothed;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> levelSmoothed;
 
     double phase = 0.0;
     double lfoPhase = 0.0;
     float lfoCurrent = 0.0f;
     double baseFrequencyHz = 440.0;
     double sampleRateHz = 44100.0;
-    int currentMidiNote = 60;
     float velocityGain = 0.0f;
     float pitchWheelSemitones = 0.0f;
-    int controlUpdateCounter = 0;
-    int lfoUpdateCounter = 0;
-    static constexpr int controlUpdateInterval = 8;
-    float heldPitchModSemitones = 0.0f;
-    double heldFrequency = 440.0;
-    float heldCutoff = 3000.0f;
-    float heldResonance = 0.7071f;
-    float heldLevelMod = 1.0f;
-
-#if JUCE_ANDROID
-    // Same preallocated hosted Plaits strategy as accepted MIYAKO.
-    alignas (16) std::array<uint8_t, 65536> plaitsWork {};
-    plaits::Voice plaitsVoice;
-    std::array<plaits::Voice::Frame, plaits::kBlockSize> plaitsFrames {};
-    int plaitsFrameIndex = static_cast<int> (plaits::kBlockSize);
-    double plaitsStreamPhase = 1.0;
-    float plaitsPreviousSample = 0.0f;
-    float plaitsNextSample = 0.0f;
-    bool plaitsGate = false;
-    int activePlaitsModel = -1;
-    int pendingPlaitsModel = -1;
-    float plaitsModelGain = 1.0f;
-    float plaitsHarmonicsCurrent = 0.5f;
-    float plaitsTimbreCurrent = 0.5f;
-    float plaitsMorphCurrent = 0.5f;
-    bool plaitsParamsInitialised = false;
-#endif
 };
