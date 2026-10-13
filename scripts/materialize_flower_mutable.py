@@ -63,13 +63,29 @@ def extract_subtree(z: ZipFile, archive_root: str, subtree: str, target_root: Pa
 
 def patch_plaits_user_data(root: Path) -> None:
     path = root / "Source/plaits/user_data.h"
-    data = path.read_bytes()
-    needle = b"#ifdef TEST"
-    if data.count(needle) != 2:
-        raise RuntimeError("Unexpected upstream Plaits user_data.h; host patch refused")
-    data = data.replace(needle, b"#if defined(TEST) || defined(__ANDROID__)")
-    data = b"#include <cstdio>\n" + data
-    path.write_bytes(data)
+
+    # Match the accepted MIYAKO Android port exactly.  The upstream MCU
+    # implementation accesses STM32 FLASH directly; Android has no equivalent.
+    # Factory Plaits engines remain available because Voice::Render falls back
+    # to the compiled factory FM patch table when ptr() returns nullptr.
+    path.write_text(
+        "// Plaits Android port compatibility shim for user-uploaded STM32 FLASH data.\n"
+        "// The upstream MCU original is preserved verbatim as\n"
+        "// Source/plaits/user_data_stm32_original.h.\n"
+        "// Factory Plaits engines (including the 6-op factory presets) still work:\n"
+        "// plaits::Voice::Render uses fm_patches_table when ptr() returns nullptr.\n"
+        "// This file is NOT an alternate synthesis engine.\n"
+        "#pragma once\n"
+        "#include <cstdint>\n"
+        "namespace plaits {\n"
+        "class UserData {\n"
+        " public:\n"
+        "  UserData() = default;\n"
+        "  inline const uint8_t* ptr(int /*slot*/) const noexcept { return nullptr; }\n"
+        "};\n"
+        "} // namespace plaits\n",
+        encoding="utf-8",
+    )
 
 def patch_clouds_debug_pin(root: Path) -> None:
     path = root / "Source/clouds/drivers/debug_pin.h"
