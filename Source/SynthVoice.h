@@ -74,6 +74,7 @@ private:
     float velocityGain = 0.0f;
     float pitchWheelSemitones = 0.0f;
     int controlUpdateCounter = 0;
+    int lfoUpdateCounter = 0;
     static constexpr int controlUpdateInterval = 8;
     float heldPitchModSemitones = 0.0f;
     float heldCutoff = 3000.0f;
