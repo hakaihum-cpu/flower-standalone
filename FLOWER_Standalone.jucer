@@ -92,10 +92,10 @@
       <CONFIGURATIONS>
         <CONFIGURATION name="Debug" isDebug="1" optimisation="1"
                        linkTimeOptimisation="0" targetName="FLOWER"
-                       androidArchitectures="arm64-v8a"/>
+                       headerPath="../../Source" androidArchitectures="arm64-v8a"/>
         <CONFIGURATION name="Release" isDebug="0" optimisation="3"
                        linkTimeOptimisation="1" targetName="FLOWER"
-                       androidArchitectures="arm64-v8a"/>
+                       headerPath="../../Source" androidArchitectures="arm64-v8a"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_audio_basics" path="JUCE/modules"/>
