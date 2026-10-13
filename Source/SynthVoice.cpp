@@ -70,6 +70,7 @@ void SineVoice::startNote (int midiNoteNumber,
     lfoPhase = 0.0;
     lfoCurrent = 0.0f;
     controlUpdateCounter = 0;
+    lfoUpdateCounter = 0;
     filter.reset();
     adsr.noteOn();
     deClick.setCurrentAndTargetValue (0.0f);
@@ -115,9 +116,22 @@ void SineVoice::setParams (const Params& newParams) noexcept
 
 float SineVoice::nextLfo() noexcept
 {
-    lfoCurrent = std::sin (juce::MathConstants<float>::twoPi * static_cast<float> (lfoPhase));
-    const auto increment = juce::jlimit (0.01, 20.0, static_cast<double> (params.lfoRate)) / sampleRateHz;
+    // LFO tops out at 20 Hz.  A held 8-sample control value is transparent at
+    // audio rates but avoids one sin() call per voice per sample on Android.
+    if (lfoUpdateCounter <= 0)
+    {
+        lfoCurrent = std::sin (
+            juce::MathConstants<float>::twoPi
+            * static_cast<float> (lfoPhase));
+        lfoUpdateCounter = controlUpdateInterval;
+    }
+
+    const auto increment =
+        juce::jlimit (
+            0.01, 20.0, static_cast<double> (params.lfoRate))
+        / sampleRateHz;
     lfoPhase = wrap01 (lfoPhase + increment);
+    --lfoUpdateCounter;
     return lfoCurrent;
 }
 
