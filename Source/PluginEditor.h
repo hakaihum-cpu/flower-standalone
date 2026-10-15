@@ -106,6 +106,7 @@ private:
     int selectedMidiOutput = -1;
     int midiPresetSlot = 1;
     juce::String midiPresetMessage;
+    int globalPresetSlot = 1;
     juce::String globalPresetMessage;
     juce::String lastAudioRouteError;
     bool l1Latched = false;
