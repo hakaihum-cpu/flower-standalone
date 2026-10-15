@@ -206,6 +206,7 @@ public:
         currentMidiNote = -1;
         phase = 0.0;
         frequency = 440.0;
+        tuningOffsetSemitones = 0.0f;
         envelope = 0.0f;
         stepSamplesRemaining = 0;
         noteSamplesRemaining = 0;
@@ -230,6 +231,21 @@ public:
         const bool triggered = noteTriggered;
         noteTriggered = false;
         return triggered;
+    }
+
+    void setTuningOffsetSemitones (float semitones) noexcept
+    {
+        tuningOffsetSemitones =
+            std::clamp (semitones, -0.49f, 0.49f);
+    }
+
+    static double midiFrequency (
+        double midiNote,
+        double tuningOffsetSemitones = 0.0) noexcept
+    {
+        return 440.0 * std::pow (
+            2.0,
+            (midiNote + tuningOffsetSemitones - 69.0) / 12.0);
     }
 
     void setTiming (float bpm, float length01) noexcept
@@ -317,7 +333,9 @@ private:
         currentNoteIndex = index;
         const int midi = notes[(size_t) index];
         currentMidiNote = midi;
-        frequency = 440.0 * std::pow (2.0, ((double) midi - 69.0) / 12.0);
+        frequency = midiFrequency (
+            (double) midi,
+            (double) tuningOffsetSemitones);
         // Keep oscillator phase and envelope continuous across note changes.
         // Resetting both on every random step caused sharp discontinuities
         // that were perceived as clipping/crackle.
@@ -333,6 +351,7 @@ private:
     int currentMidiNote = -1;
     double phase = 0.0;
     double frequency = 440.0;
+    float tuningOffsetSemitones = 0.0f;
     float envelope = 0.0f;
     int stepSamples = 12000;
     int stepSamplesRemaining = 0;
