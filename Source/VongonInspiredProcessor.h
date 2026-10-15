@@ -401,7 +401,9 @@ private:
 
         juce::Reverb::Parameters rev;
         rev.roomSize = 0.35f + 0.62f * ccValue (ultrasheer, 105, y);
-        rev.damping = 0.85f - 0.75f * ccValue (ultrasheer, 103, y);
+        rev.damping = ccRaw (ultrasheer, 103) < 0
+            ? 0.72f - 0.46f * y
+            : 0.85f - 0.75f * ccValue (ultrasheer, 103, y);
         rev.wetLevel = revBypass ? 0.0f : wet;
         rev.dryLevel = 1.0f - 0.42f * (revBypass ? 0.0f : wet);
         rev.width = 1.0f;
@@ -530,8 +532,10 @@ private:
         const int interval = ccRaw (rosetones, 90) < 0 ? 0
             : juce::jmin (11, ccRaw (rosetones, 90) * 12 / 128);
         const float glide = ccValue (rosetones, 83, 1.0f);
-        const float glideCoeff = onePoleCoeff (
-            sampleRate, 0.5f + glide * glide * 200.0f);
+        const float glideCoeff = ccRaw (rosetones, 83) < 0
+            ? 1.0f
+            : onePoleCoeff (
+                sampleRate, 0.5f + glide * glide * 200.0f);
 
         for (int i = 0; i < samples; ++i)
         {
@@ -622,7 +626,7 @@ private:
                 * ccValue (solarfaze, 95, 0.355f));
         const float midFrequency = ccValue (solarfaze, 94, 0.5f);
         const float driveMaster = 0.5f + 2.0f
-            * ccValue (solarfaze, 88, x);
+            * ccValue (solarfaze, 88, 0.25f);
         const float driveLow = (1.15f + 3.0f * x) * driveMaster
             * (1.0f + (float) (ccRaw (solarfaze, 89) < 0 ? 0
                 : ccRaw (solarfaze, 89) < 43 ? 0
@@ -638,13 +642,13 @@ private:
         const float detAmount = ccValue (solarfaze, 81, y);
         const float detuneDepthMs = 0.18f + 2.4f * detAmount;
         const float detEnv = 2.0f * ccValue (solarfaze, 82, 0.5f) - 1.0f;
-        const float detSize = ccValue (solarfaze, 96, 0.5f);
+        const float detSize = ccValue (solarfaze, 96, 0.3095238f);
         const float mix = ccValue (solarfaze, 80, 0.16f + 0.68f * y);
         const float satMix = ccValue (solarfaze, 86, 1.0f);
         const float satTone = ccValue (solarfaze, 87, 0.5f);
-        const float bandLow = ccValue (solarfaze, 83, 0.75f);
-        const float bandMid = ccValue (solarfaze, 84, 0.75f);
-        const float bandHigh = ccValue (solarfaze, 85, 0.75f);
+        const float bandLow = ccValue (solarfaze, 83, 0.95f);
+        const float bandMid = ccValue (solarfaze, 84, 0.78f);
+        const float bandHigh = ccValue (solarfaze, 85, 0.8266667f);
         const float gateThreshold = 0.0002f + 0.025f
             * ccValue (solarfaze, 98, 0.056f);
         const bool gateEnabled = ! ccOn (solarfaze, 92);
@@ -697,7 +701,9 @@ private:
             {
                 const float polarity = ch == 0 ? 1.0f : -1.0f;
                 const float envShape = juce::jlimit (
-                    0.1f, 2.0f, 1.0f + detEnv * (2.0f * envMod - 1.0f));
+                    0.1f, 2.0f,
+                    (0.35f + 0.65f * envMod)
+                        * (1.0f + detEnv * (2.0f * envMod - 1.0f)));
                 const double delaySamples = sampleRate
                     * (1.8f + 4.2f * detSize
                         + detuneDepthMs * envShape * lfo * polarity)
