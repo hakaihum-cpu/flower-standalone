@@ -2260,16 +2260,6 @@ void RealtimeChordFxAudioProcessorEditor::updateVongonXYPoint (
     processor.setVongonXY (x, y, touchDown);
 }
 
-void RealtimeChordFxAudioProcessorEditor::updateVongonXYPoint (
-    juce::Point<float> p, bool touchDown)
-{
-    const float x = juce::jlimit (0.0f, 1.0f, p.x / design);
-    const float y = juce::jlimit (
-        0.0f, 1.0f,
-        1.0f - (p.y - 70.0f) / (design - 70.0f));
-    processor.setVongonXY (x, y, touchDown);
-}
-
 void RealtimeChordFxAudioProcessorEditor::updateEurekaXYPoint (
     juce::Point<float> p)
 {
