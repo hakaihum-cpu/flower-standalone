@@ -619,12 +619,16 @@ private:
         const bool satOn = ! ccOn (solarfaze, 14);
         const bool detOn = ! ccOn (solarfaze, 13);
         const bool satFirst = ccOn (solarfaze, 97, true);
-        const float lowCoeff = onePoleCoeff (
-            sampleRate, 90.0f + 450.0f * ccValue (solarfaze, 93, 0.333f));
-        const float upperCoeff = onePoleCoeff (
-            sampleRate, 1500.0f + 3100.0f
-                * ccValue (solarfaze, 95, 0.355f));
         const float midFrequency = ccValue (solarfaze, 94, 0.5f);
+        const float crossoverScale = 0.75f + 0.5f * midFrequency;
+        const float lowCoeff = onePoleCoeff (
+            sampleRate, (90.0f + 450.0f
+                * ccValue (solarfaze, 93, 0.3333333f))
+                * crossoverScale);
+        const float upperCoeff = onePoleCoeff (
+            sampleRate, (1500.0f + 3100.0f
+                * ccValue (solarfaze, 95, 0.3548387f))
+                * crossoverScale);
         const float driveMaster = 0.5f + 2.0f
             * ccValue (solarfaze, 88, 0.25f);
         const float driveLow = (1.15f + 3.0f * x) * driveMaster
@@ -678,7 +682,7 @@ private:
                 saturated[ch] = gate * (
                     std::tanh (low * driveLow) * bandLow
                     + std::tanh (mid * driveMid)
-                        * bandMid * (0.5f + midFrequency)
+                        * bandMid
                     + std::tanh (high * driveHigh)
                         * bandHigh * (0.25f + satTone));
                 const float toDelay = satFirst && satOn
@@ -784,7 +788,7 @@ private:
             0.05 + 0.95 * ccValue (polyphrase, 5, 1.0f);
         const double sliderRight = sync ? sliderLeft
             : 0.05 + 0.95 * ccValue (
-                polyphrase, 6, 0.56f + 0.4f * y);
+                polyphrase, 6, 0.557894737f + 0.4f * y);
         updatePolyTarget (0, seconds * sliderLeft * sampleRate);
         updatePolyTarget (1, seconds * sliderRight * sampleRate);
 
