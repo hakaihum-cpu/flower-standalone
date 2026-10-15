@@ -664,17 +664,17 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             cloudsTouch.load (std::memory_order_relaxed));
     }
 
-    if (effectMode == 2 || effectMode == 3)
+    if (effectMode == 3)
     {
-        // EUREKA owns its saturation/level behaviour. CHORDBOT is MIDI-only.
-        // Both therefore keep the dry audio path outside legacy protection.
+        // CHORDBOT is MIDI-only and must leave the dry audio path untouched.
         outputSafetyGain = 1.0f;
         outputSafetyWasActive = false;
     }
     else
     {
         const bool outputActive =
-            effectMode == 4
+            effectMode == 2
+            || effectMode == 4
             || (running.load (std::memory_order_relaxed)
                 && (effectMode == 1 || (haveChord && chordMidiGateOpen)));
         applyOutputSafety (buffer, outputActive);
@@ -1632,25 +1632,44 @@ bool RealtimeChordFxAudioProcessor::hasMidiControllerPreset (int slot) const
         && apvts.state.getProperty ("midiControllerPreset" + juce::String (slot)).toString().isNotEmpty();
 }
 
-bool RealtimeChordFxAudioProcessor::saveUserPreset()
+bool RealtimeChordFxAudioProcessor::saveUserPreset (int slot)
 {
+    if (slot < 1 || slot > 3)
+        return false;
+
     auto snapshot = apvts.copyState();
+    for (int i = 1; i <= 3; ++i)
+        snapshot.removeProperty (
+            "userPresetXml" + juce::String (i), nullptr);
+    // Legacy single-slot property is intentionally excluded from new saves.
     snapshot.removeProperty ("userPresetXml", nullptr);
     snapshot.removeProperty ("audioOutputType", nullptr);
     snapshot.removeProperty ("audioOutputName", nullptr);
 
     if (auto xml = snapshot.createXml())
     {
-        apvts.state.setProperty ("userPresetXml", xml->toString(), nullptr);
+        apvts.state.setProperty (
+            "userPresetXml" + juce::String (slot),
+            xml->toString(), nullptr);
         return true;
     }
 
     return false;
 }
 
-bool RealtimeChordFxAudioProcessor::loadUserPreset()
+bool RealtimeChordFxAudioProcessor::loadUserPreset (int slot)
 {
-    const auto stored = apvts.state.getProperty ("userPresetXml").toString();
+    if (slot < 1 || slot > 3)
+        return false;
+
+    const auto property =
+        "userPresetXml" + juce::String (slot);
+    auto stored = apvts.state.getProperty (property).toString();
+
+    // Slot 1 can import the previous one-slot preset once, preserving user data.
+    if (slot == 1 && stored.isEmpty())
+        stored = apvts.state.getProperty ("userPresetXml").toString();
+
     if (stored.isEmpty())
         return false;
 
@@ -1668,7 +1687,18 @@ bool RealtimeChordFxAudioProcessor::loadUserPreset()
     const auto audioOutputName =
         apvts.state.getProperty ("audioOutputName");
 
-    restored.setProperty ("userPresetXml", stored, nullptr);
+    // Preserve all three saved slots across replaceState().
+    for (int i = 1; i <= 3; ++i)
+    {
+        const auto key = "userPresetXml" + juce::String (i);
+        const auto value = apvts.state.getProperty (key);
+        if (! value.isVoid())
+            restored.setProperty (key, value, nullptr);
+    }
+    if (slot == 1
+        && ! restored.hasProperty ("userPresetXml1"))
+        restored.setProperty ("userPresetXml1", stored, nullptr);
+
     if (! audioOutputType.isVoid())
         restored.setProperty ("audioOutputType", audioOutputType, nullptr);
     if (! audioOutputName.isVoid())
@@ -1680,9 +1710,17 @@ bool RealtimeChordFxAudioProcessor::loadUserPreset()
     return true;
 }
 
-bool RealtimeChordFxAudioProcessor::hasUserPreset() const
+bool RealtimeChordFxAudioProcessor::hasUserPreset (int slot) const
 {
-    return apvts.state.hasProperty ("userPresetXml")
+    if (slot < 1 || slot > 3)
+        return false;
+
+    const auto value = apvts.state.getProperty (
+        "userPresetXml" + juce::String (slot)).toString();
+    if (value.isNotEmpty())
+        return true;
+
+    return slot == 1
         && apvts.state.getProperty ("userPresetXml").toString().isNotEmpty();
 }
 
