@@ -308,7 +308,33 @@ private:
         const float wet = ccValue (ultrasheer, 104, 0.12f + 0.66f * y);
         const bool vibBypass = ccOn (ultrasheer, 106);
         const bool revBypass = ccOn (ultrasheer, 107);
+        const bool reverbFirst = ccOn (ultrasheer, 108);
+        if (revBypass && ! ccOn (ultrasheer, 109, true))
+            ultraReverb.reset();
         const float baseMs = 7.0f;
+
+        juce::Reverb::Parameters rev;
+        rev.roomSize = 0.35f + 0.62f * ccValue (ultrasheer, 105, y);
+        rev.damping = 0.85f - 0.75f * ccValue (ultrasheer, 103, y);
+        rev.wetLevel = revBypass ? 0.0f : wet;
+        rev.dryLevel = 1.0f - 0.42f * (revBypass ? 0.0f : wet);
+        rev.width = 1.0f;
+        rev.freezeMode = 0.0f;
+        ultraReverb.setParameters (rev);
+
+
+        const auto applyReverb = [&]() noexcept
+        {
+            if (channels >= 2)
+                ultraReverb.processStereo (
+                    buffer.getWritePointer (0),
+                    buffer.getWritePointer (1), samples);
+            else
+                ultraReverb.processMono (
+                    buffer.getWritePointer (0), samples);
+        };
+        if (reverbFirst)
+            applyReverb();
 
         const float randomSmooth =
             1.0f - std::exp (
@@ -358,22 +384,8 @@ private:
             ultraWrite = (ultraWrite + 1) % ultraDelay.getNumSamples();
         }
 
-        juce::Reverb::Parameters rev;
-        rev.roomSize = 0.35f + 0.62f * ccValue (ultrasheer, 105, y);
-        rev.damping = 0.85f - 0.75f * ccValue (ultrasheer, 103, y);
-        rev.wetLevel = revBypass ? 0.0f : wet;
-        rev.dryLevel = 1.0f - 0.42f * (revBypass ? 0.0f : wet);
-        rev.width = 1.0f;
-        rev.freezeMode = 0.0f;
-        ultraReverb.setParameters (rev);
-
-        if (channels >= 2)
-            ultraReverb.processStereo (
-                buffer.getWritePointer (0),
-                buffer.getWritePointer (1), samples);
-        else
-            ultraReverb.processMono (
-                buffer.getWritePointer (0), samples);
+        if (! reverbFirst)
+            applyReverb();
 
         for (int ch = 0; ch < channels; ++ch)
         {
@@ -439,8 +451,8 @@ private:
         {
             roseOctaveSmoothed +=
                 glideCoeff * (targetOctave - roseOctaveSmoothed);
-            const float mod = modMode == 0 ? 0.0f
-                : std::sin ((float) rosePhase) * modDepth;
+            const float mod = std::sin ((float) rosePhase) * modDepth
+                * (modMode == 0 ? 0.5f : 1.0f);
             rosePhase +=
                 juce::MathConstants<double>::twoPi
                 * (double) modRate / sampleRate;
@@ -606,11 +618,9 @@ private:
                     / 1000.0;
                 const float detuned = readDelay (
                     solarDelay, ch, solarWrite, delaySamples);
-                const float pre = satFirst && satOn
-                    ? dry[ch] + (saturated[ch] - dry[ch]) * satMix
-                    : dry[ch];
                 const float detResult = detOn
-                    ? pre + (detuned - pre) * mix : pre;
+                    ? dry[ch] + (detuned - dry[ch]) * mix
+                    : (satOn ? saturated[ch] : dry[ch]);
                 const float result = satFirst || ! satOn
                     ? detResult
                     : detResult + (saturated[ch] - dry[ch]) * satMix;
@@ -781,7 +791,8 @@ private:
                     polyLowpass[(size_t) ch] * (1.0f - pingPong)
                     + polyLowpass[(size_t) other] * pingPong;
                 const float infiniteBoost = infinite
-                    || (touchDown && y > 0.93f)
+                    || (ccOn (polyphrase, 11, true)
+                        && touchDown && y > 0.93f)
                     ? 1.04f : feedback;
                 const float incoming = bypass ? 0.0f : dry[ch];
                 const float write = bypass && ! trails
