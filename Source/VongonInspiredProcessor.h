@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -74,8 +75,9 @@ public:
             const int number = message.getControllerNumber();
             if (acceptsCc (mode, number))
             {
-                bank[(size_t) number] =
-                    juce::jlimit (0, 127, message.getControllerValue());
+                bank[(size_t) number].store (
+                    juce::jlimit (0, 127, message.getControllerValue()),
+                    std::memory_order_relaxed);
                 if (mode == polyphrase && number == 15)
                 {
                     const double now = midiSamplePosition
@@ -115,11 +117,94 @@ public:
             if (pc >= 10 && pc <= 18)
             {
                 const size_t slot = (size_t) (pc - 10);
-                slots[slot] = bank;
-                valid[slot] = true;
+                for (size_t i = 0; i < 128; ++i)
+                    slots[slot][i].store (
+                        bank[i].load (std::memory_order_relaxed),
+                        std::memory_order_relaxed);
+                valid[slot].store (true, std::memory_order_release);
             }
-            else if (pc >= 0 && pc <= 8 && valid[(size_t) pc])
-                bank = slots[(size_t) pc];
+            else if (pc >= 0 && pc <= 8
+                     && valid[(size_t) pc].load (std::memory_order_acquire))
+            {
+                for (size_t i = 0; i < 128; ++i)
+                    bank[i].store (
+                        slots[(size_t) pc][i].load (
+                            std::memory_order_relaxed),
+                        std::memory_order_relaxed);
+            }
+        }
+    }
+
+    VongonInspiredProcessor() noexcept
+    {
+        for (auto& bank : midiCc)
+            for (auto& value : bank)
+                value.store (-1, std::memory_order_relaxed);
+    }
+
+    // Serializable PC bank, exported only by the host state callback.
+    // Atomic values avoid racing getStateInformation against MIDI/audio.
+    juce::String exportMidiSnapshot() const
+    {
+        juce::StringArray parts;
+        const auto encode = [&] (const auto& bank) -> juce::String
+        {
+            juce::String hex;
+            for (const auto& cell : bank)
+                hex += juce::String::toHexString (
+                    juce::jlimit (0, 128,
+                        cell.load (std::memory_order_relaxed) + 1))
+                    .paddedLeft ('0', 2);
+            return hex;
+        };
+        for (size_t mode = 0; mode < 4; ++mode)
+        {
+            parts.add (encode (midiCc[mode]));
+            for (size_t slot = 0; slot < 9; ++slot)
+                parts.add (midiPresetValid[mode][slot].load (
+                    std::memory_order_relaxed)
+                    ? encode (midiPresets[mode][slot]) : "-");
+        }
+        return parts.joinIntoString ("|");
+    }
+
+    void importMidiSnapshot (const juce::String& serialised)
+    {
+        const auto parts = juce::StringArray::fromTokens (
+            serialised, "|", "");
+        if (parts.size() != 40)
+            return;
+        const auto decode = [&] (const juce::String& hex, auto& bank)
+        {
+            if (hex.length() != 256)
+                return false;
+            for (int i = 0; i < 128; ++i)
+            {
+                const int raw = hex.substring (i * 2, i * 2 + 2)
+                    .getHexValue32() - 1;
+                if (raw < -1 || raw > 127)
+                    return false;
+            }
+            for (int i = 0; i < 128; ++i)
+            {
+                const int raw = hex.substring (i * 2, i * 2 + 2)
+                    .getHexValue32() - 1;
+                bank[(size_t) i].store (
+                    raw, std::memory_order_relaxed);
+            }
+            return true;
+        };
+        for (size_t mode = 0; mode < 4; ++mode)
+        {
+            decode (parts[(int) (mode * 10)], midiCc[mode]);
+            for (size_t slot = 0; slot < 9; ++slot)
+            {
+                const auto& encoded = parts[(int) (mode * 10 + slot + 1)];
+                const bool valid = encoded != "-"
+                    && decode (encoded, midiPresets[mode][slot]);
+                midiPresetValid[mode][slot].store (
+                    valid, std::memory_order_relaxed);
+            }
         }
     }
 
@@ -216,7 +301,8 @@ public:
 private:
     int ccRaw (int mode, int number) const noexcept
     {
-        return midiCc[(size_t) (mode - ultrasheer)][(size_t) number];
+        return midiCc[(size_t) (mode - ultrasheer)][(size_t) number]
+            .load (std::memory_order_relaxed);
     }
 
     float ccValue (int mode, int number, float fallback) const noexcept
@@ -812,13 +898,10 @@ private:
 
     // In-memory, per-mode MIDI CC and nine PC snapshot banks.
     // Values of -1 mean XY retains authority until the first CC for that control.
-    std::array<std::array<int, 128>, 4> midiCc = [] {
-        std::array<std::array<int, 128>, 4> result {};
-        for (auto& bank : result) bank.fill (-1);
-        return result;
-    }();
-    std::array<std::array<std::array<int, 128>, 9>, 4> midiPresets {};
-    std::array<std::array<bool, 9>, 4> midiPresetValid {};
+    std::array<std::array<std::atomic<int>, 128>, 4> midiCc {};
+    std::array<std::array<std::array<std::atomic<int>, 128>, 9>, 4>
+        midiPresets {};
+    std::array<std::array<std::atomic<bool>, 9>, 4> midiPresetValid {};
     std::array<float, 128> roseNotes {};
     float roseOctaveSmoothed = 4.0f;
     double midiSamplePosition = 0.0;
