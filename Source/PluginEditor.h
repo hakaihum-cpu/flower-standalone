@@ -64,7 +64,6 @@ private:
     void refreshMidiOutputs();
     void cycleMidiOutput (int direction);
     void updateMidiControllerFromPoint (juce::Point<float>);
-    void updateCloudsFromPoint (juce::Point<float>);
     void updateEurekaXYPoint (juce::Point<float>);
     int nextVisualFrame (int count, int avoid);
     void setChoiceActual (const char* id, int value);
@@ -88,7 +87,6 @@ private:
     bool audioConfigVisible = false;
     bool midiControlConfigVisible = false;
     bool xyDragging = false;
-    bool cloudsOnlyDragging = false;
     DragParam dragging = DragParam::none;
     std::vector<AudioInputOption> audioInputs;
     std::vector<AudioOutputOption> audioOutputs;
