@@ -986,18 +986,23 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
     const float y = juce::jlimit (0.0f, 1.0f, processor.getCloudsY());
     const bool touch = processor.getCloudsTouch();
 
-    const float position = x;
-    const float size = juce::jlimit (0.0f, 1.0f, 0.04f + y * 0.96f);
-    const float density = size;
-    const float texture = juce::jlimit (0.0f, 1.0f, 0.04f + x * 0.96f);
-    const float pitch = (x - 0.5f) * 24.0f;
-    const float spread = juce::jlimit (0.0f, 1.0f, 0.10f + x * 0.90f);
-    const float feedback = juce::jlimit (0.0f, 0.78f, 0.03f + y * 0.70f);
+    const float position = juce::jlimit (0.0f, 1.0f, 0.08f + x * 0.84f);
+    const float size = juce::jlimit (0.0f, 1.0f, 0.14f + y * 0.72f);
+    const float density = juce::jlimit (0.0f, 1.0f, 0.28f + y * 0.44f);
+    const float texture = juce::jlimit (0.0f, 1.0f, 0.24f + x * 0.52f);
+    const float pitch =
+        x < 0.10f ? -12.0f
+        : x < 0.22f ? -7.0f
+        : x > 0.90f ? 12.0f
+        : x > 0.78f ? 7.0f
+                    : 0.0f;
+    const float spread = juce::jlimit (0.0f, 1.0f, 0.18f + x * 0.58f);
+    const float feedback = juce::jlimit (0.0f, 0.42f, 0.03f + y * 0.34f);
     const float reverb = juce::jlimit (
-        0.0f, 0.90f, 0.04f + std::sqrt (x * y) * 0.82f);
+        0.0f, 0.72f, 0.02f + std::pow (x * y, 1.35f) * 0.68f);
     const float dryWet = juce::jlimit (
-        0.0f, 1.0f, 0.08f + 0.92f * (0.45f * x + 0.55f * y));
-    const bool freeze = y > 0.88f && x < 0.32f;
+        0.18f, 0.88f, 0.24f + 0.58f * (0.30f * x + 0.70f * y));
+    const bool freeze = y > 0.93f && x < 0.24f;
 
     g.setColour (uiColour (0.96f));
     g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
@@ -1037,7 +1042,7 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
         24, 574, 672, 22, juce::Justification::centredLeft, 1);
 
     g.drawFittedText (
-        "PITCH " + juce::String (pitch, 1)
+        "PITCH " + juce::String ((int) pitch)
         + "st   SPREAD " + juce::String (spread, 2)
         + "   FEEDBACK " + juce::String (feedback, 2)
         + "   REVERB " + juce::String (reverb, 2),
@@ -1052,7 +1057,7 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
     g.setColour (uiColour (0.56f));
     g.setFont (juce::FontOptions (9.8f));
     g.drawFittedText (
-        "X: POSITION / TEXTURE / PITCH / SPREAD    Y: SIZE / DENSITY / FEEDBACK    XY: REVERB / DRY-WET",
+        "X: POSITION / TEXTURE / PITCH(0, +/-7, +/-12) / SPREAD    Y: SIZE / DENSITY / FEEDBACK    XY: REVERB / DRY-WET",
         24, 666, 672, 24, juce::Justification::centredLeft, 1);
 }
 
