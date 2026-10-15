@@ -165,13 +165,6 @@ void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e
     const int midi = juce::jlimit (0, 127, juce::roundToInt (midiFloat));
     lastInputMidiFloat = midiFloat;
 
-    // CHORD-B is generated rather than pitch-shifted from the live input.
-    // Preserve the live source's cents offset so the sine chord does not beat
-    // against a slightly sharp/flat instrument while keeping chord tones on
-    // the same MIDI pitch classes.
-    sineArpeggiator.setTuningOffsetSemitones (
-        midiFloat - (float) midi);
-
     if (midi == pendingMidi) ++stableCount;
     else { pendingMidi = midi; stableCount = 1; }
 
@@ -179,6 +172,13 @@ void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e
 
     const int previous = detectedMidi.load (std::memory_order_relaxed);
     if (midi == previous) return;
+
+    // CHORD-B is generated rather than pitch-shifted from the live input.
+    // Capture the stable live source's cents offset once per accepted note so
+    // the generated chord matches a slightly sharp/flat instrument without
+    // following detector jitter on every analysis frame.
+    sineArpeggiator.setTuningOffsetSemitones (
+        midiFloat - (float) midi);
 
     detectedMidi.store (midi, std::memory_order_relaxed);
 
