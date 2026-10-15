@@ -30,6 +30,7 @@ public:
         smoothedX = 0.5f;
         smoothedY = 0.5f;
         visualEnvelope = 0.0f;
+        previousTouchDown = false;
         activity.store (0.0f, std::memory_order_relaxed);
 
         engine.Init (largeBuffer.data(), largeBuffer.size(),
@@ -64,7 +65,8 @@ public:
     void process (juce::AudioBuffer<float>& buffer,
                   bool enabled,
                   float x,
-                  float y) noexcept
+                  float y,
+                  bool touchDown) noexcept
     {
         if (! prepared || buffer.getNumChannels() <= 0)
             return;
@@ -93,36 +95,38 @@ public:
 
         auto* params = engine.mutable_parameters();
 
-        // The two-axis surface drives every continuous Clouds sound control.
-        // POSITION/TEXTURE/PITCH/SPREAD primarily follow X.
-        // SIZE/DENSITY/FEEDBACK primarily follow Y.
-        // REVERB and host DRY/WET use both axes.
+        // Dedicated CLOUDS mode: every Clouds parameter is derived from the
+        // same XY/touch surface.  Continuous parameters use X, Y or X*Y.
+        // FREEZE occupies the upper-left zone, TRIGGER is a one-block pulse
+        // on a new touch, and GATE follows touch-down state.
         params->position = smoothedX;
         params->size = juce::jlimit (
-            0.0f, 1.0f, 0.05f + smoothedY * 0.95f);
+            0.0f, 1.0f, 0.04f + smoothedY * 0.96f);
         params->density = juce::jlimit (
-            0.0f, 1.0f, 0.05f + smoothedY * 0.95f);
+            0.0f, 1.0f, 0.04f + smoothedY * 0.96f);
         params->texture = juce::jlimit (
-            0.0f, 1.0f, 0.05f + smoothedX * 0.95f);
+            0.0f, 1.0f, 0.04f + smoothedX * 0.96f);
         params->pitch = (smoothedX - 0.5f) * 24.0f;
         params->stereo_spread = juce::jlimit (
-            0.0f, 1.0f, 0.15f + smoothedX * 0.85f);
+            0.0f, 1.0f, 0.10f + smoothedX * 0.90f);
         params->feedback = juce::jlimit (
-            0.0f, 0.72f, 0.04f + smoothedY * 0.62f);
+            0.0f, 0.78f, 0.03f + smoothedY * 0.70f);
         params->reverb = juce::jlimit (
-            0.0f, 0.86f,
-            0.05f + std::sqrt (smoothedX * smoothedY) * 0.76f);
+            0.0f, 0.90f,
+            0.04f + std::sqrt (smoothedX * smoothedY) * 0.82f);
+        params->dry_wet = juce::jlimit (
+            0.0f, 1.0f,
+            0.08f + 0.92f * (0.45f * smoothedX + 0.55f * smoothedY));
 
-        // The original DSP is kept fully wet.  Host wetMix below is the
-        // effective DRY/WET control, avoiding a second resampled dry path.
-        params->dry_wet = 1.0f;
-        params->freeze = false;
-        params->trigger = false;
-        params->gate = true;
+        const bool freezeZone =
+            smoothedY > 0.88f && smoothedX < 0.32f;
+        params->freeze = freezeZone;
+        params->trigger = touchDown && ! previousTouchDown;
+        params->gate = touchDown;
 
         const float xyWet = juce::jlimit (
-            0.0f, 0.72f,
-            0.10f + 0.62f * (0.45f * smoothedX + 0.55f * smoothedY));
+            0.0f, 0.78f,
+            0.08f + 0.70f * params->dry_wet);
         const float targetWet = enabled ? xyWet : 0.0f;
         const float step = static_cast<float> (
             1.0 / juce::jmax (1.0, 0.035 * hostRate));
@@ -223,6 +227,7 @@ public:
         activity.store (
             juce::jlimit (0.0f, 1.0f, visualEnvelope * 2.8f),
             std::memory_order_relaxed);
+        previousTouchDown = touchDown;
     }
 
 private:
@@ -283,6 +288,7 @@ private:
     float smoothedX = 0.5f;
     float smoothedY = 0.5f;
     float visualEnvelope = 0.0f;
+    bool previousTouchDown = false;
     bool prepared = false;
 };
 
@@ -293,7 +299,7 @@ class EffectsCloudsEngine final
 public:
     void prepare (double) noexcept {}
     float getActivity() const noexcept { return 0.0f; }
-    void process (juce::AudioBuffer<float>&, bool, float, float) noexcept {}
+    void process (juce::AudioBuffer<float>&, bool, float, float, bool) noexcept {}
 };
 
 #endif
