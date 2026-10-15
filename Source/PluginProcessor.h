@@ -148,6 +148,7 @@ private:
     int pendingMidi = -1;
     int stableCount = 0;
     float lastInputMidiFloat = 60.0f;
+    float chordBTuningOffsetSemitones = 0.0f;
     chordfx::ChordPlan currentPlan;
     bool haveChord = false;
     double samplesUntilChange = 0.0;
