@@ -218,6 +218,15 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
         loadedEurekaFrame = 0;
     }
 
+    vongonFrames.load (
+        BinaryData::vongon_frames_pack,
+        BinaryData::vongon_frames_packSize);
+    if (vongonFrames.getFrameCount() > 0)
+    {
+        currentVongonFrame = vongonFrames.getFrame (0);
+        loadedVongonFrame = 0;
+    }
+
    #if JUCE_ANDROID
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
     {
@@ -680,7 +689,7 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
     if (! hasKeyboardFocus (true))
         grabKeyboardFocus();
 
-    const int effectMode = juce::jlimit (0, 4, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
     const float activity = juce::jmax (
@@ -746,6 +755,37 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
 
         eurekaVisualPreviousActivity = activity;
     }
+    else if (effectMode >= 5
+             && effectMode <= 8
+             && vongonFrames.getFrameCount() > 0)
+    {
+        if (vongonVisualCooldown > 0)
+            --vongonVisualCooldown;
+
+        const bool attack =
+            activity > 0.006f
+            && activity > vongonVisualPreviousActivity * 1.30f + 0.0015f;
+
+        if (activity > 0.009f
+            && (attack || vongonVisualCooldown <= 0))
+        {
+            vongonFrameIndex =
+                nextVisualFrame (
+                    vongonFrames.getFrameCount(),
+                    loadedVongonFrame);
+            vongonVisualCooldown = 4;
+        }
+
+        if (vongonFrameIndex != loadedVongonFrame)
+        {
+            currentVongonFrame =
+                vongonFrames.getFrame (vongonFrameIndex);
+            loadedVongonFrame = vongonFrameIndex;
+            ++dotVongonRevision;
+        }
+
+        vongonVisualPreviousActivity = activity;
+    }
 
     dotActivity = juce::jlimit (0.0f, 1.0f, activity * 18.0f);
     if (dotModeEnabled() && ++dotTimerDivider >= 2)
@@ -779,7 +819,7 @@ void RealtimeChordFxAudioProcessorEditor::paint (juce::Graphics& g)
 
 void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g)
 {
-    const int effectMode = juce::jlimit (0, 4, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     if (effectMode == 3)
         return;
@@ -816,7 +856,7 @@ void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g
 
 void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
 {
-    const int effectMode = juce::jlimit (0, 4, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::chordMode)->load()));
@@ -830,6 +870,12 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
     if (effectMode == 4)
     {
         paintClouds (g);
+        return;
+    }
+
+    if (effectMode >= 5 && effectMode <= 8)
+    {
+        paintVongonMode (g, effectMode);
         return;
     }
 
@@ -1059,6 +1105,95 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
     g.drawFittedText (
         "X: POSITION / TEXTURE / PITCH(0, +/-7, +/-12) / SPREAD    Y: SIZE / DENSITY / FEEDBACK    XY: REVERB / DRY-WET",
         24, 666, 672, 24, juce::Justification::centredLeft, 1);
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
+    juce::Graphics& g, int effectMode)
+{
+    if (currentVongonFrame.isValid())
+        paintMediaFrame (
+            g, currentVongonFrame,
+            juce::Rectangle<float> (0, 0, design, design),
+            2, dotVongonRevision);
+
+    g.setColour (juce::Colours::black.withAlpha (0.34f));
+    g.fillRect (0.0f, 0.0f, 720.0f, 88.0f);
+    g.setColour (juce::Colours::black.withAlpha (0.58f));
+    g.fillRect (0.0f, 560.0f, 720.0f, 160.0f);
+
+    const float x = juce::jlimit (0.0f, 1.0f, processor.getVongonX());
+    const float y = juce::jlimit (0.0f, 1.0f, processor.getVongonY());
+    const bool touch = processor.getVongonTouch();
+
+    const juce::String name =
+        effectMode == 5 ? "ULTRASHEER"
+        : effectMode == 6 ? "ROSETONES"
+        : effectMode == 7 ? "SOLARFAZE"
+                          : "POLYPHRASE";
+
+    const juce::String descriptor =
+        effectMode == 5 ? "PLATE / VIBRATO"
+        : effectMode == 6 ? "CHROMATIC RESONATOR"
+        : effectMode == 7 ? "MULTIBAND SAT / DETUNE"
+                          : "DUAL DELAY / LOOPER";
+
+    g.setColour (uiColour (0.96f));
+    g.setFont (juce::FontOptions (21.0f).withStyle ("Bold"));
+    g.drawText (name, 28, 18, 260, 34,
+                juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (11.5f));
+    g.setColour (uiColour (0.70f));
+    g.drawText (descriptor, 270, 24, 240, 24,
+                juce::Justification::centredLeft);
+    g.setColour (uiColour (0.94f));
+    g.drawText ("CONFIG", 604, 22, 88, 24,
+                juce::Justification::centredRight);
+
+    const float px = x * design;
+    const float py = 70.0f + (1.0f - y) * 650.0f;
+    g.setColour (uiColour (touch ? 0.86f : 0.34f));
+    g.drawLine (px, 72.0f, px, 558.0f, 1.0f);
+    g.drawLine (0.0f, py, 720.0f, py, 1.0f);
+    g.fillRect (px - 4.0f, py - 4.0f, 8.0f, 8.0f);
+
+    g.setColour (uiColour (0.80f));
+    g.setFont (juce::FontOptions (10.8f));
+
+    juce::String line1, line2;
+    if (effectMode == 5)
+    {
+        line1 = "X: VIBRATO DEPTH / RATE / CYCLE→RANDOM";
+        line2 = "Y: PLATE DECAY / BRIGHTNESS / MIX";
+    }
+    else if (effectMode == 6)
+    {
+        line1 = "X: RESONATOR REGISTER / TONE";
+        line2 = "Y: SENSITIVITY / FEEDBACK / SYNTH MIX";
+    }
+    else if (effectMode == 7)
+    {
+        line1 = "X: BASS / MID / TREB SATURATION";
+        line2 = "Y: ENVELOPE DETUNE / STEREO WIDTH / MIX";
+    }
+    else
+    {
+        line1 = "X: DELAY TIME 85ms→22s / ROUTING";
+        line2 = "Y: FEEDBACK / TONE / MOD / MIX   TOP: HOLD";
+    }
+
+    g.drawFittedText (
+        line1, 24, 604, 672, 22,
+        juce::Justification::centredLeft, 1);
+    g.drawFittedText (
+        line2, 24, 634, 672, 22,
+        juce::Justification::centredLeft, 1);
+
+    g.setColour (uiColour (0.60f));
+    g.drawText (
+        "X " + juce::String (juce::roundToInt (x * 127.0f)).paddedLeft ('0', 3)
+        + "   Y " + juce::String (juce::roundToInt (y * 127.0f)).paddedLeft ('0', 3),
+        24, 670, 220, 20,
+        juce::Justification::centredLeft);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
@@ -1853,7 +1988,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
         }
     }
 
-    const int effectMode = juce::jlimit (0, 4, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::chordMode)->load()));
@@ -2109,6 +2244,16 @@ void RealtimeChordFxAudioProcessorEditor::updateCloudsXYPoint (
         0.0f, 1.0f,
         1.0f - (p.y - 70.0f) / (design - 70.0f));
     processor.setCloudsXY (x, y, touchDown);
+}
+
+void RealtimeChordFxAudioProcessorEditor::updateVongonXYPoint (
+    juce::Point<float> p, bool touchDown)
+{
+    const float x = juce::jlimit (0.0f, 1.0f, p.x / design);
+    const float y = juce::jlimit (
+        0.0f, 1.0f,
+        1.0f - (p.y - 70.0f) / (design - 70.0f));
+    processor.setVongonXY (x, y, touchDown);
 }
 
 void RealtimeChordFxAudioProcessorEditor::updateEurekaXYPoint (
@@ -2370,7 +2515,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
         if (p.y >= 508 && p.y < 540)
         {
-            const int effect = juce::jlimit (0, 4, juce::roundToInt (
+            const int effect = juce::jlimit (0, 8, juce::roundToInt (
                 processor.state().getRawParameterValue (ParamID::effectMode)->load()));
             const int chord = juce::jlimit (0, 1, juce::roundToInt (
                 processor.state().getRawParameterValue (ParamID::chordMode)->load()));
@@ -2425,7 +2570,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    const int currentEffectMode = juce::jlimit (0, 4, juce::roundToInt (
+    const int currentEffectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
     if (currentEffectMode != 3
@@ -2464,7 +2609,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    const int effectMode = juce::jlimit (0, 4, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
     if (effectMode == 4)
@@ -2716,7 +2861,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
     if (midiControlConfigVisible || audioConfigVisible || configVisible)
         return;
 
-    const int effectMode = juce::jlimit (0, 4, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
     if (effectMode == 4 && cloudsXYTouchDown)
@@ -2783,7 +2928,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 
 bool RealtimeChordFxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
-    const int effectMode = juce::jlimit (0, 4, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
     if (effectMode == 3)
