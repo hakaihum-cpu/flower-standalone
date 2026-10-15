@@ -99,27 +99,41 @@ public:
         // same XY/touch surface.  Continuous parameters use X, Y or X*Y.
         // FREEZE occupies the upper-left zone, TRIGGER is a one-block pulse
         // on a new touch, and GATE follows touch-down state.
-        params->position = smoothedX;
+        // Keep the central performance area musical.  Most of the XY
+        // plane stays at unshifted pitch; only the far left/right edges enter
+        // consonant interval zones.  Other parameters avoid the destructive
+        // extremes of the raw Clouds ranges while still covering the full
+        // character of the effect.
+        params->position = juce::jlimit (
+            0.0f, 1.0f, 0.08f + smoothedX * 0.84f);
         params->size = juce::jlimit (
-            0.0f, 1.0f, 0.04f + smoothedY * 0.96f);
+            0.0f, 1.0f, 0.14f + smoothedY * 0.72f);
         params->density = juce::jlimit (
-            0.0f, 1.0f, 0.04f + smoothedY * 0.96f);
+            0.0f, 1.0f, 0.28f + smoothedY * 0.44f);
         params->texture = juce::jlimit (
-            0.0f, 1.0f, 0.04f + smoothedX * 0.96f);
-        params->pitch = (smoothedX - 0.5f) * 24.0f;
+            0.0f, 1.0f, 0.24f + smoothedX * 0.52f);
+
+        const float pitchSemitones =
+            smoothedX < 0.10f ? -12.0f
+            : smoothedX < 0.22f ? -7.0f
+            : smoothedX > 0.90f ? 12.0f
+            : smoothedX > 0.78f ? 7.0f
+                                : 0.0f;
+        params->pitch = pitchSemitones;
+
         params->stereo_spread = juce::jlimit (
-            0.0f, 1.0f, 0.10f + smoothedX * 0.90f);
+            0.0f, 1.0f, 0.18f + smoothedX * 0.58f);
         params->feedback = juce::jlimit (
-            0.0f, 0.78f, 0.03f + smoothedY * 0.70f);
+            0.0f, 0.42f, 0.03f + smoothedY * 0.34f);
         params->reverb = juce::jlimit (
-            0.0f, 0.90f,
-            0.04f + std::sqrt (smoothedX * smoothedY) * 0.82f);
+            0.0f, 0.72f,
+            0.02f + std::pow (smoothedX * smoothedY, 1.35f) * 0.68f);
         params->dry_wet = juce::jlimit (
-            0.0f, 1.0f,
-            0.08f + 0.92f * (0.45f * smoothedX + 0.55f * smoothedY));
+            0.18f, 0.88f,
+            0.24f + 0.58f * (0.30f * smoothedX + 0.70f * smoothedY));
 
         const bool freezeZone =
-            smoothedY > 0.88f && smoothedX < 0.32f;
+            smoothedY > 0.93f && smoothedX < 0.24f;
         params->freeze = freezeZone;
         params->trigger = touchDown && ! previousTouchDown;
         params->gate = touchDown;
