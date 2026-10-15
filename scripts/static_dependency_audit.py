@@ -283,9 +283,9 @@ for need in [
     "params.reverb",
     "hallReverb",
     "hall.roomSize = 0.88f",
-    "0.52f * params.reverb",
+    "0.52f * smoothedReverb",
     "params.loops == 2 ? 2.0 : 1.0",
-    "0.0005 : 0.006",
+    "params.og ? 0.0005 : 0.010",
     "headPosition",
 ]:
     if need not in haze:
