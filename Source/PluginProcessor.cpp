@@ -59,6 +59,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     sineArpeggiator.prepare (currentSampleRate);
     chordBRandomFx.prepare (currentSampleRate);
     hazeProcessor.prepare (currentSampleRate);
+    cloudsEngine.prepare (currentSampleRate);
     pendingMidi = -1;
     stableCount = 0;
     haveChord = false;
@@ -163,6 +164,13 @@ void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e
     const float midiFloat = 69.0f + 12.0f * std::log2 (e.hz / 440.0f);
     const int midi = juce::jlimit (0, 127, juce::roundToInt (midiFloat));
     lastInputMidiFloat = midiFloat;
+
+    // CHORD-B is generated rather than pitch-shifted from the live input.
+    // Preserve the live source's cents offset so the sine chord does not beat
+    // against a slightly sharp/flat instrument while keeping chord tones on
+    // the same MIDI pitch classes.
+    sineArpeggiator.setTuningOffsetSemitones (
+        midiFloat - (float) midi);
 
     if (midi == pendingMidi) ++stableCount;
     else { pendingMidi = midi; stableCount = 1; }
@@ -624,6 +632,18 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             processChordB (buffer);
     }
 
+    if (effectMode != 3)
+    {
+        const bool cloudsOn =
+            apvts.getRawParameterValue (ParamID::cloudsEnabled)->load()
+            >= 0.5f;
+        cloudsEngine.process (
+            buffer,
+            cloudsOn,
+            cloudsX.load (std::memory_order_relaxed),
+            cloudsY.load (std::memory_order_relaxed));
+    }
+
     if (effectMode == 2 || effectMode == 3)
     {
         // EUREKA owns its saturation/level behaviour. CHORDBOT is MIDI-only.
@@ -1037,9 +1057,19 @@ void RealtimeChordFxAudioProcessor::setMidiControllerXY (int x, int y, bool touc
     y = juce::jlimit (0, 127, y);
     controllerX.store (x, std::memory_order_relaxed);
     controllerY.store (y, std::memory_order_relaxed);
+    cloudsX.store ((float) x / 127.0f, std::memory_order_relaxed);
+    cloudsY.store ((float) y / 127.0f, std::memory_order_relaxed);
     controllerTouch.store (touchDown, std::memory_order_relaxed);
     controllerDirty.store (true, std::memory_order_release);
     visualFrame.store (controllerFrameForXY (x, y), std::memory_order_relaxed);
+}
+
+void RealtimeChordFxAudioProcessor::setCloudsXY (float x, float y) noexcept
+{
+    cloudsX.store (juce::jlimit (0.0f, 1.0f, x),
+                   std::memory_order_relaxed);
+    cloudsY.store (juce::jlimit (0.0f, 1.0f, y),
+                   std::memory_order_relaxed);
 }
 
 void RealtimeChordFxAudioProcessor::releaseMidiControllerTouch() noexcept
@@ -1158,6 +1188,8 @@ void RealtimeChordFxAudioProcessor::applyMotionPoint (int x, int y)
     y = juce::jlimit (0, 127, y);
     controllerX.store (x, std::memory_order_relaxed);
     controllerY.store (y, std::memory_order_relaxed);
+    cloudsX.store ((float) x / 127.0f, std::memory_order_relaxed);
+    cloudsY.store ((float) y / 127.0f, std::memory_order_relaxed);
     controllerTouch.store (true, std::memory_order_relaxed);
     controllerDirty.store (true, std::memory_order_release);
     if (apvts.getRawParameterValue (ParamID::midiControl)->load() >= 0.5f)
@@ -1660,6 +1692,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
                             "1.5 BURSTS", "2 BURSTS", "3 BURSTS", "4 BURSTS",
                             "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS" },
         0));
+    p.add (std::make_unique<juce::AudioParameterBool> (
+        ParamID::cloudsEnabled, "CLOUDS", false));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeMix, "HAZE MIX", 0.0f, 1.0f, 0.55f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeTime, "HAZE TIME", 0.0f, 1.0f, 0.50f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeAmount, "HAZE AMOUNT", 0.0f, 1.0f, 0.50f));
