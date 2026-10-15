@@ -16,6 +16,17 @@
    <FILE id="yinc01" name="YinPitchDetector.cpp" compile="1" resource="0" file="Source/YinPitchDetector.cpp"/>
    <FILE id="frmh01" name="FramePack.h" compile="0" resource="0" file="Source/FramePack.h"/>
    <FILE id="hazh01" name="HazeProcessor.h" compile="0" resource="0" file="Source/HazeProcessor.h"/>
+   <FILE id="cldh01" name="EffectsCloudsEngine.h" compile="0" resource="0" file="Source/EffectsCloudsEngine.h"/>
+   <FILE id="cld001" name="correlator.cc" compile="1" resource="0" file="Source/clouds/dsp/correlator.cc"/>
+   <FILE id="cld002" name="granular_processor.cc" compile="1" resource="0" file="Source/clouds/dsp/granular_processor.cc"/>
+   <FILE id="cld003" name="mu_law.cc" compile="1" resource="0" file="Source/clouds/dsp/mu_law.cc"/>
+   <FILE id="cld004" name="frame_transformation.cc" compile="1" resource="0" file="Source/clouds/dsp/pvoc/frame_transformation.cc"/>
+   <FILE id="cld005" name="phase_vocoder.cc" compile="1" resource="0" file="Source/clouds/dsp/pvoc/phase_vocoder.cc"/>
+   <FILE id="cld006" name="stft.cc" compile="1" resource="0" file="Source/clouds/dsp/pvoc/stft.cc"/>
+   <FILE id="cld007" name="clouds_resources.cc" compile="1" resource="0" file="Source/clouds/resources.cc"/>
+   <FILE id="stl001" name="atan.cc" compile="1" resource="0" file="Source/stmlib/dsp/atan.cc"/>
+   <FILE id="stl002" name="units.cc" compile="1" resource="0" file="Source/stmlib/dsp/units.cc"/>
+   <FILE id="stl003" name="random.cc" compile="1" resource="0" file="Source/stmlib/utils/random.cc"/>
    <FILE id="frmc01" name="FramePack.cpp" compile="1" resource="0" file="Source/FramePack.cpp"/>
    <FILE id="prch01" name="PluginProcessor.h" compile="0" resource="0" file="Source/PluginProcessor.h"/>
    <FILE id="prcc01" name="PluginProcessor.cpp" compile="1" resource="0" file="Source/PluginProcessor.cpp"/>
