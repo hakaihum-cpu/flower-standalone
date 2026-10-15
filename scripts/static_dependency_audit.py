@@ -735,7 +735,7 @@ for need in [
     "smoothedRepeat",
     "smoothedReverb",
     "sampleRate * 0.003",
-    "sampleRate * 0.010",
+    "params.og ? 0.0005 : 0.010",
     "sampleRate * 0.008",
     "softProtect (out[i])",
 ]:
