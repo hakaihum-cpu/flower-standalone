@@ -8,6 +8,7 @@
 #include "YinPitchDetector.h"
 #include "ChordRenderers.h"
 #include "HazeProcessor.h"
+#include "EffectsCloudsEngine.h"
 
 class RealtimeChordFxAudioProcessor final : public juce::AudioProcessor
 {
@@ -51,6 +52,7 @@ public:
     int getVisualFrame() const noexcept { return visualFrame.load (std::memory_order_relaxed); }
     juce::String getChordLabel() const;
     void setMidiControllerXY (int x, int y, bool touchDown) noexcept;
+    void setCloudsXY (float x, float y) noexcept;
     void releaseMidiControllerTouch() noexcept;
     void notifyMidiControllerConfigChanged() noexcept { controllerDirty.store (true, std::memory_order_release); }
     void notifyChordAHoldChanged() noexcept { chordAHoldRefreshRequested.store (true, std::memory_order_release); }
@@ -120,6 +122,9 @@ private:
     chordfx::SineArpeggiator sineArpeggiator;
     chordfx::ChordBRandomFx chordBRandomFx;
     chordfx::HazeProcessor hazeProcessor;
+    EffectsCloudsEngine cloudsEngine;
+    std::atomic<float> cloudsX { 0.5f };
+    std::atomic<float> cloudsY { 0.5f };
     std::atomic<bool> hazeClearRequested { false };
     std::atomic<bool> hazeShuffleRequested { false };
     juce::Reverb chordReverb;
