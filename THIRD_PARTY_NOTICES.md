@@ -42,3 +42,12 @@ materialized source files. Mutable Instruments is a registered trademark; this
 integration is not presented as an official Mutable Instruments product.
 
 Upstream source: https://github.com/pichenettes/eurorack
+
+
+## Vongon-inspired EFFECTS modes
+
+ULTRASHEER, ROSETONES, SOLARFAZE, and POLYPHRASE are used here as user-requested
+reference names for independently implemented EFFECTS modes inspired by the
+published signal-flow/features of Vongon products. No Vongon firmware, source
+code, impulse response, or other proprietary DSP asset is included. Vongon and
+the referenced product names are trademarks of their respective owner.
