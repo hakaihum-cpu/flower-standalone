@@ -153,6 +153,20 @@ for need in [
 if jucer_text.count('headerPath="../../Source"') != 2:
     fail("Android Clouds include-root contract missing from Debug/Release configurations")
 
+# Compile-time duplicate definition guard for processor/editor member functions.
+# This catches accidental repeated qualified definitions before CircleCI reaches clang.
+qualified_method_pattern = re.compile(
+    r"^(?:[\w:<>&*~]+\s+)+"
+    r"(RealtimeChordFxAudioProcessor(?:Editor)?::[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+    re.MULTILINE,
+)
+for rel in ["Source/PluginProcessor.cpp", "Source/PluginEditor.cpp"]:
+    source_text = (R / rel).read_text()
+    names = qualified_method_pattern.findall(source_text)
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        fail(f"duplicate qualified method definition in {rel}: {duplicates}")
+
 # Product isolation / no synth implementation.
 target_source_files = [
     "Source/FramePack.cpp","Source/FramePack.h",
