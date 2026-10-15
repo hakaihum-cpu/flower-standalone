@@ -4,7 +4,7 @@ import csv, hashlib, sys, xml.etree.ElementTree as ET
 
 R = Path(__file__).resolve().parents[1]
 JUCER = R / "RealtimeChordFX_Standalone.jucer"
-MODE_CHOICE_TOKEN = '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS" }, 0'
+MODE_CHOICE_TOKEN = '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES", "SOLARFAZE", "POLYPHRASE" }, 0'
 
 EXPECTED_MODULES = {
     "juce_audio_basics",
@@ -47,11 +47,13 @@ required = [
     "RealtimeChordFX_Standalone.jucer",
     "Source/PluginProcessor.cpp", "Source/PluginEditor.cpp", "Source/ChordRenderers.h",
     "Source/HazeProcessor.h", "Source/EffectsCloudsEngine.h",
+    "Source/VongonInspiredProcessor.h",
     "Source/TheoryEngine.cpp", "Source/YinPitchDetector.cpp",
     "Source/GranularPitchBank.cpp", "Source/PsolaHarmonyBank.h", "Source/FramePack.cpp",
     "Resources/classroom_frames.pack",
     "Resources/classroom_frames_manifest.csv",
     "Resources/eureka_frames.pack",
+    "Resources/vongon_frames.pack",
     "Resources/effects_app_icon.jpg",
     "Resources/effects_app_icon.b64",
     "PROJECT_CONTRACT.md", "BUILD_HISTORY.csv", "THIRD_PARTY_NOTICES.md",
@@ -94,6 +96,19 @@ eureka_count = int.from_bytes(eureka_pack[4:8], "little")
 if eureka_count != 144:
     fail(f"EUREKA frame count mismatch: {eureka_count}")
 
+# New user-supplied Vongon-mode videos only.  EUREKA keeps its own immutable bank.
+vongon_pack = (R / "Resources/vongon_frames.pack").read_bytes()
+if len(vongon_pack) != 1403092:
+    fail(f"Vongon frame pack size mismatch: {len(vongon_pack)}")
+vongon_sha = hashlib.sha256(vongon_pack).hexdigest()
+if vongon_sha != "1bb7e165022ac796f01e8611342612b8127c5c17d58a2957a7902ca0e27b7bda":
+    fail(f"Vongon frame pack sha256 mismatch: {vongon_sha}")
+if vongon_pack[:4] != b"CRF1":
+    fail("Vongon frame pack magic mismatch")
+vongon_count = int.from_bytes(vongon_pack[4:8], "little")
+if vongon_count != 216:
+    fail(f"Vongon frame count mismatch: {vongon_count}")
+
 icon = (R / "Resources/effects_app_icon.jpg").read_bytes()
 if len(icon) != 27540:
     fail(f"launcher icon size mismatch: {len(icon)}")
@@ -106,6 +121,8 @@ if not icon.startswith(b"\xff\xd8"):
 jucer_text = JUCER.read_text()
 for need in [
     'name="eureka_frames.pack" compile="0" resource="1" file="Resources/eureka_frames.pack"',
+    'name="vongon_frames.pack" compile="0" resource="1" file="Resources/vongon_frames.pack"',
+    'name="VongonInspiredProcessor.h" compile="0" resource="0" file="Source/VongonInspiredProcessor.h"',
     'name="effects_app_icon.jpg" compile="0" resource="0" file="Resources/effects_app_icon.jpg"',
     'name="EffectsCloudsEngine.h" compile="0" resource="0" file="Source/EffectsCloudsEngine.h"',
     'file="Source/clouds/dsp/granular_processor.cc"',
@@ -129,6 +146,7 @@ target_source_files = [
     "Source/ChordRenderers.h",
     "Source/HazeProcessor.h",
     "Source/EffectsCloudsEngine.h",
+    "Source/VongonInspiredProcessor.h",
     "Source/PsolaHarmonyBank.h",
     "Source/PluginEditor.cpp","Source/PluginEditor.h",
     "Source/PluginProcessor.cpp","Source/PluginProcessor.h",
@@ -140,7 +158,7 @@ for bad in ["SynthVoice", "juce::Synthesiser", "SineVoice", "FLOWER", "MIYAKO"]:
     if bad in src:
         fail(f"forbidden cross-project/synth token in product source: {bad}")
 for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● REC",
-             "MODE","CHORD","DREAMY","EUREKA","CHORDBOT","CLOUDS","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
+             "MODE","CHORD","DREAMY","EUREKA","CHORDBOT","CLOUDS","ULTRASHEER","ROSETONES","SOLARFAZE","POLYPHRASE","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
     if need not in src:
         fail(f"UI/requirement token missing: {need}")
 
@@ -161,8 +179,13 @@ for need in [
     '"EUREKA"',
     '"CHORDBOT"',
     '"CLOUDS"',
+    '"ULTRASHEER"',
+    '"ROSETONES"',
+    '"SOLARFAZE"',
+    '"POLYPHRASE"',
     "paintHaze (g)",
     "paintClouds (g)",
+    "paintVongonMode (g, effectMode)",
     "paintChordBot (g)",
     '"X " + juce::String',
     '"CONFIG"',
@@ -255,6 +278,9 @@ for need in [
     "cloudsEngine.process",
     "effectMode == 4",
     "setCloudsXY",
+    "vongonProcessor.prepare",
+    "vongonProcessor.process",
+    "setVongonXY",
     "hazeParamsFromState",
     "hazeClearRequested.exchange",
     "hazeShuffleRequested.exchange",
@@ -272,8 +298,10 @@ for need in [
     if need not in processor:
         fail(f"HAZE processor integration missing: {need}")
 
-if 'if (effectMode == 2 || effectMode == 3)' not in processor or "outputSafetyGain = 1.0f;" not in processor:
-    fail("EUREKA/CHORDBOT must stay outside legacy output soft protection")
+if 'if (effectMode == 3)' not in processor or "effectMode == 2" not in processor:
+    fail("CHORDBOT-only bypass / EUREKA output-safety routing missing")
+if "effectMode >= 4" not in processor or "applyOutputSafety (buffer, outputActive)" not in processor:
+    fail("audible mode output-safety routing missing")
 
 for need in [
     "ParamID::hazeMix",
@@ -373,8 +401,11 @@ parameter_ids = (R / "Source/ParameterIDs.h").read_text()
 for need in [
     "ParamID::wet",
     "ParamID::boostDb",
-    "saveUserPreset",
-    "loadUserPreset",
+    "saveUserPreset (int slot)",
+    "loadUserPreset (int slot)",
+    "hasUserPreset (int slot)",
+    '"userPresetXml" + juce::String (slot)',
+    "globalPresetSlot",
     "wetDryScratch",
     "decibelsToGain",
 ]:
@@ -638,6 +669,10 @@ for need in [
     "params->size",
     "params->density",
     "params->texture",
+    "pitchSemitones",
+    "smoothedX < 0.10f ? -12.0f",
+    "smoothedX < 0.22f ? -7.0f",
+    "smoothedX > 0.78f ? 7.0f",
     "params->pitch",
     "params->stereo_spread",
     "params->feedback",
@@ -676,6 +711,48 @@ for rel in [
 notices = (R / "THIRD_PARTY_NOTICES.md").read_text()
 if "Mutable Instruments Clouds" not in notices or "Emilie Gillet" not in notices:
     fail("Clouds MIT attribution missing")
+
+haze = (R / "Source/HazeProcessor.h").read_text()
+for need in [
+    "smoothedTime",
+    "smoothedRepeat",
+    "smoothedReverb",
+    "sampleRate * 0.003",
+    "sampleRate * 0.010",
+    "sampleRate * 0.008",
+    "softProtect (out[i])",
+]:
+    if need not in haze:
+        fail(f"EUREKA click-hardening contract missing: {need}")
+
+vongon = (R / "Source/VongonInspiredProcessor.h").read_text()
+for need in [
+    "class VongonInspiredProcessor",
+    "ultrasheer = 5",
+    "rosetones = 6",
+    "solarfaze = 7",
+    "polyphrase = 8",
+    "processUltrasheer",
+    "processRosetones",
+    "processSolarfaze",
+    "processPolyphrase",
+    "polyCrossfadeRemaining",
+    "22.0 / 0.085",
+    "std::array<std::array<ResonatorState, 12>, 2>",
+]:
+    if need not in vongon:
+        fail(f"Vongon-inspired DSP contract missing: {need}")
+
+for need in [
+    "vongonFrames",
+    "BinaryData::vongon_frames_pack",
+    "dotVongonRevision",
+    "updateVongonXYPoint",
+    "vongonXYTouchDown",
+    "paintVongonMode",
+]:
+    if need not in editor and need not in editor_header:
+        fail(f"Vongon video/DOT/XY contract missing: {need}")
 
 # JUCER: exact module set proven by FLOWER Golden and complete JUCE 9.0.2 dependency closure.
 root = ET.parse(JUCER).getroot()
@@ -718,6 +795,10 @@ if "GranularPitchBank.cpp" in jucer_text or "GranularPitchBank.h" in jucer_text:
     fail("obsolete generated-audio pitch shifter must not be compiled into EFFECTS")
 if "Resources/classroom_frames.pack" not in jucer_text:
     fail("supplied frame pack not embedded")
+if "Resources/eureka_frames.pack" not in jucer_text:
+    fail("EUREKA frame pack not embedded")
+if "Resources/vongon_frames.pack" not in jucer_text:
+    fail("Vongon frame pack not embedded")
 for bad_ref in ["FLOWER_Standalone.jucer","SynthVoice","Carnival","flower_"]:
     if bad_ref in jucer_text:
         fail(f"cross-project JUCER reference found: {bad_ref}")
@@ -777,6 +858,9 @@ print("[PASS] JUCER module set matches proven FLOWER Golden")
 print("[PASS] JUCE 9.0.2 dependency closure verified")
 print("[PASS] Android RECORD_AUDIO exporter contract verified")
 print("[PASS] known-good AN-10..AN-15 CircleCI controls preserved")
-print("[PASS] pinned Clouds DSP / XY / attribution contracts verified")
-print("[PASS] CHORD-B live cents-offset tuning regression verified")
+print("[PASS] pinned Clouds DSP / musical XY / attribution contracts verified")
+print("[PASS] CHORD-B continuously-smoothed cents-offset contract verified")
+print("[PASS] EUREKA click-hardening / output-safety contracts verified")
+print("[PASS] three global preset slots verified")
+print("[PASS] Vongon-inspired 4-mode DSP / supplied-video / DOT contracts verified")
 print("[PASS] CHORD/Dreamy noise-hardening contracts verified")
