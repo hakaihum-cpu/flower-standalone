@@ -154,7 +154,7 @@ private:
     double gateSamplesRemaining = 0.0;
     int midiClockTicks = 0;
     bool midiClockRunning = false;
-    int lastEffectMode = 0; // 0=CHORD, 1=DREAMY, 2=EUREKA, 3=CHORDBOT
+    int lastEffectMode = 0; // 0=CHORD, 1=DREAMY, 2=EUREKA, 3=CHORDBOT, 4=CLOUDS
     int lastChordMode = 0;  // 0=CHORD-A, 1=CHORD-B
     int pitchSamplesSinceValid = 1000000;
     float outputSafetyGain = 0.0f;
