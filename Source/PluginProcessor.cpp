@@ -82,6 +82,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     lastChordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
     pitchSamplesSinceValid = 1000000;
+    chordBTuningOffsetSemitones = 0.0f;
     outputSafetyGain = 0.0f;
     outputSafetyWasActive = false;
 
@@ -178,8 +179,10 @@ void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e
     // Capture the stable live source's cents offset once per accepted note so
     // the generated chord matches a slightly sharp/flat instrument without
     // following detector jitter on every analysis frame.
+    chordBTuningOffsetSemitones =
+        juce::jlimit (-0.49f, 0.49f, midiFloat - (float) midi);
     sineArpeggiator.setTuningOffsetSemitones (
-        midiFloat - (float) midi);
+        chordBTuningOffsetSemitones);
 
     detectedMidi.store (midi, std::memory_order_relaxed);
 
@@ -278,6 +281,8 @@ void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
     if (mode == 0)
     {
         sineArpeggiator.reset();
+        sineArpeggiator.setTuningOffsetSemitones (
+            chordBTuningOffsetSemitones);
         chordBRandomFx.reset();
         chordReverb.reset();
 
@@ -455,6 +460,8 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     {
         lastChordMode = chordMode;
         sineArpeggiator.reset();
+        sineArpeggiator.setTuningOffsetSemitones (
+            chordBTuningOffsetSemitones);
         chordBRandomFx.reset();
         chordReverb.reset();
         if (haveChord)
@@ -477,6 +484,8 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         theory.reset();
         sampleChordRenderer.reset();
         sineArpeggiator.reset();
+        chordBTuningOffsetSemitones = 0.0f;
+        sineArpeggiator.setTuningOffsetSemitones (0.0f);
         chordBRandomFx.reset();
         hazeProcessor.clear();
         chordReverb.reset();
