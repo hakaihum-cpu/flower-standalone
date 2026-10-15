@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <vector>
 
 // Four original EFFECTS modes inspired by the signal-flow ideas of Vongon
