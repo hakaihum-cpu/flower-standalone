@@ -167,6 +167,27 @@ for rel in ["Source/PluginProcessor.cpp", "Source/PluginEditor.cpp"]:
     if duplicates:
         fail(f"duplicate qualified method definition in {rel}: {duplicates}")
 
+# Exact one-definition guards for newly-added methods whose accidental
+# duplication is a hard C++ compile error.
+for rel, token in [
+    ("Source/PluginEditor.cpp",
+     "RealtimeChordFxAudioProcessorEditor::updateVongonXYPoint ("),
+    ("Source/PluginEditor.cpp",
+     "RealtimeChordFxAudioProcessorEditor::paintVongonMode ("),
+    ("Source/PluginProcessor.cpp",
+     "RealtimeChordFxAudioProcessor::setVongonXY ("),
+    ("Source/PluginProcessor.cpp",
+     "RealtimeChordFxAudioProcessor::saveUserPreset (int slot)"),
+    ("Source/PluginProcessor.cpp",
+     "RealtimeChordFxAudioProcessor::loadUserPreset (int slot)"),
+    ("Source/PluginProcessor.cpp",
+     "RealtimeChordFxAudioProcessor::hasUserPreset (int slot)"),
+]:
+    source_text = (R / rel).read_text()
+    count = source_text.count(token)
+    if count != 1:
+        fail(f"expected exactly one definition token in {rel}: {token} count={count}")
+
 # Product isolation / no synth implementation.
 target_source_files = [
     "Source/FramePack.cpp","Source/FramePack.h",
