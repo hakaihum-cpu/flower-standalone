@@ -64,6 +64,9 @@ public:
         filterLow = { 0.0f, 0.0f };
         filterBand = { 0.0f, 0.0f };
         currentSpeed = 1.0;
+        smoothedTime = 0.50f;
+        smoothedRepeat = 0.0f;
+        smoothedReverb = 0.0f;
         randomState = 0x48415A45u;
         hallReverb.setSampleRate (sampleRate);
         hallReverb.reset();
@@ -84,6 +87,9 @@ public:
             warbleBuffer.clear();
         filterLow = { 0.0f, 0.0f };
         filterBand = { 0.0f, 0.0f };
+        smoothedTime = params.time;
+        smoothedRepeat = params.repeat;
+        smoothedReverb = params.reverb;
         hallReverb.reset();
     }
 
@@ -174,7 +180,7 @@ public:
         juce::Reverb::Parameters hall;
         hall.roomSize = 0.88f;
         hall.damping = 0.42f;
-        hall.wetLevel = params.bypass ? 0.0f : 0.52f * params.reverb;
+        hall.wetLevel = params.bypass ? 0.0f : 0.52f * smoothedReverb;
         hall.dryLevel = 1.0f;
         hall.width = 1.0f;
         hall.freezeMode = 0.0f;
@@ -187,6 +193,16 @@ public:
         else
             hallReverb.processMono (
                 buffer.getWritePointer (0), samples);
+
+        if (! params.bypass)
+        {
+            for (int ch = 0; ch < channels; ++ch)
+            {
+                auto* out = buffer.getWritePointer (ch);
+                for (int i = 0; i < samples; ++i)
+                    out[i] = softProtect (out[i]);
+            }
+        }
     }
 
 private:
@@ -215,6 +231,21 @@ private:
         return std::isfinite (v) ? v : 0.0f;
     }
 
+    static float softProtect (float sample) noexcept
+    {
+        sample = finite (sample);
+        constexpr float threshold = 0.92f;
+        constexpr float ceiling = 0.995f;
+        const float magnitude = std::abs (sample);
+        if (magnitude <= threshold)
+            return sample;
+
+        const float knee = ceiling - threshold;
+        const float shaped =
+            threshold + knee * std::tanh ((magnitude - threshold) / knee);
+        return std::copysign (shaped, sample);
+    }
+
     uint32_t nextRandom() noexcept
     {
         randomState ^= randomState << 13;
@@ -240,7 +271,7 @@ private:
         const float timeModDepth =
             params.mod < 0.5f ? (0.5f - params.mod) * 2.0f : 0.0f;
         const float effectiveTime = clamp01 (
-            params.time + modSmoothed * 0.16f * timeModDepth);
+            smoothedTime + modSmoothed * 0.16f * timeModDepth);
         const double seconds =
             lane == 0 ? 10.0 * effectiveTime
                       : 10.0 * (1.0 - effectiveTime);
@@ -258,7 +289,7 @@ private:
     {
         const float depth =
             params.mod < 0.5f ? (0.5f - params.mod) * 2.0f : 0.0f;
-        return clamp01 (params.repeat + modSmoothed * 0.22f * depth);
+        return clamp01 (smoothedRepeat + modSmoothed * 0.22f * depth);
     }
 
     int activeSpan (int lane) const noexcept
@@ -268,7 +299,12 @@ private:
         const float minFactor = params.og ? 0.0015f : 0.006f;
         const float factor = std::pow (
             minFactor, std::pow (repeat, params.og ? 1.05f : 1.25f));
-        return std::clamp ((int) std::lround (loop * factor), 24, loop);
+        const int minimumSpan = params.og
+            ? 24
+            : std::max (96, (int) std::lround (sampleRate * 0.003));
+        return std::clamp (
+            (int) std::lround (loop * factor),
+            minimumSpan, loop);
     }
 
     float effectiveHaze() const noexcept
@@ -306,7 +342,7 @@ private:
             lane.playPosition = randomUnit() * (double) loopSamples (index);
             lane.jumpCrossfadeTotal = std::max (
                 1, (int) std::lround (
-                    sampleRate * (params.og ? 0.0005 : 0.006)));
+                    sampleRate * (params.og ? 0.0005 : 0.010)));
             lane.jumpCrossfade = lane.jumpCrossfadeTotal;
         }
     }
@@ -358,7 +394,7 @@ private:
 
         const int seam = std::clamp (
             params.og ? 12
-                      : (int) std::lround (sampleRate * 0.004),
+                      : (int) std::lround (sampleRate * 0.008),
             8, std::max (8, span / 4));
 
         auto readSpan = [&] (double localPosition) noexcept
@@ -489,6 +525,18 @@ private:
 
     void updateModulation() noexcept
     {
+        const float controlCoeff =
+            1.0f - std::exp (
+                -1.0f / std::max (1.0f, (float) sampleRate * 0.055f));
+        smoothedTime += controlCoeff * (params.time - smoothedTime);
+        smoothedRepeat += controlCoeff * (params.repeat - smoothedRepeat);
+
+        const float reverbCoeff =
+            1.0f - std::exp (
+                -1.0f / std::max (1.0f, (float) sampleRate * 0.080f));
+        smoothedReverb +=
+            reverbCoeff * (params.reverb - smoothedReverb);
+
         if (--modSamplesRemaining <= 0)
         {
             modTarget = randomBipolar();
@@ -568,6 +616,9 @@ private:
 
     std::array<float, 2> filterLow { 0.0f, 0.0f };
     std::array<float, 2> filterBand { 0.0f, 0.0f };
+    float smoothedTime = 0.50f;
+    float smoothedRepeat = 0.0f;
+    float smoothedReverb = 0.0f;
 
     juce::Reverb hallReverb;
     juce::AudioBuffer<float> warbleBuffer;
