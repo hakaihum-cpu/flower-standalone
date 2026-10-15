@@ -111,11 +111,15 @@ for need in [
     'file="Source/clouds/dsp/granular_processor.cc"',
     'file="Source/clouds/resources.cc"',
     'file="Source/stmlib/utils/random.cc"',
+    'headerPath="../../Source"',
     'smallIcon="appic1"',
     'bigIcon="appic1"',
 ]:
     if need not in jucer_text:
         fail(f"EUREKA supplied-image resource contract missing: {need}")
+
+if jucer_text.count('headerPath="../../Source"') != 2:
+    fail("Android Clouds include-root contract missing from Debug/Release configurations")
 
 # Product isolation / no synth implementation.
 target_source_files = [
