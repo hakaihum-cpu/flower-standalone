@@ -19,6 +19,110 @@ public:
         polyphrase = 8
     };
 
+    // The real ULTRASHEER has no MIDI; CC 100-109 are EFFECTS-only.
+    // Other mode numbers and thresholds follow Vongon user manuals.
+    static bool acceptsCc (int mode, int number) noexcept
+    {
+        if (mode == ultrasheer) return number >= 100 && number <= 109;
+        if (mode == rosetones)
+            return number == 13 || number == 14
+                || (number >= 80 && number <= 87) || number == 90;
+        if (mode == solarfaze)
+            return number == 13 || number == 14
+                || (number >= 80 && number <= 98);
+        if (mode == polyphrase)
+            return (number >= 1 && number <= 11)
+                || (number >= 13 && number <= 17);
+        return false;
+    }
+
+    void handleMidi (const juce::MidiMessage& message, int mode,
+                     int channel, int sampleOffset) noexcept
+    {
+        if (mode == polyphrase)
+        {
+            if (message.isMidiStart())
+            {
+                polyClockLast = -1.0;
+                polyClockQuarterSeconds = 0.0;
+            }
+            if (message.isMidiClock())
+            {
+                const double now = midiSamplePosition
+                    + (double) juce::jmax (0, sampleOffset);
+                if (polyClockLast >= 0.0 && now > polyClockLast)
+                {
+                    const double quarter = (now - polyClockLast)
+                        * 24.0 / sampleRate;
+                    if (quarter >= 0.1 && quarter <= 2.0)
+                        polyClockQuarterSeconds =
+                            polyClockQuarterSeconds > 0.0
+                                ? 0.8 * polyClockQuarterSeconds + 0.2 * quarter
+                                : quarter;
+                }
+                polyClockLast = now;
+            }
+        }
+
+        if (! message.isForChannel (channel)
+            || mode < ultrasheer || mode > polyphrase)
+            return;
+
+        auto& bank = midiCc[(size_t) (mode - ultrasheer)];
+        if (message.isController())
+        {
+            const int number = message.getControllerNumber();
+            if (acceptsCc (mode, number))
+            {
+                bank[(size_t) number] =
+                    juce::jlimit (0, 127, message.getControllerValue());
+                if (mode == polyphrase && number == 15)
+                {
+                    const double now = midiSamplePosition
+                        + (double) juce::jmax (0, sampleOffset);
+                    if (polyTapLast >= 0.0 && now > polyTapLast)
+                    {
+                        const double seconds = (now - polyTapLast) / sampleRate;
+                        if (seconds >= 0.15 && seconds <= 2.0)
+                            polyTapQuarterSeconds = seconds;
+                    }
+                    polyTapLast = now;
+                }
+            }
+            return;
+        }
+
+        if (mode == rosetones && (message.isNoteOn() || message.isNoteOff()))
+        {
+            const int note = message.getNoteNumber();
+            if (juce::isPositiveAndBelow (note, 128))
+            {
+                if (message.isNoteOn())
+                    roseNotes[(size_t) note] =
+                        (float) message.getVelocity() / 127.0f;
+                else
+                    roseNotes[(size_t) note] = 0.0f;
+            }
+            return;
+        }
+
+        if (mode != ultrasheer && message.isProgramChange())
+        {
+            // JUCE program numbers are zero-based: PC#1 => raw 0.
+            const int pc = message.getProgramChangeNumber();
+            auto& slots = midiPresets[(size_t) (mode - ultrasheer)];
+            auto& valid = midiPresetValid[(size_t) (mode - ultrasheer)];
+            if (pc >= 10 && pc <= 18)
+            {
+                const size_t slot = (size_t) (pc - 10);
+                slots[slot] = bank;
+                valid[slot] = true;
+            }
+            else if (pc >= 0 && pc <= 8 && valid[(size_t) pc])
+                bank = slots[(size_t) pc];
+        }
+    }
+
     void prepare (double requestedRate)
     {
         sampleRate = requestedRate > 1000.0 ? requestedRate : 48000.0;
@@ -97,6 +201,7 @@ public:
     {
         x = juce::jlimit (0.0f, 1.0f, x);
         y = juce::jlimit (0.0f, 1.0f, y);
+        midiSamplePosition += buffer.getNumSamples();
 
         switch (mode)
         {
@@ -109,6 +214,23 @@ public:
     }
 
 private:
+    int ccRaw (int mode, int number) const noexcept
+    {
+        return midiCc[(size_t) (mode - ultrasheer)][(size_t) number];
+    }
+
+    float ccValue (int mode, int number, float fallback) const noexcept
+    {
+        const int val = ccRaw (mode, number);
+        return val < 0 ? fallback : (float) val / 127.0f;
+    }
+
+    bool ccOn (int mode, int number, bool fallback = false) const noexcept
+    {
+        const int val = ccRaw (mode, number);
+        return val < 0 ? fallback : val >= 64;
+    }
+
     struct ResonatorState
     {
         float y1 = 0.0f;
@@ -176,11 +298,16 @@ private:
 
         // X: vibrato depth/rate and cycle->random character.
         // Y: plate decay / brightness / wet amount.
-        const float depthMs = 0.12f + 3.0f * x * x;
-        const float rateHz = 0.18f + 3.2f * x;
-        const float randomBlend =
-            juce::jlimit (0.0f, 1.0f, (x - 0.55f) / 0.45f);
-        const float wet = 0.12f + 0.66f * y;
+        const float depth = ccValue (ultrasheer, 100, x);
+        const float rate = ccValue (ultrasheer, 101, x);
+        const float depthMs = 0.12f + 3.0f * depth * depth;
+        const float rateHz = 0.18f + 3.2f * rate;
+        const float randomBlend = ccRaw (ultrasheer, 102) >= 0
+            ? (ccOn (ultrasheer, 102) ? 1.0f : 0.0f)
+            : juce::jlimit (0.0f, 1.0f, (x - 0.55f) / 0.45f);
+        const float wet = ccValue (ultrasheer, 104, 0.12f + 0.66f * y);
+        const bool vibBypass = ccOn (ultrasheer, 106);
+        const bool revBypass = ccOn (ultrasheer, 107);
         const float baseMs = 7.0f;
 
         const float randomSmooth =
@@ -225,17 +352,17 @@ private:
                     readDelay (ultraDelay, ch, ultraWrite, delaySamples);
                 buffer.setSample (
                     ch, i,
-                    dry + (vib - dry) * (0.12f + 0.55f * x));
+                    dry + (vib - dry) * (vibBypass ? 0.0f : 0.12f + 0.55f * depth));
             }
 
             ultraWrite = (ultraWrite + 1) % ultraDelay.getNumSamples();
         }
 
         juce::Reverb::Parameters rev;
-        rev.roomSize = 0.35f + 0.62f * y;
-        rev.damping = 0.72f - 0.46f * y;
-        rev.wetLevel = wet;
-        rev.dryLevel = 1.0f - 0.42f * wet;
+        rev.roomSize = 0.35f + 0.62f * ccValue (ultrasheer, 105, y);
+        rev.damping = 0.85f - 0.75f * ccValue (ultrasheer, 103, y);
+        rev.wetLevel = revBypass ? 0.0f : wet;
+        rev.dryLevel = 1.0f - 0.42f * (revBypass ? 0.0f : wet);
         rev.width = 1.0f;
         rev.freezeMode = 0.0f;
         ultraReverb.setParameters (rev);
@@ -272,24 +399,39 @@ private:
             return;
 
         // X chooses octave/register and tone. Y controls sensitivity/resonance.
-        const int octave =
-            x < 0.25f ? 3
-            : x < 0.50f ? 4
-            : x < 0.75f ? 5
-                        : 6;
-        const float sensitivity = 0.45f + 1.75f * y;
+        if (ccOn (rosetones, 13))
+            return;
+        const int octave = ccRaw (rosetones, 87) >= 0
+            ? 3 + juce::jmin (3, ccRaw (rosetones, 87) / 32)
+            : (x < 0.25f ? 3 : x < 0.50f ? 4 : x < 0.75f ? 5 : 6);
+        const float sensitivity = 0.45f
+            + 1.75f * ccValue (rosetones, 85, y);
         const float radius = juce::jlimit (
-            0.88f, 0.9965f, 0.91f + y * 0.084f);
+            0.88f, 0.9965f,
+            0.91f + ccValue (rosetones, 86, y) * 0.084f);
+        const float tone = ccValue (rosetones, 82, x);
         const float toneCoeff = onePoleCoeff (
-            sampleRate, 900.0f + 9200.0f * x * x);
-        const float synthMix = 0.12f + 0.66f * y;
-        const float modDepth = 0.0007f + 0.004f * x * y;
+            sampleRate, 900.0f + 9200.0f * tone * tone);
+        const float synthMix = ccValue (rosetones, 80, 0.12f + 0.66f * y);
+        const float synthLevel = ccValue (rosetones, 81, 0.5f) * 2.0f;
+        const float modAmount = ccValue (rosetones, 84, x * y);
+        const float modDepth = 0.0007f + 0.004f * modAmount;
         const float modRate = 0.07f + 0.26f * x;
+        const int modMode = ccRaw (rosetones, 14) < 0 ? 2
+            : ccRaw (rosetones, 14) < 43 ? 0
+            : ccRaw (rosetones, 14) < 86 ? 1 : 2;
+        const int interval = ccRaw (rosetones, 90) < 0 ? 0
+            : juce::jmin (11, ccRaw (rosetones, 90) * 12 / 128);
+        const float glide = ccValue (rosetones, 83, 1.0f);
+        const float glideCoeff = onePoleCoeff (
+            sampleRate, 0.5f + glide * glide * 200.0f);
 
         for (int i = 0; i < samples; ++i)
         {
-            const float mod =
-                std::sin ((float) rosePhase) * modDepth;
+            roseOctaveSmoothed +=
+                glideCoeff * ((float) octave - roseOctaveSmoothed);
+            const float mod = modMode == 0 ? 0.0f
+                : std::sin ((float) rosePhase) * modDepth;
             rosePhase +=
                 juce::MathConstants<double>::twoPi
                 * (double) modRate / sampleRate;
@@ -308,7 +450,8 @@ private:
             float synth[2] { 0.0f, 0.0f };
             for (int note = 0; note < 12; ++note)
             {
-                const double midi = 12.0 * (double) octave + (double) note;
+                const double midi = 12.0 * (double) roseOctaveSmoothed
+                    + (double) note + (double) interval;
                 const double frequency =
                     440.0 * std::pow (2.0, (midi - 69.0) / 12.0)
                     * (1.0 + mod * (note % 2 == 0 ? 1.0 : -1.0));
@@ -325,8 +468,12 @@ private:
                     const float inputGain =
                         ((note + ch) % 2 == 0 ? 1.0f : 0.72f)
                         * (0.012f + 0.012f * y);
+                    float noteGate = 0.0f;
+                    for (int midiNote = note; midiNote < 128; midiNote += 12)
+                        noteGate = juce::jmax (
+                            noteGate, roseNotes[(size_t) midiNote]);
                     const float next =
-                        excitation * inputGain
+                        (excitation + 0.004f * noteGate) * inputGain
                         + a1 * state.y1
                         + a2 * state.y2;
                     state.y2 = state.y1;
@@ -337,7 +484,7 @@ private:
 
             for (int ch = 0; ch < channels; ++ch)
             {
-                synth[ch] *= 0.11f;
+                synth[ch] *= 0.11f * synthLevel;
                 roseToneLow[(size_t) ch] +=
                     toneCoeff * (synth[ch] - roseToneLow[(size_t) ch]);
                 const float shaped =
@@ -579,6 +726,23 @@ private:
             polyWrite = (polyWrite + 1) % polyDelay.getNumSamples();
         }
     }
+
+    // In-memory, per-mode MIDI CC and nine PC snapshot banks.
+    // Values of -1 mean XY retains authority until the first CC for that control.
+    std::array<std::array<int, 128>, 4> midiCc = [] {
+        std::array<std::array<int, 128>, 4> result {};
+        for (auto& bank : result) bank.fill (-1);
+        return result;
+    }();
+    std::array<std::array<std::array<int, 128>, 9>, 4> midiPresets {};
+    std::array<std::array<bool, 9>, 4> midiPresetValid {};
+    std::array<float, 128> roseNotes {};
+    float roseOctaveSmoothed = 4.0f;
+    double midiSamplePosition = 0.0;
+    double polyClockLast = -1.0;
+    double polyClockQuarterSeconds = 0.0;
+    double polyTapLast = -1.0;
+    double polyTapQuarterSeconds = 0.0;
 
     double sampleRate = 48000.0;
 
