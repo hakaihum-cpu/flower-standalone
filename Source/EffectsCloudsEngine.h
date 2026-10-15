@@ -124,10 +124,7 @@ public:
         params->trigger = touchDown && ! previousTouchDown;
         params->gate = touchDown;
 
-        const float xyWet = juce::jlimit (
-            0.0f, 0.78f,
-            0.08f + 0.70f * params->dry_wet);
-        const float targetWet = enabled ? xyWet : 0.0f;
+        const float targetWet = enabled ? 1.0f : 0.0f;
         const float step = static_cast<float> (
             1.0 / juce::jmax (1.0, 0.035 * hostRate));
         const double ratio = nativeRate / hostRate;
@@ -211,9 +208,11 @@ public:
 
             wetMix += juce::jlimit (-step, step, targetWet - wetMix);
 
-            left[n] = softProtect (dryL + wetL * wetMix);
+            left[n] = softProtect (
+                dryL + (wetL - dryL) * wetMix);
             if (right)
-                right[n] = softProtect (dryR + wetR * wetMix);
+                right[n] = softProtect (
+                    dryR + (wetR - dryR) * wetMix);
 
             peak = juce::jmax (
                 peak,
