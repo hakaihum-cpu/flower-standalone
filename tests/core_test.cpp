@@ -2,6 +2,7 @@
 #include "../Source/YinPitchDetector.h"
 #include "../Source/GranularPitchBank.h"
 #include "../Source/PsolaHarmonyBank.h"
+#include "../Source/ChordRenderers.h"
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -9,6 +10,17 @@
 
 int main()
 {
+    // CHORD-B equal-temperament tuning regression.  The generated sine stays
+    // exactly at A4=440 Hz when the source is in tune, and follows the live
+    // source's fractional-semitone offset without changing chord pitch class.
+    assert (std::abs (
+        chordfx::SineArpeggiator::midiFrequency (69.0) - 440.0) < 1.0e-9);
+    const double quarterSemitone =
+        440.0 * std::pow (2.0, 0.25 / 12.0);
+    assert (std::abs (
+        chordfx::SineArpeggiator::midiFrequency (69.0, 0.25)
+        - quarterSemitone) < 1.0e-9);
+
     chordfx::TheoryEngine theory;
     theory.setRandomSeed (1);
     theory.setComplexity (1.0f);
