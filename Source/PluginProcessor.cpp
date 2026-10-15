@@ -60,7 +60,9 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordBRandomFx.prepare (currentSampleRate);
     hazeProcessor.prepare (currentSampleRate);
     cloudsEngine.prepare (currentSampleRate);
+    vongonProcessor.prepare (currentSampleRate);
     cloudsTouch.store (false, std::memory_order_relaxed);
+    vongonTouch.store (false, std::memory_order_relaxed);
     pendingMidi = -1;
     stableCount = 0;
     haveChord = false;
@@ -77,7 +79,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordMidiRefreshRequested = false;
     chordMidiStopRequested = false;
     chordMidiGateOpen = false;
-    lastEffectMode = juce::jlimit (0, 4, juce::roundToInt (
+    lastEffectMode = juce::jlimit (0, 8, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     lastChordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -283,6 +285,8 @@ void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
 {
     if (mode != 4)
         cloudsTouch.store (false, std::memory_order_relaxed);
+    if (mode < 5 || mode > 8)
+        vongonTouch.store (false, std::memory_order_relaxed);
 
     // Mode changes must not reset Dreamy history/state. The accepted effect
     // keeps collecting input continuously and only changes whether its wet
@@ -455,7 +459,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     const bool midiClockMode =
         apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
-    const int effectMode = juce::jlimit (0, 4, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -497,6 +501,8 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         sineArpeggiator.setTuningOffsetSemitones (0.0f);
         chordBRandomFx.reset();
         hazeProcessor.clear();
+        vongonProcessor.reset();
+        vongonTouch.store (false, std::memory_order_relaxed);
         chordReverb.reset();
         haveChord = false;
         pendingMidi = -1;
@@ -663,6 +669,15 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             cloudsY.load (std::memory_order_relaxed),
             cloudsTouch.load (std::memory_order_relaxed));
     }
+    else if (effectMode >= 5 && effectMode <= 8)
+    {
+        vongonProcessor.process (
+            buffer,
+            effectMode,
+            vongonX.load (std::memory_order_relaxed),
+            vongonY.load (std::memory_order_relaxed),
+            vongonTouch.load (std::memory_order_relaxed));
+    }
 
     if (effectMode == 3)
     {
@@ -674,7 +689,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     {
         const bool outputActive =
             effectMode == 2
-            || effectMode == 4
+            || effectMode >= 4
             || (running.load (std::memory_order_relaxed)
                 && (effectMode == 1 || (haveChord && chordMidiGateOpen)));
         applyOutputSafety (buffer, outputActive);
@@ -726,7 +741,7 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
     // last X/Y position until the next touch; touch state itself is only for
     // interaction/MIDI note-off handling.
     const int selectedEffectMode =
-        juce::jlimit (0, 4, juce::roundToInt (
+        juce::jlimit (0, 8, juce::roundToInt (
             apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const bool enabled =
         running.load (std::memory_order_acquire)
@@ -1093,6 +1108,16 @@ void RealtimeChordFxAudioProcessor::setCloudsXY (
     cloudsTouch.store (touchDown, std::memory_order_relaxed);
 }
 
+void RealtimeChordFxAudioProcessor::setVongonXY (
+    float x, float y, bool touchDown) noexcept
+{
+    vongonX.store (juce::jlimit (0.0f, 1.0f, x),
+                   std::memory_order_relaxed);
+    vongonY.store (juce::jlimit (0.0f, 1.0f, y),
+                   std::memory_order_relaxed);
+    vongonTouch.store (touchDown, std::memory_order_relaxed);
+}
+
 void RealtimeChordFxAudioProcessor::releaseMidiControllerTouch() noexcept
 {
     controllerTouch.store (false, std::memory_order_relaxed);
@@ -1328,11 +1353,10 @@ void RealtimeChordFxAudioProcessor::stopActiveChordMidi (juce::MidiBuffer& out)
 void RealtimeChordFxAudioProcessor::processChordMidi (juce::MidiBuffer& out)
 {
     const int selectedEffectMode =
-        juce::jlimit (0, 4, juce::roundToInt (
+        juce::jlimit (0, 8, juce::roundToInt (
             apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const bool enabled =
-        selectedEffectMode != 3
-        && selectedEffectMode != 4
+        selectedEffectMode <= 2
         && apvts.getRawParameterValue (ParamID::chordMidiOut)->load() >= 0.5f;
     const int channel = juce::jlimit (1, 16,
         juce::roundToInt (apvts.getRawParameterValue (ParamID::chordMidiChannel)->load()));
@@ -1493,7 +1517,7 @@ void RealtimeChordFxAudioProcessor::processChordBotMidi (
     juce::MidiBuffer& out)
 {
     const int selectedEffectMode =
-        juce::jlimit (0, 4, juce::roundToInt (
+        juce::jlimit (0, 8, juce::roundToInt (
             apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const int requested =
         selectedEffectMode == 3
@@ -1728,7 +1752,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
 {
     juce::AudioProcessorValueTreeState::ParameterLayout p;
     p.add (std::make_unique<juce::AudioParameterChoice> (
-        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS" }, 0));
+        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES", "SOLARFAZE", "POLYPHRASE" }, 0));
     p.add (std::make_unique<juce::AudioParameterChoice> (
         ParamID::chordMode, "CHORD ENGINE", juce::StringArray { "A", "B" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::complex, "COMPLEX", 0.0f, 1.0f, 0.25f));
