@@ -4,7 +4,7 @@ import csv, hashlib, sys, xml.etree.ElementTree as ET
 
 R = Path(__file__).resolve().parents[1]
 JUCER = R / "RealtimeChordFX_Standalone.jucer"
-MODE_CHOICE_TOKEN = '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT" }, 0'
+MODE_CHOICE_TOKEN = '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS" }, 0'
 
 EXPECTED_MODULES = {
     "juce_audio_basics",
@@ -136,7 +136,7 @@ for bad in ["SynthVoice", "juce::Synthesiser", "SineVoice", "FLOWER", "MIYAKO"]:
     if bad in src:
         fail(f"forbidden cross-project/synth token in product source: {bad}")
 for need in ["COMPLEX","BAR","WIDTH","LENGTH","iRig Streamer","DETECTED","● REC",
-             "MODE","CHORD","DREAMY","EUREKA","CHORDBOT","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
+             "MODE","CHORD","DREAMY","EUREKA","CHORDBOT","CLOUDS","MIDI CONTROL","MIDI SETTINGS","MIDI OUT","X MODE","Y MODE","PRESET","MOTION BARS","MOTION REC","MOTION PLAY","CHORD OUT","CHORD CH"]:
     if need not in src:
         fail(f"UI/requirement token missing: {need}")
 
@@ -156,7 +156,9 @@ for need in [
     '"DREAMY"',
     '"EUREKA"',
     '"CHORDBOT"',
+    '"CLOUDS"',
     "paintHaze (g)",
+    "paintClouds (g)",
     "paintChordBot (g)",
     '"X " + juce::String',
     '"CONFIG"',
@@ -247,7 +249,7 @@ for need in [
     "hazeProcessor.renderBlock",
     "cloudsEngine.prepare",
     "cloudsEngine.process",
-    "ParamID::cloudsEnabled",
+    "effectMode == 4",
     "setCloudsXY",
     "hazeParamsFromState",
     "hazeClearRequested.exchange",
@@ -636,11 +638,27 @@ for need in [
     "params->stereo_spread",
     "params->feedback",
     "params->reverb",
-    "params->dry_wet = 1.0f",
+    "params->dry_wet = juce::jlimit",
+    "params->freeze = freezeZone",
+    "params->trigger = touchDown && ! previousTouchDown",
+    "params->gate = touchDown",
     "wetMix",
 ]:
     if need not in clouds_engine:
         fail(f"Clouds XY/DSP contract missing: {need}")
+
+if "cloudsEnabled" in parameter_ids or "ParamID::cloudsEnabled" in processor:
+    fail("obsolete global CLOUDS enable parameter must not remain; CLOUDS is MODE=4")
+
+for need in [
+    'effectMode == 4',
+    '"CLOUDS"',
+    "paintClouds (g)",
+    "updateCloudsXYPoint",
+    "cloudsXYTouchDown",
+]:
+    if need not in editor and need not in processor:
+        fail(f"CLOUDS dedicated-mode UI contract missing: {need}")
 
 for rel in [
     "Source/clouds/dsp/granular_processor.cc",
