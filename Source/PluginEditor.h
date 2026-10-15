@@ -39,6 +39,7 @@ private:
     void rebuildDotDisplay (int width, int height, int sourceKind, int sourceRevision);
     void paintDotUiFrame (juce::Graphics&);
     void paintHaze (juce::Graphics&);
+    void paintClouds (juce::Graphics&);
     void paintChordBot (juce::Graphics&);
     void paintConfig (juce::Graphics&);
     void paintAudioConfig (juce::Graphics&);
@@ -64,6 +65,7 @@ private:
     void refreshMidiOutputs();
     void cycleMidiOutput (int direction);
     void updateMidiControllerFromPoint (juce::Point<float>);
+    void updateCloudsXYPoint (juce::Point<float>, bool touchDown);
     void updateEurekaXYPoint (juce::Point<float>);
     int nextVisualFrame (int count, int avoid);
     void setChoiceActual (const char* id, int value);
@@ -116,6 +118,7 @@ private:
 
     bool eurekaPanelVisible = false;
     bool eurekaXYTouchDown = false;
+    bool cloudsXYTouchDown = false;
     float eurekaXYX = 0.5f;
     float eurekaXYY = 0.5f;
 
