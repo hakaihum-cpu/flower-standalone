@@ -708,7 +708,7 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
     // last X/Y position until the next touch; touch state itself is only for
     // interaction/MIDI note-off handling.
     const int selectedEffectMode =
-        juce::jlimit (0, 3, juce::roundToInt (
+        juce::jlimit (0, 4, juce::roundToInt (
             apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const bool enabled =
         running.load (std::memory_order_acquire)
@@ -1310,7 +1310,7 @@ void RealtimeChordFxAudioProcessor::stopActiveChordMidi (juce::MidiBuffer& out)
 void RealtimeChordFxAudioProcessor::processChordMidi (juce::MidiBuffer& out)
 {
     const int selectedEffectMode =
-        juce::jlimit (0, 3, juce::roundToInt (
+        juce::jlimit (0, 4, juce::roundToInt (
             apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const bool enabled =
         selectedEffectMode != 3
@@ -1475,7 +1475,7 @@ void RealtimeChordFxAudioProcessor::processChordBotMidi (
     juce::MidiBuffer& out)
 {
     const int selectedEffectMode =
-        juce::jlimit (0, 3, juce::roundToInt (
+        juce::jlimit (0, 4, juce::roundToInt (
             apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const int requested =
         selectedEffectMode == 3
