@@ -42,8 +42,8 @@
  <EXPORTFORMATS>
   <ANDROIDSTUDIO targetFolder="Builds/Android" androidMinimumSDK="24" microphonePermissionNeeded="1" androidEnableVirtualMidi="0" androidBluetoothScanNeeded="1" androidBluetoothConnectNeeded="1" smallIcon="appic1" bigIcon="appic1">
    <CONFIGURATIONS>
-    <CONFIGURATION name="Debug" isDebug="1" optimisation="1" linkTimeOptimisation="0" targetName="RealtimeChordFX" androidArchitectures="arm64-v8a"/>
-    <CONFIGURATION name="Release" isDebug="0" optimisation="3" linkTimeOptimisation="1" targetName="RealtimeChordFX" androidArchitectures="arm64-v8a"/>
+    <CONFIGURATION name="Debug" isDebug="1" optimisation="1" linkTimeOptimisation="0" targetName="RealtimeChordFX" headerPath="../../Source" androidArchitectures="arm64-v8a"/>
+    <CONFIGURATION name="Release" isDebug="0" optimisation="3" linkTimeOptimisation="1" targetName="RealtimeChordFX" headerPath="../../Source" androidArchitectures="arm64-v8a"/>
    </CONFIGURATIONS>
    <MODULEPATHS>
     <MODULEPATH id="juce_audio_basics" path="JUCE/modules"/><MODULEPATH id="juce_audio_devices" path="JUCE/modules"/>
