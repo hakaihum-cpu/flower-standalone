@@ -236,7 +236,11 @@ public:
     void setTuningOffsetSemitones (float semitones) noexcept
     {
         tuningOffsetSemitones =
-            std::clamp (semitones, -0.49f, 0.49f);
+            std::clamp (semitones, -0.20f, 0.20f);
+        if (currentMidiNote >= 0)
+            frequency = midiFrequency (
+                (double) currentMidiNote,
+                (double) tuningOffsetSemitones);
     }
 
     static double midiFrequency (
