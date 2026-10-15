@@ -207,9 +207,9 @@ public:
 
             wetMix += juce::jlimit (-step, step, targetWet - wetMix);
 
-            left[n] = dryL + wetL * wetMix;
+            left[n] = softProtect (dryL + wetL * wetMix);
             if (right)
-                right[n] = dryR + wetR * wetMix;
+                right[n] = softProtect (dryR + wetR * wetMix);
 
             peak = juce::jmax (
                 peak,
@@ -226,6 +226,23 @@ public:
     }
 
 private:
+    static float softProtect (float sample) noexcept
+    {
+        if (! std::isfinite (sample))
+            return 0.0f;
+
+        constexpr float threshold = 0.92f;
+        constexpr float ceiling = 0.995f;
+        const float magnitude = std::abs (sample);
+        if (magnitude <= threshold)
+            return sample;
+
+        const float knee = ceiling - threshold;
+        const float shaped =
+            threshold + knee * std::tanh ((magnitude - threshold) / knee);
+        return std::copysign (shaped, sample);
+    }
+
     static int16_t toInt16 (float value) noexcept
     {
         const float finite = std::isfinite (value) ? value : 0.0f;
