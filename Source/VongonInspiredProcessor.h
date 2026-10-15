@@ -420,6 +420,15 @@ private:
         const int modMode = ccRaw (rosetones, 14) < 0 ? 2
             : ccRaw (rosetones, 14) < 43 ? 0
             : ccRaw (rosetones, 14) < 86 ? 1 : 2;
+        const float targetOctave = ccRaw (rosetones, 87) < 0
+            ? (float) octave
+            : 3.0f + (float) juce::roundToInt (
+                36.0f * ccValue (rosetones, 87, 0.0f)) / 12.0f;
+        std::array<float, 12> noteGates {};
+        for (int note = 0; note < 128; ++note)
+            noteGates[(size_t) (note % 12)] = juce::jmax (
+                noteGates[(size_t) (note % 12)],
+                roseNotes[(size_t) note]);
         const int interval = ccRaw (rosetones, 90) < 0 ? 0
             : juce::jmin (11, ccRaw (rosetones, 90) * 12 / 128);
         const float glide = ccValue (rosetones, 83, 1.0f);
@@ -429,7 +438,7 @@ private:
         for (int i = 0; i < samples; ++i)
         {
             roseOctaveSmoothed +=
-                glideCoeff * ((float) octave - roseOctaveSmoothed);
+                glideCoeff * (targetOctave - roseOctaveSmoothed);
             const float mod = modMode == 0 ? 0.0f
                 : std::sin ((float) rosePhase) * modDepth;
             rosePhase +=
@@ -468,12 +477,8 @@ private:
                     const float inputGain =
                         ((note + ch) % 2 == 0 ? 1.0f : 0.72f)
                         * (0.012f + 0.012f * y);
-                    float noteGate = 0.0f;
-                    for (int midiNote = note; midiNote < 128; midiNote += 12)
-                        noteGate = juce::jmax (
-                            noteGate, roseNotes[(size_t) midiNote]);
                     const float next =
-                        (excitation + 0.004f * noteGate) * inputGain
+                        (excitation + 0.004f * noteGates[(size_t) note]) * inputGain
                         + a1 * state.y1
                         + a2 * state.y2;
                     state.y2 = state.y1;
@@ -509,13 +514,42 @@ private:
             return;
 
         // X: multiband saturation balance/drive. Y: dynamic stereo detune.
-        const float lowCoeff = onePoleCoeff (sampleRate, 240.0f);
-        const float upperCoeff = onePoleCoeff (sampleRate, 2600.0f);
-        const float driveLow = 1.15f + 3.0f * x;
-        const float driveMid = 1.10f + 4.2f * x;
-        const float driveHigh = 1.05f + 2.4f * x;
-        const float detuneDepthMs = 0.18f + 2.4f * y;
-        const float mix = 0.16f + 0.68f * y;
+        const bool satOn = ! ccOn (solarfaze, 14);
+        const bool detOn = ! ccOn (solarfaze, 13);
+        const bool satFirst = ccOn (solarfaze, 97, true);
+        const float lowCoeff = onePoleCoeff (
+            sampleRate, 90.0f + 450.0f * ccValue (solarfaze, 93, 0.333f));
+        const float upperCoeff = onePoleCoeff (
+            sampleRate, 1500.0f + 3100.0f
+                * ccValue (solarfaze, 95, 0.355f));
+        const float midFrequency = ccValue (solarfaze, 94, 0.5f);
+        const float driveMaster = 0.5f + 2.0f
+            * ccValue (solarfaze, 88, x);
+        const float driveLow = (1.15f + 3.0f * x) * driveMaster
+            * (1.0f + (float) (ccRaw (solarfaze, 89) < 0 ? 0
+                : ccRaw (solarfaze, 89) < 43 ? 0
+                : ccRaw (solarfaze, 89) < 86 ? 1 : 3));
+        const float driveMid = (1.10f + 4.2f * x) * driveMaster
+            * (1.0f + (float) (ccRaw (solarfaze, 90) < 0 ? 0
+                : ccRaw (solarfaze, 90) < 43 ? 0
+                : ccRaw (solarfaze, 90) < 86 ? 1 : 3));
+        const float driveHigh = (1.05f + 2.4f * x) * driveMaster
+            * (1.0f + (float) (ccRaw (solarfaze, 91) < 0 ? 0
+                : ccRaw (solarfaze, 91) < 43 ? 0
+                : ccRaw (solarfaze, 91) < 86 ? 1 : 3));
+        const float detAmount = ccValue (solarfaze, 81, y);
+        const float detuneDepthMs = 0.18f + 2.4f * detAmount;
+        const float detEnv = 2.0f * ccValue (solarfaze, 82, 0.5f) - 1.0f;
+        const float detSize = ccValue (solarfaze, 96, 0.5f);
+        const float mix = ccValue (solarfaze, 80, 0.16f + 0.68f * y);
+        const float satMix = ccValue (solarfaze, 86, 1.0f);
+        const float satTone = ccValue (solarfaze, 87, 0.5f);
+        const float bandLow = ccValue (solarfaze, 83, 0.75f);
+        const float bandMid = ccValue (solarfaze, 84, 0.75f);
+        const float bandHigh = ccValue (solarfaze, 85, 0.75f);
+        const float gateThreshold = 0.0002f + 0.025f
+            * ccValue (solarfaze, 98, 0.056f);
+        const bool gateEnabled = ! ccOn (solarfaze, 92);
 
         for (int i = 0; i < samples; ++i)
         {
@@ -537,16 +571,19 @@ private:
                 const float high = dry[ch] - solarUpper[(size_t) ch];
                 const float mid = dry[ch] - low - high;
 
-                const float gate =
-                    solarGateEnvelope > 0.0016f ? 1.0f : 0.0f;
-                saturated[ch] =
-                    gate * (
-                        std::tanh (low * driveLow) * 0.95f
-                        + std::tanh (mid * driveMid) * 0.78f
-                        + std::tanh (high * driveHigh) * 0.62f);
-
+                const float gate = ! gateEnabled
+                    || solarGateEnvelope > gateThreshold ? 1.0f : 0.0f;
+                saturated[ch] = gate * (
+                    std::tanh (low * driveLow) * bandLow
+                    + std::tanh (mid * driveMid)
+                        * bandMid * (0.5f + midFrequency)
+                    + std::tanh (high * driveHigh)
+                        * bandHigh * (0.25f + satTone));
+                const float toDelay = satFirst && satOn
+                    ? dry[ch] + (saturated[ch] - dry[ch]) * satMix
+                    : dry[ch];
                 solarDelay.setSample (
-                    ch, solarWrite, protect (saturated[ch]));
+                    ch, solarWrite, protect (toDelay));
             }
 
             const float envMod =
@@ -561,21 +598,23 @@ private:
             for (int ch = 0; ch < channels; ++ch)
             {
                 const float polarity = ch == 0 ? 1.0f : -1.0f;
-                const double delaySamples =
-                    sampleRate
-                    * (3.1f
-                       + detuneDepthMs
-                         * (0.35f + 0.65f * envMod)
-                         * lfo * polarity)
+                const float envShape = juce::jlimit (
+                    0.1f, 2.0f, 1.0f + detEnv * (2.0f * envMod - 1.0f));
+                const double delaySamples = sampleRate
+                    * (1.8f + 4.2f * detSize
+                        + detuneDepthMs * envShape * lfo * polarity)
                     / 1000.0;
-                const float detuned =
-                    readDelay (
-                        solarDelay, ch, solarWrite, delaySamples);
-                buffer.setSample (
-                    ch, i,
-                    protect (
-                        dry[ch]
-                        + (detuned - dry[ch]) * mix));
+                const float detuned = readDelay (
+                    solarDelay, ch, solarWrite, delaySamples);
+                const float pre = satFirst && satOn
+                    ? dry[ch] + (saturated[ch] - dry[ch]) * satMix
+                    : dry[ch];
+                const float detResult = detOn
+                    ? pre + (detuned - pre) * mix : pre;
+                const float result = satFirst || ! satOn
+                    ? detResult
+                    : detResult + (saturated[ch] - dry[ch]) * satMix;
+                buffer.setSample (ch, i, protect (result));
             }
 
             solarWrite = (solarWrite + 1) % solarDelay.getNumSamples();
@@ -615,24 +654,52 @@ private:
         if (channels <= 0 || samples <= 0)
             return;
 
-        // Log-like 85 ms .. 22 s time range.
-        const double seconds =
-            0.085 * std::pow (22.0 / 0.085, (double) x);
-        updatePolyTarget (0, seconds * sampleRate);
-        updatePolyTarget (
-            1,
-            seconds * sampleRate * (0.58 + 0.38 * (double) y));
+        // Nine discrete time bands match CC#8 in the v2.3 manual.
+        static constexpr double secondsTable[9] = {
+            0.085, 0.170, 0.341, 0.682, 1.3, 2.7, 5.5, 11.0, 22.0
+        };
+        const int timeCc = ccRaw (polyphrase, 8);
+        const int timeIndex = timeCc < 0 ? -1
+            : timeCc <= 8 ? 0
+            : timeCc <= 22 ? 1 : timeCc <= 37 ? 2
+            : timeCc <= 56 ? 3 : timeCc <= 74 ? 4
+            : timeCc <= 91 ? 5 : timeCc <= 106 ? 6
+            : timeCc <= 120 ? 7 : 8;
+        const double timeSeconds = timeIndex < 0
+            ? 0.085 * std::pow (22.0 / 0.085, (double) x)
+            : secondsTable[timeIndex];
+        const bool clockEnabled = ccRaw (polyphrase, 17) < 64;
+        const bool recentClock = polyClockLast >= 0.0
+            && midiSamplePosition - polyClockLast < sampleRate * 3.0;
+        const double seconds = clockEnabled && recentClock
+            && polyClockQuarterSeconds > 0.0
+            ? polyClockQuarterSeconds * (timeIndex < 0
+                ? 1.0 : std::pow (2.0, (double) timeIndex - 4.0))
+            : (polyTapQuarterSeconds > 0.0 && timeIndex < 0
+                ? polyTapQuarterSeconds : timeSeconds);
+        const bool sync = ccOn (polyphrase, 10);
+        const double sliderLeft =
+            0.05 + 0.95 * ccValue (polyphrase, 5, 1.0f);
+        const double sliderRight = sync ? sliderLeft
+            : 0.05 + 0.95 * ccValue (
+                polyphrase, 6, 0.56f + 0.4f * y);
+        updatePolyTarget (0, seconds * sliderLeft * sampleRate);
+        updatePolyTarget (1, seconds * sliderRight * sampleRate);
 
-        const float feedback =
-            juce::jlimit (0.0f, 1.08f, 0.12f + 0.94f * y);
-        const float mix = 0.12f + 0.68f * y;
-        const float tone = 0.08f + 0.82f * (1.0f - y);
-        const float toneCoeff =
-            onePoleCoeff (sampleRate, 650.0f + 12500.0f * tone * tone);
-        const float modDepthSamples =
-            (float) sampleRate
-            * (0.00015f + 0.0018f * y);
-        const float modRate = 0.05f + 0.33f * x;
+        const float repeats = ccValue (polyphrase, 1, y);
+        const float feedback = juce::jlimit (
+            0.0f, 1.08f, 0.12f + 0.94f * repeats);
+        const bool bypass = ccOn (polyphrase, 13);
+        const bool trails = ccOn (polyphrase, 16);
+        const bool infinite = ccOn (polyphrase, 14);
+        const float mix = bypass ? 0.0f
+            : ccValue (polyphrase, 7, 0.12f + 0.68f * y);
+        const float tone = ccValue (polyphrase, 2, 0.08f + 0.82f * (1.0f - y));
+        const float toneCoeff = onePoleCoeff (
+            sampleRate, 650.0f + 12500.0f * tone * tone);
+        const float modDepthSamples = (float) sampleRate
+            * (0.00015f + 0.0018f * ccValue (polyphrase, 3, y));
+        const float modRate = 0.05f + 0.33f * ccValue (polyphrase, 4, x);
 
         for (int i = 0; i < samples; ++i)
         {
@@ -703,18 +770,23 @@ private:
             }
 
             // Middle/right XY area progressively becomes ping-pong.
-            const float pingPong =
-                juce::jlimit (0.0f, 1.0f, (x - 0.35f) / 0.45f);
+            const int style = ccRaw (polyphrase, 9);
+            const float pingPong = style < 0
+                ? juce::jlimit (0.0f, 1.0f, (x - 0.35f) / 0.45f)
+                : (style < 44 ? 0.0f : style < 88 ? 1.0f : 0.5f);
             for (int ch = 0; ch < channels; ++ch)
             {
                 const int other = channels > 1 ? 1 - ch : ch;
                 const float fbSignal =
                     polyLowpass[(size_t) ch] * (1.0f - pingPong)
                     + polyLowpass[(size_t) other] * pingPong;
-                const float infiniteBoost =
-                    touchDown && y > 0.93f ? 1.04f : feedback;
-                const float write =
-                    protect (dry[ch] + fbSignal * infiniteBoost);
+                const float infiniteBoost = infinite
+                    || (touchDown && y > 0.93f)
+                    ? 1.04f : feedback;
+                const float incoming = bypass ? 0.0f : dry[ch];
+                const float write = bypass && ! trails
+                    ? 0.0f
+                    : protect (incoming + fbSignal * infiniteBoost);
                 polyDelay.setSample (ch, polyWrite, write);
                 buffer.setSample (
                     ch, i,
