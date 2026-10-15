@@ -488,6 +488,19 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     if (midiClockMode) handleMidiClock (midi);
     else processInternalMotionClock (n);
 
+    // Consume Vongon MIDI input before the existing MIDI OUT path clears it.
+    // Existing CHORD/CHORDBOT and controller MIDI output remain isolated.
+    if (effectMode >= 5 && effectMode <= 8)
+    {
+        const int midiInputChannel = juce::jlimit (1, 16,
+            juce::roundToInt (
+                apvts.getRawParameterValue (ParamID::midiChannel)->load()));
+        for (const auto event : midi)
+            vongonProcessor.handleMidi (
+                event.getMessage(), effectMode,
+                midiInputChannel, event.samplePosition);
+    }
+
     midi.clear();
     processMidiController (midi, n);
 
