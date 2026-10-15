@@ -17,6 +17,7 @@
    <FILE id="frmh01" name="FramePack.h" compile="0" resource="0" file="Source/FramePack.h"/>
    <FILE id="hazh01" name="HazeProcessor.h" compile="0" resource="0" file="Source/HazeProcessor.h"/>
    <FILE id="cldh01" name="EffectsCloudsEngine.h" compile="0" resource="0" file="Source/EffectsCloudsEngine.h"/>
+   <FILE id="vngh01" name="VongonInspiredProcessor.h" compile="0" resource="0" file="Source/VongonInspiredProcessor.h"/>
    <FILE id="cld001" name="correlator.cc" compile="1" resource="0" file="Source/clouds/dsp/correlator.cc"/>
    <FILE id="cld002" name="granular_processor.cc" compile="1" resource="0" file="Source/clouds/dsp/granular_processor.cc"/>
    <FILE id="cld003" name="mu_law.cc" compile="1" resource="0" file="Source/clouds/dsp/mu_law.cc"/>
@@ -36,6 +37,7 @@
   <GROUP id="res0001" name="Resources">
    <FILE id="pack01" name="classroom_frames.pack" compile="0" resource="1" file="Resources/classroom_frames.pack"/>
    <FILE id="eufr01" name="eureka_frames.pack" compile="0" resource="1" file="Resources/eureka_frames.pack"/>
+   <FILE id="vgfr01" name="vongon_frames.pack" compile="0" resource="1" file="Resources/vongon_frames.pack"/>
    <FILE id="appic1" name="effects_app_icon.jpg" compile="0" resource="0" file="Resources/effects_app_icon.jpg"/>
   </GROUP>
  </MAINGROUP>
