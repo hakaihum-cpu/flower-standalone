@@ -40,6 +40,7 @@ private:
     void paintDotUiFrame (juce::Graphics&);
     void paintHaze (juce::Graphics&);
     void paintClouds (juce::Graphics&);
+    void paintVongonMode (juce::Graphics&, int effectMode);
     void paintChordBot (juce::Graphics&);
     void paintConfig (juce::Graphics&);
     void paintAudioConfig (juce::Graphics&);
@@ -66,6 +67,7 @@ private:
     void cycleMidiOutput (int direction);
     void updateMidiControllerFromPoint (juce::Point<float>);
     void updateCloudsXYPoint (juce::Point<float>, bool touchDown);
+    void updateVongonXYPoint (juce::Point<float>, bool touchDown);
     void updateEurekaXYPoint (juce::Point<float>);
     int nextVisualFrame (int count, int avoid);
     void setChoiceActual (const char* id, int value);
@@ -75,15 +77,21 @@ private:
     RealtimeChordFxAudioProcessor& processor;
     FramePack frames;
     FramePack eurekaFrames;
+    FramePack vongonFrames;
     juce::Image currentFrame;
     juce::Image currentEurekaFrame;
+    juce::Image currentVongonFrame;
     int loadedFrame = -1;
     int loadedEurekaFrame = -1;
+    int loadedVongonFrame = -1;
     int eurekaFrameIndex = 0;
+    int vongonFrameIndex = 0;
     int chordVisualCooldown = 0;
     int eurekaVisualCooldown = 0;
+    int vongonVisualCooldown = 0;
     float chordVisualPreviousActivity = 0.0f;
     float eurekaVisualPreviousActivity = 0.0f;
+    float vongonVisualPreviousActivity = 0.0f;
     uint32_t visualRandomState = 0x45464658u;
     bool configVisible = false;
     bool audioConfigVisible = false;
@@ -120,6 +128,7 @@ private:
     bool eurekaPanelVisible = false;
     bool eurekaXYTouchDown = false;
     bool cloudsXYTouchDown = false;
+    bool vongonXYTouchDown = false;
     float eurekaXYX = 0.5f;
     float eurekaXYY = 0.5f;
 
@@ -129,6 +138,7 @@ private:
     juce::Image dotDisplayCache;
     int dotFrameRevision = 1;
     int dotEurekaRevision = 1;
+    int dotVongonRevision = 1;
     int dotLumaSourceKind = -1;
     int dotLumaRevision = -1;
     int dotRenderedSourceKind = -1;
