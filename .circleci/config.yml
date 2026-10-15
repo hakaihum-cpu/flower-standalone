@@ -19,6 +19,11 @@ jobs:
             python3 scripts/materialize_frame_pack.py
 
       - run:
+          name: Materialize pinned Clouds source
+          command: |
+            python3 scripts/materialize_effects_clouds.py
+
+      - run:
           name: Static dependency audit
           command: |
             python3 scripts/static_dependency_audit.py
