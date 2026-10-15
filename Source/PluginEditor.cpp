@@ -1744,6 +1744,8 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setFont (juce::FontOptions (20.0f));
     g.drawText ("CONFIG", 34, 26, 180, 32, juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (13.0f));
+    g.drawText ("<  PRESET " + juce::String (globalPresetSlot) + "  >",
+                230, 30, 126, 24, juce::Justification::centred);
     g.drawText ("SAVE", 370, 30, 72, 24, juce::Justification::centred);
     g.drawText ("LOAD", 458, 30, 72, 24, juce::Justification::centred);
     g.drawText ("CLOSE", 620, 30, 70, 24, juce::Justification::centredRight);
@@ -2303,19 +2305,37 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (configVisible)
     {
+        if (juce::Rectangle<float> (220.0f, 20.0f, 146.0f, 42.0f).contains (p))
+        {
+            const int direction = p.x < 293.0f ? -1 : 1;
+            globalPresetSlot =
+                ((globalPresetSlot - 1 + direction + 3) % 3) + 1;
+            globalPresetMessage =
+                processor.hasUserPreset (globalPresetSlot)
+                    ? "PRESET " + juce::String (globalPresetSlot) + " SAVED"
+                    : "PRESET " + juce::String (globalPresetSlot) + " EMPTY";
+            repaint();
+            return;
+        }
+
         if (juce::Rectangle<float> (360.0f, 20.0f, 86.0f, 42.0f).contains (p))
         {
-            globalPresetMessage = processor.saveUserPreset()
-                ? "PARAMETERS SAVED" : "SAVE FAILED";
+            globalPresetMessage =
+                processor.saveUserPreset (globalPresetSlot)
+                    ? "SAVED PRESET " + juce::String (globalPresetSlot)
+                    : "SAVE FAILED";
             repaint();
             return;
         }
         if (juce::Rectangle<float> (450.0f, 20.0f, 86.0f, 42.0f).contains (p))
         {
-            const bool loaded = processor.loadUserPreset();
+            const bool loaded =
+                processor.loadUserPreset (globalPresetSlot);
             globalPresetMessage = loaded
-                ? "PARAMETERS LOADED"
-                : (processor.hasUserPreset() ? "LOAD FAILED" : "NO SAVED PARAMETERS");
+                ? "LOADED PRESET " + juce::String (globalPresetSlot)
+                : (processor.hasUserPreset (globalPresetSlot)
+                    ? "LOAD FAILED"
+                    : "PRESET " + juce::String (globalPresetSlot) + " EMPTY");
 
             if (loaded)
             {
