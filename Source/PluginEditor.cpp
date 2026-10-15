@@ -2013,14 +2013,6 @@ void RealtimeChordFxAudioProcessorEditor::updateMidiControllerFromPoint (juce::P
     processor.setMidiControllerXY (x, y, true);
 }
 
-void RealtimeChordFxAudioProcessorEditor::updateCloudsFromPoint (
-    juce::Point<float> p)
-{
-    const float x = juce::jlimit (0.0f, 1.0f, p.x / design);
-    const float y = juce::jlimit (0.0f, 1.0f, 1.0f - p.y / design);
-    processor.setCloudsXY (x, y);
-}
-
 void RealtimeChordFxAudioProcessorEditor::updateEurekaXYPoint (
     juce::Point<float> p)
 {
@@ -2589,19 +2581,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         }
         else
         {
-            const bool cloudsOn =
-                processor.state().getRawParameterValue (
-                    ParamID::cloudsEnabled)->load() >= 0.5f;
-
-            if (cloudsOn && !(p.x <= 170 && p.y <= 70))
-            {
-                cloudsOnlyDragging = true;
-                updateCloudsFromPoint (p);
-            }
-            else
-            {
-                processor.toggleRunState();
-            }
+            processor.toggleRunState();
         }
     }
     else
@@ -2635,13 +2615,6 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
         return;
     }
 
-    if (cloudsOnlyDragging)
-    {
-        updateCloudsFromPoint (toDesign (e.position));
-        repaint();
-        return;
-    }
-
     if (xyDragging)
     {
         updateMidiControllerFromPoint (toDesign (e.position));
@@ -2659,7 +2632,6 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 {
     eurekaXYTouchDown = false;
-    cloudsOnlyDragging = false;
 
     if (chordBotPressedPad >= 0)
     {
