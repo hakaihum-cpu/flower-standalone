@@ -27,3 +27,18 @@ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE.
+
+
+## Mutable Instruments Clouds
+
+The EFFECTS Clouds integration uses the original STM32F Clouds DSP source from
+the pichenettes/eurorack repository, pinned to commit
+`08460a69a7e1f7a81c5a2abcc7189c9a6b7208d4`, together with stmlib pinned to
+`e3bd7c9cc00e4364166f9905c0509b6ffd0535ec`.
+
+Clouds DSP code is Copyright (c) 2014 Emilie Gillet and is distributed under
+the MIT license. Original copyright/license headers are retained in the
+materialized source files. Mutable Instruments is a registered trademark; this
+integration is not presented as an official Mutable Instruments product.
+
+Upstream source: https://github.com/pichenettes/eurorack
