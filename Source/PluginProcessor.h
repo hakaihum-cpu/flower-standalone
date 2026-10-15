@@ -64,9 +64,9 @@ public:
     bool saveMidiControllerPreset (int slot);
     bool loadMidiControllerPreset (int slot);
     bool hasMidiControllerPreset (int slot) const;
-    bool saveUserPreset();
-    bool loadUserPreset();
-    bool hasUserPreset() const;
+    bool saveUserPreset (int slot);
+    bool loadUserPreset (int slot);
+    bool hasUserPreset (int slot) const;
     void toggleMotionRecord() noexcept { motionCommand.store (1, std::memory_order_release); }
     void clearMotion() noexcept { motionCommand.store (2, std::memory_order_release); }
     int getMotionState() const noexcept { return motionState.load (std::memory_order_relaxed); }
