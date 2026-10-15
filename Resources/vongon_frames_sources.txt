@@ -1,0 +1,23 @@
+EFFECTS Vongon-mode visual bank
+Created from user-supplied videos only. No generated/replacement imagery.
+
+Sources:
+346654116_1792073109459725.mp4
+692753445_1792072792221934.mp4
+981652867_1792072629589643.mp4
+389663512_1792072607026324.mp4
+721211298_1792072531100205.mp4
+989951027_1792072484719362.mp4
+
+Processing:
+- each source: 8.0 s, 640x360, 24 fps
+- sample: 4.5 fps = 36 frames/source
+- output frame: JPEG 480x270, ffmpeg q:v=7
+- total: 216 frames
+- CRF1 pack bytes: 1403092
+- CRF1 pack sha256: 1bb7e165022ac796f01e8611342612b8127c5c17d58a2957a7902ca0e27b7bda
+
+Usage:
+- ULTRASHEER / ROSETONES / SOLARFAZE / POLYPHRASE only
+- EUREKA visual bank is unchanged
+- DOT mode consumes the same current Vongon frame through the existing DOT renderer
