@@ -9,6 +9,7 @@
 #include "ChordRenderers.h"
 #include "HazeProcessor.h"
 #include "EffectsCloudsEngine.h"
+#include "VongonInspiredProcessor.h"
 
 class RealtimeChordFxAudioProcessor final : public juce::AudioProcessor
 {
@@ -56,6 +57,10 @@ public:
     float getCloudsX() const noexcept { return cloudsX.load (std::memory_order_relaxed); }
     float getCloudsY() const noexcept { return cloudsY.load (std::memory_order_relaxed); }
     bool getCloudsTouch() const noexcept { return cloudsTouch.load (std::memory_order_relaxed); }
+    void setVongonXY (float x, float y, bool touchDown) noexcept;
+    float getVongonX() const noexcept { return vongonX.load (std::memory_order_relaxed); }
+    float getVongonY() const noexcept { return vongonY.load (std::memory_order_relaxed); }
+    bool getVongonTouch() const noexcept { return vongonTouch.load (std::memory_order_relaxed); }
     void releaseMidiControllerTouch() noexcept;
     void notifyMidiControllerConfigChanged() noexcept { controllerDirty.store (true, std::memory_order_release); }
     void notifyChordAHoldChanged() noexcept { chordAHoldRefreshRequested.store (true, std::memory_order_release); }
@@ -129,6 +134,11 @@ private:
     std::atomic<float> cloudsX { 0.5f };
     std::atomic<float> cloudsY { 0.5f };
     std::atomic<bool> cloudsTouch { false };
+
+    VongonInspiredProcessor vongonProcessor;
+    std::atomic<float> vongonX { 0.5f };
+    std::atomic<float> vongonY { 0.5f };
+    std::atomic<bool> vongonTouch { false };
     std::atomic<bool> hazeClearRequested { false };
     std::atomic<bool> hazeShuffleRequested { false };
     juce::Reverb chordReverb;
@@ -155,7 +165,7 @@ private:
     double gateSamplesRemaining = 0.0;
     int midiClockTicks = 0;
     bool midiClockRunning = false;
-    int lastEffectMode = 0; // 0=CHORD, 1=DREAMY, 2=EUREKA, 3=CHORDBOT, 4=CLOUDS
+    int lastEffectMode = 0; // 0=CHORD, 1=DREAMY, 2=EUREKA, 3=CHORDBOT, 4=CLOUDS, 5..8=Vongon-inspired
     int lastChordMode = 0;  // 0=CHORD-A, 1=CHORD-B
     int pitchSamplesSinceValid = 1000000;
     float outputSafetyGain = 0.0f;
