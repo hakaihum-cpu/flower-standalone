@@ -60,6 +60,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordBRandomFx.prepare (currentSampleRate);
     hazeProcessor.prepare (currentSampleRate);
     cloudsEngine.prepare (currentSampleRate);
+    cloudsTouch.store (false, std::memory_order_relaxed);
     pendingMidi = -1;
     stableCount = 0;
     haveChord = false;
@@ -76,7 +77,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordMidiRefreshRequested = false;
     chordMidiStopRequested = false;
     chordMidiGateOpen = false;
-    lastEffectMode = juce::jlimit (0, 3, juce::roundToInt (
+    lastEffectMode = juce::jlimit (0, 4, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     lastChordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -268,6 +269,9 @@ void RealtimeChordFxAudioProcessor::handleMidiClock (const juce::MidiBuffer& mid
 
 void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
 {
+    if (mode != 4)
+        cloudsTouch.store (false, std::memory_order_relaxed);
+
     // Mode changes must not reset Dreamy history/state. The accepted effect
     // keeps collecting input continuously and only changes whether its wet
     // layer is audible.
@@ -437,7 +441,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     const bool midiClockMode =
         apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
-    const int effectMode = juce::jlimit (0, 3, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 4, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -632,16 +636,14 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             processChordB (buffer);
     }
 
-    if (effectMode != 3)
+    if (effectMode == 4)
     {
-        const bool cloudsOn =
-            apvts.getRawParameterValue (ParamID::cloudsEnabled)->load()
-            >= 0.5f;
         cloudsEngine.process (
             buffer,
-            cloudsOn,
+            true,
             cloudsX.load (std::memory_order_relaxed),
-            cloudsY.load (std::memory_order_relaxed));
+            cloudsY.load (std::memory_order_relaxed),
+            cloudsTouch.load (std::memory_order_relaxed));
     }
 
     if (effectMode == 2 || effectMode == 3)
@@ -654,8 +656,9 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     else
     {
         const bool outputActive =
-            running.load (std::memory_order_relaxed)
-            && (effectMode == 1 || (haveChord && chordMidiGateOpen));
+            effectMode == 4
+            || (running.load (std::memory_order_relaxed)
+                && (effectMode == 1 || (haveChord && chordMidiGateOpen)));
         applyOutputSafety (buffer, outputActive);
     }
 
@@ -1057,19 +1060,19 @@ void RealtimeChordFxAudioProcessor::setMidiControllerXY (int x, int y, bool touc
     y = juce::jlimit (0, 127, y);
     controllerX.store (x, std::memory_order_relaxed);
     controllerY.store (y, std::memory_order_relaxed);
-    cloudsX.store ((float) x / 127.0f, std::memory_order_relaxed);
-    cloudsY.store ((float) y / 127.0f, std::memory_order_relaxed);
     controllerTouch.store (touchDown, std::memory_order_relaxed);
     controllerDirty.store (true, std::memory_order_release);
     visualFrame.store (controllerFrameForXY (x, y), std::memory_order_relaxed);
 }
 
-void RealtimeChordFxAudioProcessor::setCloudsXY (float x, float y) noexcept
+void RealtimeChordFxAudioProcessor::setCloudsXY (
+    float x, float y, bool touchDown) noexcept
 {
     cloudsX.store (juce::jlimit (0.0f, 1.0f, x),
                    std::memory_order_relaxed);
     cloudsY.store (juce::jlimit (0.0f, 1.0f, y),
                    std::memory_order_relaxed);
+    cloudsTouch.store (touchDown, std::memory_order_relaxed);
 }
 
 void RealtimeChordFxAudioProcessor::releaseMidiControllerTouch() noexcept
@@ -1188,8 +1191,6 @@ void RealtimeChordFxAudioProcessor::applyMotionPoint (int x, int y)
     y = juce::jlimit (0, 127, y);
     controllerX.store (x, std::memory_order_relaxed);
     controllerY.store (y, std::memory_order_relaxed);
-    cloudsX.store ((float) x / 127.0f, std::memory_order_relaxed);
-    cloudsY.store ((float) y / 127.0f, std::memory_order_relaxed);
     controllerTouch.store (true, std::memory_order_relaxed);
     controllerDirty.store (true, std::memory_order_release);
     if (apvts.getRawParameterValue (ParamID::midiControl)->load() >= 0.5f)
@@ -1313,6 +1314,7 @@ void RealtimeChordFxAudioProcessor::processChordMidi (juce::MidiBuffer& out)
             apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const bool enabled =
         selectedEffectMode != 3
+        && selectedEffectMode != 4
         && apvts.getRawParameterValue (ParamID::chordMidiOut)->load() >= 0.5f;
     const int channel = juce::jlimit (1, 16,
         juce::roundToInt (apvts.getRawParameterValue (ParamID::chordMidiChannel)->load()));
@@ -1670,7 +1672,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
 {
     juce::AudioProcessorValueTreeState::ParameterLayout p;
     p.add (std::make_unique<juce::AudioParameterChoice> (
-        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT" }, 0));
+        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS" }, 0));
     p.add (std::make_unique<juce::AudioParameterChoice> (
         ParamID::chordMode, "CHORD ENGINE", juce::StringArray { "A", "B" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::complex, "COMPLEX", 0.0f, 1.0f, 0.25f));
@@ -1692,8 +1694,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
                             "1.5 BURSTS", "2 BURSTS", "3 BURSTS", "4 BURSTS",
                             "5 BURSTS", "6 BURSTS", "7 BURSTS", "8 BURSTS" },
         0));
-    p.add (std::make_unique<juce::AudioParameterBool> (
-        ParamID::cloudsEnabled, "CLOUDS", false));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeMix, "HAZE MIX", 0.0f, 1.0f, 0.55f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeTime, "HAZE TIME", 0.0f, 1.0f, 0.50f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hazeAmount, "HAZE AMOUNT", 0.0f, 1.0f, 0.50f));
