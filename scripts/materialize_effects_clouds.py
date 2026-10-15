@@ -60,7 +60,8 @@ def extract_subtree(
 def patch_clouds_debug_pin(root: Path) -> None:
     path = root / "Source/clouds/drivers/debug_pin.h"
     path.write_text(
-        "// Android/JUCE port boundary. Replaces only the STM32 hardware debug GPIO.\n"
+        "// Android/JUCE port boundary. Replaces only the STM32 hardware debug GPIO,\n"
+        "// never an audio algorithm from the original MIT-licensed Clouds engine.\n"
         "#pragma once\n"
         "namespace clouds {\n"
         "struct DebugPin {\n"
