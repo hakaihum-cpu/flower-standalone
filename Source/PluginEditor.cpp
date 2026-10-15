@@ -2002,7 +2002,11 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setFont (juce::FontOptions (16.0f));
     g.drawText ("MODE", 54, 510, 220, 30, juce::Justification::centredLeft);
     const juce::String modeText =
-        effectMode == 4 ? "CLOUDS"
+        effectMode == 8 ? "POLYPHRASE"
+        : effectMode == 7 ? "SOLARFAZE"
+        : effectMode == 6 ? "ROSETONES"
+        : effectMode == 5 ? "ULTRASHEER"
+        : effectMode == 4 ? "CLOUDS"
         : effectMode == 3 ? "CHORDBOT"
         : effectMode == 2 ? "EUREKA"
         : effectMode == 1 ? "DREAMY"
@@ -2244,6 +2248,16 @@ void RealtimeChordFxAudioProcessorEditor::updateCloudsXYPoint (
         0.0f, 1.0f,
         1.0f - (p.y - 70.0f) / (design - 70.0f));
     processor.setCloudsXY (x, y, touchDown);
+}
+
+void RealtimeChordFxAudioProcessorEditor::updateVongonXYPoint (
+    juce::Point<float> p, bool touchDown)
+{
+    const float x = juce::jlimit (0.0f, 1.0f, p.x / design);
+    const float y = juce::jlimit (
+        0.0f, 1.0f,
+        1.0f - (p.y - 70.0f) / (design - 70.0f));
+    processor.setVongonXY (x, y, touchDown);
 }
 
 void RealtimeChordFxAudioProcessorEditor::updateVongonXYPoint (
@@ -2530,9 +2544,17 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
                 setChoiceActual (ParamID::effectMode, 3);      // EUREKA -> CHORDBOT
             else if (effect == 3)
                 setChoiceActual (ParamID::effectMode, 4);      // CHORDBOT -> CLOUDS
+            else if (effect == 4)
+                setChoiceActual (ParamID::effectMode, 5);      // CLOUDS -> ULTRASHEER
+            else if (effect == 5)
+                setChoiceActual (ParamID::effectMode, 6);      // ULTRASHEER -> ROSETONES
+            else if (effect == 6)
+                setChoiceActual (ParamID::effectMode, 7);      // ROSETONES -> SOLARFAZE
+            else if (effect == 7)
+                setChoiceActual (ParamID::effectMode, 8);      // SOLARFAZE -> POLYPHRASE
             else
             {
-                setChoiceActual (ParamID::effectMode, 0);      // CLOUDS -> A
+                setChoiceActual (ParamID::effectMode, 0);      // POLYPHRASE -> A
                 setChoiceActual (ParamID::chordMode, 0);
             }
         }
@@ -2611,6 +2633,17 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+
+    if (effectMode >= 5 && effectMode <= 8)
+    {
+        if (p.y > 70.0f)
+        {
+            vongonXYTouchDown = true;
+            updateVongonXYPoint (p, true);
+        }
+        repaint();
+        return;
+    }
 
     if (effectMode == 4)
     {
@@ -2864,6 +2897,15 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
     const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
+    if (effectMode >= 5
+        && effectMode <= 8
+        && vongonXYTouchDown)
+    {
+        updateVongonXYPoint (toDesign (e.position), true);
+        repaint();
+        return;
+    }
+
     if (effectMode == 4 && cloudsXYTouchDown)
     {
         updateCloudsXYPoint (toDesign (e.position), true);
@@ -2903,6 +2945,13 @@ void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
         cloudsXYTouchDown = false;
         processor.setCloudsXY (
             processor.getCloudsX(), processor.getCloudsY(), false);
+    }
+
+    if (vongonXYTouchDown)
+    {
+        vongonXYTouchDown = false;
+        processor.setVongonXY (
+            processor.getVongonX(), processor.getVongonY(), false);
     }
 
     if (chordBotPressedPad >= 0)
