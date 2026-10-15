@@ -1662,6 +1662,15 @@ bool RealtimeChordFxAudioProcessor::saveUserPreset (int slot)
         return false;
 
     auto snapshot = apvts.copyState();
+    snapshot.setProperty (
+        "cloudsX", cloudsX.load (std::memory_order_relaxed), nullptr);
+    snapshot.setProperty (
+        "cloudsY", cloudsY.load (std::memory_order_relaxed), nullptr);
+    snapshot.setProperty (
+        "vongonX", vongonX.load (std::memory_order_relaxed), nullptr);
+    snapshot.setProperty (
+        "vongonY", vongonY.load (std::memory_order_relaxed), nullptr);
+
     for (int i = 1; i <= 3; ++i)
         snapshot.removeProperty (
             "userPresetXml" + juce::String (i), nullptr);
@@ -1729,6 +1738,31 @@ bool RealtimeChordFxAudioProcessor::loadUserPreset (int slot)
         restored.setProperty ("audioOutputName", audioOutputName, nullptr);
 
     apvts.replaceState (restored);
+
+    cloudsX.store (
+        juce::jlimit (
+            0.0f, 1.0f,
+            (float) apvts.state.getProperty ("cloudsX", 0.5f)),
+        std::memory_order_relaxed);
+    cloudsY.store (
+        juce::jlimit (
+            0.0f, 1.0f,
+            (float) apvts.state.getProperty ("cloudsY", 0.5f)),
+        std::memory_order_relaxed);
+    cloudsTouch.store (false, std::memory_order_relaxed);
+
+    vongonX.store (
+        juce::jlimit (
+            0.0f, 1.0f,
+            (float) apvts.state.getProperty ("vongonX", 0.5f)),
+        std::memory_order_relaxed);
+    vongonY.store (
+        juce::jlimit (
+            0.0f, 1.0f,
+            (float) apvts.state.getProperty ("vongonY", 0.5f)),
+        std::memory_order_relaxed);
+    vongonTouch.store (false, std::memory_order_relaxed);
+
     notifyMidiControllerConfigChanged();
     chordAHoldRefreshRequested.store (true, std::memory_order_release);
     return true;
