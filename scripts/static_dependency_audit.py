@@ -54,6 +54,7 @@ required = [
     "Resources/classroom_frames_manifest.csv",
     "Resources/eureka_frames.pack",
     "Resources/vongon_frames.pack",
+    "Resources/vongon_frames_sources.txt",
     "Resources/effects_app_icon.jpg",
     "Resources/effects_app_icon.b64",
     "PROJECT_CONTRACT.md", "BUILD_HISTORY.csv", "THIRD_PARTY_NOTICES.md",
@@ -108,6 +109,20 @@ if vongon_pack[:4] != b"CRF1":
 vongon_count = int.from_bytes(vongon_pack[4:8], "little")
 if vongon_count != 216:
     fail(f"Vongon frame count mismatch: {vongon_count}")
+
+vongon_manifest = (R / "Resources/vongon_frames_sources.txt").read_text()
+for need in [
+    "346654116_1792073109459725.mp4",
+    "692753445_1792072792221934.mp4",
+    "981652867_1792072629589643.mp4",
+    "389663512_1792072607026324.mp4",
+    "721211298_1792072531100205.mp4",
+    "989951027_1792072484719362.mp4",
+    "EUREKA visual bank is unchanged",
+    "DOT mode consumes the same current Vongon frame",
+]:
+    if need not in vongon_manifest:
+        fail(f"Vongon user-video provenance missing: {need}")
 
 icon = (R / "Resources/effects_app_icon.jpg").read_bytes()
 if len(icon) != 27540:
@@ -711,6 +726,8 @@ for rel in [
 notices = (R / "THIRD_PARTY_NOTICES.md").read_text()
 if "Mutable Instruments Clouds" not in notices or "Emilie Gillet" not in notices:
     fail("Clouds MIT attribution missing")
+if "Vongon-inspired EFFECTS modes" not in notices or "No Vongon firmware" not in notices:
+    fail("independent Vongon-inspired implementation notice missing")
 
 haze = (R / "Source/HazeProcessor.h").read_text()
 for need in [
