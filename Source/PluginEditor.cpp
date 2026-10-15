@@ -787,6 +787,18 @@ void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g
     const float boostDb = juce::jlimit (
         0.0f, 14.0f,
         processor.state().getRawParameterValue (ParamID::boostDb)->load());
+    const bool cloudsOn =
+        processor.state().getRawParameterValue (ParamID::cloudsEnabled)->load()
+        >= 0.5f;
+
+    const juce::Rectangle<float> cloudsBounds (286.0f, 16.0f, 90.0f, 38.0f);
+    g.setColour (juce::Colours::black.withAlpha (0.50f));
+    g.fillRoundedRectangle (cloudsBounds, 6.0f);
+    g.setColour (uiColour (cloudsOn ? 0.98f : 0.58f));
+    g.drawRoundedRectangle (
+        cloudsBounds, 6.0f, cloudsOn ? 1.8f : 1.0f);
+    g.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
+    g.drawText ("CLOUDS", cloudsBounds, juce::Justification::centred);
 
     const juce::Rectangle<float> boostBounds (390.0f, 16.0f, 76.0f, 38.0f);
     g.setColour (juce::Colours::black.withAlpha (0.50f));
@@ -2001,6 +2013,14 @@ void RealtimeChordFxAudioProcessorEditor::updateMidiControllerFromPoint (juce::P
     processor.setMidiControllerXY (x, y, true);
 }
 
+void RealtimeChordFxAudioProcessorEditor::updateCloudsFromPoint (
+    juce::Point<float> p)
+{
+    const float x = juce::jlimit (0.0f, 1.0f, p.x / design);
+    const float y = juce::jlimit (0.0f, 1.0f, 1.0f - p.y / design);
+    processor.setCloudsXY (x, y);
+}
+
 void RealtimeChordFxAudioProcessorEditor::updateEurekaXYPoint (
     juce::Point<float> p)
 {
@@ -2012,6 +2032,8 @@ void RealtimeChordFxAudioProcessorEditor::updateEurekaXYPoint (
     const float stutter = 0.18f + 0.82f * eurekaXYX;
     const float loopPosition = 0.12f + 0.76f * eurekaXYY;
     const float hall = std::pow (eurekaXYX * eurekaXYY, 1.25f);
+
+    processor.setCloudsXY (eurekaXYX, eurekaXYY);
 
     if (auto* repeat = processor.state().getParameter (ParamID::hazeRepeat))
         repeat->setValueNotifyingHost (stutter);
@@ -2299,6 +2321,20 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
     if (currentEffectMode != 3
+        && juce::Rectangle<float> (286.0f, 16.0f, 90.0f, 38.0f).contains (p))
+    {
+        if (auto* clouds =
+                processor.state().getParameter (ParamID::cloudsEnabled))
+        {
+            clouds->setValueNotifyingHost (
+                clouds->getValue() < 0.5f ? 1.0f : 0.0f);
+        }
+
+        repaint();
+        return;
+    }
+
+    if (currentEffectMode != 3
         && juce::Rectangle<float> (390.0f, 16.0f, 76.0f, 38.0f).contains (p))
     {
         const float current = juce::jlimit (
@@ -2553,7 +2589,19 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         }
         else
         {
-            processor.toggleRunState();
+            const bool cloudsOn =
+                processor.state().getRawParameterValue (
+                    ParamID::cloudsEnabled)->load() >= 0.5f;
+
+            if (cloudsOn && !(p.x <= 170 && p.y <= 70))
+            {
+                cloudsOnlyDragging = true;
+                updateCloudsFromPoint (p);
+            }
+            else
+            {
+                processor.toggleRunState();
+            }
         }
     }
     else
@@ -2587,6 +2635,13 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
         return;
     }
 
+    if (cloudsOnlyDragging)
+    {
+        updateCloudsFromPoint (toDesign (e.position));
+        repaint();
+        return;
+    }
+
     if (xyDragging)
     {
         updateMidiControllerFromPoint (toDesign (e.position));
@@ -2604,6 +2659,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 {
     eurekaXYTouchDown = false;
+    cloudsOnlyDragging = false;
 
     if (chordBotPressedPad >= 0)
     {
