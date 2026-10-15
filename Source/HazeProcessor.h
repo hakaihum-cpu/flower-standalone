@@ -299,9 +299,10 @@ private:
         const float minFactor = params.og ? 0.0015f : 0.006f;
         const float factor = std::pow (
             minFactor, std::pow (repeat, params.og ? 1.05f : 1.25f));
-        const int minimumSpan = params.og
+        const int requestedMinimumSpan = params.og
             ? 24
             : std::max (96, (int) std::lround (sampleRate * 0.003));
+        const int minimumSpan = std::min (requestedMinimumSpan, loop);
         return std::clamp (
             (int) std::lround (loop * factor),
             minimumSpan, loop);
