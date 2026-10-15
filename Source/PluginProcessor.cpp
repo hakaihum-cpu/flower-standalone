@@ -1856,7 +1856,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
 
 void RealtimeChordFxAudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
+    auto stateCopy = apvts.copyState();
+    stateCopy.setProperty (
+        "vongonMidiPcBank", vongonProcessor.exportMidiSnapshot(), nullptr);
+    if (auto xml = stateCopy.createXml())
+        copyXmlToBinary (*xml, dest);
 }
 
 void RealtimeChordFxAudioProcessor::setStateInformation (const void* data, int size)
@@ -1865,7 +1869,10 @@ void RealtimeChordFxAudioProcessor::setStateInformation (const void* data, int s
     {
         if (xml->hasTagName (apvts.state.getType()))
         {
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            auto stateCopy = juce::ValueTree::fromXml (*xml);
+            vongonProcessor.importMidiSnapshot (
+                stateCopy.getProperty ("vongonMidiPcBank").toString());
+            apvts.replaceState (stateCopy);
             loadChordBotLayout();
         }
     }
