@@ -52,7 +52,10 @@ public:
     int getVisualFrame() const noexcept { return visualFrame.load (std::memory_order_relaxed); }
     juce::String getChordLabel() const;
     void setMidiControllerXY (int x, int y, bool touchDown) noexcept;
-    void setCloudsXY (float x, float y) noexcept;
+    void setCloudsXY (float x, float y, bool touchDown) noexcept;
+    float getCloudsX() const noexcept { return cloudsX.load (std::memory_order_relaxed); }
+    float getCloudsY() const noexcept { return cloudsY.load (std::memory_order_relaxed); }
+    bool getCloudsTouch() const noexcept { return cloudsTouch.load (std::memory_order_relaxed); }
     void releaseMidiControllerTouch() noexcept;
     void notifyMidiControllerConfigChanged() noexcept { controllerDirty.store (true, std::memory_order_release); }
     void notifyChordAHoldChanged() noexcept { chordAHoldRefreshRequested.store (true, std::memory_order_release); }
@@ -125,6 +128,7 @@ private:
     EffectsCloudsEngine cloudsEngine;
     std::atomic<float> cloudsX { 0.5f };
     std::atomic<float> cloudsY { 0.5f };
+    std::atomic<bool> cloudsTouch { false };
     std::atomic<bool> hazeClearRequested { false };
     std::atomic<bool> hazeShuffleRequested { false };
     juce::Reverb chordReverb;
