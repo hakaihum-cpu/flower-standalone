@@ -46,7 +46,7 @@ def fail(msg):
 required = [
     "RealtimeChordFX_Standalone.jucer",
     "Source/PluginProcessor.cpp", "Source/PluginEditor.cpp", "Source/ChordRenderers.h",
-    "Source/HazeProcessor.h",
+    "Source/HazeProcessor.h", "Source/EffectsCloudsEngine.h",
     "Source/TheoryEngine.cpp", "Source/YinPitchDetector.cpp",
     "Source/GranularPitchBank.cpp", "Source/PsolaHarmonyBank.h", "Source/FramePack.cpp",
     "Resources/classroom_frames.pack",
@@ -56,6 +56,7 @@ required = [
     "Resources/effects_app_icon.b64",
     "PROJECT_CONTRACT.md", "BUILD_HISTORY.csv", "THIRD_PARTY_NOTICES.md",
     "scripts/materialize_frame_pack.py",
+    "scripts/materialize_effects_clouds.py",
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_juce_android_gamepad_keys.py",
     "tests/core_test.cpp",
@@ -106,6 +107,10 @@ jucer_text = JUCER.read_text()
 for need in [
     'name="eureka_frames.pack" compile="0" resource="1" file="Resources/eureka_frames.pack"',
     'name="effects_app_icon.jpg" compile="0" resource="0" file="Resources/effects_app_icon.jpg"',
+    'name="EffectsCloudsEngine.h" compile="0" resource="0" file="Source/EffectsCloudsEngine.h"',
+    'file="Source/clouds/dsp/granular_processor.cc"',
+    'file="Source/clouds/resources.cc"',
+    'file="Source/stmlib/utils/random.cc"',
     'smallIcon="appic1"',
     'bigIcon="appic1"',
 ]:
@@ -119,6 +124,7 @@ target_source_files = [
     "Source/ParameterIDs.h",
     "Source/ChordRenderers.h",
     "Source/HazeProcessor.h",
+    "Source/EffectsCloudsEngine.h",
     "Source/PsolaHarmonyBank.h",
     "Source/PluginEditor.cpp","Source/PluginEditor.h",
     "Source/PluginProcessor.cpp","Source/PluginProcessor.h",
@@ -239,6 +245,10 @@ for need in [
     "hazeProcessor.prepare",
     "hazeProcessor.captureBlock",
     "hazeProcessor.renderBlock",
+    "cloudsEngine.prepare",
+    "cloudsEngine.process",
+    "ParamID::cloudsEnabled",
+    "setCloudsXY",
     "hazeParamsFromState",
     "hazeClearRequested.exchange",
     "hazeShuffleRequested.exchange",
@@ -307,6 +317,8 @@ for need in [
     "foundG7",
     "botMinor",
     "foundE7",
+    "SineArpeggiator::midiFrequency",
+    "quarterSemitone",
 ]:
     if need not in core_test:
         fail(f"CHORDBOT regression test missing: {need}")
@@ -484,6 +496,9 @@ for need in [
     "class SineArpeggiator",
     "triggerRandomNote",
     "consumeNoteTrigger",
+    "setTuningOffsetSemitones",
+    "midiFrequency",
+    "tuningOffsetSemitones",
     "class ChordBRandomFx",
     "shortDelay",
     "longDelay",
@@ -538,6 +553,7 @@ for need in [
     "ParamID::hold",
     "ParamID::effect",
     "chordBRandomFx.setProbability",
+    "sineArpeggiator.setTuningOffsetSemitones",
     "chordBRandomFx.chooseForNote",
     "chordBRandomFx.processSample",
     "softProtectBuffer (buffer)",
@@ -607,6 +623,38 @@ for need in [
     if need not in theory:
         fail(f"anchor-constrained harmony contract missing: {need}")
 
+clouds_engine = (R / "Source/EffectsCloudsEngine.h").read_text()
+for need in [
+    "class EffectsCloudsEngine",
+    "clouds::GranularProcessor",
+    "PLAYBACK_MODE_GRANULAR",
+    "params->position",
+    "params->size",
+    "params->density",
+    "params->texture",
+    "params->pitch",
+    "params->stereo_spread",
+    "params->feedback",
+    "params->reverb",
+    "params->dry_wet = 1.0f",
+    "wetMix",
+]:
+    if need not in clouds_engine:
+        fail(f"Clouds XY/DSP contract missing: {need}")
+
+for rel in [
+    "Source/clouds/dsp/granular_processor.cc",
+    "Source/clouds/resources.cc",
+    "Source/stmlib/dsp/dsp.h",
+    "Source/stmlib/utils/random.cc",
+]:
+    if not (R / rel).is_file():
+        fail(f"materialized Clouds dependency missing: {rel}")
+
+notices = (R / "THIRD_PARTY_NOTICES.md").read_text()
+if "Mutable Instruments Clouds" not in notices or "Emilie Gillet" not in notices:
+    fail("Clouds MIT attribution missing")
+
 # JUCER: exact module set proven by FLOWER Golden and complete JUCE 9.0.2 dependency closure.
 root = ET.parse(JUCER).getroot()
 if root.attrib.get("pluginFormats") != "buildStandalone":
@@ -657,6 +705,8 @@ ci = (R / ".circleci/config.yml").read_text()
 for need in [
     "run_build:", "default: false",
     "Materialize exact supplied frame pack",
+    "Materialize pinned Clouds source",
+    "scripts/materialize_effects_clouds.py",
     "no_output_timeout: 30m",
     "CMAKE_BUILD_PARALLEL_LEVEL=2",
     "--max-workers=2",
