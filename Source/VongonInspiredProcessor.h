@@ -37,6 +37,21 @@ public:
         return false;
     }
 
+    void setDirectCc (int mode, int number, int value) noexcept
+    {
+        if (acceptsCc (mode, number))
+            midiCc[(size_t) (mode - ultrasheer)][(size_t) number]
+                .store (juce::jlimit (0, 127, value),
+                        std::memory_order_relaxed);
+    }
+
+    int getDirectCc (int mode, int number) const noexcept
+    {
+        if (! acceptsCc (mode, number)) return -1;
+        return midiCc[(size_t) (mode - ultrasheer)][(size_t) number]
+            .load (std::memory_order_relaxed);
+    }
+
     void handleMidi (const juce::MidiMessage& message, int mode,
                      int channel, int sampleOffset) noexcept
     {
