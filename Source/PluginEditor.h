@@ -40,6 +40,7 @@ private:
     void paintDotUiFrame (juce::Graphics&);
     void paintHaze (juce::Graphics&);
     void paintClouds (juce::Graphics&);
+    void paintVideoEffect (juce::Graphics&, const juce::Image&, float x, float y);
     void paintVongonMode (juce::Graphics&, int effectMode);
     void paintVongonParameterPanel (juce::Graphics&, int effectMode);
     void setVongonParameterFromX (int mode, int index, float x);
