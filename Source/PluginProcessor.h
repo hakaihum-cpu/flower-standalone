@@ -61,6 +61,14 @@ public:
     float getVongonX() const noexcept { return vongonX.load (std::memory_order_relaxed); }
     float getVongonY() const noexcept { return vongonY.load (std::memory_order_relaxed); }
     bool getVongonTouch() const noexcept { return vongonTouch.load (std::memory_order_relaxed); }
+    void setVongonCc (int mode, int cc, int value) noexcept
+    {
+        vongonProcessor.setDirectCc (mode, cc, value);
+    }
+    int getVongonCc (int mode, int cc) const noexcept
+    {
+        return vongonProcessor.getDirectCc (mode, cc);
+    }
     void releaseMidiControllerTouch() noexcept;
     void notifyMidiControllerConfigChanged() noexcept { controllerDirty.store (true, std::memory_order_release); }
     void notifyChordAHoldChanged() noexcept { chordAHoldRefreshRequested.store (true, std::memory_order_release); }
