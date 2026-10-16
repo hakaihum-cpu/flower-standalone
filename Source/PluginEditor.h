@@ -92,6 +92,7 @@ private:
     int vongonFrameIndex = 0;
     float eurekaFramePhase = 0.0f;
     float vongonFramePhase = 0.0f;
+    int videoEffectTick = 0;
     bool eurekaSwitchClipPending = false;
     bool vongonSwitchClipPending = false;
     int chordVisualCooldown = 0;
