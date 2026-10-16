@@ -640,14 +640,23 @@ pa1 = dreamy.find("void RealtimeChordFxAudioProcessor::processChordB", pa0)
 if pa0 < 0 or pa1 < 0:
     fail("CHORD-A processor boundaries missing")
 chord_a_audio = dreamy[pa0:pa1]
+# User-approved 100% generated CHORD-A output supersedes the older
+# DRY+CHORD mix. Prevent accidental regression to an unprocessed signal.
 if "softProtectBuffer (buffer)" in chord_a_audio:
-    fail("CHORD-A approved mix drift: soft protection must not alter CHORD-A")
+    fail("CHORD-A output-safety contract drift")
 for need in [
-    "dryLeft * 0.78f + chord * 0.46f",
+    "const float output = audible ? chord * 0.65f : 0.0f;",
+    "buffer.setSample (0, i, output)",
     "processChordReverb (buffer)",
 ]:
     if need not in chord_a_audio:
-        fail(f"CHORD-A approved mix drift: {need}")
+        fail(f"CHORD-A generated-only output contract missing: {need}")
+for rejected in [
+    "dryLeft * 0.78f + chord * 0.46f",
+    "dryRight * 0.78f + chord * 0.46f",
+]:
+    if rejected in chord_a_audio:
+        fail(f"CHORD-A unwanted dry input path: {rejected}")
 
 switch0 = dreamy.find("if (effectMode == 0 && chordMode != lastChordMode)")
 switch1 = dreamy.find("handleMotionCommand()", switch0)
