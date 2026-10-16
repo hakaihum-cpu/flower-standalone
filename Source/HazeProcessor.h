@@ -58,6 +58,7 @@ public:
             lane.smoothedSpan = 0.0f;
             lane.cachedSpan = 0;
             lane.spanFramesUntilRefresh = 0;
+            lane.stutterStartValid = false;
             lane.playPosition = 0.0;
             lane.previousPlayPosition = 0.0;
             lane.jumpCrossfade = 0;
@@ -103,6 +104,7 @@ public:
             lane.smoothedSpan = 0.0f;
             lane.cachedSpan = 0;
             lane.spanFramesUntilRefresh = 0;
+            lane.stutterStartValid = false;
             lane.playPosition = 0.0;
             lane.previousPlayPosition = 0.0;
             lane.jumpCrossfade = 0;
@@ -263,6 +265,8 @@ private:
         float smoothedSpan = 0.0f;
         int cachedSpan = 0;
         int spanFramesUntilRefresh = 0;
+        bool stutterStartValid = false;
+        int stutterStart = 0;
         double playPosition = 0.0;
         double previousPlayPosition = 0.0;
         int jumpCrossfade = 0;
@@ -464,7 +468,16 @@ private:
             * ((float) requestedSpan - lane.smoothedSpan);
         const int span = std::clamp (
             (int) std::lround (lane.smoothedSpan), 16, loop);
-        const int start = (lane.recordPosition - span + loop) % loop;
+        // Anchor each captured stutter phrase in the ring buffer.
+        // Using the moving record head as the start EVERY sample formerly
+        // made playback advance twice and caused audible discontinuities.
+        if (! lane.stutterStartValid)
+        {
+            lane.stutterStart = (lane.recordPosition - span + loop) % loop;
+            lane.stutterStartValid = true;
+        }
+        const int start = lane.stutterStart;
+        const int nextStart = (lane.recordPosition - span + loop) % loop;
 
         double local = lane.playPosition;
         while (local < 0.0)
@@ -477,7 +490,8 @@ private:
                       : (int) std::lround (sampleRate * 0.008),
             8, std::max (8, span / 4));
 
-        auto readSpan = [&] (double localPosition) noexcept
+        auto readSpan = [&] (double localPosition,
+                             int windowStart) noexcept
         {
             while (localPosition < 0.0)
                 localPosition += (double) span;
@@ -485,18 +499,19 @@ private:
                 localPosition -= (double) span;
 
             const double absolute =
-                (double) start + localPosition;
+                (double) windowStart + localPosition;
             return readLinear (lane, absolute, loop);
         };
 
-        float value = readSpan (local);
+        float value = readSpan (local, start);
         if (! params.og && local >= (double) (span - seam))
         {
             const float t =
                 (float) ((local - (double) (span - seam)) / (double) seam);
             const double headPosition =
                 local - (double) (span - seam);
-            value += (readSpan (headPosition) - value) * t;
+            // Blend into the NEXT freshly captured phrase at the seam.
+            value += (readSpan (headPosition, nextStart) - value) * t;
         }
 
         const double direction = lane.reverse ? -1.0 : 1.0;
@@ -506,9 +521,9 @@ private:
                 - (float) lane.jumpCrossfade
                   / (float) std::max (1, lane.jumpCrossfadeTotal);
             const float previous =
-                readSpan (lane.previousPlayPosition);
+                readSpan (lane.previousPlayPosition, start);
             value = previous + (value - previous) * t;
-            lane.previousPlayPosition += speed * direction - 1.0;
+            lane.previousPlayPosition += speed * direction;
             --lane.jumpCrossfade;
         }
 
@@ -517,14 +532,22 @@ private:
         value = value * lane.randomGain
               + randomBipolar() * lane.noiseAmount;
 
-        // start advances with the record head: subtract its 1-sample
-        // movement to keep requested playback speed at unity.
-        lane.playPosition += speed * direction - 1.0;
-
+        // The phrase start is fixed during playback; advance by the
+        // requested speed only. Capture the next phrase on each wrap.
+        lane.playPosition += speed * direction;
+        bool wrapped = false;
         while (lane.playPosition < 0.0)
+        {
             lane.playPosition += (double) span;
+            wrapped = true;
+        }
         while (lane.playPosition >= (double) span)
+        {
             lane.playPosition -= (double) span;
+            wrapped = true;
+        }
+        if (wrapped)
+            lane.stutterStart = nextStart;
 
         return finite (value);
     }
