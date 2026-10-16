@@ -35,6 +35,17 @@ public:
     void prepare (double sr)
     {
         sampleRate = sr > 1000.0 ? sr : 48000.0;
+        const auto pole = [this] (double seconds)
+        {
+            return (float) (1.0 - std::exp (
+                -1.0 / std::max (1.0, sampleRate * seconds)));
+        };
+        controlCoeff = pole (0.055);
+        reverbCoeff = pole (0.080);
+        modulationCoeff = pole (0.18);
+        speedCoeffClean = pole (0.008);
+        speedCoeffOg = pole (0.080);
+        warbleCoeff = pole (0.12);
         capacity = std::max (4096, (int) std::ceil (sampleRate * 10.2));
         for (auto& lane : lanes)
         {
@@ -117,6 +128,19 @@ public:
         params.speed = std::clamp (params.speed, 0, 2);
         params.loops = std::clamp (params.loops, 0, 2);
         params.warble = std::clamp (params.warble, 0, 2);
+        filterDistance = std::abs (params.filter - 0.5f) * 2.0f;
+        if (filterDistance >= 0.015f)
+        {
+            const float cutoff =
+                18000.0f * std::pow (0.035f, filterDistance);
+            filterCoeff = std::clamp (
+                2.0f * std::sin (
+                    juce::MathConstants<float>::pi
+                    * cutoff / (float) sampleRate),
+                0.001f, 0.95f);
+            filterQ = params.og ? (0.34f - 0.22f * filterDistance)
+                                : (0.62f - 0.22f * filterDistance);
+        }
     }
 
     // Hardware Haze keeps recording even while its output is bypassed.
@@ -475,10 +499,8 @@ private:
         const double target = targetSpeed();
         // OG intentionally glides between tape speeds; clean mode settles
         // quickly while remaining click-safe.
-        const double timeSeconds = params.og ? 0.080 : 0.008;
-        const double coeff =
-            1.0 - std::exp (-1.0 / std::max (1.0, sampleRate * timeSeconds));
-        currentSpeed += coeff * (target - currentSpeed);
+        currentSpeed += (params.og ? speedCoeffOg : speedCoeffClean)
+            * (target - currentSpeed);
 
         const float a = readLane (0, currentSpeed);
 
@@ -510,44 +532,21 @@ private:
 
     float filterWet (int channel, float input) noexcept
     {
-        const float position = params.filter;
-        const float distance = std::abs (position - 0.5f) * 2.0f;
-        if (distance < 0.015f)
-            return input;
-
-        const float cutoff =
-            18000.0f * std::pow (0.035f, distance);
-        const float f = std::clamp (
-            2.0f * std::sin (
-                juce::MathConstants<float>::pi
-                * cutoff / (float) sampleRate),
-            0.001f, 0.95f);
-        const float q =
-            params.og ? (0.34f - 0.22f * distance)
-                      : (0.62f - 0.22f * distance);
-
+        if (filterDistance < 0.015f) return input;
         float& low = filterLow[(size_t) channel];
         float& band = filterBand[(size_t) channel];
-        low += f * band;
-        const float high = input - low - q * band;
-        band += f * high;
-
-        const float filtered =
-            position < 0.5f ? low : band;
-        return input + (filtered - input) * distance;
+        low += filterCoeff * band;
+        const float high = input - low - filterQ * band;
+        band += filterCoeff * high;
+        const float filtered = params.filter < 0.5f ? low : band;
+        return input + (filtered - input) * filterDistance;
     }
 
     void updateModulation() noexcept
     {
-        const float controlCoeff =
-            1.0f - std::exp (
-                -1.0f / std::max (1.0f, (float) sampleRate * 0.055f));
         smoothedTime += controlCoeff * (params.time - smoothedTime);
         smoothedRepeat += controlCoeff * (params.repeat - smoothedRepeat);
 
-        const float reverbCoeff =
-            1.0f - std::exp (
-                -1.0f / std::max (1.0f, (float) sampleRate * 0.080f));
         smoothedReverb +=
             reverbCoeff * (params.reverb - smoothedReverb);
 
@@ -559,10 +558,7 @@ private:
                     sampleRate * (0.22 + randomUnit() * 1.4)));
         }
 
-        const float coeff =
-            1.0f - std::exp (
-                -1.0f / std::max (1.0f, (float) sampleRate * 0.18f));
-        modSmoothed += coeff * (modTarget - modSmoothed);
+        modSmoothed += modulationCoeff * (modTarget - modSmoothed);
     }
 
     void applyWarble (float& left, float& right) noexcept
@@ -588,10 +584,7 @@ private:
             warbleTarget = randomBipolar();
         }
 
-        const float smooth =
-            1.0f - std::exp (
-                -1.0f / std::max (1.0f, (float) sampleRate * 0.12f));
-        warbleSmoothed += smooth * (warbleTarget - warbleSmoothed);
+        warbleSmoothed += warbleCoeff * (warbleTarget - warbleSmoothed);
 
         const float depthMs =
             params.warble == 1 ? 0.45f : 1.7f;
@@ -633,6 +626,15 @@ private:
     float smoothedTime = 0.50f;
     float smoothedRepeat = 0.0f;
     float smoothedReverb = 0.0f;
+    float controlCoeff = 0.001f;
+    float reverbCoeff = 0.001f;
+    float modulationCoeff = 0.001f;
+    float speedCoeffClean = 0.001f;
+    float speedCoeffOg = 0.001f;
+    float warbleCoeff = 0.001f;
+    float filterDistance = 0.0f;
+    float filterCoeff = 0.0f;
+    float filterQ = 0.0f;
 
     juce::Reverb hallReverb;
     juce::AudioBuffer<float> warbleBuffer;
