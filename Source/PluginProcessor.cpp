@@ -329,16 +329,13 @@ void RealtimeChordFxAudioProcessor::processChordAudio (juce::AudioBuffer<float>&
 
     for (int i = 0; i < n; ++i)
     {
-        const float dryLeft = buffer.getSample (0, i);
-        const float dryRight = channels > 1 ? buffer.getSample (1, i) : dryLeft;
         const float chord = sampleChordRenderer.renderSample (audible);
-
-        if (audible)
-        {
-            buffer.setSample (0, i, dryLeft * 0.78f + chord * 0.46f);
-            if (channels > 1)
-                buffer.setSample (1, i, dryRight * 0.78f + chord * 0.46f);
-        }
+        // CHORD-A output is generated harmony only; input is retained
+        // internally for tracking/capture, never routed to the speakers.
+        const float output = audible ? chord * 0.65f : 0.0f;
+        buffer.setSample (0, i, output);
+        if (channels > 1)
+            buffer.setSample (1, i, output);
     }
 
     if (running.load (std::memory_order_relaxed) && haveChord)
@@ -367,8 +364,6 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
 
     for (int i = 0; i < n; ++i)
     {
-        const float dryLeft = buffer.getSample (0, i);
-        const float dryRight = channels > 1 ? buffer.getSample (1, i) : dryLeft;
         const float arp = sineArpeggiator.renderSample (audible);
 
         if (sineArpeggiator.consumeNoteTrigger())
@@ -378,12 +373,10 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
         float effectedRight = arp;
         chordBRandomFx.processSample (arp, effectedLeft, effectedRight);
 
-        if (audible)
-        {
-            buffer.setSample (0, i, dryLeft * 0.68f + effectedLeft * 0.52f);
-            if (channels > 1)
-                buffer.setSample (1, i, dryRight * 0.68f + effectedRight * 0.52f);
-        }
+        // CHORD-B is a pure generated sine arpeggiator.
+        buffer.setSample (0, i, audible ? effectedLeft * 0.52f : 0.0f);
+        if (channels > 1)
+            buffer.setSample (1, i, audible ? effectedRight * 0.52f : 0.0f);
     }
 
     if (running.load (std::memory_order_relaxed) && haveChord)
@@ -688,6 +681,10 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     // the accepted standalone effect. It is wet only when DREAMY is selected.
     processDreamy (buffer);
 
+    if (effectMode == 1
+        && ! running.load (std::memory_order_relaxed))
+        buffer.clear();
+
     if (effectMode == 2)
         hazeProcessor.renderBlock (buffer);
     else if (effectMode == 0)
@@ -719,7 +716,8 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     if (effectMode == 3)
     {
-        // CHORDBOT is MIDI-only and must leave the dry audio path untouched.
+        // CHORDBOT remains MIDI-only: no passthrough audio.
+        buffer.clear();
         outputSafetyGain = 1.0f;
         outputSafetyWasActive = false;
     }
@@ -733,23 +731,15 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         applyOutputSafety (buffer, outputActive);
     }
 
-    // Global WET. MIDI-only mode 3 keeps its audio path untouched.
+    // Global WET is an output level, never a dry/wet crossfade.
+    // WET = 0 means silence, not an unprocessed monitoring route.
     if (effectMode != 3)
     {
         const float wet = juce::jlimit (
             0.0f, 1.0f,
             apvts.getRawParameterValue (ParamID::wet)->load());
-
         if (wet < 0.9999f)
-        {
-            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-            {
-                auto* out = buffer.getWritePointer (ch);
-                const auto* dry = wetDryScratch.getReadPointer (ch);
-                for (int i = 0; i < n; ++i)
-                    out[i] = dry[i] + (out[i] - dry[i]) * wet;
-            }
-        }
+            buffer.applyGain (wet);
 
         const float boostDb = juce::jlimit (
             0.0f, 14.0f,
@@ -992,13 +982,23 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
                         dreamyWet[channel] / totalWindow * drift;
                     buffer.setSample (
                         channel, sample,
-                        dry[channel] + (wetSample - dry[channel]) * wetMix);
+                        wetSample * wetMix);
                 }
+            }
+            else
+            {
+                for (int channel = 0; channel < channels; ++channel)
+                    buffer.setSample (channel, sample, 0.0f);
             }
         }
         else
         {
             dreamyVoiceActive = { false, false };
+            if (enabled)
+            {
+                for (int channel = 0; channel < channels; ++channel)
+                    buffer.setSample (channel, sample, 0.0f);
+            }
         }
 
         for (int channel = 0; channel < channels; ++channel)
