@@ -89,6 +89,10 @@ private:
     int loadedVongonFrame = -1;
     int eurekaFrameIndex = 0;
     int vongonFrameIndex = 0;
+    float eurekaFramePhase = 0.0f;
+    float vongonFramePhase = 0.0f;
+    bool eurekaSwitchClipPending = false;
+    bool vongonSwitchClipPending = false;
     int chordVisualCooldown = 0;
     int eurekaVisualCooldown = 0;
     int vongonVisualCooldown = 0;
