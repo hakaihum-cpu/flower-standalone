@@ -134,9 +134,11 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     }
     chordReverb.reset();
 
+    // Reserve space for the largest normal Android BURST selection.
+    // Avoid reallocations when switching from small to larger buffers.
     wetDryScratch.setSize (
         juce::jmax (2, getTotalNumOutputChannels()),
-        juce::jmax (1, block), false, true, false);
+        juce::jmax (8192, block), false, true, false);
     wetDryScratch.clear();
 
     inputPeakRaw.store (0.0f, std::memory_order_relaxed);
@@ -575,11 +577,17 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         if (pitchSamplesSinceValid < 100000000)
             ++pitchSamplesSinceValid;
 
-        const auto estimate = pitchDetector.pushSample (mono);
-        if (estimate.valid)
+        // Chord tracking is only needed by CHORD/DREAMY/EUREKA.
+        // Vongon and CLOUDS do not consume this YIN result; avoiding it
+        // lowers audio-thread work without changing their DSP.
+        if (effectMode <= 2)
         {
-            pitchSamplesSinceValid = 0;
-            acceptPitch (estimate);
+            const auto estimate = pitchDetector.pushSample (mono);
+            if (estimate.valid)
+            {
+                pitchSamplesSinceValid = 0;
+                acceptPitch (estimate);
+            }
         }
 
         // Preserve discrete stereo input. Mono devices are duplicated only as
