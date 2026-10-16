@@ -806,9 +806,9 @@ for need in [
     "smoothedTime",
     "smoothedRepeat",
     "smoothedReverb",
-    "sampleRate * 0.003",
+    "sampleRate * 0.090",
     "params.og ? 0.0005 : 0.010",
-    "sampleRate * 0.008",
+    "sampleRate * 0.016",
     "softProtect (out[i])",
 ]:
     if need not in haze:
@@ -890,7 +890,8 @@ for need in [
 for need in [
     "if (attack && chordVisualCooldown <= 0)",
     "eurekaFramePhase += 4.5f / 30.0f",
-    "vongonFramePhase += 4.5f / 30.0f",
+    "const bool fullVideo = total == 6 * 192",
+    "vongonFramePhase += playbackFps / 30.0f",
     "eurekaSwitchClipPending |= attack",
     "vongonSwitchClipPending |= attack",
     "paintVideoEffect (g, currentEurekaFrame",
