@@ -781,61 +781,79 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
     }
     else if (effectMode == 2 && eurekaFrames.getFrameCount() > 0)
     {
-        if (eurekaVisualCooldown > 0)
-            --eurekaVisualCooldown;
-
+        // The supplied MP4 was stored as ordered 36-frame/8-second clips.
+        // Play each clip sequentially; never choose random stills.
         const bool attack =
             activity > 0.006f
             && activity > eurekaVisualPreviousActivity * 1.28f + 0.0015f;
-
-        if (attack && eurekaVisualCooldown <= 0)
+        eurekaSwitchClipPending |= attack;
+        const int total = eurekaFrames.getFrameCount();
+        const int clipFrames = 36;
+        const int clips = total / clipFrames;
+        eurekaFramePhase += 4.5f / 30.0f;
+        while (eurekaFramePhase >= 1.0f)
         {
-            eurekaFrameIndex =
-                nextVisualFrame (eurekaFrames.getFrameCount(), loadedEurekaFrame);
-            eurekaVisualCooldown = 24; // >=0.8 s between actual note onsets
+            eurekaFramePhase -= 1.0f;
+            const int position = eurekaFrameIndex % clipFrames;
+            const int clip = eurekaFrameIndex / clipFrames;
+            if (position == clipFrames - 1)
+            {
+                const int nextClip =
+                    eurekaSwitchClipPending && clips > 1
+                    ? (clip + 1) % clips : clip;
+                eurekaFrameIndex = nextClip * clipFrames;
+                eurekaSwitchClipPending = false;
+            }
+            else
+                ++eurekaFrameIndex;
         }
-
         if (eurekaFrameIndex != loadedEurekaFrame)
         {
-            currentEurekaFrame =
-                eurekaFrames.getFrame (eurekaFrameIndex);
+            currentEurekaFrame = eurekaFrames.getFrame (
+                eurekaFrameIndex);
             loadedEurekaFrame = eurekaFrameIndex;
             ++dotEurekaRevision;
         }
-
         eurekaVisualPreviousActivity =
-            eurekaVisualPreviousActivity * 0.60f + activity * 0.40f;
+            0.60f * eurekaVisualPreviousActivity + 0.40f * activity;
     }
     else if (effectMode >= 5
              && effectMode <= 8
              && vongonFrames.getFrameCount() > 0)
     {
-        if (vongonVisualCooldown > 0)
-            --vongonVisualCooldown;
-
         const bool attack =
             activity > 0.006f
             && activity > vongonVisualPreviousActivity * 1.30f + 0.0015f;
-
-        if (attack && vongonVisualCooldown <= 0)
+        vongonSwitchClipPending |= attack;
+        const int total = vongonFrames.getFrameCount();
+        const int clipFrames = 36;
+        const int clips = total / clipFrames;
+        vongonFramePhase += 4.5f / 30.0f;
+        while (vongonFramePhase >= 1.0f)
         {
-            vongonFrameIndex =
-                nextVisualFrame (
-                    vongonFrames.getFrameCount(),
-                    loadedVongonFrame);
-            vongonVisualCooldown = 24; // >=0.8 s between actual note onsets
+            vongonFramePhase -= 1.0f;
+            const int position = vongonFrameIndex % clipFrames;
+            const int clip = vongonFrameIndex / clipFrames;
+            if (position == clipFrames - 1)
+            {
+                const int nextClip =
+                    vongonSwitchClipPending && clips > 1
+                    ? (clip + 1) % clips : clip;
+                vongonFrameIndex = nextClip * clipFrames;
+                vongonSwitchClipPending = false;
+            }
+            else
+                ++vongonFrameIndex;
         }
-
         if (vongonFrameIndex != loadedVongonFrame)
         {
-            currentVongonFrame =
-                vongonFrames.getFrame (vongonFrameIndex);
+            currentVongonFrame = vongonFrames.getFrame (
+                vongonFrameIndex);
             loadedVongonFrame = vongonFrameIndex;
             ++dotVongonRevision;
         }
-
         vongonVisualPreviousActivity =
-            vongonVisualPreviousActivity * 0.60f + activity * 0.40f;
+            0.60f * vongonVisualPreviousActivity + 0.40f * activity;
     }
 
     dotActivity = juce::jlimit (0.0f, 1.0f, activity * 18.0f);
