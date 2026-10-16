@@ -1176,6 +1176,43 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
         24, 666, 672, 24, juce::Justification::centredLeft, 1);
 }
 
+void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (
+    juce::Graphics& g, const juce::Image& source, float x, float y)
+{
+    if (! source.isValid()) return;
+
+    // Playback follows the user-supplied clip in sequence. Parameters act
+    // on the moving picture itself rather than selecting random stills.
+    const float intensity = juce::jlimit (
+        0.0f, 1.0f, 0.12f + x * 0.42f + dotActivity * 0.28f);
+    const float movement = std::sin (
+        (float) dotUiTick * 0.16f + y * 4.0f);
+    const float offset = (2.0f + 13.0f * x) * movement;
+    juce::Graphics::ScopedSaveState save (g);
+    g.reduceClipRegion (juce::Rectangle<int> (0, 0, 720, 720));
+    if (! dotModeEnabled())
+    {
+        g.setOpacity (0.07f + 0.18f * intensity);
+        g.drawImage (
+            source,
+            juce::Rectangle<float> (
+                offset, 0.0f, design, design),
+            juce::RectanglePlacement::stretchToFit);
+    }
+    // Gentle horizontal analogue-video displacement, also in DOT mode.
+    // No opaque black panel and no artificial frame replacement.
+    g.setColour (uiColour (0.10f + intensity * 0.20f));
+    const int period = juce::jmax (12, 30 - juce::roundToInt (x * 16.0f));
+    for (int row = 0; row < 720; row += period)
+    {
+        const float shift = offset * (0.18f + 0.12f * y);
+        g.drawHorizontalLine (
+            row + (dotUiTick % period),
+            juce::jmax (0.0f, shift),
+            juce::jmin (720.0f, 720.0f + shift));
+    }
+}
+
 void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
     juce::Graphics& g, int effectMode)
 {
@@ -1184,6 +1221,9 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
             g, currentVongonFrame,
             juce::Rectangle<float> (0, 0, design, design),
             2, dotVongonRevision);
+    paintVideoEffect (
+        g, currentVongonFrame,
+        processor.getVongonX(), processor.getVongonY());
 
     // Keep the supplied Vongon video fully visible, including the lower area.
     // Do not mask it with the former translucent black footer panel.
@@ -1349,6 +1389,7 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
             juce::Rectangle<float> (0.0f, 0.0f, design, design),
             1, dotEurekaRevision);
     }
+    paintVideoEffect (g, currentEurekaFrame, eurekaXYX, eurekaXYY);
 
     juce::ColourGradient topShade (
         juce::Colours::black.withAlpha (0.58f), 360.0f, 0.0f,
