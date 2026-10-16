@@ -1055,8 +1055,6 @@ private:
             0, 8, juce::roundToInt (x * 8.0f));
         const double timeSeconds = timeIndex < 0
             ? secondsTable[physicalIndex] : secondsTable[timeIndex];
-        // Legacy source contract token for existing static audit:
-        // 22.0 / 0.085
         const bool clockEnabled = ccRaw (polyphrase, 17) < 64;
         const bool recentClock = polyClockLast >= 0.0
             && midiSamplePosition - polyClockLast < sampleRate * 3.0;
