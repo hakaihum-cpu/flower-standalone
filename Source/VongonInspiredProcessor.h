@@ -1034,6 +1034,12 @@ private:
             (double) (polyDelay.getNumSamples() - 2),
             targetSamples);
 
+        // Never crossfade to a delay tap that has not yet been written.
+        // Retain the previous audible delay until the requested history
+        // exists, then transition with the established 45-ms crossfade.
+        if (targetSamples > (double) polySamplesWritten
+                - sampleRate * 0.050)
+            return;
         if (std::abs (targetSamples - polyTargetDelay[(size_t) channel])
             < 16.0)
             return;
@@ -1051,7 +1057,11 @@ private:
     {
         if (samples > (double) polySamplesWritten - 2.0)
             return 0.0f;
-        return readDelay (polyDelay, channel, polyWrite, samples);
+        const float validFade = juce::jlimit (0.0f, 1.0f,
+            (float) ((polySamplesWritten - samples - 2.0)
+                / juce::jmax (1.0, sampleRate * 0.050)));
+        return readDelay (polyDelay, channel, polyWrite, samples)
+            * validFade;
     }
 
     void processPolyphrase (
@@ -1189,12 +1199,20 @@ private:
             }
 
             // Middle/right XY area progressively becomes ping-pong.
+            // When delay memory is empty (first seconds after reset),
+            // fade in the wet signal rather than dropping the dry audio.
+            const float history = juce::jlimit (0.0f, 1.0f,
+                (float) ((double) polySamplesWritten
+                    - std::min (
+                        polyCurrentDelay[0], polyCurrentDelay[1]) + 2.0)
+                / juce::jmax (1.0, sampleRate * 0.080));
             const int style = ccRaw (polyphrase, 9);
             const int echoStyle = style < 0 ? 0
                 : style < 44 ? 0 : style < 88 ? 1 : 2;
             const float pingPong = echoStyle == 1 ? 1.0f : 0.0f;
             const bool monoStyle = echoStyle == 2;
-            polyWetSmoothed += wetAlpha * (wetTarget - polyWetSmoothed);
+            polyWetSmoothed += wetAlpha
+                * (wetTarget * history - polyWetSmoothed);
             const float monoReturn = 0.5f * (polyToneOut[0]
                 + polyToneOut[(size_t) (channels > 1 ? 1 : 0)]);
             for (int ch = 0; ch < channels; ++ch)
@@ -1206,7 +1224,7 @@ private:
                 const float infiniteBoost = infinite
                     || (ccOn (polyphrase, 11, true)
                         && touchDown && y > 0.93f)
-                    ? 1.04f : feedback;
+                    ? 0.998f : feedback;
                 const float incoming = bypass ? 0.0f : dry[ch];
                 const float externalReturn = monoStyle && channels > 1
                     ? dry[1] : fbSignal;
