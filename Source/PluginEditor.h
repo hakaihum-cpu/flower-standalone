@@ -41,6 +41,8 @@ private:
     void paintHaze (juce::Graphics&);
     void paintClouds (juce::Graphics&);
     void paintVongonMode (juce::Graphics&, int effectMode);
+    void paintVongonParameterPanel (juce::Graphics&, int effectMode);
+    void setVongonParameterFromX (int mode, int index, float x);
     void paintChordBot (juce::Graphics&);
     void paintConfig (juce::Graphics&);
     void paintAudioConfig (juce::Graphics&);
@@ -131,6 +133,9 @@ private:
     bool eurekaXYTouchDown = false;
     bool cloudsXYTouchDown = false;
     bool vongonXYTouchDown = false;
+    bool vongonPanelVisible = false;
+    int vongonPanelPage = 0;
+    int vongonDraggingParameter = -1;
     float eurekaXYX = 0.5f;
     float eurekaXYY = 0.5f;
 
