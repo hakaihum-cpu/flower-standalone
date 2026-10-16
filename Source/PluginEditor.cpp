@@ -754,18 +754,20 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             activity > 0.007f
             && activity > chordVisualPreviousActivity * 1.35f + 0.002f;
 
-        if (activity > 0.010f
-            && chordVisualCooldown <= 0)
+        // Event-led cuts only. Continuous notes must not cycle frames
+        // at a fixed slideshow rate.
+        if (attack && chordVisualCooldown <= 0)
         {
             const int frame =
                 nextVisualFrame (frames.getFrameCount(), loadedFrame);
             currentFrame = frames.getFrame (frame);
             loadedFrame = frame;
             ++dotFrameRevision;
-            chordVisualCooldown = 45; // Minimum ~1.5 s between cuts at 30 Hz
+            chordVisualCooldown = 21; // >=0.7 s between actual note onsets
         }
 
-        chordVisualPreviousActivity = activity;
+        chordVisualPreviousActivity =
+            chordVisualPreviousActivity * 0.60f + activity * 0.40f;
     }
     else if (effectMode == 1 && frames.getFrameCount() > 0)
     {
@@ -786,12 +788,11 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             activity > 0.006f
             && activity > eurekaVisualPreviousActivity * 1.28f + 0.0015f;
 
-        if (activity > 0.009f
-            && eurekaVisualCooldown <= 0)
+        if (attack && eurekaVisualCooldown <= 0)
         {
             eurekaFrameIndex =
                 nextVisualFrame (eurekaFrames.getFrameCount(), loadedEurekaFrame);
-            eurekaVisualCooldown = 54; // Hold each user frame for ~1.8 s
+            eurekaVisualCooldown = 24; // >=0.8 s between actual note onsets
         }
 
         if (eurekaFrameIndex != loadedEurekaFrame)
@@ -802,7 +803,8 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             ++dotEurekaRevision;
         }
 
-        eurekaVisualPreviousActivity = activity;
+        eurekaVisualPreviousActivity =
+            eurekaVisualPreviousActivity * 0.60f + activity * 0.40f;
     }
     else if (effectMode >= 5
              && effectMode <= 8
@@ -815,14 +817,13 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             activity > 0.006f
             && activity > vongonVisualPreviousActivity * 1.30f + 0.0015f;
 
-        if (activity > 0.009f
-            && vongonVisualCooldown <= 0)
+        if (attack && vongonVisualCooldown <= 0)
         {
             vongonFrameIndex =
                 nextVisualFrame (
                     vongonFrames.getFrameCount(),
                     loadedVongonFrame);
-            vongonVisualCooldown = 54; // Hold each user frame for ~1.8 s
+            vongonVisualCooldown = 24; // >=0.8 s between actual note onsets
         }
 
         if (vongonFrameIndex != loadedVongonFrame)
@@ -833,7 +834,8 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             ++dotVongonRevision;
         }
 
-        vongonVisualPreviousActivity = activity;
+        vongonVisualPreviousActivity =
+            vongonVisualPreviousActivity * 0.60f + activity * 0.40f;
     }
 
     dotActivity = juce::jlimit (0.0f, 1.0f, activity * 18.0f);
