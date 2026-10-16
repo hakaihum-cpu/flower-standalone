@@ -140,6 +140,8 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
         juce::jmax (2, getTotalNumOutputChannels()),
         juce::jmax (8192, block), false, true, false);
     wetDryScratch.clear();
+    inputGainLinearSmoothed = juce::Decibels::decibelsToGain (
+        apvts.getRawParameterValue (ParamID::inputGainDb)->load());
 
     inputPeakRaw.store (0.0f, std::memory_order_relaxed);
     inputRmsRaw.store (0.0f, std::memory_order_relaxed);
@@ -449,6 +451,21 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     const int n = buffer.getNumSamples();
     const int availableInputChannels =
         juce::jmax (1, juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels()));
+
+    // INPUT GAIN affects the actual input of every EFFECTS mode, including
+    // the monitored dry signal. Smooth changes to prevent gain-step clicks.
+    const float gainTarget = juce::Decibels::decibelsToGain (
+        apvts.getRawParameterValue (ParamID::inputGainDb)->load());
+    const float gainStep = 1.0f - std::exp (
+        -1.0f / juce::jmax (1.0f, (float) currentSampleRate * 0.020f));
+    for (int i = 0; i < n; ++i)
+    {
+        inputGainLinearSmoothed += gainStep
+            * (gainTarget - inputGainLinearSmoothed);
+        for (int channel = 0; channel < availableInputChannels; ++channel)
+            buffer.setSample (channel, i,
+                buffer.getSample (channel, i) * inputGainLinearSmoothed);
+    }
 
     if (wetDryScratch.getNumChannels() < buffer.getNumChannels()
         || wetDryScratch.getNumSamples() < n)
@@ -1820,6 +1837,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterFloat> (
         ParamID::boostDb, "BOOST",
         juce::NormalisableRange<float> (0.0f, 14.0f, 0.5f), 0.0f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (
+        ParamID::inputGainDb, "INPUT GAIN",
+        juce::NormalisableRange<float> (-24.0f, 24.0f, 0.5f), 0.0f));
     p.add (std::make_unique<juce::AudioParameterChoice> (
         ParamID::displayMode, "DISPLAY",
         juce::StringArray { "MEDIA", "DOT" }, 0));
