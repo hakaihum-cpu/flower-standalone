@@ -469,7 +469,11 @@ private:
             lane.cachedSpan = activeSpan (index);
             lane.spanFramesUntilRefresh = 64;
         }
-        const int requestedSpan = lane.cachedSpan;
+        const int requestedSpan = juce::jmin (
+            lane.cachedSpan,
+            juce::jmax (128, lane.validSamples - 32));
+        // On first startup and after CLEAR, capture a usable short phrase
+        // instead of demanding seconds of unavailable audio history.
         if (lane.smoothedSpan <= 0.0f)
             lane.smoothedSpan = (float) requestedSpan;
         // Follow moving stutter boundaries over ~50 ms, not instantly.
