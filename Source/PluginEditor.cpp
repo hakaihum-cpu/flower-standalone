@@ -9,6 +9,54 @@
 
 namespace
 {
+
+    struct VongonControl { const char* name; int cc; };
+    static constexpr VongonControl ultrasheerControls[] {
+        { "VIBRATO DEPTH", 100 }, { "VIBRATO RATE", 101 },
+        { "CYCLE / RANDOM", 102 }, { "REVERB BRIGHT", 103 },
+        { "REVERB MIX", 104 }, { "REVERB DECAY", 105 },
+        { "VIB BYPASS", 106 }, { "REV BYPASS", 107 },
+        { "FX ORDER", 108 }, { "REVERB TRAILS", 109 }
+    };
+    static constexpr VongonControl rosetonesControls[] {
+        { "BYPASS", 13 }, { "MOD MODE", 14 },
+        { "MIX", 80 }, { "SYNTH LEVEL", 81 },
+        { "TONE", 82 }, { "GLIDE TIME", 83 },
+        { "MODULATION", 84 }, { "SENS", 85 },
+        { "FEEDBACK", 86 }, { "OCTAVE", 87 },
+        { "INTERVAL", 90 }
+    };
+    static constexpr VongonControl solarfazeControls[] {
+        { "DETUNE BYPASS", 13 }, { "SAT BYPASS", 14 },
+        { "DETUNE MIX", 80 }, { "DETUNE AMOUNT", 81 },
+        { "DETUNE ENV", 82 }, { "DETUNE SIZE", 96 },
+        { "BASS LEVEL", 83 }, { "MID LEVEL", 84 },
+        { "TREB LEVEL", 85 }, { "BASS DRIVE", 89 },
+        { "MID DRIVE", 90 }, { "TREB DRIVE", 91 },
+        { "BASS FREQ", 93 }, { "MID FREQ", 94 },
+        { "TREB FREQ", 95 }, { "SAT MIX", 86 },
+        { "SAT TONE", 87 }, { "SAT DRIVE", 88 },
+        { "GATE BYPASS", 92 }, { "GATE THRESH", 98 },
+        { "FX ORDER", 97 }
+    };
+    static constexpr VongonControl polyphraseControls[] {
+        { "REPEATS", 1 }, { "TONE", 2 },
+        { "DEPTH", 3 }, { "RATE", 4 },
+        { "DELAY LEFT", 5 }, { "DELAY RIGHT", 6 },
+        { "MIX", 7 }, { "TIME", 8 },
+        { "ECHO STYLE", 9 }, { "SYNC", 10 },
+        { "TRIG MODE", 11 }, { "BYPASS", 13 },
+        { "INFINITE", 14 }, { "TAP TEMPO", 15 },
+        { "TRAILS", 16 }, { "MIDI CLOCK", 17 }
+    };
+    const VongonControl* getVongonControls (int mode, int& count)
+    {
+        if (mode == 5) { count = 10; return ultrasheerControls; }
+        if (mode == 6) { count = 11; return rosetonesControls; }
+        if (mode == 7) { count = 21; return solarfazeControls; }
+        count = 16; return polyphraseControls;
+    }
+
     constexpr const char* audioBufferNames[]
     {
         "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST",
@@ -1149,6 +1197,14 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
     g.setColour (uiColour (0.94f));
     g.drawText ("CONFIG", 604, 22, 88, 24,
                 juce::Justification::centredRight);
+    g.drawText (vongonPanelVisible ? "CLOSE" : "PARAM",
+                500, 20, 74, 30, juce::Justification::centred);
+
+    if (vongonPanelVisible)
+    {
+        paintVongonParameterPanel (g, effectMode);
+        return;
+    }
 
     const float px = x * design;
     const float py = 70.0f + (1.0f - y) * 650.0f;
@@ -1195,6 +1251,65 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
         + "   Y " + juce::String (juce::roundToInt (y * 127.0f)).paddedLeft ('0', 3),
         24, 670, 220, 20,
         juce::Justification::centredLeft);
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintVongonParameterPanel (
+    juce::Graphics& g, int mode)
+{
+    int count = 0;
+    const auto* items = getVongonControls (mode, count);
+    const int pageCount = (count + 7) / 8;
+    vongonPanelPage = juce::jlimit (0, pageCount - 1, vongonPanelPage);
+
+    g.setColour (juce::Colours::black.withAlpha (0.90f));
+    g.fillRoundedRectangle (
+        juce::Rectangle<float> (14, 70, 692, 636), 10.0f);
+    g.setColour (uiColour (0.92f));
+    g.setFont (juce::FontOptions (16.0f).withStyle ("Bold"));
+    g.drawText ("PARAMETERS - MIDI CC / MANUAL",
+                32, 80, 560, 34, juce::Justification::centredLeft);
+
+    for (int k = 0; k < 8; ++k)
+    {
+        const int index = vongonPanelPage * 8 + k;
+        if (index >= count) break;
+        const auto& item = items[index];
+        const int current = processor.getVongonCc (mode, item.cc);
+        const float fraction = current < 0 ? 0.5f
+            : (float) current / 127.0f;
+        const int col = k % 2;
+        const int row = k / 2;
+        const juce::Rectangle<float> bounds (
+            36.0f + col * 346.0f, 139.0f + row * 112.0f,
+            300.0f, 78.0f);
+        paintBar (g, bounds,
+                  juce::String (item.name) + "  CC#" + juce::String (item.cc),
+                  fraction,
+                  current < 0 ? "XY / DEFAULT" : juce::String (current));
+    }
+
+    g.setColour (uiColour (0.9f));
+    g.setFont (juce::FontOptions (18.0f).withStyle ("Bold"));
+    g.drawText ("<", 142, 618, 74, 48, juce::Justification::centred);
+    g.drawText ("PAGE " + juce::String (vongonPanelPage + 1)
+        + " / " + juce::String (pageCount),
+        260, 618, 200, 48, juce::Justification::centred);
+    g.drawText (">", 502, 618, 74, 48, juce::Justification::centred);
+}
+
+void RealtimeChordFxAudioProcessorEditor::setVongonParameterFromX (
+    int mode, int index, float x)
+{
+    int count = 0;
+    const auto* items = getVongonControls (mode, count);
+    if (! juce::isPositiveAndBelow (index, count)) return;
+    const int k = index % 8;
+    const int col = k % 2;
+    const float left = 36.0f + col * 346.0f;
+    const float norm = juce::jlimit (
+        0.0f, 1.0f, (x - left) / 300.0f);
+    processor.setVongonCc (
+        mode, items[index].cc, juce::roundToInt (norm * 127.0f));
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
@@ -2662,6 +2777,48 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (effectMode >= 5 && effectMode <= 8)
     {
+        if (p.x >= 485.0f && p.x < 580.0f && p.y <= 70.0f)
+        {
+            vongonPanelVisible = ! vongonPanelVisible;
+            vongonPanelPage = 0;
+            vongonDraggingParameter = -1;
+            repaint();
+            return;
+        }
+        if (vongonPanelVisible)
+        {
+            int count = 0;
+            getVongonControls (effectMode, count);
+            const int pages = (count + 7) / 8;
+            if (p.y >= 606.0f)
+            {
+                if (p.x < 240.0f)
+                    vongonPanelPage = (vongonPanelPage + pages - 1) % pages;
+                else if (p.x > 472.0f)
+                    vongonPanelPage = (vongonPanelPage + 1) % pages;
+            }
+            else
+            {
+                for (int k = 0; k < 8; ++k)
+                {
+                    const int row = k / 2;
+                    const int col = k % 2;
+                    const int index = vongonPanelPage * 8 + k;
+                    if (index >= count) break;
+                    if (juce::Rectangle<float> (
+                            36.0f + col * 346.0f,
+                            139.0f + row * 112.0f,
+                            300.0f, 78.0f).contains (p))
+                    {
+                        vongonDraggingParameter = index;
+                        setVongonParameterFromX (effectMode, index, p.x);
+                        break;
+                    }
+                }
+            }
+            repaint();
+            return;
+        }
         if (p.y > 70.0f)
         {
             vongonXYTouchDown = true;
@@ -2929,6 +3086,14 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
     const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
+    if (effectMode >= 5 && effectMode <= 8
+        && vongonPanelVisible && vongonDraggingParameter >= 0)
+    {
+        setVongonParameterFromX (
+            effectMode, vongonDraggingParameter, toDesign (e.position).x);
+        repaint();
+        return;
+    }
     if (effectMode >= 5
         && effectMode <= 8
         && vongonXYTouchDown)
@@ -2971,6 +3136,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 {
     inputGainDragging = false;
+    vongonDraggingParameter = -1;
     eurekaXYTouchDown = false;
 
     if (cloudsXYTouchDown)
