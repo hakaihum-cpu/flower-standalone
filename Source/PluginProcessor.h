@@ -69,6 +69,10 @@ public:
     {
         return vongonProcessor.getDirectCc (mode, cc);
     }
+    void triggerVongonPolyphrase() noexcept
+    {
+        vongonProcessor.requestPolyTrigger();
+    }
     void releaseMidiControllerTouch() noexcept;
     void notifyMidiControllerConfigChanged() noexcept { controllerDirty.store (true, std::memory_order_release); }
     void notifyChordAHoldChanged() noexcept { chordAHoldRefreshRequested.store (true, std::memory_order_release); }
