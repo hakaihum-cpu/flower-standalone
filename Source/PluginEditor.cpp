@@ -107,7 +107,8 @@ namespace
                 if (getType != nullptr)
                     name << "  [type " << (int) env->CallIntMethod (info, getType) << "]";
 
-                result.addIfNotAlreadyThere (name);
+                if (! name.containsIgnoreCase ("RG Rotate"))
+                    result.addIfNotAlreadyThere (name);
 
                 if (productString != nullptr) env->DeleteLocalRef (productString);
                 if (product != nullptr) env->DeleteLocalRef (product);
@@ -1116,10 +1117,10 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
             juce::Rectangle<float> (0, 0, design, design),
             2, dotVongonRevision);
 
+    // Keep the supplied Vongon video fully visible, including the lower area.
+    // Do not mask it with the former translucent black footer panel.
     g.setColour (juce::Colours::black.withAlpha (0.34f));
     g.fillRect (0.0f, 0.0f, 720.0f, 88.0f);
-    g.setColour (juce::Colours::black.withAlpha (0.58f));
-    g.fillRect (0.0f, 560.0f, 720.0f, 160.0f);
 
     const float x = juce::jlimit (0.0f, 1.0f, processor.getVongonX());
     const float y = juce::jlimit (0.0f, 1.0f, processor.getVongonY());
@@ -1551,6 +1552,10 @@ void RealtimeChordFxAudioProcessorEditor::refreshAudioOutputs()
 
         for (const auto& name : names)
         {
+            // RG Rotate is an Android internal endpoint, not an external route.
+            if (name.containsIgnoreCase ("RG Rotate"))
+                continue;
+
             const int index = (int) audioOutputs.size();
             audioOutputs.push_back ({ type->getTypeName(), name });
 
