@@ -46,6 +46,7 @@ public:
         speedCoeffClean = pole (0.008);
         speedCoeffOg = pole (0.080);
         warbleCoeff = pole (0.12);
+        spanCoeff = pole (0.050);
         capacity = std::max (4096, (int) std::ceil (sampleRate * 10.2));
         for (auto& lane : lanes)
         {
@@ -445,9 +446,8 @@ private:
         if (lane.smoothedSpan <= 0.0f)
             lane.smoothedSpan = (float) requestedSpan;
         // Follow moving stutter boundaries over ~50 ms, not instantly.
-        lane.smoothedSpan += (float) (
-            (requestedSpan - lane.smoothedSpan)
-            * (1.0 - std::exp (-1.0 / (sampleRate * 0.050))));
+        lane.smoothedSpan += spanCoeff
+            * ((float) requestedSpan - lane.smoothedSpan);
         const int span = std::clamp (
             (int) std::lround (lane.smoothedSpan), 16, loop);
         const int start = (lane.recordPosition - span + loop) % loop;
@@ -662,6 +662,7 @@ private:
     float speedCoeffClean = 0.001f;
     float speedCoeffOg = 0.001f;
     float warbleCoeff = 0.001f;
+    float spanCoeff = 0.001f;
     float filterDistance = 0.0f;
     float filterCoeff = 0.0f;
     float filterQ = 0.0f;
