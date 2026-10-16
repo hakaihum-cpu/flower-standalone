@@ -249,7 +249,10 @@ public:
 
         for (auto& channel : roseState)
             for (auto& resonator : channel)
+            {
                 resonator = {};
+                resonator.line.assign (2048, 0.0f);
+            }
         roseToneLow = { 0.0f, 0.0f };
         rosePhase = 0.0;
         for (int note = 0; note < 48; ++note)
@@ -313,7 +316,12 @@ public:
 
         for (auto& channel : roseState)
             for (auto& resonator : channel)
-                resonator = {};
+            {
+                std::fill (
+                    resonator.line.begin(), resonator.line.end(), 0.0f);
+                resonator.cursor = 0;
+                resonator.delaySmoothed = 0.0f;
+            }
         roseToneLow = { 0.0f, 0.0f };
         for (auto& detector : roseDetectors)
         {
@@ -417,8 +425,30 @@ private:
 
     struct ResonatorState
     {
-        float y1 = 0.0f;
-        float y2 = 0.0f;
+        // Tuned feedback delay line, distinct from the 48 detection filters.
+        std::vector<float> line;
+        int cursor = 0;
+        float delaySmoothed = 0.0f;
+
+        float tick (float drive, float samples, float feedback) noexcept
+        {
+            if (line.empty()) return 0.0f;
+            const int count = (int) line.size();
+            samples = juce::jlimit (
+                2.0f, (float) (count - 2), samples);
+            float pos = (float) cursor - samples;
+            if (pos < 0.0f) pos += (float) count;
+            const int i0 = (int) pos;
+            const int i1 = (i0 + 1) % count;
+            const float frac = pos - (float) i0;
+            const float delayed = line[(size_t) i0]
+                + (line[(size_t) i1] - line[(size_t) i0]) * frac;
+            // Nonlinear soft limiter in the resonator feedback path.
+            const float next = drive + delayed * feedback;
+            line[(size_t) cursor] = next / (1.0f + std::abs (next));
+            if (++cursor == count) cursor = 0;
+            return delayed;
+        }
     };
 
     struct SolarBand
@@ -668,10 +698,10 @@ private:
         roseOctaveSmoothed += glideAlpha * (octave - roseOctaveSmoothed);
 
         const float sens = ccValue (rosetones, 85, y);
-        const float inputGain = 1.0f + 5.0f * sens;
+        const float inputGain = 5.0f * sens;
         const float feedback = ccValue (rosetones, 86, y);
-        const float radius = juce::jlimit (
-            0.91f, 0.9997f, 0.91f + 0.0894f * feedback);
+        const float feedbackGain = juce::jlimit (
+            0.30f, 0.9995f, 0.30f + feedback * 0.6995f);
         const float mix = ccValue (rosetones, 80, y);
         const float tone = ccValue (rosetones, 82, x);
         const float toneCoeff = onePoleCoeff (
@@ -685,7 +715,7 @@ private:
             : juce::jmin (11, ccRaw (rosetones, 90) * 12 / 128);
 
         // High-cost pitch math once per audio buffer, not per sample.
-        float a1[2][12] {};
+        float delayLength[2][12] {};
         float panning[2][12] {};
         const double phase = rosePhase;
         for (int note = 0; note < 12; ++note)
@@ -703,13 +733,21 @@ private:
                     ? (ch == 0 ? -0.14f : 0.14f) * modulation : 0.0f;
                 const double frequency = baseHz
                     * std::pow (2.0, (double) (vibrato + chorus) / 12.0);
-                const double omega = juce::MathConstants<double>::twoPi
-                    * juce::jmin (frequency, sampleRate * 0.42) / sampleRate;
-                a1[ch][note] = 2.0f * radius * (float) std::cos (omega);
+                auto& voice = roseState[(size_t) ch][(size_t) note];
+                const float desiredDelay = (float) (
+                    sampleRate / juce::jmax (30.0, frequency));
+                if (voice.delaySmoothed <= 0.0f)
+                    voice.delaySmoothed = desiredDelay;
+                // Smooth octave/glide and chorus updates between buffers.
+                voice.delaySmoothed += 0.12f
+                    * (desiredDelay - voice.delaySmoothed);
+                delayLength[ch][note] = voice.delaySmoothed;
                 const float pan = (float) note / 11.0f;
+                const float spread = (mode == 0 || mode == 2)
+                    ? 0.35f : 0.78f;
                 panning[ch][note] = channels == 1 ? 1.0f
-                    : (ch == 0 ? 1.0f - 0.78f * pan
-                               : 0.22f + 0.78f * pan);
+                    : ch == 0 ? 1.0f - spread * pan
+                              : 1.0f - spread * (1.0f - pan);
             }
         }
         rosePhase += juce::MathConstants<double>::twoPi
@@ -759,12 +797,10 @@ private:
                 for (int ch = 0; ch < channels; ++ch)
                 {
                     auto& state = roseState[(size_t) ch][(size_t) note];
-                    const float next = excitation * 0.0025f
-                        + a1[ch][note] * state.y1
-                        - radius * radius * state.y2;
-                    state.y2 = state.y1;
-                    state.y1 = protect (next);
-                    wet[ch] += state.y1 * panning[ch][note];
+                    const float voice = state.tick (
+                        excitation * 0.018f,
+                        delayLength[ch][note], feedbackGain);
+                    wet[ch] += voice * panning[ch][note];
                 }
             }
 
