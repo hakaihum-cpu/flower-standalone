@@ -52,7 +52,6 @@ jobs:
       - store_artifacts:
           path: audio-regression
           destination: audio-regression
-          when: always
 
       - restore_cache:
           keys:
