@@ -268,11 +268,18 @@ public:
         solarUpper = { 0.0f, 0.0f };
         solarGateEnvelope = 0.0f;
         solarDelay.setSize (
-            2, juce::jmax (256, juce::roundToInt (sampleRate * 0.035)),
+            2, juce::jmax (256, juce::roundToInt (sampleRate * 0.250)),
             false, true, false);
         solarDelay.clear();
         solarWrite = 0;
         solarPhase = 0.0;
+        solarPitchPhase = { 0.1, 0.6 };
+        solarDetuneSmoothed = 0.0f;
+        solarSizeSmoothed = 0.5f;
+        solarGateGain = 1.0f;
+        solarToneLow = { 0.0f, 0.0f };
+        for (auto& channel : solarBands)
+            for (auto& band : channel) band = {};
 
         const int polyCapacity =
             juce::jmax (4096, juce::roundToInt (sampleRate * 22.5));
@@ -319,6 +326,12 @@ public:
         solarUpper = { 0.0f, 0.0f };
         solarDelay.clear();
         solarWrite = 0;
+        solarPitchPhase = { 0.1, 0.6 };
+        solarDetuneSmoothed = 0.0f;
+        solarGateGain = 1.0f;
+        solarToneLow = { 0.0f, 0.0f };
+        for (auto& channel : solarBands)
+            for (auto& band : channel) band = {};
 
         // Logical reset: silence unwritten samples without clearing 22.5s
         // of audio memory during the time-critical callback.
@@ -406,6 +419,33 @@ private:
     {
         float y1 = 0.0f;
         float y2 = 0.0f;
+    };
+
+    struct SolarBand
+    {
+        float b0 = 0.0f, b2 = 0.0f;
+        float a1 = 0.0f, a2 = 0.0f;
+        float x1 = 0.0f, x2 = 0.0f, y1 = 0.0f, y2 = 0.0f;
+        void tune (double rate, float freq) noexcept
+        {
+            const double omega = juce::MathConstants<double>::twoPi
+                * (double) juce::jlimit (
+                    20.0f, (float) rate * 0.44f, freq) / rate;
+            const double alpha = std::sin (omega) / 1.5;
+            const double normaliser = 1.0 / (1.0 + alpha);
+            b0 = (float) (alpha * normaliser);
+            b2 = -b0;
+            a1 = (float) (-2.0 * std::cos (omega) * normaliser);
+            a2 = (float) ((1.0 - alpha) * normaliser);
+        }
+        float process (float input) noexcept
+        {
+            const float result = b0 * input + b2 * x2
+                - a1 * y1 - a2 * y2;
+            x2 = x1; x1 = input;
+            y2 = y1; y1 = result;
+            return result;
+        }
     };
 
     struct RoseDetectorState
@@ -743,122 +783,148 @@ private:
     }
 
     void processSolarfaze (
-        juce::AudioBuffer<float>& buffer,
-        float x,
-        float y) noexcept
+        juce::AudioBuffer<float>& buffer, float x, float y) noexcept
     {
         const int channels = juce::jmin (2, buffer.getNumChannels());
-        const int samples = buffer.getNumSamples();
-        if (channels <= 0 || samples <= 0)
-            return;
+        const int count = buffer.getNumSamples();
+        if (channels <= 0 || count <= 0) return;
 
-        // X: multiband saturation balance/drive. Y: dynamic stereo detune.
-        const bool satOn = ! ccOn (solarfaze, 14);
         const bool detOn = ! ccOn (solarfaze, 13);
+        const bool satOn = ! ccOn (solarfaze, 14);
         const bool satFirst = ccOn (solarfaze, 97, true);
-        const float midFrequency = ccValue (solarfaze, 94, 0.5f);
-        const float crossoverScale = 0.75f + 0.5f * midFrequency;
-        const float lowCoeff = onePoleCoeff (
-            sampleRate, (90.0f + 450.0f
-                * ccValue (solarfaze, 93, 0.3333333f))
-                * crossoverScale);
-        const float upperCoeff = onePoleCoeff (
-            sampleRate, (1500.0f + 3100.0f
-                * ccValue (solarfaze, 95, 0.3548387f))
-                * crossoverScale);
-        const float driveMaster = 0.5f + 2.0f
-            * ccValue (solarfaze, 88, 0.25f);
-        const float driveLow = (1.15f + 3.0f * x) * driveMaster
-            * (1.0f + (float) (ccRaw (solarfaze, 89) < 0 ? 0
-                : ccRaw (solarfaze, 89) < 43 ? 0
-                : ccRaw (solarfaze, 89) < 86 ? 1 : 3));
-        const float driveMid = (1.10f + 4.2f * x) * driveMaster
-            * (1.0f + (float) (ccRaw (solarfaze, 90) < 0 ? 0
-                : ccRaw (solarfaze, 90) < 43 ? 0
-                : ccRaw (solarfaze, 90) < 86 ? 1 : 3));
-        const float driveHigh = (1.05f + 2.4f * x) * driveMaster
-            * (1.0f + (float) (ccRaw (solarfaze, 91) < 0 ? 0
-                : ccRaw (solarfaze, 91) < 43 ? 0
-                : ccRaw (solarfaze, 91) < 86 ? 1 : 3));
-        const float detAmount = ccValue (solarfaze, 81, y);
-        const float detuneDepthMs = 0.18f + 2.4f * detAmount;
-        const float detEnv = 2.0f * ccValue (solarfaze, 82, 0.5f) - 1.0f;
-        const float detSize = ccValue (solarfaze, 96, 0.3095238f);
-        const float mix = ccValue (solarfaze, 80, 0.16f + 0.68f * y);
-        const float satMix = ccValue (solarfaze, 86, 1.0f);
+        const bool gateOn = ! ccOn (solarfaze, 92);
+        const float detuneMix = ccValue (solarfaze, 80, y);
+        const float detuneAmount = ccValue (solarfaze, 81, y);
+        const float detuneEnv = 2.0f * ccValue (solarfaze, 82, 0.5f) - 1.0f;
+        const float detuneSize = ccValue (solarfaze, 96, 0.5f);
+        const float satMix = ccValue (solarfaze, 86, x);
         const float satTone = ccValue (solarfaze, 87, 0.5f);
-        const float bandLow = ccValue (solarfaze, 83, 0.95f);
-        const float bandMid = ccValue (solarfaze, 84, 0.78f);
-        const float bandHigh = ccValue (solarfaze, 85, 0.8266667f);
-        const float gateThreshold = 0.0002f + 0.025f
-            * ccValue (solarfaze, 98, 0.056f);
-        const bool gateEnabled = ! ccOn (solarfaze, 92);
-
-        // Implement CC97 signal order: SAT->DETUNE or DETUNE->SAT.
-        const auto saturateBands = [&] (int ch, float signal) noexcept
-        {
-            solarLow[(size_t) ch] += lowCoeff * (signal - solarLow[(size_t) ch]);
-            solarUpper[(size_t) ch] +=
-                upperCoeff * (signal - solarUpper[(size_t) ch]);
-            const float low = solarLow[(size_t) ch];
-            const float high = signal - solarUpper[(size_t) ch];
-            const float mid = signal - low - high;
-            const float gate = ! gateEnabled
-                || solarGateEnvelope > gateThreshold ? 1.0f : 0.0f;
-            return gate * (
-                std::tanh (low * driveLow) * bandLow
-                + std::tanh (mid * driveMid) * bandMid
-                + std::tanh (high * driveHigh)
-                    * bandHigh * (0.25f + satTone));
+        const float mainDrive = 0.8f
+            + 4.5f * ccValue (solarfaze, 88, x);
+        const float levels[3] {
+            ccValue (solarfaze, 83, 0.7f),
+            ccValue (solarfaze, 84, 0.7f),
+            ccValue (solarfaze, 85, 0.7f)
         };
-        for (int i = 0; i < samples; ++i)
+        const float bandDrive[3] {
+            ccRaw (solarfaze, 89) < 43 ? 1.0f
+                : ccRaw (solarfaze, 89) < 86 ? 2.0f : 4.0f,
+            ccRaw (solarfaze, 90) < 43 ? 1.0f
+                : ccRaw (solarfaze, 90) < 86 ? 2.0f : 4.0f,
+            ccRaw (solarfaze, 91) < 43 ? 1.0f
+                : ccRaw (solarfaze, 91) < 86 ? 2.0f : 4.0f
+        };
+
+        // Independent centre-frequency controls for all three bands.
+        const float hz[3] {
+            20.0f * std::pow (22.0f,
+                ccValue (solarfaze, 93, 0.523f)), // 100Hz default
+            150.0f * std::pow (16.0f,
+                ccValue (solarfaze, 94, 0.5f)),   // 600Hz default
+            2000.0f * std::pow (
+                juce::jmax (1.1f, (float) sampleRate * 0.44f / 2000.0f),
+                ccValue (solarfaze, 95, 0.64f))   // approx 7.7kHz default
+        };
+        for (int ch = 0; ch < channels; ++ch)
+            for (int band = 0; band < 3; ++band)
+                solarBands[(size_t) ch][(size_t) band].tune (
+                    sampleRate, hz[band]);
+
+        const float toneCoeff = onePoleCoeff (
+            sampleRate, 600.0f + 17500.0f * satTone * satTone);
+        const float threshold = 0.0003f
+            * std::pow (100.0f, ccValue (solarfaze, 98, 0.15f));
+        const float smooth = onePoleCoeff (sampleRate, 15.0f);
+        const auto saturate = [&] (float input, int ch) noexcept
         {
-            float dry[2] { 0.0f, 0.0f };
-            float preDetune[2] { 0.0f, 0.0f };
+            float result = 0.0f;
+            for (int band = 0; band < 3; ++band)
+            {
+                const float isolated = solarBands[(size_t) ch][(size_t) band]
+                    .process (input);
+                const float drive = mainDrive * bandDrive[band];
+                const float coloured = std::tanh (isolated * drive)
+                    / juce::jmax (1.0f, drive);
+                result += coloured * levels[band];
+            }
+            solarToneLow[(size_t) ch] +=
+                toneCoeff * (result - solarToneLow[(size_t) ch]);
+            return solarToneLow[(size_t) ch];
+        };
+
+        for (int sample = 0; sample < count; ++sample)
+        {
+            float dry[2] {};
+            float beforeDetune[2] {};
+            float envSample = 0.0f;
             for (int ch = 0; ch < channels; ++ch)
             {
-                dry[ch] = buffer.getSample (ch, i);
-                solarGateEnvelope +=
-                    0.0025f * (std::abs (dry[ch]) - solarGateEnvelope);
-                preDetune[ch] = satFirst && satOn
-                    ? dry[ch] + (saturateBands (ch, dry[ch]) - dry[ch]) * satMix
+                dry[ch] = buffer.getSample (ch, sample);
+                envSample = juce::jmax (envSample, std::abs (dry[ch]));
+            }
+            solarGateEnvelope += 0.0015f
+                * (envSample - solarGateEnvelope);
+            const float gateTarget = ! gateOn
+                || solarGateEnvelope >= threshold ? 1.0f : 0.0f;
+            solarGateGain += smooth * (gateTarget - solarGateGain);
+            const float envelope = juce::jlimit (
+                0.0f, 1.0f, solarGateEnvelope * 5.0f);
+            solarDetuneSmoothed += smooth
+                * (detuneAmount - solarDetuneSmoothed);
+            solarSizeSmoothed += smooth
+                * (detuneSize - solarSizeSmoothed);
+
+            for (int ch = 0; ch < channels; ++ch)
+            {
+                dry[ch] *= solarGateGain; // gate affects the entire signal
+                const float processed = satFirst && satOn
+                    ? saturate (dry[ch], ch) : dry[ch];
+                beforeDetune[ch] = satFirst && satOn
+                    ? dry[ch] + (processed - dry[ch]) * satMix
                     : dry[ch];
                 solarDelay.setSample (
-                    ch, solarWrite, protect (preDetune[ch]));
+                    ch, solarWrite, protect (beforeDetune[ch]));
             }
 
-            const float envMod =
-                juce::jlimit (0.0f, 1.0f, solarGateEnvelope * 7.0f);
-            const float lfo = std::sin ((float) solarPhase);
-            solarPhase +=
-                juce::MathConstants<double>::twoPi
-                * (0.12 + 0.55 * (double) y) / sampleRate;
-            if (solarPhase >= juce::MathConstants<double>::twoPi)
-                solarPhase -= juce::MathConstants<double>::twoPi;
-
+            const float semitones = 0.52f * solarDetuneSmoothed
+                * juce::jlimit (
+                    0.0f, 2.0f,
+                    1.0f + detuneEnv * (envelope * 2.0f - 1.0f));
+            const double window = sampleRate
+                * (0.012 + 0.145 * (double) solarSizeSmoothed);
             for (int ch = 0; ch < channels; ++ch)
             {
-                const float polarity = ch == 0 ? 1.0f : -1.0f;
-                const float envShape = juce::jlimit (
-                    0.1f, 2.0f,
-                    (0.35f + 0.65f * envMod)
-                        * (1.0f + detEnv * (2.0f * envMod - 1.0f)));
-                const double delaySamples = sampleRate
-                    * (1.8f + 4.2f * detSize
-                        + detuneDepthMs * envShape * lfo * polarity)
-                    / 1000.0;
-                const float detuned = readDelay (
-                    solarDelay, ch, solarWrite, delaySamples);
-                const float detResult = detOn
-                    ? preDetune[ch] + (detuned - preDetune[ch]) * mix
-                    : preDetune[ch];
-                const float result = ! satFirst && satOn
-                    ? detResult
-                        + (saturateBands (ch, detResult) - detResult) * satMix
-                    : detResult;
-                buffer.setSample (ch, i, protect (result));
+                const float shift = ch == 0 ? semitones : -semitones;
+                const double ratio = std::pow (
+                    2.0, (double) shift / 12.0);
+                const double delta = ratio - 1.0;
+                auto& phase = solarPitchPhase[(size_t) ch];
+                phase += std::abs (delta) / window;
+                if (phase >= 1.0) phase -= std::floor (phase);
+                const double otherPhase = phase < 0.5
+                    ? phase + 0.5 : phase - 0.5;
+                const double headA = sampleRate * 0.003
+                    + (delta >= 0.0 ? 1.0 - phase : phase) * window;
+                const double headB = sampleRate * 0.003
+                    + (delta >= 0.0 ? 1.0 - otherPhase : otherPhase) * window;
+                const float weight = 0.5f
+                    - 0.5f * std::cos (
+                        juce::MathConstants<float>::twoPi * (float) phase);
+                const float shifted = readDelay (
+                    solarDelay, ch, solarWrite, headA) * weight
+                    + readDelay (
+                        solarDelay, ch, solarWrite, headB) * (1.0f - weight);
+                const float detuned = detOn
+                    ? beforeDetune[ch]
+                        + (shifted - beforeDetune[ch]) * detuneMix
+                    : beforeDetune[ch];
+                const float distorted = ! satFirst && satOn
+                    ? saturate (detuned, ch) : detuned;
+                const float output = ! satFirst && satOn
+                    ? detuned + (distorted - detuned) * satMix
+                    : detuned;
+                buffer.setSample (ch, sample, protect (output));
             }
-
             solarWrite = (solarWrite + 1) % solarDelay.getNumSamples();
         }
     }
@@ -1107,6 +1173,12 @@ private:
     std::array<float, 2> solarLow { 0.0f, 0.0f };
     std::array<float, 2> solarUpper { 0.0f, 0.0f };
     float solarGateEnvelope = 0.0f;
+    float solarGateGain = 1.0f;
+    float solarDetuneSmoothed = 0.0f;
+    float solarSizeSmoothed = 0.5f;
+    std::array<double, 2> solarPitchPhase { 0.1, 0.6 };
+    std::array<float, 2> solarToneLow {};
+    std::array<std::array<SolarBand, 3>, 2> solarBands {};
     juce::AudioBuffer<float> solarDelay;
     int solarWrite = 0;
     double solarPhase = 0.0;
