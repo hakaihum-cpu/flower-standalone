@@ -39,6 +39,8 @@ public:
         for (auto& lane : lanes)
         {
             lane.buffer.assign ((size_t) capacity, 0.0f);
+            lane.writeGeneration.assign ((size_t) capacity, 0u);
+            lane.generation = 1u;
             lane.recordPosition = 0;
             lane.playPosition = 0.0;
             lane.previousPlayPosition = 0.0;
@@ -76,7 +78,10 @@ public:
     {
         for (auto& lane : lanes)
         {
-            std::fill (lane.buffer.begin(), lane.buffer.end(), 0.0f);
+            // Invalidate the old recording without clearing ~10 seconds
+            // of stereo buffers on Android's real-time audio callback.
+            ++lane.generation;
+            if (lane.generation == 0u) lane.generation = 1u;
             lane.recordPosition = 0;
             lane.playPosition = 0.0;
             lane.previousPlayPosition = 0.0;
@@ -209,6 +214,8 @@ private:
     struct Lane
     {
         std::vector<float> buffer;
+        std::vector<uint32_t> writeGeneration;
+        uint32_t generation = 1u;
         int recordPosition = 0;
         double playPosition = 0.0;
         double previousPlayPosition = 0.0;
@@ -355,9 +362,12 @@ private:
         if (lane.recordPosition >= loop)
             lane.recordPosition = 0;
 
-        const float old = lane.buffer[(size_t) lane.recordPosition];
-        lane.buffer[(size_t) lane.recordPosition] =
+        const size_t pos = (size_t) lane.recordPosition;
+        const float old = lane.writeGeneration[pos] == lane.generation
+            ? lane.buffer[pos] : 0.0f;
+        lane.buffer[pos] =
             params.echo ? 0.5f * old + 0.5f * input : input;
+        lane.writeGeneration[pos] = lane.generation;
 
         ++lane.recordPosition;
         if (lane.recordPosition >= loop)
@@ -376,8 +386,11 @@ private:
         const int i0 = (int) position;
         const int i1 = (i0 + 1) % loop;
         const float frac = (float) (position - (double) i0);
-        return lane.buffer[(size_t) i0]
-             + frac * (lane.buffer[(size_t) i1] - lane.buffer[(size_t) i0]);
+        const float a = lane.writeGeneration[(size_t) i0]
+            == lane.generation ? lane.buffer[(size_t) i0] : 0.0f;
+        const float b = lane.writeGeneration[(size_t) i1]
+            == lane.generation ? lane.buffer[(size_t) i1] : 0.0f;
+        return a + frac * (b - a);
     }
 
     float readLane (int index, double speed) noexcept
