@@ -251,6 +251,8 @@ public:
         ultraFeedback = { 0.0f, 0.0f };
         ultraDamped = { 0.0f, 0.0f };
         ultraWetSmoothed = 0.0f;
+        ultraVibSmoothed = 0.0f;
+        ultraDepthSmoothed = 0.0f;
 
         for (auto& channel : roseState)
             for (auto& resonator : channel)
@@ -321,6 +323,8 @@ public:
         ultraFeedback = { 0.0f, 0.0f };
         ultraDamped = { 0.0f, 0.0f };
         ultraWetSmoothed = 0.0f;
+        ultraVibSmoothed = 0.0f;
+        ultraDepthSmoothed = 0.0f;
 
         for (auto& channel : roseState)
             for (auto& resonator : channel)
@@ -588,7 +592,9 @@ private:
         const bool revBypass = ccOn (ultrasheer, 107);
         const bool reverbFirst = ccOn (ultrasheer, 108);
         const bool trails = ccOn (ultrasheer, 109, true);
-        const float decayFeedback = std::pow (0.001f, 0.146f / decay);
+        const float decayFeedback = revBypass && ! trails
+            ? 0.0f : std::pow (0.001f, 0.146f / decay);
+        const float vibratoAlpha = onePoleCoeff (sampleRate, 15.0f);
         const float damping = onePoleCoeff (
             sampleRate, 650.0f + 15500.0f * brightness * brightness);
         const float wetMix = mix <= 0.5f ? 2.0f * mix : 1.0f;
@@ -657,6 +663,11 @@ private:
             }
             ultraRandom +=
                 randomSmooth * (ultraRandomTarget - ultraRandom);
+            ultraDepthSmoothed += vibratoAlpha
+                * (depth - ultraDepthSmoothed);
+            ultraVibSmoothed += vibratoAlpha
+                * ((vibBypass || depth < 0.0001f ? 0.0f : 1.0f)
+                    - ultraVibSmoothed);
 
             const float sine = std::sin ((float) ultraPhase);
             const float mod =
@@ -671,14 +682,15 @@ private:
             {
                 const float dry = buffer.getSample (ch, i);
                 ultraDelay.setSample (ch, ultraWrite, dry);
-                if (! vibBypass && depth > 0.0001f)
+                if (ultraVibSmoothed > 0.0001f)
                 {
-                    // Identical modulation for both channels preserves stereo.
+                    // Preserve stereo by modulating L/R with the same waveform.
                     const double delaySamples = sampleRate
-                        * (baseMs + depthMs * mod) / 1000.0;
-                    buffer.setSample (
-                        ch, i, readDelay (
-                            ultraDelay, ch, ultraWrite, delaySamples));
+                        * (baseMs + 4.5f * ultraDepthSmoothed * mod) / 1000.0;
+                    const float shifted = readDelay (
+                        ultraDelay, ch, ultraWrite, delaySamples);
+                    buffer.setSample (ch, i, dry
+                        + (shifted - dry) * ultraVibSmoothed);
                 }
             }
 
@@ -1233,6 +1245,8 @@ private:
     std::array<float, 2> ultraFeedback {};
     std::array<float, 2> ultraDamped {};
     float ultraWetSmoothed = 0.0f;
+    float ultraVibSmoothed = 0.0f;
+    float ultraDepthSmoothed = 0.0f;
 
     std::array<RoseDetectorState, 48> roseDetectors {};
     std::array<std::array<ResonatorState, 12>, 2> roseState {};
