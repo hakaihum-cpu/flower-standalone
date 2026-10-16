@@ -517,118 +517,139 @@ private:
     }
 
     void processRosetones (
-        juce::AudioBuffer<float>& buffer,
-        float x,
-        float y) noexcept
+        juce::AudioBuffer<float>& buffer, float x, float y) noexcept
     {
         const int channels = juce::jmin (2, buffer.getNumChannels());
         const int samples = buffer.getNumSamples();
         if (channels <= 0 || samples <= 0)
             return;
-
-        // X chooses octave/register and tone. Y controls sensitivity/resonance.
         if (ccOn (rosetones, 13))
             return;
-        const int octave = ccRaw (rosetones, 87) >= 0
-            ? 3 + juce::jmin (3, ccRaw (rosetones, 87) / 32)
-            : (x < 0.25f ? 3 : x < 0.50f ? 4 : x < 0.75f ? 5 : 6);
-        const float sensitivity = 0.45f
-            + 1.75f * ccValue (rosetones, 85, y);
+
+        // Manual architecture: 48 chromatic input filters C2..B5, folded
+        // by pitch class into 12 separately excited tuned resonators.
+        // OCTAVE revoices the outputs; it does not change pitch detection.
+        const float octave = ccRaw (rosetones, 87) < 0
+            ? 3.0f + std::floor (x * 3.999f)
+            : 3.0f + 3.0f * ccValue (rosetones, 87, x);
+        const float glide = ccValue (rosetones, 83, 1.0f);
+        const float glideAlpha = ccRaw (rosetones, 83) < 0
+            ? 1.0f : 1.0f - std::exp (
+                -(float) samples / juce::jmax (1.0f,
+                    (float) sampleRate * (0.012f + 0.42f * (1.0f - glide))));
+        roseOctaveSmoothed += glideAlpha * (octave - roseOctaveSmoothed);
+
+        const float sens = ccValue (rosetones, 85, y);
+        const float inputGain = 1.0f + 5.0f * sens;
+        const float feedback = ccValue (rosetones, 86, y);
         const float radius = juce::jlimit (
-            0.88f, 0.9965f,
-            0.91f + ccValue (rosetones, 86, y) * 0.084f);
+            0.91f, 0.9997f, 0.91f + 0.0894f * feedback);
+        const float mix = ccValue (rosetones, 80, y);
         const float tone = ccValue (rosetones, 82, x);
         const float toneCoeff = onePoleCoeff (
-            sampleRate, 900.0f + 9200.0f * tone * tone);
-        const float synthMix = ccValue (rosetones, 80, 0.12f + 0.66f * y);
-        const float synthLevel = ccValue (rosetones, 81, 0.5f) * 2.0f;
-        const float modAmount = ccValue (rosetones, 84, x * y);
-        const float modDepth = 0.0007f + 0.004f * modAmount;
-        const float modRate = 0.07f + 0.26f * x;
-        const int modMode = ccRaw (rosetones, 14) < 0 ? 2
+            sampleRate, 350.0f + 12000.0f * tone * tone);
+        const float synthLevel = 2.0f * ccValue (rosetones, 81, 0.5f);
+        const float modulation = ccValue (rosetones, 84, 0.4f * x * y);
+        const int mode = ccRaw (rosetones, 14) < 0 ? 2
             : ccRaw (rosetones, 14) < 43 ? 0
             : ccRaw (rosetones, 14) < 86 ? 1 : 2;
-        const float targetOctave = ccRaw (rosetones, 87) < 0
-            ? (float) octave
-            : 3.0f + (float) juce::roundToInt (
-                36.0f * ccValue (rosetones, 87, 0.0f)) / 12.0f;
-        std::array<float, 12> noteGates {};
-        for (int note = 0; note < 128; ++note)
-            noteGates[(size_t) (note % 12)] = juce::jmax (
-                noteGates[(size_t) (note % 12)],
-                roseNotes[(size_t) note]);
         const int interval = ccRaw (rosetones, 90) < 0 ? 0
             : juce::jmin (11, ccRaw (rosetones, 90) * 12 / 128);
-        const float glide = ccValue (rosetones, 83, 1.0f);
-        const float glideCoeff = ccRaw (rosetones, 83) < 0
-            ? 1.0f
-            : onePoleCoeff (
-                sampleRate, 0.5f + glide * glide * 200.0f);
 
+        // High-cost pitch math once per audio buffer, not per sample.
+        float a1[2][12] {};
+        float panning[2][12] {};
+        const double phase = rosePhase;
+        for (int note = 0; note < 12; ++note)
+        {
+            const double midi = 12.0 * (double) roseOctaveSmoothed
+                + (double) note + (double) interval;
+            const double baseHz = 440.0
+                * std::pow (2.0, (midi - 69.0) / 12.0);
+            const float vibrato = (mode == 1 || mode == 2)
+                ? 0.18f * modulation * std::sin (
+                    (float) phase + (float) note * 0.52f) : 0.0f;
+            for (int ch = 0; ch < channels; ++ch)
+            {
+                const float chorus = (mode == 0 || mode == 2)
+                    ? (ch == 0 ? -0.14f : 0.14f) * modulation : 0.0f;
+                const double frequency = baseHz
+                    * std::pow (2.0, (double) (vibrato + chorus) / 12.0);
+                const double omega = juce::MathConstants<double>::twoPi
+                    * juce::jmin (frequency, sampleRate * 0.42) / sampleRate;
+                a1[ch][note] = 2.0f * radius * (float) std::cos (omega);
+                const float pan = (float) note / 11.0f;
+                panning[ch][note] = channels == 1 ? 1.0f
+                    : (ch == 0 ? 1.0f - 0.78f * pan
+                               : 0.22f + 0.78f * pan);
+            }
+        }
+        rosePhase += juce::MathConstants<double>::twoPi
+            * (0.09 + 0.2 * (double) modulation)
+            * (double) samples / sampleRate;
+        if (rosePhase >= juce::MathConstants<double>::twoPi)
+            rosePhase = std::fmod (
+                rosePhase, juce::MathConstants<double>::twoPi);
+
+        std::array<float, 12> midiGates {};
+        for (int midiNote = 0; midiNote < 128; ++midiNote)
+            midiGates[(size_t) (midiNote % 12)] = juce::jmax (
+                midiGates[(size_t) (midiNote % 12)],
+                roseNotes[(size_t) midiNote]);
+
+        const float attack = onePoleCoeff (sampleRate, 85.0f);
+        const float release = onePoleCoeff (sampleRate, 12.0f);
         for (int i = 0; i < samples; ++i)
         {
-            roseOctaveSmoothed +=
-                glideCoeff * (targetOctave - roseOctaveSmoothed);
-            const float mod = std::sin ((float) rosePhase) * modDepth
-                * (modMode == 0 ? 0.5f : 1.0f);
-            rosePhase +=
-                juce::MathConstants<double>::twoPi
-                * (double) modRate / sampleRate;
-            if (rosePhase >= juce::MathConstants<double>::twoPi)
-                rosePhase -= juce::MathConstants<double>::twoPi;
+            const float dryL = buffer.getSample (0, i);
+            const float dryR = channels > 1 ? buffer.getSample (1, i) : dryL;
+            const float mono = std::tanh (
+                0.5f * (dryL + dryR) * inputGain);
+            std::array<float, 12> pitchEnergy {};
+            for (int bandIndex = 0; bandIndex < 48; ++bandIndex)
+            {
+                auto& detector = roseDetectors[(size_t) bandIndex];
+                const float high = mono - detector.low
+                    - 0.11f * detector.band;
+                detector.band += detector.coeff * high;
+                detector.low += detector.coeff * detector.band;
+                const float energy = std::abs (detector.band);
+                detector.envelope +=
+                    (energy > detector.envelope ? attack : release)
+                    * (energy - detector.envelope);
+                pitchEnergy[(size_t) (bandIndex % 12)] +=
+                    detector.envelope;
+            }
 
-            float dry[2] { 0.0f, 0.0f };
-            for (int ch = 0; ch < channels; ++ch)
-                dry[ch] = buffer.getSample (ch, i);
-
-            const float mono =
-                channels > 1 ? 0.5f * (dry[0] + dry[1]) : dry[0];
-            const float excitation =
-                std::tanh (mono * sensitivity);
-
-            float synth[2] { 0.0f, 0.0f };
+            float wet[2] { 0.0f, 0.0f };
             for (int note = 0; note < 12; ++note)
             {
-                const double midi = 12.0 * (double) roseOctaveSmoothed
-                    + (double) note + (double) interval;
-                const double frequency =
-                    440.0 * std::pow (2.0, (midi - 69.0) / 12.0)
-                    * (1.0 + mod * (note % 2 == 0 ? 1.0 : -1.0));
-                const double omega =
-                    juce::MathConstants<double>::twoPi
-                    * frequency / sampleRate;
-                const float a1 =
-                    2.0f * radius * (float) std::cos (omega);
-                const float a2 = -(radius * radius);
-
+                const float excitation = juce::jlimit (
+                    0.0f, 1.0f,
+                    pitchEnergy[(size_t) note] * 0.6f
+                        + midiGates[(size_t) note] * 0.16f);
                 for (int ch = 0; ch < channels; ++ch)
                 {
                     auto& state = roseState[(size_t) ch][(size_t) note];
-                    const float inputGain =
-                        ((note + ch) % 2 == 0 ? 1.0f : 0.72f)
-                        * (0.012f + 0.012f * y);
-                    const float next =
-                        (excitation + 0.004f * noteGates[(size_t) note]) * inputGain
-                        + a1 * state.y1
-                        + a2 * state.y2;
+                    const float next = excitation * 0.0025f
+                        + a1[ch][note] * state.y1
+                        - radius * radius * state.y2;
                     state.y2 = state.y1;
                     state.y1 = protect (next);
-                    synth[ch] += state.y1;
+                    wet[ch] += state.y1 * panning[ch][note];
                 }
             }
 
+            const float dry[2] { dryL, dryR };
             for (int ch = 0; ch < channels; ++ch)
             {
-                synth[ch] *= 0.11f * synthLevel;
+                const float synth = std::tanh (
+                    wet[ch] * 0.3f * synthLevel);
                 roseToneLow[(size_t) ch] +=
-                    toneCoeff * (synth[ch] - roseToneLow[(size_t) ch]);
-                const float shaped =
-                    std::tanh (roseToneLow[(size_t) ch] * 1.25f);
-                buffer.setSample (
-                    ch, i,
-                    protect (
-                        dry[ch]
-                        + shaped * synthMix));
+                    toneCoeff * (synth - roseToneLow[(size_t) ch]);
+                const float out = dry[ch] * (1.0f - mix)
+                    + roseToneLow[(size_t) ch] * mix;
+                buffer.setSample (ch, i, protect (out));
             }
         }
     }
