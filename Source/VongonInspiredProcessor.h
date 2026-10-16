@@ -261,6 +261,8 @@ public:
                 resonator.line.assign (2048, 0.0f);
             }
         roseToneLow = { 0.0f, 0.0f };
+        roseMixSmoothed = 0.5f;
+        roseFeedbackSmoothed = 0.7f;
         rosePhase = 0.0;
         for (int note = 0; note < 48; ++note)
         {
@@ -337,6 +339,8 @@ public:
                 resonator.delaySmoothed = 0.0f;
             }
         roseToneLow = { 0.0f, 0.0f };
+        roseMixSmoothed = 0.5f;
+        roseFeedbackSmoothed = 0.7f;
         for (auto& detector : roseDetectors)
         {
             detector.low = 0.0f;
@@ -808,8 +812,12 @@ private:
 
         const float attack = onePoleCoeff (sampleRate, 85.0f);
         const float release = onePoleCoeff (sampleRate, 12.0f);
+        const float mixSmooth = onePoleCoeff (sampleRate, 18.0f);
         for (int i = 0; i < samples; ++i)
         {
+            roseMixSmoothed += mixSmooth * (mix - roseMixSmoothed);
+            roseFeedbackSmoothed += mixSmooth
+                * (feedbackGain - roseFeedbackSmoothed);
             const float dryL = buffer.getSample (0, i);
             const float dryR = channels > 1 ? buffer.getSample (1, i) : dryL;
             const float mono = std::tanh (
@@ -842,7 +850,7 @@ private:
                     auto& state = roseState[(size_t) ch][(size_t) note];
                     const float voice = state.tick (
                         excitation * 0.018f,
-                        delayLength[ch][note], feedbackGain);
+                        delayLength[ch][note], roseFeedbackSmoothed);
                     wet[ch] += voice * panning[ch][note];
                 }
             }
@@ -854,8 +862,8 @@ private:
                     wet[ch] * 0.3f * synthLevel);
                 roseToneLow[(size_t) ch] +=
                     toneCoeff * (synth - roseToneLow[(size_t) ch]);
-                const float out = dry[ch] * (1.0f - mix)
-                    + roseToneLow[(size_t) ch] * mix;
+                const float out = dry[ch] * (1.0f - roseMixSmoothed)
+                    + roseToneLow[(size_t) ch] * roseMixSmoothed;
                 buffer.setSample (ch, i, protect (out));
             }
         }
@@ -1257,6 +1265,8 @@ private:
     std::array<RoseDetectorState, 48> roseDetectors {};
     std::array<std::array<ResonatorState, 12>, 2> roseState {};
     std::array<float, 2> roseToneLow { 0.0f, 0.0f };
+    float roseMixSmoothed = 0.5f;
+    float roseFeedbackSmoothed = 0.7f;
     double rosePhase = 0.0;
 
     std::array<float, 2> solarLow { 0.0f, 0.0f };
