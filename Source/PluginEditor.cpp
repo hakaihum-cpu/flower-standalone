@@ -755,14 +755,14 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             && activity > chordVisualPreviousActivity * 1.35f + 0.002f;
 
         if (activity > 0.010f
-            && (attack || chordVisualCooldown <= 0))
+            && chordVisualCooldown <= 0)
         {
             const int frame =
                 nextVisualFrame (frames.getFrameCount(), loadedFrame);
             currentFrame = frames.getFrame (frame);
             loadedFrame = frame;
             ++dotFrameRevision;
-            chordVisualCooldown = 5; // ~167 ms at 30 Hz
+            chordVisualCooldown = 45; // Minimum ~1.5 s between cuts at 30 Hz
         }
 
         chordVisualPreviousActivity = activity;
@@ -787,11 +787,11 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             && activity > eurekaVisualPreviousActivity * 1.28f + 0.0015f;
 
         if (activity > 0.009f
-            && (attack || eurekaVisualCooldown <= 0))
+            && eurekaVisualCooldown <= 0)
         {
             eurekaFrameIndex =
                 nextVisualFrame (eurekaFrames.getFrameCount(), loadedEurekaFrame);
-            eurekaVisualCooldown = 4; // ~133 ms
+            eurekaVisualCooldown = 54; // Hold each user frame for ~1.8 s
         }
 
         if (eurekaFrameIndex != loadedEurekaFrame)
@@ -816,13 +816,13 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             && activity > vongonVisualPreviousActivity * 1.30f + 0.0015f;
 
         if (activity > 0.009f
-            && (attack || vongonVisualCooldown <= 0))
+            && vongonVisualCooldown <= 0)
         {
             vongonFrameIndex =
                 nextVisualFrame (
                     vongonFrames.getFrameCount(),
                     loadedVongonFrame);
-            vongonVisualCooldown = 4;
+            vongonVisualCooldown = 54; // Hold each user frame for ~1.8 s
         }
 
         if (vongonFrameIndex != loadedVongonFrame)
