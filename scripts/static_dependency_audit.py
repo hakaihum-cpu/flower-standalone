@@ -817,6 +817,7 @@ for need in [
         fail(f"EUREKA anti-dropout path missing: {need}")
 for need in [
     "targetSamples > (double) polySamplesWritten",
+    "if (polyCrossfadeRemaining[(size_t) channel] > 0)",
     "const float validFade",
     "wetTarget * history - polyWetSmoothed",
     "0.94f + feedback * 0.0595f",
