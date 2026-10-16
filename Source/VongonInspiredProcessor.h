@@ -747,8 +747,11 @@ private:
         const float sens = ccValue (rosetones, 85, y);
         const float inputGain = 5.0f * sens;
         const float feedback = ccValue (rosetones, 86, y);
+        // Feedback occurs once per resonator delay circuit, NOT once
+        // per audio sample. Previous 0.3-0.65 default damped almost all
+        // the synthesized signal before the user could hear it.
         const float feedbackGain = juce::jlimit (
-            0.30f, 0.9995f, 0.30f + feedback * 0.6995f);
+            0.94f, 0.9995f, 0.94f + feedback * 0.0595f);
         const float mix = ccValue (rosetones, 80, y);
         const float tone = ccValue (rosetones, 82, x);
         const float toneCoeff = onePoleCoeff (
@@ -844,12 +847,12 @@ private:
                 const float excitation = juce::jlimit (
                     0.0f, 1.0f,
                     pitchEnergy[(size_t) note] * 0.6f
-                        + midiGates[(size_t) note] * 0.16f);
+                        + midiGates[(size_t) note] * 0.32f);
                 for (int ch = 0; ch < channels; ++ch)
                 {
                     auto& state = roseState[(size_t) ch][(size_t) note];
                     const float voice = state.tick (
-                        excitation * 0.018f,
+                        excitation * 0.13f,
                         delayLength[ch][note], roseFeedbackSmoothed);
                     wet[ch] += voice * panning[ch][note];
                 }
@@ -859,7 +862,7 @@ private:
             for (int ch = 0; ch < channels; ++ch)
             {
                 const float synth = std::tanh (
-                    wet[ch] * 0.3f * synthLevel);
+                    wet[ch] * 1.25f * synthLevel);
                 roseToneLow[(size_t) ch] +=
                     toneCoeff * (synth - roseToneLow[(size_t) ch]);
                 const float out = dry[ch] * (1.0f - roseMixSmoothed)
