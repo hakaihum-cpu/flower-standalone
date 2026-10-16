@@ -975,11 +975,12 @@ private:
             for (int ch = 0; ch < channels; ++ch)
             {
                 dry[ch] *= solarGateGain; // gate affects the entire signal
-                const float processed = satFirst
-                    ? saturate (dry[ch], ch) : dry[ch];
-                beforeDetune[ch] = satFirst
-                    ? dry[ch] + (processed - dry[ch]) * solarSatMixSmoothed
-                    : dry[ch];
+                const float processed = satFirst && satOn
+                    ? saturate (dry[ch], ch) : 0.0f;
+                // Pass input internally if the first stage is bypassed.
+                // Only processed stages may contribute to the final output.
+                beforeDetune[ch] = satFirst && satOn
+                    ? processed * solarSatMixSmoothed : dry[ch];
                 solarDelay.setSample (
                     ch, solarWrite, protect (beforeDetune[ch]));
             }
@@ -1019,13 +1020,26 @@ private:
                     : readDelay (solarDelay, ch, solarWrite, headA) * weight
                         + readDelay (solarDelay, ch, solarWrite, headB)
                             * (1.0f - weight);
-                const float detuned = beforeDetune[ch]
-                    + (shifted - beforeDetune[ch]) * solarDetMixSmoothed;
-                const float distorted = ! satFirst
-                    ? saturate (detuned, ch) : detuned;
-                const float output = ! satFirst
-                    ? detuned + (distorted - detuned) * solarSatMixSmoothed
-                    : detuned;
+                float output = 0.0f;
+                if (satFirst)
+                {
+                    // SAT -> DETUNE. DETUNE takes the processed SAT
+                    // output as its carrier; neither stage adds DRY.
+                    output = detOn
+                        ? shifted * solarDetMixSmoothed
+                        : (satOn ? beforeDetune[ch] : 0.0f);
+                }
+                else
+                {
+                    // DETUNE -> SAT: the dry input is a carrier only
+                    // when the DETUNE stage is bypassed.
+                    const float detWet = detOn
+                        ? shifted * solarDetMixSmoothed : 0.0f;
+                    const float carrier = detOn ? detWet : dry[ch];
+                    output = satOn
+                        ? saturate (carrier, ch) * solarSatMixSmoothed
+                        : detWet;
+                }
                 buffer.setSample (ch, sample, protect (output));
             }
             solarWrite = (solarWrite + 1) % solarDelay.getNumSamples();
