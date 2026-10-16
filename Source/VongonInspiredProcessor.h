@@ -256,6 +256,7 @@ public:
         polyDelay.clear();
         polyWrite = 0;
         polyLowpass = { 0.0f, 0.0f };
+        polyToneOut = { 0.0f, 0.0f };
         polyPhase = 0.0;
         polyRandom = polyRandomTarget = 0.0f;
         polyRandomSamples = 1;
@@ -294,6 +295,7 @@ public:
         polySamplesWritten = 0;
         polyWrite = 0;
         polyLowpass = { 0.0f, 0.0f };
+        polyToneOut = { 0.0f, 0.0f };
         polyCrossfadeRemaining = { 0, 0 };
     }
 
@@ -855,9 +857,13 @@ private:
         const bool infinite = ccOn (polyphrase, 14);
         const float mix = bypass ? 0.0f
             : ccValue (polyphrase, 7, 0.12f + 0.68f * y);
-        const float tone = ccValue (polyphrase, 2, 0.08f + 0.82f * (1.0f - y));
-        const float toneCoeff = onePoleCoeff (
-            sampleRate, 650.0f + 12500.0f * tone * tone);
+        // Polyphrase's TONE is a bipolar feedback EQ: centre remains flat.
+        const float tone = ccValue (polyphrase, 2, 0.5f);
+        const float toneDistance = 2.0f * std::abs (tone - 0.5f);
+        const float cutoff = tone < 0.5f
+            ? 18000.0f * std::pow (0.025f, toneDistance)
+            : 40.0f + 2400.0f * toneDistance * toneDistance;
+        const float toneCoeff = onePoleCoeff (sampleRate, cutoff);
         const float modDepthSamples = (float) sampleRate
             * (0.00015f + 0.0018f * ccValue (polyphrase, 3, y));
         const float modRate = 0.05f + 0.33f * ccValue (polyphrase, 4, x);
@@ -921,21 +927,27 @@ private:
                 }
 
                 polyLowpass[(size_t) ch] +=
-                    toneCoeff
-                    * (delayed[ch] - polyLowpass[(size_t) ch]);
+                    toneCoeff * (delayed[ch] - polyLowpass[(size_t) ch]);
+                polyToneOut[(size_t) ch] = tone < 0.5f
+                    ? delayed[ch] + (polyLowpass[(size_t) ch] - delayed[ch])
+                        * toneDistance
+                    : delayed[ch] - polyLowpass[(size_t) ch] * toneDistance;
             }
 
             // Middle/right XY area progressively becomes ping-pong.
             const int style = ccRaw (polyphrase, 9);
             const float pingPong = style < 0
                 ? juce::jlimit (0.0f, 1.0f, (x - 0.35f) / 0.45f)
-                : (style < 44 ? 0.0f : style < 88 ? 1.0f : 0.5f);
+                : (style < 44 ? 0.0f : style < 88 ? 1.0f : 0.0f);
+            const bool monoStyle = style >= 88;
+            const float monoReturn = 0.5f * (polyToneOut[0]
+                + polyToneOut[(size_t) (channels > 1 ? 1 : 0)]);
             for (int ch = 0; ch < channels; ++ch)
             {
                 const int other = channels > 1 ? 1 - ch : ch;
-                const float fbSignal =
-                    polyLowpass[(size_t) ch] * (1.0f - pingPong)
-                    + polyLowpass[(size_t) other] * pingPong;
+                const float fbSignal = monoStyle ? monoReturn
+                    : polyToneOut[(size_t) ch] * (1.0f - pingPong)
+                        + polyToneOut[(size_t) other] * pingPong;
                 const float infiniteBoost = infinite
                     || (ccOn (polyphrase, 11, true)
                         && touchDown && y > 0.93f)
@@ -999,6 +1011,7 @@ private:
     int polyWrite = 0;
     int polySamplesWritten = 0;
     std::array<float, 2> polyLowpass { 0.0f, 0.0f };
+    std::array<float, 2> polyToneOut { 0.0f, 0.0f };
     std::array<double, 2> polyCurrentDelay { 0.0, 0.0 };
     std::array<double, 2> polyOldDelay { 0.0, 0.0 };
     std::array<double, 2> polyTargetDelay { 0.0, 0.0 };
