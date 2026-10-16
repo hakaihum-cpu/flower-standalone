@@ -804,6 +804,35 @@ for need in [
     if need not in vongon:
         fail(f"Vongon-inspired DSP contract missing: {need}")
 
+# Regression guards for the reported EUREKA/POLYPHRASE audio cuts and
+# ROSETONES upper-XY silence. Check the structures rather than mute failures.
+for need in [
+    "spanFramesUntilRefresh = 64",
+    "lane.playPosition += speed * direction - 1.0",
+    "params.og && leftSide",
+    "const float activeMix = params.mix * historyReady",
+]:
+    if need not in haze:
+        fail(f"EUREKA anti-dropout path missing: {need}")
+for need in [
+    "targetSamples > (double) polySamplesWritten",
+    "const float validFade",
+    "wetTarget * history - polyWetSmoothed",
+    "0.94f + feedback * 0.0595f",
+    "excitation * 0.13f",
+    "wet[ch] * 1.25f * synthLevel",
+]:
+    if need not in vongon:
+        fail(f"Vongon dropout/voice-level regression: {need}")
+for need in [
+    "if (attack && chordVisualCooldown <= 0)",
+    "if (attack && eurekaVisualCooldown <= 0)",
+    "if (attack && vongonVisualCooldown <= 0)",
+]:
+    if need not in editor:
+        fail(f"Audio-reactive frame hold regression: {need}")
+
+
 # New controls must be usable and input gain must reach the real audio path.
 for need in [
     "ParamID::inputGainDb",
