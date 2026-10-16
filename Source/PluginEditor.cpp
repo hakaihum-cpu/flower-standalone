@@ -1870,6 +1870,14 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioInput (int index)
     refreshAudioInputs();
 }
 
+void RealtimeChordFxAudioProcessorEditor::updateInputGainFromX (float x)
+{
+    const float norm = juce::jlimit (0.0f, 1.0f, (x - 238.0f) / 178.0f);
+    const float db = std::round ((-24.0f + 48.0f * norm) * 2.0f) * 0.5f;
+    if (auto* gain = processor.state().getParameter (ParamID::inputGainDb))
+        gain->setValueNotifyingHost (gain->convertTo0to1 (db));
+}
+
 void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
 {
     if (currentFrame.isValid())
@@ -1901,7 +1909,23 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setFont (juce::FontOptions (13.0f));
     g.setColour (uiColour (0.62f));
     g.drawText ("AUDIO INPUT", 54, 94, 180, 24, juce::Justification::centredLeft);
+
+    const float inputGainDb = processor.state().getRawParameterValue (
+        ParamID::inputGainDb)->load();
+    const float gainNorm = juce::jlimit (
+        0.0f, 1.0f, (inputGainDb + 24.0f) / 48.0f);
+    g.setColour (uiColour (0.9f));
+    g.setFont (juce::FontOptions (11.0f).withStyle ("Bold"));
+    g.drawText ("INPUT GAIN " + juce::String (inputGainDb, 1) + " dB",
+                235, 87, 184, 20, juce::Justification::centred);
+    g.setColour (uiColour (0.3f));
+    g.fillRect (238.0f, 113.0f, 178.0f, 2.0f);
+    g.setColour (uiColour (0.9f));
+    g.fillRect (238.0f, 112.0f, 178.0f * gainNorm, 4.0f);
+    g.fillRect (238.0f + gainNorm * 178.0f - 3.0f,
+                109.0f, 6.0f, 10.0f);
     g.setColour (uiColour (0.82f));
+    g.setFont (juce::FontOptions (13.0f));
     g.drawText ("AUDIO SETTINGS  >", 438, 94, 202, 24,
                 juce::Justification::centredRight);
 
@@ -2459,6 +2483,13 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (configVisible)
     {
+        if (juce::Rectangle<float> (235.0f, 86.0f, 185.0f, 38.0f).contains (p))
+        {
+            inputGainDragging = true;
+            updateInputGainFromX (p.x);
+            repaint();
+            return;
+        }
         if (juce::Rectangle<float> (220.0f, 20.0f, 146.0f, 42.0f).contains (p))
         {
             const int direction = p.x < 293.0f ? -1 : 1;
@@ -2886,6 +2917,12 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
 void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 {
+    if (configVisible && inputGainDragging)
+    {
+        updateInputGainFromX (toDesign (e.position).x);
+        repaint();
+        return;
+    }
     if (midiControlConfigVisible || audioConfigVisible || configVisible)
         return;
 
@@ -2933,6 +2970,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 
 void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 {
+    inputGainDragging = false;
     eurekaXYTouchDown = false;
 
     if (cloudsXYTouchDown)
