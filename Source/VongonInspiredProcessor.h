@@ -1055,6 +1055,17 @@ private:
             (double) (polyDelay.getNumSamples() - 2),
             targetSamples);
 
+        // The first selected delay must be established before any history
+        // is written. Otherwise wet-only output needlessly waits for the
+        // old hardcoded 420-ms default even with an 85-ms time selection.
+        if (polySamplesWritten == 0)
+        {
+            polyCurrentDelay[(size_t) channel] = targetSamples;
+            polyOldDelay[(size_t) channel] = targetSamples;
+            polyTargetDelay[(size_t) channel] = targetSamples;
+            polyCrossfadeRemaining[(size_t) channel] = 0;
+            return;
+        }
         // Never crossfade to a delay tap that has not yet been written.
         // Retain the previous audible delay until the requested history
         // exists, then transition with the established 45-ms crossfade.
