@@ -154,7 +154,6 @@ private:
     std::atomic<bool> hazeClearRequested { false };
     std::atomic<bool> hazeShuffleRequested { false };
     juce::Reverb chordReverb;
-    juce::AudioBuffer<float> wetDryScratch;
     float inputGainLinearSmoothed = 1.0f;
 
     double currentSampleRate = 48000.0;
