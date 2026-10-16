@@ -3,6 +3,7 @@
 // Built with tests/dsp_juce_shim/JuceHeader.h (only JUCE primitives mocked).
 #include "../Source/HazeProcessor.h"
 #include "../Source/VongonInspiredProcessor.h"
+#include "../Source/ChordRenderers.h"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -104,8 +105,8 @@ static Results hazeTest() {
             float x=sampleInput(t+i);
             b.setSample(0,i,x);b.setSample(1,i,x);
         }
-        if(t==sampleRate*3){p.time=0.42f;p.repeat=0.82f;dsp.setParams(p);}
-        if(t==sampleRate*5){p.time=0.14f;p.repeat=0.45f;dsp.setParams(p);}
+        if(t==sampleRate*3){p.time=0.42f;p.repeat=1.0f;dsp.setParams(p);}
+        if(t==sampleRate*5){p.time=0.14f;p.repeat=0.95f;dsp.setParams(p);}
         dsp.captureBlock(b);
         dsp.renderBlock(b);
         appendBlock(r,b);
@@ -156,9 +157,38 @@ static Results roseTest() {
     }
     return r;
 }
+static Results chordATest() {
+    chordfx::SampleChordRenderer dsp;
+    dsp.prepare(sampleRate);
+    dsp.setHold(0.0f);
+    Results r;
+    // The initial note arrives before 240 ms of history is available.
+    for(int i=0;i<sampleRate/10;++i)
+        dsp.pushInput(sampleInput(i));
+    if(dsp.canCapture())
+        throw std::runtime_error("CHORD-A first phrase ready prematurely");
+    dsp.setPlan(std::vector<int>{60,64,67},57.0f,true);
+    for(int i=sampleRate/10;i<sampleRate/2;++i)
+        dsp.pushInput(sampleInput(i));
+    if(!dsp.canCapture())
+        throw std::runtime_error("CHORD-A recording never became ready");
+    dsp.setPlan(std::vector<int>{60,64,67},57.0f,true);
+    if(!dsp.hasCapture())
+        throw std::runtime_error("CHORD-A initial capture failed");
+    for(int i=0;i<sampleRate;++i)
+        r.mono.push_back(dsp.renderSample(true));
+    // A progression does not recapture, so existing playback must continue.
+    dsp.setPlan(std::vector<int>{60,65,69},57.0f,false);
+    for(int i=0;i<sampleRate;++i)
+        r.mono.push_back(dsp.renderSample(true));
+    return r;
+}
+
 int main() {
     try {
         std::filesystem::create_directories("audio-regression");
+        const auto chord=inspect(chordATest(),"CHORD-A");
+        wav("audio-regression/chord-a.wav",chord.mono);
         const auto haze=inspect(hazeTest(),"EUREKA");
         wav("audio-regression/eureka.wav",haze.mono);
         const auto poly=inspect(polyTest(),"POLYPHRASE");
@@ -190,6 +220,7 @@ int main() {
             log<<name<<","<<r.tailRms<<","<<r.largestStep<<","
                <<r.longestZeroRun<<","<<r.nonfinite<<"\n";
         };
+        writeMetrics("CHORD-A",chord);
         writeMetrics("EUREKA",haze);
         writeMetrics("POLYPHRASE",poly);
         writeMetrics("ROSETONES",rose);
