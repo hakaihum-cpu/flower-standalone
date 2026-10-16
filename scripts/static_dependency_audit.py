@@ -795,7 +795,7 @@ for need in [
     "std::array<RoseDetectorState, 48>",
     "float tick (float drive",
     "ultraInputDiff[0].allpass",
-    "ultraTankFeedback",
+    "ultraFeedback[(size_t) (1 - ch)]",
     "solarBands[(size_t) ch][(size_t) band].tune",
     "solarRatio[1] = 1.0 / solarRatio[0]",
     "const float depth = std::abs (2.0f * depthKnob - 1.0f)",
