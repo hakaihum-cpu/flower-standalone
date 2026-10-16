@@ -1043,6 +1043,11 @@ private:
         if (targetSamples > (double) polySamplesWritten
                 - sampleRate * 0.050)
             return;
+        // A moving XY previously restarted the 45-ms crossfade every
+        // audio block, so no transition could complete. Finish the
+        // current fade before beginning another retarget.
+        if (polyCrossfadeRemaining[(size_t) channel] > 0)
+            return;
         if (std::abs (targetSamples - polyTargetDelay[(size_t) channel])
             < 16.0)
             return;
