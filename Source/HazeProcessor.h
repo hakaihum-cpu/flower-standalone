@@ -56,6 +56,8 @@ public:
             lane.recordPosition = 0;
             lane.validSamples = 0;
             lane.smoothedSpan = 0.0f;
+            lane.cachedSpan = 0;
+            lane.spanFramesUntilRefresh = 0;
             lane.playPosition = 0.0;
             lane.previousPlayPosition = 0.0;
             lane.jumpCrossfade = 0;
@@ -99,6 +101,8 @@ public:
             lane.recordPosition = 0;
             lane.validSamples = 0;
             lane.smoothedSpan = 0.0f;
+            lane.cachedSpan = 0;
+            lane.spanFramesUntilRefresh = 0;
             lane.playPosition = 0.0;
             lane.previousPlayPosition = 0.0;
             lane.jumpCrossfade = 0;
@@ -257,6 +261,8 @@ private:
         int recordPosition = 0;
         int validSamples = 0;
         float smoothedSpan = 0.0f;
+        int cachedSpan = 0;
+        int spanFramesUntilRefresh = 0;
         double playPosition = 0.0;
         double previousPlayPosition = 0.0;
         int jumpCrossfade = 0;
@@ -442,7 +448,15 @@ private:
     {
         auto& lane = lanes[(size_t) index];
         const int loop = loopSamples (index);
-        const int requestedSpan = activeSpan (index);
+        // activeSpan contains two pow() calls. Recompute control only
+        // once every 64 audio samples, never at the sample rate.
+        if (--lane.spanFramesUntilRefresh <= 0
+            || lane.cachedSpan > loop || lane.cachedSpan <= 0)
+        {
+            lane.cachedSpan = activeSpan (index);
+            lane.spanFramesUntilRefresh = 64;
+        }
+        const int requestedSpan = lane.cachedSpan;
         if (lane.smoothedSpan <= 0.0f)
             lane.smoothedSpan = (float) requestedSpan;
         // Follow moving stutter boundaries over ~50 ms, not instantly.
