@@ -53,6 +53,8 @@ public:
             lane.writeGeneration.assign ((size_t) capacity, 0u);
             lane.generation = 1u;
             lane.recordPosition = 0;
+            lane.validSamples = 0;
+            lane.smoothedSpan = 0.0f;
             lane.playPosition = 0.0;
             lane.previousPlayPosition = 0.0;
             lane.jumpCrossfade = 0;
@@ -94,6 +96,8 @@ public:
             ++lane.generation;
             if (lane.generation == 0u) lane.generation = 1u;
             lane.recordPosition = 0;
+            lane.validSamples = 0;
+            lane.smoothedSpan = 0.0f;
             lane.playPosition = 0.0;
             lane.previousPlayPosition = 0.0;
             lane.jumpCrossfade = 0;
@@ -190,8 +194,17 @@ public:
             wetL = filterWet (0, wetL);
             wetR = filterWet (1, wetR);
 
-            float outL = dryL + (wetL - dryL) * params.mix;
-            float outR = dryR + (wetR - dryR) * params.mix;
+            // No old buffer exists immediately after CLEAR. Crossfade
+            // gradually from live audio as fresh history accumulates.
+            const int available = params.loops == 0
+                ? lanes[0].validSamples
+                : std::min (lanes[0].validSamples, lanes[1].validSamples);
+            const float historyReady = std::clamp (
+                (float) available / std::max (
+                    64.0f, (float) sampleRate * 0.030f), 0.0f, 1.0f);
+            const float activeMix = params.mix * historyReady;
+            float outL = dryL + (wetL - dryL) * activeMix;
+            float outR = dryR + (wetR - dryR) * activeMix;
 
             applyWarble (outL, outR);
 
@@ -241,6 +254,8 @@ private:
         std::vector<uint32_t> writeGeneration;
         uint32_t generation = 1u;
         int recordPosition = 0;
+        int validSamples = 0;
+        float smoothedSpan = 0.0f;
         double playPosition = 0.0;
         double previousPlayPosition = 0.0;
         int jumpCrossfade = 0;
@@ -367,8 +382,12 @@ private:
 
         // Counter-clockwise HAZE introduces random jumps into old/silent
         // regions of the record buffer. Clean mode sutures the jump.
-        if (leftSide && amount > 0.02f
-            && randomUnit() < amount * (params.og ? 0.85f : 0.58f))
+        // Clean mode must not jump unpredictably into old/empty audio.
+        // OG permits a jump only when there is sufficient valid history.
+        if (params.og && leftSide && amount > 0.35f
+            && lane.validSamples >= std::max (
+                1024, (int) (sampleRate * 0.080))
+            && randomUnit() < amount * 0.40f)
         {
             lane.previousPlayPosition = lane.playPosition;
             lane.playPosition = randomUnit() * (double) loopSamples (index);
@@ -393,6 +412,7 @@ private:
             params.echo ? 0.5f * old + 0.5f * input : input;
         lane.writeGeneration[pos] = lane.generation;
 
+        lane.validSamples = std::min (loop, lane.validSamples + 1);
         ++lane.recordPosition;
         if (lane.recordPosition >= loop)
         {
@@ -421,7 +441,15 @@ private:
     {
         auto& lane = lanes[(size_t) index];
         const int loop = loopSamples (index);
-        const int span = activeSpan (index);
+        const int requestedSpan = activeSpan (index);
+        if (lane.smoothedSpan <= 0.0f)
+            lane.smoothedSpan = (float) requestedSpan;
+        // Follow moving stutter boundaries over ~50 ms, not instantly.
+        lane.smoothedSpan += (float) (
+            (requestedSpan - lane.smoothedSpan)
+            * (1.0 - std::exp (-1.0 / (sampleRate * 0.050))));
+        const int span = std::clamp (
+            (int) std::lround (lane.smoothedSpan), 16, loop);
         const int start = (lane.recordPosition - span + loop) % loop;
 
         double local = lane.playPosition;
@@ -457,6 +485,7 @@ private:
             value += (readSpan (headPosition) - value) * t;
         }
 
+        const double direction = lane.reverse ? -1.0 : 1.0;
         if (lane.jumpCrossfade > 0)
         {
             const float t = 1.0f
@@ -465,7 +494,7 @@ private:
             const float previous =
                 readSpan (lane.previousPlayPosition);
             value = previous + (value - previous) * t;
-            lane.previousPlayPosition += speed;
+            lane.previousPlayPosition += speed * direction - 1.0;
             --lane.jumpCrossfade;
         }
 
@@ -474,8 +503,9 @@ private:
         value = value * lane.randomGain
               + randomBipolar() * lane.noiseAmount;
 
-        const double direction = lane.reverse ? -1.0 : 1.0;
-        lane.playPosition += speed * direction;
+        // start advances with the record head: subtract its 1-sample
+        // movement to keep requested playback speed at unity.
+        lane.playPosition += speed * direction - 1.0;
 
         while (lane.playPosition < 0.0)
             lane.playPosition += (double) span;
