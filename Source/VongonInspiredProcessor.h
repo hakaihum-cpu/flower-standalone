@@ -748,17 +748,18 @@ private:
         roseOctaveSmoothed += glideAlpha * (octave - roseOctaveSmoothed);
 
         const float sens = ccValue (rosetones, 85, y);
-        const float inputGain = 5.0f * sens;
+        const float inputGain = 1.25f + 2.25f * sens;
         const float feedback = ccValue (rosetones, 86, y);
         // Feedback occurs once per resonator delay circuit, NOT once
         // per audio sample. Previous 0.3-0.65 default damped almost all
         // the synthesized signal before the user could hear it.
         const float feedbackGain = juce::jlimit (
-            0.94f, 0.9995f, 0.94f + feedback * 0.0595f);
-        const float mix = ccValue (rosetones, 80, y);
+            0.955f, 0.997f, 0.955f + feedback * 0.042f);
+        const float mix = 0.25f
+            + 0.75f * ccValue (rosetones, 80, y);
         const float tone = ccValue (rosetones, 82, x);
         const float toneCoeff = onePoleCoeff (
-            sampleRate, 350.0f + 12000.0f * tone * tone);
+            sampleRate, 800.0f + 12000.0f * tone * tone);
         const float synthLevel = 2.0f * ccValue (rosetones, 81, 0.5f);
         const float modulation = ccValue (rosetones, 84, 0.4f * x * y);
         const int mode = ccRaw (rosetones, 14) < 0 ? 2
@@ -829,6 +830,7 @@ private:
             const float mono = std::tanh (
                 0.5f * (dryL + dryR) * inputGain);
             std::array<float, 12> pitchEnergy {};
+            std::array<float, 12> pitchSigned {};
             for (int bandIndex = 0; bandIndex < 48; ++bandIndex)
             {
                 auto& detector = roseDetectors[(size_t) bandIndex];
@@ -840,22 +842,38 @@ private:
                 detector.envelope +=
                     (energy > detector.envelope ? attack : release)
                     * (energy - detector.envelope);
-                pitchEnergy[(size_t) (bandIndex % 12)] +=
-                    detector.envelope;
+                const size_t pitchClass = (size_t) (bandIndex % 12);
+                pitchEnergy[pitchClass] += detector.envelope;
+                pitchSigned[pitchClass] += detector.band;
             }
 
+            // The former design fed a unipolar rectified ENVELOPE into
+            // each delay. That creates mostly DC and indiscriminate
+            // excitation, not tuned musical resonances. Drive each
+            // feedback line with its signed pitch-selective band signal.
+            const float dominant = *std::max_element (
+                pitchEnergy.begin(), pitchEnergy.end());
+            roseNoiseState ^= roseNoiseState << 13;
+            roseNoiseState ^= roseNoiseState >> 17;
+            roseNoiseState ^= roseNoiseState << 5;
+            const float noise = (float) (roseNoiseState & 65535u)
+                / 32767.5f - 1.0f;
             float wet[2] { 0.0f, 0.0f };
             for (int note = 0; note < 12; ++note)
             {
-                const float excitation = juce::jlimit (
-                    0.0f, 1.0f,
-                    pitchEnergy[(size_t) note] * 0.6f
-                        + midiGates[(size_t) note] * 0.32f);
+                const float energy = pitchEnergy[(size_t) note];
+                const float gate = juce::jlimit (0.0f, 1.0f,
+                    (energy - juce::jmax (
+                        0.002f, dominant * 0.22f))
+                    / juce::jmax (0.01f, dominant * 0.45f));
+                const float noteDrive = gate
+                    * pitchSigned[(size_t) note] * 0.04f
+                    + noise * midiGates[(size_t) note] * 0.015f;
                 for (int ch = 0; ch < channels; ++ch)
                 {
                     auto& state = roseState[(size_t) ch][(size_t) note];
                     const float voice = state.tick (
-                        excitation * 0.13f,
+                        noteDrive,
                         delayLength[ch][note], roseFeedbackSmoothed);
                     wet[ch] += voice * panning[ch][note];
                 }
@@ -1317,6 +1335,7 @@ private:
     float ultraVibSmoothed = 0.0f;
     float ultraDepthSmoothed = 0.0f;
 
+    uint32_t roseNoiseState = 0x524f5345u;
     std::array<RoseDetectorState, 48> roseDetectors {};
     std::array<std::array<ResonatorState, 12>, 2> roseState {};
     std::array<float, 2> roseToneLow { 0.0f, 0.0f };
