@@ -645,7 +645,9 @@ chord_a_audio = dreamy[pa0:pa1]
 if "softProtectBuffer (buffer)" in chord_a_audio:
     fail("CHORD-A output-safety contract drift")
 for need in [
-    "const float output = audible ? chord * 0.65f : 0.0f;",
+    "chordAOutputEnvelope += smoothing",
+    "const float output = chord * 0.78f * chordAOutputEnvelope;",
+    "sampleChordRenderer.canCapture()",
     "buffer.setSample (0, i, output)",
     "processChordReverb (buffer)",
 ]:
@@ -839,6 +841,29 @@ for need in [
     if need not in vongon:
         fail(f"Vongon-inspired DSP contract missing: {need}")
 
+# Four user-reported regressions must not silently revert to random
+# still-image slideshow, DC-driven ROSETONES or hard short-loop clicks.
+for need in [
+    "sampleRate * 0.090",
+    "sampleRate * 0.016",
+    "const float t = linear * linear",
+]:
+    if need not in haze:
+        fail(f"EUREKA right-XY smooth stutter contract missing: {need}")
+for need in [
+    "std::max_element",
+    "pitchSigned",
+    "roseNoiseState",
+]:
+    if need not in vongon:
+        fail(f"ROSETONES signed input resonator contract missing: {need}")
+for need in [
+    "bool canCapture() const noexcept",
+    "if (recapture || captureLength <= 0)",
+]:
+    if need not in renderers:
+        fail(f"CHORD-A continuity/capture contract missing: {need}")
+
 # Regression guards for the reported EUREKA/POLYPHRASE audio cuts and
 # ROSETONES upper-XY silence. Check the structures rather than mute failures.
 for need in [
@@ -855,16 +880,22 @@ for need in [
     "if (polyCrossfadeRemaining[(size_t) channel] > 0)",
     "const float validFade",
     "wetTarget * history - polyWetSmoothed",
-    "0.94f + feedback * 0.0595f",
-    "excitation * 0.13f",
+    "0.955f + feedback * 0.042f",
+    "pitchSigned[pitchClass] += detector.band",
+    "const float noteDrive = gate",
     "wet[ch] * 1.25f * synthLevel",
 ]:
     if need not in vongon:
         fail(f"Vongon dropout/voice-level regression: {need}")
 for need in [
     "if (attack && chordVisualCooldown <= 0)",
-    "if (attack && eurekaVisualCooldown <= 0)",
-    "if (attack && vongonVisualCooldown <= 0)",
+    "eurekaFramePhase += 4.5f / 30.0f",
+    "vongonFramePhase += 4.5f / 30.0f",
+    "eurekaSwitchClipPending |= attack",
+    "vongonSwitchClipPending |= attack",
+    "paintVideoEffect (g, currentEurekaFrame",
+    "paintVideoEffect (",
+    "g, currentVongonFrame",
 ]:
     if need not in editor:
         fail(f"Audio-reactive frame hold regression: {need}")
