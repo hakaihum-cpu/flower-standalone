@@ -37,6 +37,11 @@ public:
         return false;
     }
 
+    void requestPolyTrigger() noexcept
+    {
+        polyTriggerRequested.store (true, std::memory_order_release);
+    }
+
     void setDirectCc (int mode, int number, int value) noexcept
     {
         if (acceptsCc (mode, number))
@@ -361,6 +366,24 @@ public:
         x = juce::jlimit (0.0f, 1.0f, x);
         y = juce::jlimit (0.0f, 1.0f, y);
         midiSamplePosition += buffer.getNumSamples();
+        if (mode == polyphrase && polyTriggerRequested.exchange (
+                false, std::memory_order_acq_rel))
+        {
+            if (ccOn (polyphrase, 11))
+                setDirectCc (polyphrase, 14,
+                    ccOn (polyphrase, 14) ? 0 : 127);
+            else
+            {
+                const double now = midiSamplePosition;
+                if (polyTapLast >= 0.0 && now > polyTapLast)
+                {
+                    const double dt = (now - polyTapLast) / sampleRate;
+                    if (dt >= 0.15 && dt <= 2.0)
+                        polyTapQuarterSeconds = dt;
+                }
+                polyTapLast = now;
+            }
+        }
 
         switch (mode)
         {
@@ -1063,6 +1086,7 @@ private:
             * 0.0035f * depth;
         const float modRate = 0.1f + 9.9f * ccValue (polyphrase, 4, x);
         const bool randomMode = depthKnob > 0.5f;
+        const float randomAlpha = onePoleCoeff (sampleRate, modRate * 0.7f);
 
         for (int i = 0; i < samples; ++i)
         {
@@ -1077,7 +1101,6 @@ private:
                     128, juce::roundToInt (
                         sampleRate / juce::jmax (0.05f, modRate)));
             }
-            const float randomAlpha = onePoleCoeff (sampleRate, modRate * 0.7f);
             polyRandom +=
                 randomAlpha * (polyRandomTarget - polyRandom);
             polyPhase +=
@@ -1183,6 +1206,7 @@ private:
     double polyClockLast = -1.0;
     double polyClockQuarterSeconds = 0.0;
     double polyTapLast = -1.0;
+    std::atomic<bool> polyTriggerRequested { false };
     double polyTapQuarterSeconds = 0.0;
 
     double sampleRate = 48000.0;
