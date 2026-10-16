@@ -282,8 +282,11 @@ public:
         solarWrite = 0;
         solarPhase = 0.0;
         solarPitchPhase = { 0.1, 0.6 };
+        solarRatioRefresh = 0;
         solarDetuneSmoothed = 0.0f;
         solarSizeSmoothed = 0.5f;
+        solarRatio = { 1.0, 1.0 };
+        solarRatioRefresh = 0;
         solarGateGain = 1.0f;
         solarToneLow = { 0.0f, 0.0f };
         for (auto& channel : solarBands)
@@ -340,6 +343,7 @@ public:
         solarDelay.clear();
         solarWrite = 0;
         solarPitchPhase = { 0.1, 0.6 };
+        solarRatioRefresh = 0;
         solarDetuneSmoothed = 0.0f;
         solarGateGain = 1.0f;
         solarToneLow = { 0.0f, 0.0f };
@@ -951,12 +955,17 @@ private:
                     1.0f + detuneEnv * (envelope * 2.0f - 1.0f));
             const double window = sampleRate
                 * (0.012 + 0.145 * (double) solarSizeSmoothed);
+            // Recompute pitch ratios every 16 samples, not at audio rate.
+            if (--solarRatioRefresh <= 0)
+            {
+                solarRatio[0] = std::pow (
+                    2.0, (double) semitones / 12.0);
+                solarRatio[1] = 1.0 / solarRatio[0];
+                solarRatioRefresh = 16;
+            }
             for (int ch = 0; ch < channels; ++ch)
             {
-                const float shift = ch == 0 ? semitones : -semitones;
-                const double ratio = std::pow (
-                    2.0, (double) shift / 12.0);
-                const double delta = ratio - 1.0;
+                const double delta = solarRatio[(size_t) ch] - 1.0;
                 auto& phase = solarPitchPhase[(size_t) ch];
                 phase += std::abs (delta) / window;
                 if (phase >= 1.0) phase -= std::floor (phase);
@@ -966,13 +975,15 @@ private:
                     + (delta >= 0.0 ? 1.0 - phase : phase) * window;
                 const double headB = sampleRate * 0.003
                     + (delta >= 0.0 ? 1.0 - otherPhase : otherPhase) * window;
-                const float weight = 0.5f
-                    - 0.5f * std::cos (
-                        juce::MathConstants<float>::twoPi * (float) phase);
-                const float shifted = readDelay (
-                    solarDelay, ch, solarWrite, headA) * weight
-                    + readDelay (
-                        solarDelay, ch, solarWrite, headB) * (1.0f - weight);
+                // Smooth cubic crossfade, no costly cosine per sample.
+                const float distance = (float) std::abs (2.0 * phase - 1.0);
+                const float weight = 1.0f
+                    - distance * distance * (3.0f - 2.0f * distance);
+                const float shifted = std::abs (delta) < 1.0e-6
+                    ? beforeDetune[ch]
+                    : readDelay (solarDelay, ch, solarWrite, headA) * weight
+                        + readDelay (solarDelay, ch, solarWrite, headB)
+                            * (1.0f - weight);
                 const float detuned = detOn
                     ? beforeDetune[ch]
                         + (shifted - beforeDetune[ch]) * detuneMix
@@ -1237,6 +1248,8 @@ private:
     float solarDetuneSmoothed = 0.0f;
     float solarSizeSmoothed = 0.5f;
     std::array<double, 2> solarPitchPhase { 0.1, 0.6 };
+    std::array<double, 2> solarRatio { 1.0, 1.0 };
+    int solarRatioRefresh = 0;
     std::array<float, 2> solarToneLow {};
     std::array<std::array<SolarBand, 3>, 2> solarBands {};
     juce::AudioBuffer<float> solarDelay;
