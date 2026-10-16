@@ -286,6 +286,8 @@ public:
         solarPitchPhase = { 0.1, 0.6 };
         solarRatioRefresh = 0;
         solarDetuneSmoothed = 0.0f;
+        solarSatMixSmoothed = 0.0f;
+        solarDetMixSmoothed = 0.0f;
         solarSizeSmoothed = 0.5f;
         solarRatio = { 1.0, 1.0 };
         solarRatioRefresh = 0;
@@ -349,6 +351,8 @@ public:
         solarPitchPhase = { 0.1, 0.6 };
         solarRatioRefresh = 0;
         solarDetuneSmoothed = 0.0f;
+        solarSatMixSmoothed = 0.0f;
+        solarDetMixSmoothed = 0.0f;
         solarGateGain = 1.0f;
         solarToneLow = { 0.0f, 0.0f };
         for (auto& channel : solarBands)
@@ -948,14 +952,18 @@ private:
                 * (detuneAmount - solarDetuneSmoothed);
             solarSizeSmoothed += smooth
                 * (detuneSize - solarSizeSmoothed);
+            solarSatMixSmoothed += smooth
+                * ((satOn ? satMix : 0.0f) - solarSatMixSmoothed);
+            solarDetMixSmoothed += smooth
+                * ((detOn ? detuneMix : 0.0f) - solarDetMixSmoothed);
 
             for (int ch = 0; ch < channels; ++ch)
             {
                 dry[ch] *= solarGateGain; // gate affects the entire signal
-                const float processed = satFirst && satOn
+                const float processed = satFirst
                     ? saturate (dry[ch], ch) : dry[ch];
-                beforeDetune[ch] = satFirst && satOn
-                    ? dry[ch] + (processed - dry[ch]) * satMix
+                beforeDetune[ch] = satFirst
+                    ? dry[ch] + (processed - dry[ch]) * solarSatMixSmoothed
                     : dry[ch];
                 solarDelay.setSample (
                     ch, solarWrite, protect (beforeDetune[ch]));
@@ -996,14 +1004,12 @@ private:
                     : readDelay (solarDelay, ch, solarWrite, headA) * weight
                         + readDelay (solarDelay, ch, solarWrite, headB)
                             * (1.0f - weight);
-                const float detuned = detOn
-                    ? beforeDetune[ch]
-                        + (shifted - beforeDetune[ch]) * detuneMix
-                    : beforeDetune[ch];
-                const float distorted = ! satFirst && satOn
+                const float detuned = beforeDetune[ch]
+                    + (shifted - beforeDetune[ch]) * solarDetMixSmoothed;
+                const float distorted = ! satFirst
                     ? saturate (detuned, ch) : detuned;
-                const float output = ! satFirst && satOn
-                    ? detuned + (distorted - detuned) * satMix
+                const float output = ! satFirst
+                    ? detuned + (distorted - detuned) * solarSatMixSmoothed
                     : detuned;
                 buffer.setSample (ch, sample, protect (output));
             }
@@ -1258,6 +1264,8 @@ private:
     float solarGateEnvelope = 0.0f;
     float solarGateGain = 1.0f;
     float solarDetuneSmoothed = 0.0f;
+    float solarSatMixSmoothed = 0.0f;
+    float solarDetMixSmoothed = 0.0f;
     float solarSizeSmoothed = 0.5f;
     std::array<double, 2> solarPitchPhase { 0.1, 0.6 };
     std::array<double, 2> solarRatio { 1.0, 1.0 };
