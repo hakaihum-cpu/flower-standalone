@@ -35,6 +35,25 @@ jobs:
             g++ -std=c++17 -O2 tests/core_test.cpp Source/TheoryEngine.cpp Source/YinPitchDetector.cpp Source/GranularPitchBank.cpp -o /tmp/chordfx_core_test
             /tmp/chordfx_core_test
 
+      # Run the actual EUREKA / POLYPHRASE / ROSETONES C++ DSP on
+      # deterministic 48-kHz input BEFORE installing Android tooling.
+      # This is a regression guard, not a hardware-underrun benchmark.
+      - run:
+          name: EUREKA and Vongon offline DSP audio regression
+          command: |
+            set -euo pipefail
+            mkdir -p audio-regression
+            g++ -std=c++17 -O2 -Wall -Wextra \
+              -I tests/dsp_juce_shim \
+              tests/effects_audio_regression.cpp \
+              -o /tmp/effects_audio_regression
+            /tmp/effects_audio_regression | tee audio-regression/test.log
+
+      - store_artifacts:
+          path: audio-regression
+          destination: audio-regression
+          when: always
+
       - restore_cache:
           keys:
             - juce-9.0.2-projucer-v1
