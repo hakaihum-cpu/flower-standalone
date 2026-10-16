@@ -1239,10 +1239,10 @@ private:
             // When delay memory is empty (first seconds after reset),
             // fade in the wet signal rather than dropping the dry audio.
             const float history = juce::jlimit (0.0f, 1.0f,
-                (float) ((double) polySamplesWritten
+                (float) (((double) polySamplesWritten
                     - std::min (
                         polyCurrentDelay[0], polyCurrentDelay[1]) + 2.0)
-                / juce::jmax (1.0, sampleRate * 0.080));
+                / juce::jmax (1.0, sampleRate * 0.080)));
             const int style = ccRaw (polyphrase, 9);
             const int echoStyle = style < 0 ? 0
                 : style < 44 ? 0 : style < 88 ? 1 : 2;
