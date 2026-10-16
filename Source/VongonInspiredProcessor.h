@@ -706,39 +706,37 @@ private:
             * ccValue (solarfaze, 98, 0.056f);
         const bool gateEnabled = ! ccOn (solarfaze, 92);
 
+        // Implement CC97 signal order: SAT->DETUNE or DETUNE->SAT.
+        const auto saturateBands = [&] (int ch, float signal) noexcept
+        {
+            solarLow[(size_t) ch] += lowCoeff * (signal - solarLow[(size_t) ch]);
+            solarUpper[(size_t) ch] +=
+                upperCoeff * (signal - solarUpper[(size_t) ch]);
+            const float low = solarLow[(size_t) ch];
+            const float high = signal - solarUpper[(size_t) ch];
+            const float mid = signal - low - high;
+            const float gate = ! gateEnabled
+                || solarGateEnvelope > gateThreshold ? 1.0f : 0.0f;
+            return gate * (
+                std::tanh (low * driveLow) * bandLow
+                + std::tanh (mid * driveMid) * bandMid
+                + std::tanh (high * driveHigh)
+                    * bandHigh * (0.25f + satTone));
+        };
         for (int i = 0; i < samples; ++i)
         {
             float dry[2] { 0.0f, 0.0f };
-            float saturated[2] { 0.0f, 0.0f };
-
+            float preDetune[2] { 0.0f, 0.0f };
             for (int ch = 0; ch < channels; ++ch)
             {
                 dry[ch] = buffer.getSample (ch, i);
                 solarGateEnvelope +=
                     0.0025f * (std::abs (dry[ch]) - solarGateEnvelope);
-
-                solarLow[(size_t) ch] +=
-                    lowCoeff * (dry[ch] - solarLow[(size_t) ch]);
-                solarUpper[(size_t) ch] +=
-                    upperCoeff * (dry[ch] - solarUpper[(size_t) ch]);
-
-                const float low = solarLow[(size_t) ch];
-                const float high = dry[ch] - solarUpper[(size_t) ch];
-                const float mid = dry[ch] - low - high;
-
-                const float gate = ! gateEnabled
-                    || solarGateEnvelope > gateThreshold ? 1.0f : 0.0f;
-                saturated[ch] = gate * (
-                    std::tanh (low * driveLow) * bandLow
-                    + std::tanh (mid * driveMid)
-                        * bandMid
-                    + std::tanh (high * driveHigh)
-                        * bandHigh * (0.25f + satTone));
-                const float toDelay = satFirst && satOn
-                    ? dry[ch] + (saturated[ch] - dry[ch]) * satMix
+                preDetune[ch] = satFirst && satOn
+                    ? dry[ch] + (saturateBands (ch, dry[ch]) - dry[ch]) * satMix
                     : dry[ch];
                 solarDelay.setSample (
-                    ch, solarWrite, protect (toDelay));
+                    ch, solarWrite, protect (preDetune[ch]));
             }
 
             const float envMod =
@@ -764,11 +762,12 @@ private:
                 const float detuned = readDelay (
                     solarDelay, ch, solarWrite, delaySamples);
                 const float detResult = detOn
-                    ? dry[ch] + (detuned - dry[ch]) * mix
-                    : (satOn ? saturated[ch] : dry[ch]);
-                const float result = satFirst || ! satOn
+                    ? preDetune[ch] + (detuned - preDetune[ch]) * mix
+                    : preDetune[ch];
+                const float result = ! satFirst && satOn
                     ? detResult
-                    : detResult + (saturated[ch] - dry[ch]) * satMix;
+                        + (saturateBands (ch, detResult) - detResult) * satMix
+                    : detResult;
                 buffer.setSample (ch, i, protect (result));
             }
 
