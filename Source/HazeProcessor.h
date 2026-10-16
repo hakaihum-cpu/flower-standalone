@@ -206,9 +206,16 @@ public:
             const int available = params.loops == 0
                 ? lanes[0].validSamples
                 : std::min (lanes[0].validSamples, lanes[1].validSamples);
+            const float required = params.loops == 0
+                ? lanes[0].smoothedSpan
+                : std::max (lanes[0].smoothedSpan, lanes[1].smoothedSpan);
+            // A stutter phrase may be several seconds long. A fixed
+            // 30-ms startup fade incorrectly mixed in unwritten silence.
+            const float fadeSamples = std::max (
+                128.0f, (float) sampleRate * 0.060f);
             const float historyReady = std::clamp (
-                (float) available / std::max (
-                    64.0f, (float) sampleRate * 0.030f), 0.0f, 1.0f);
+                ((float) available - required + fadeSamples)
+                    / fadeSamples, 0.0f, 1.0f);
             const float activeMix = params.mix * historyReady;
             float outL = dryL + (wetL - dryL) * activeMix;
             float outR = dryR + (wetR - dryR) * activeMix;
