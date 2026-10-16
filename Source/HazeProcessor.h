@@ -216,16 +216,18 @@ public:
             const float historyReady = std::clamp (
                 ((float) available - required + fadeSamples)
                     / fadeSamples, 0.0f, 1.0f);
+            // EUREKA is 100% processed-only at its audio output:
+            // MIX now controls the processed output level, never DRY bleed.
             const float activeMix = params.mix * historyReady;
-            float outL = dryL + (wetL - dryL) * activeMix;
-            float outR = dryR + (wetR - dryR) * activeMix;
+            float outL = wetL * activeMix;
+            float outR = wetR * activeMix;
 
             applyWarble (outL, outR);
 
             if (params.bypass)
             {
-                outL = dryL;
-                outR = dryR;
+                outL = 0.0f;
+                outR = 0.0f;
             }
 
             buffer.setSample (0, i, finite (outL));
