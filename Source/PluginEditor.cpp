@@ -827,9 +827,13 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             && activity > vongonVisualPreviousActivity * 1.30f + 0.0015f;
         vongonSwitchClipPending |= attack;
         const int total = vongonFrames.getFrameCount();
-        const int clipFrames = 36;
+        // Full-rate user-source pack has six 192-frame / 8-second clips.
+        // Retain a safe frame index on older 36-frame bundled packs.
+        const bool fullVideo = total == 6 * 192;
+        const int clipFrames = fullVideo ? 192 : 36;
         const int clips = total / clipFrames;
-        vongonFramePhase += 4.5f / 30.0f;
+        const float playbackFps = fullVideo ? 24.0f : 4.5f;
+        vongonFramePhase += playbackFps / 30.0f;
         while (vongonFramePhase >= 1.0f)
         {
             vongonFramePhase -= 1.0f;
