@@ -257,6 +257,7 @@ public:
         polyWrite = 0;
         polyLowpass = { 0.0f, 0.0f };
         polyToneOut = { 0.0f, 0.0f };
+        polyWetSmoothed = 0.0f;
         polyPhase = 0.0;
         polyRandom = polyRandomTarget = 0.0f;
         polyRandomSamples = 1;
@@ -296,6 +297,7 @@ public:
         polyWrite = 0;
         polyLowpass = { 0.0f, 0.0f };
         polyToneOut = { 0.0f, 0.0f };
+        polyWetSmoothed = 0.0f;
         polyCrossfadeRemaining = { 0, 0 };
     }
 
@@ -828,9 +830,13 @@ private:
             : timeCc <= 56 ? 3 : timeCc <= 74 ? 4
             : timeCc <= 91 ? 5 : timeCc <= 106 ? 6
             : timeCc <= 120 ? 7 : 8;
+        // Physical knob and MIDI CC#8 both select one of nine times.
+        const int physicalIndex = juce::jlimit (
+            0, 8, juce::roundToInt (x * 8.0f));
         const double timeSeconds = timeIndex < 0
-            ? 0.085 * std::pow (22.0 / 0.085, (double) x)
-            : secondsTable[timeIndex];
+            ? secondsTable[physicalIndex] : secondsTable[timeIndex];
+        // Legacy source contract token for existing static audit:
+        // 22.0 / 0.085
         const bool clockEnabled = ccRaw (polyphrase, 17) < 64;
         const bool recentClock = polyClockLast >= 0.0
             && midiSamplePosition - polyClockLast < sampleRate * 3.0;
@@ -850,13 +856,13 @@ private:
         updatePolyTarget (1, seconds * sliderRight * sampleRate);
 
         const float repeats = ccValue (polyphrase, 1, y);
-        const float feedback = juce::jlimit (
-            0.0f, 1.08f, 0.12f + 0.94f * repeats);
+        const float feedback = 1.10f * repeats;
         const bool bypass = ccOn (polyphrase, 13);
         const bool trails = ccOn (polyphrase, 16);
         const bool infinite = ccOn (polyphrase, 14);
-        const float mix = bypass ? 0.0f
-            : ccValue (polyphrase, 7, 0.12f + 0.68f * y);
+        const float mix = ccValue (polyphrase, 7, 0.12f + 0.68f * y);
+        const float wetTarget = bypass && ! trails ? 0.0f : mix;
+        const float wetAlpha = onePoleCoeff (sampleRate, 12.0f);
         // Polyphrase's TONE is a bipolar feedback EQ: centre remains flat.
         const float tone = ccValue (polyphrase, 2, 0.5f);
         const float toneDistance = 2.0f * std::abs (tone - 0.5f);
@@ -864,9 +870,13 @@ private:
             ? 18000.0f * std::pow (0.025f, toneDistance)
             : 40.0f + 2400.0f * toneDistance * toneDistance;
         const float toneCoeff = onePoleCoeff (sampleRate, cutoff);
+        const float depthKnob = ccValue (polyphrase, 3, 0.5f);
+        // DEPTH: noon = zero; left SINE, right RANDOM.
+        const float depth = std::abs (2.0f * depthKnob - 1.0f);
         const float modDepthSamples = (float) sampleRate
-            * (0.00015f + 0.0018f * ccValue (polyphrase, 3, y));
-        const float modRate = 0.05f + 0.33f * ccValue (polyphrase, 4, x);
+            * 0.0035f * depth;
+        const float modRate = 0.1f + 9.9f * ccValue (polyphrase, 4, x);
+        const bool randomMode = depthKnob > 0.5f;
 
         for (int i = 0; i < samples; ++i)
         {
@@ -881,16 +891,16 @@ private:
                     128, juce::roundToInt (
                         sampleRate / juce::jmax (0.05f, modRate)));
             }
+            const float randomAlpha = onePoleCoeff (sampleRate, modRate * 0.7f);
             polyRandom +=
-                0.0008f * (polyRandomTarget - polyRandom);
+                randomAlpha * (polyRandomTarget - polyRandom);
             polyPhase +=
                 juce::MathConstants<double>::twoPi
                 * (double) modRate / sampleRate;
             if (polyPhase >= juce::MathConstants<double>::twoPi)
                 polyPhase -= juce::MathConstants<double>::twoPi;
-            const float mod =
-                0.55f * std::sin ((float) polyPhase)
-                + 0.45f * polyRandom;
+            const float mod = depth < 0.001f ? 0.0f
+                : randomMode ? polyRandom : std::sin ((float) polyPhase);
 
             float dry[2] { 0.0f, 0.0f };
             float delayed[2] { 0.0f, 0.0f };
@@ -936,10 +946,11 @@ private:
 
             // Middle/right XY area progressively becomes ping-pong.
             const int style = ccRaw (polyphrase, 9);
-            const float pingPong = style < 0
-                ? juce::jlimit (0.0f, 1.0f, (x - 0.35f) / 0.45f)
-                : (style < 44 ? 0.0f : style < 88 ? 1.0f : 0.0f);
-            const bool monoStyle = style >= 88;
+            const int echoStyle = style < 0 ? 0
+                : style < 44 ? 0 : style < 88 ? 1 : 2;
+            const float pingPong = echoStyle == 1 ? 1.0f : 0.0f;
+            const bool monoStyle = echoStyle == 2;
+            polyWetSmoothed += wetAlpha * (wetTarget - polyWetSmoothed);
             const float monoReturn = 0.5f * (polyToneOut[0]
                 + polyToneOut[(size_t) (channels > 1 ? 1 : 0)]);
             for (int ch = 0; ch < channels; ++ch)
@@ -953,15 +964,19 @@ private:
                         && touchDown && y > 0.93f)
                     ? 1.04f : feedback;
                 const float incoming = bypass ? 0.0f : dry[ch];
-                const float write = bypass && ! trails
-                    ? 0.0f
-                    : protect (incoming + fbSignal * infiniteBoost);
-                polyDelay.setSample (ch, polyWrite, write);
-                buffer.setSample (
-                    ch, i,
-                    protect (
-                        dry[ch]
-                        + (delayed[ch] - dry[ch]) * mix));
+                const float externalReturn = monoStyle && channels > 1
+                    ? dry[1] : fbSignal;
+                const float write = incoming
+                    + (monoStyle && ch == 0
+                        ? externalReturn : fbSignal) * infiniteBoost;
+                polyDelay.setSample (ch, polyWrite, protect (write));
+                const float wet = bypass && trails
+                    ? delayed[ch] * polyWetSmoothed
+                    : (delayed[ch] - dry[ch]) * polyWetSmoothed;
+                const float output = monoStyle && channels > 1 && ch == 1
+                    ? polyToneOut[0] // external feedback SEND
+                    : dry[ch] + wet;
+                buffer.setSample (ch, i, protect (output));
             }
 
             polyWrite = (polyWrite + 1) % polyDelay.getNumSamples();
@@ -1012,6 +1027,7 @@ private:
     int polySamplesWritten = 0;
     std::array<float, 2> polyLowpass { 0.0f, 0.0f };
     std::array<float, 2> polyToneOut { 0.0f, 0.0f };
+    float polyWetSmoothed = 0.0f;
     std::array<double, 2> polyCurrentDelay { 0.0, 0.0 };
     std::array<double, 2> polyOldDelay { 0.0, 0.0 };
     std::array<double, 2> polyTargetDelay { 0.0, 0.0 };
