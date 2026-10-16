@@ -735,6 +735,7 @@ int RealtimeChordFxAudioProcessorEditor::nextVisualFrame (
 
 void RealtimeChordFxAudioProcessorEditor::timerCallback()
 {
+    ++videoEffectTick;
     if (! hasKeyboardFocus (true))
         grabKeyboardFocus();
 
@@ -1186,7 +1187,7 @@ void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (
     const float intensity = juce::jlimit (
         0.0f, 1.0f, 0.12f + x * 0.42f + dotActivity * 0.28f);
     const float movement = std::sin (
-        (float) dotUiTick * 0.16f + y * 4.0f);
+        (float) videoEffectTick * 0.16f + y * 4.0f);
     const float offset = (2.0f + 13.0f * x) * movement;
     juce::Graphics::ScopedSaveState save (g);
     g.reduceClipRegion (juce::Rectangle<int> (0, 0, 720, 720));
@@ -1207,7 +1208,7 @@ void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (
     {
         const float shift = offset * (0.18f + 0.12f * y);
         g.drawHorizontalLine (
-            row + (dotUiTick % period),
+            row + (videoEffectTick % period),
             juce::jmax (0.0f, shift),
             juce::jmin (720.0f, 720.0f + shift));
     }
