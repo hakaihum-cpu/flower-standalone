@@ -175,11 +175,11 @@ static Results chordATest() {
     dsp.setPlan(std::vector<int>{60,64,67},57.0f,true);
     if(!dsp.hasCapture())
         throw std::runtime_error("CHORD-A initial capture failed");
-    for(int i=0;i<sampleRate;++i)
+    for(int i=0;i<sampleRate*2;++i)
         r.mono.push_back(dsp.renderSample(true));
     // A progression does not recapture, so existing playback must continue.
     dsp.setPlan(std::vector<int>{60,65,69},57.0f,false);
-    for(int i=0;i<sampleRate;++i)
+    for(int i=0;i<sampleRate*2;++i)
         r.mono.push_back(dsp.renderSample(true));
     return r;
 }
