@@ -46,7 +46,7 @@ namespace
         { "MIX", 7 }, { "TIME", 8 },
         { "ECHO STYLE", 9 }, { "SYNC", 10 },
         { "TRIG MODE", 11 }, { "BYPASS", 13 },
-        { "INFINITE", 14 }, { "TAP TEMPO", 15 },
+        { "INFINITE", 14 }, { "TRIG / TAP", 15 },
         { "TRAILS", 16 }, { "MIDI CLOCK", 17 }
     };
     const VongonControl* getVongonControls (int mode, int& count)
@@ -1285,7 +1285,8 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonParameterPanel (
         paintBar (g, bounds,
                   juce::String (item.name) + "  CC#" + juce::String (item.cc),
                   fraction,
-                  current < 0 ? "XY / DEFAULT" : juce::String (current));
+                  mode == 8 && item.cc == 15 ? "TAP / TOGGLE"
+                  : current < 0 ? "XY / DEFAULT" : juce::String (current));
     }
 
     g.setColour (uiColour (0.9f));
@@ -1308,6 +1309,11 @@ void RealtimeChordFxAudioProcessorEditor::setVongonParameterFromX (
     const float left = 36.0f + col * 346.0f;
     const float norm = juce::jlimit (
         0.0f, 1.0f, (x - left) / 300.0f);
+    if (mode == 8 && items[index].cc == 15)
+    {
+        processor.triggerVongonPolyphrase();
+        return;
+    }
     processor.setVongonCc (
         mode, items[index].cc, juce::roundToInt (norm * 127.0f));
 }
@@ -2812,6 +2818,11 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
                     {
                         vongonDraggingParameter = index;
                         setVongonParameterFromX (effectMode, index, p.x);
+                        int controlCount = 0;
+                        const auto* controls = getVongonControls (
+                            effectMode, controlCount);
+                        if (effectMode == 8 && controls[index].cc == 15)
+                            vongonDraggingParameter = -1;
                         break;
                     }
                 }
