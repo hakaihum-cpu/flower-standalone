@@ -71,6 +71,7 @@ private:
     void updateEurekaXYPoint (juce::Point<float>);
     int nextVisualFrame (int count, int avoid);
     void setChoiceActual (const char* id, int value);
+    void updateInputGainFromX (float x);
     juce::String currentInputName() const;
     juce::String noteText (int midi) const;
 
@@ -94,6 +95,7 @@ private:
     float vongonVisualPreviousActivity = 0.0f;
     uint32_t visualRandomState = 0x45464658u;
     bool configVisible = false;
+    bool inputGainDragging = false;
     bool audioConfigVisible = false;
     bool midiControlConfigVisible = false;
     bool xyDragging = false;
