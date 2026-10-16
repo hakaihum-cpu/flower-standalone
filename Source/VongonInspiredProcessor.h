@@ -220,8 +220,17 @@ public:
         ultraPhase = 0.0;
         ultraRandom = ultraRandomTarget = 0.0f;
         ultraRandomSamples = 1;
-        ultraReverb.setSampleRate (sampleRate);
-        ultraReverb.reset();
+        const double diffusionMs[4] { 4.77, 3.58, 12.73, 9.30 };
+        for (int i = 0; i < 4; ++i)
+            ultraInputDiff[(size_t) i].prepare (
+                sampleRate, diffusionMs[i] * 0.001);
+        ultraTankDiff[0].prepare (sampleRate, 0.0205);
+        ultraTankDiff[1].prepare (sampleRate, 0.0268);
+        ultraTank[0].prepare (sampleRate, 0.1496);
+        ultraTank[1].prepare (sampleRate, 0.1417);
+        ultraFeedback = { 0.0f, 0.0f };
+        ultraDamped = { 0.0f, 0.0f };
+        ultraWetSmoothed = 0.0f;
 
         for (auto& channel : roseState)
             for (auto& resonator : channel)
@@ -273,7 +282,12 @@ public:
     {
         ultraDelay.clear();
         ultraWrite = 0;
-        ultraReverb.reset();
+        for (auto& stage : ultraInputDiff) stage.reset();
+        for (auto& stage : ultraTankDiff) stage.reset();
+        for (auto& stage : ultraTank) stage.reset();
+        ultraFeedback = { 0.0f, 0.0f };
+        ultraDamped = { 0.0f, 0.0f };
+        ultraWetSmoothed = 0.0f;
 
         for (auto& channel : roseState)
             for (auto& resonator : channel)
@@ -340,6 +354,38 @@ private:
         const int val = ccRaw (mode, number);
         return val < 0 ? fallback : val >= 64;
     }
+
+    struct PlateStage
+    {
+        std::vector<float> buffer;
+        int cursor = 0;
+        void prepare (double rate, double seconds)
+        {
+            buffer.assign ((size_t) juce::jmax (
+                2, juce::roundToInt (rate * seconds)), 0.0f);
+            cursor = 0;
+        }
+        void reset() noexcept
+        {
+            std::fill (buffer.begin(), buffer.end(), 0.0f);
+            cursor = 0;
+        }
+        float tick (float input) noexcept
+        {
+            const float delayed = buffer[(size_t) cursor];
+            buffer[(size_t) cursor] = input;
+            if (++cursor == (int) buffer.size()) cursor = 0;
+            return delayed;
+        }
+        float allpass (float input, float gain) noexcept
+        {
+            const float delayed = buffer[(size_t) cursor];
+            const float output = delayed - gain * input;
+            buffer[(size_t) cursor] = input + gain * output;
+            if (++cursor == (int) buffer.size()) cursor = 0;
+            return output;
+        }
+    };
 
     struct ResonatorState
     {
@@ -418,43 +464,66 @@ private:
         // Y: plate decay / brightness / wet amount.
         const float depth = ccValue (ultrasheer, 100, x);
         const float rate = ccValue (ultrasheer, 101, x);
-        const float depthMs = 0.12f + 3.0f * depth * depth;
-        const float rateHz = 0.18f + 3.2f * rate;
-        const float randomBlend = ccRaw (ultrasheer, 102) >= 0
-            ? (ccOn (ultrasheer, 102) ? 1.0f : 0.0f)
-            : juce::jlimit (0.0f, 1.0f, (x - 0.55f) / 0.45f);
-        const float wet = ccValue (ultrasheer, 104, 0.12f + 0.66f * y);
+        const float depthMs = 4.5f * depth;
+        const float rateHz = 0.75f + 8.25f * rate;
+        const float randomBlend = ccOn (ultrasheer, 102, x > 0.6f)
+            ? 1.0f : 0.0f;
+        const float brightness = ccValue (ultrasheer, 103, y);
+        const float mix = ccValue (ultrasheer, 104, y);
+        const float decay = 0.25f * std::pow (
+            120.0f, ccValue (ultrasheer, 105, y));
         const bool vibBypass = ccOn (ultrasheer, 106);
         const bool revBypass = ccOn (ultrasheer, 107);
         const bool reverbFirst = ccOn (ultrasheer, 108);
-        if (revBypass && ! ccOn (ultrasheer, 109, true))
-            ultraReverb.reset();
+        const bool trails = ccOn (ultrasheer, 109, true);
+        const float decayFeedback = std::pow (0.001f, 0.146f / decay);
+        const float damping = onePoleCoeff (
+            sampleRate, 650.0f + 15500.0f * brightness * brightness);
+        const float wetMix = mix <= 0.5f ? 2.0f * mix : 1.0f;
+        const float dryMix = mix <= 0.5f
+            ? 1.0f : 2.0f * (1.0f - mix);
+        const float wetAlpha = onePoleCoeff (sampleRate, 15.0f);
         const float baseMs = 7.0f;
-
-        juce::Reverb::Parameters rev;
-        rev.roomSize = 0.35f + 0.62f * ccValue (ultrasheer, 105, y);
-        rev.damping = ccRaw (ultrasheer, 103) < 0
-            ? 0.72f - 0.46f * y
-            : 0.85f - 0.75f * ccValue (ultrasheer, 103, y);
-        rev.wetLevel = revBypass ? 0.0f : wet;
-        rev.dryLevel = 1.0f - 0.42f * (revBypass ? 0.0f : wet);
-        rev.width = 1.0f;
-        rev.freezeMode = 0.0f;
-        ultraReverb.setParameters (rev);
-
-
         const auto applyReverb = [&]() noexcept
         {
-            if (channels >= 2)
-                ultraReverb.processStereo (
-                    buffer.getWritePointer (0),
-                    buffer.getWritePointer (1), samples);
-            else
-                ultraReverb.processMono (
-                    buffer.getWritePointer (0), samples);
+            for (int sample = 0; sample < samples; ++sample)
+            {
+                const float left = buffer.getSample (0, sample);
+                const float right = channels > 1
+                    ? buffer.getSample (1, sample) : left;
+                float signal = revBypass ? 0.0f : (left + right) * 0.5f;
+                signal = ultraInputDiff[0].allpass (signal, 0.75f);
+                signal = ultraInputDiff[1].allpass (signal, 0.75f);
+                signal = ultraInputDiff[2].allpass (signal, 0.625f);
+                signal = ultraInputDiff[3].allpass (signal, 0.625f);
+                float tanks[2] {};
+                for (int ch = 0; ch < 2; ++ch)
+                {
+                    const float feedback = signal + decayFeedback
+                        * ultraFeedback[(size_t) (1 - ch)];
+                    const float spread = ultraTankDiff[(size_t) ch]
+                        .allpass (feedback, 0.55f);
+                    const float delayed = ultraTank[(size_t) ch].tick (spread);
+                    ultraDamped[(size_t) ch] += damping
+                        * (delayed - ultraDamped[(size_t) ch]);
+                    tanks[ch] = protect (ultraDamped[(size_t) ch]);
+                }
+                ultraFeedback = { tanks[0], tanks[1] };
+                const float targetWet = revBypass && ! trails
+                    ? 0.0f : wetMix;
+                ultraWetSmoothed += wetAlpha
+                    * (targetWet - ultraWetSmoothed);
+                const float dry = revBypass ? 1.0f : dryMix;
+                buffer.setSample (0, sample, protect (
+                    left * dry + ultraWetSmoothed
+                        * (0.8f * tanks[0] + 0.2f * tanks[1])));
+                if (channels > 1)
+                    buffer.setSample (1, sample, protect (
+                        right * dry + ultraWetSmoothed
+                            * (0.2f * tanks[0] + 0.8f * tanks[1])));
+            }
         };
-        if (reverbFirst)
-            applyReverb();
+        if (reverbFirst) applyReverb();
 
         const float randomSmooth =
             1.0f - std::exp (
@@ -490,15 +559,15 @@ private:
             {
                 const float dry = buffer.getSample (ch, i);
                 ultraDelay.setSample (ch, ultraWrite, dry);
-                const float polarity = ch == 0 ? 1.0f : -1.0f;
-                const double delaySamples =
-                    sampleRate * (baseMs + depthMs * mod * polarity)
-                    / 1000.0;
-                const float vib =
-                    readDelay (ultraDelay, ch, ultraWrite, delaySamples);
-                buffer.setSample (
-                    ch, i,
-                    dry + (vib - dry) * (vibBypass ? 0.0f : 0.12f + 0.55f * depth));
+                if (! vibBypass && depth > 0.0001f)
+                {
+                    // Identical modulation for both channels preserves stereo.
+                    const double delaySamples = sampleRate
+                        * (baseMs + depthMs * mod) / 1000.0;
+                    buffer.setSample (
+                        ch, i, readDelay (
+                            ultraDelay, ch, ultraWrite, delaySamples));
+                }
             }
 
             ultraWrite = (ultraWrite + 1) % ultraDelay.getNumSamples();
@@ -1008,7 +1077,12 @@ private:
     float ultraRandom = 0.0f;
     float ultraRandomTarget = 0.0f;
     int ultraRandomSamples = 1;
-    juce::Reverb ultraReverb;
+    std::array<PlateStage, 4> ultraInputDiff {};
+    std::array<PlateStage, 2> ultraTankDiff {};
+    std::array<PlateStage, 2> ultraTank {};
+    std::array<float, 2> ultraFeedback {};
+    std::array<float, 2> ultraDamped {};
+    float ultraWetSmoothed = 0.0f;
 
     std::array<RoseDetectorState, 48> roseDetectors {};
     std::array<std::array<ResonatorState, 12>, 2> roseState {};
