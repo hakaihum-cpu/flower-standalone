@@ -456,11 +456,37 @@ for need in [
     "hasUserPreset (int slot)",
     '"userPresetXml" + juce::String (slot)',
     "globalPresetSlot",
-    "wetDryScratch",
+    "buffer.applyGain (wet)",
     "decibelsToGain",
 ]:
     if need not in src and need not in processor_controls and need not in processor_header:
         fail(f"WET/BOOST/SAVE-LOAD contract missing: {need}")
+# Enforce wet-only output: an audio input is required to generate the
+# effect but the original input must never be mixed back in after DSP.
+for need in [
+    "buffer.applyGain (wet)",
+    "buffer.clear();",
+    "wetSample * wetMix",
+]:
+    if need not in processor_controls:
+        fail(f"dry-free master output contract missing: {need}")
+for blocked in [
+    "wetDryScratch",
+    "dryLeft * 0.78f",
+    "dryLeft * 0.68f",
+    "dry[channel] + (wetSample - dry[channel])",
+]:
+    if blocked in processor_controls or blocked in processor_header:
+        fail(f"unwanted DRY audio leak remains: {blocked}")
+if "const float out = roseToneLow[(size_t) ch]" not in (R / "Source/VongonInspiredProcessor.h").read_text():
+    fail("ROSETONES wet-only output regression")
+if "float outL = wetL * activeMix" not in (R / "Source/HazeProcessor.h").read_text():
+    fail("EUREKA wet-only output regression")
+if "left[n] = softProtect (wetL * wetMix)" not in (R / "Source/EffectsCloudsEngine.h").read_text():
+    fail("CLOUDS dry passthrough regression")
+if not (R / "tests/effects_audio_regression.cpp").is_file() or not (R / "tests/dsp_juce_shim/JuceHeader.h").is_file():
+    fail("native DSP WAV regression suite missing")
+
 for need in [
     'const char* wet = "wet"',
     'const char* boostDb = "boostDb"',
