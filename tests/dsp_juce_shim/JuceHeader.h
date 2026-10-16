@@ -17,14 +17,16 @@ template <typename T> struct MathConstants {
     static constexpr T pi = (T)3.1415926535897932384626433832795;
     static constexpr T twoPi = (T)6.283185307179586476925286766559;
 };
-template <typename A, typename B>
-constexpr auto jmin(A a,B b) {using C=std::common_type_t<A,B>;return std::min((C)a,(C)b);}
-template <typename A, typename B>
-constexpr auto jmax(A a,B b) {using C=std::common_type_t<A,B>;return std::max((C)a,(C)b);}
-template <typename A,typename B,typename C>
-constexpr auto jlimit(A low,B high,C value) {
-    using T=std::common_type_t<A,B,C>;
-    return std::clamp((T)value,(T)low,(T)high);
+// Match JUCE's single-Type template deductions. The former
+// common_type shim wrongly accepted mixed float/double jlimit arguments
+// and allowed CircleCI #195 to pass the native DSP preflight.
+template <typename T>
+constexpr T jmin(T a,T b) {return std::min(a,b);}
+template <typename T>
+constexpr T jmax(T a,T b) {return std::max(a,b);}
+template <typename T>
+constexpr T jlimit(T low,T high,T value) {
+    return std::clamp(value,low,high);
 }
 template <typename A,typename B>
 constexpr bool isPositiveAndBelow(A value,B limit) {return value>=0&&value<limit;}
