@@ -222,11 +222,11 @@ public:
 
             wetMix += juce::jlimit (-step, step, targetWet - wetMix);
 
-            left[n] = softProtect (
-                dryL + (wetL - dryL) * wetMix);
+            // CLOUDS outputs granular audio only; input is still captured
+            // and analysed, but never leaks into the monitoring output.
+            left[n] = softProtect (wetL * wetMix);
             if (right)
-                right[n] = softProtect (
-                    dryR + (wetR - dryR) * wetMix);
+                right[n] = softProtect (wetR * wetMix);
 
             peak = juce::jmax (
                 peak,
