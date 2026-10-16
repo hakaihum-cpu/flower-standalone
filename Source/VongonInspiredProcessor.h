@@ -531,9 +531,9 @@ private:
         // Manual architecture: 48 chromatic input filters C2..B5, folded
         // by pitch class into 12 separately excited tuned resonators.
         // OCTAVE revoices the outputs; it does not change pitch detection.
-        const float octave = ccRaw (rosetones, 87) < 0
-            ? 3.0f + std::floor (x * 3.999f)
-            : 3.0f + 3.0f * ccValue (rosetones, 87, x);
+        const float slider = ccValue (rosetones, 87, x);
+        const float octave = 2.0f
+            + (float) juce::roundToInt (slider * 36.0f) / 12.0f;
         const float glide = ccValue (rosetones, 83, 1.0f);
         const float glideAlpha = ccRaw (rosetones, 83) < 0
             ? 1.0f : 1.0f - std::exp (
