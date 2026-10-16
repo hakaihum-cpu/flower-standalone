@@ -68,7 +68,10 @@ public:
         {
             const int note = std::clamp (midiNotes[(size_t) i], 60, 83);
             ratio[(size_t) i] = std::pow (2.0, ((double) note - (double) sourceMidi) / 12.0);
-            phase[(size_t) i] = 0.0;
+            // Progression updates without a new capture must not reset
+            // every voice phase and create a synchronized click.
+            if (recapture || captureLength <= 0)
+                phase[(size_t) i] = 0.0;
         }
 
         for (int i = targetCount; i < maxVoices; ++i)
@@ -100,6 +103,11 @@ public:
     }
 
     bool hasCapture() const noexcept { return captureLength >= 64; }
+    bool canCapture() const noexcept
+    {
+        return historyFilled >= (int) std::lround (
+            sampleRate * (double) captureSeconds());
+    }
 
 private:
     void captureRecentPhrase() noexcept
