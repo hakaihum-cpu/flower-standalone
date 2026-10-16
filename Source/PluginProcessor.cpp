@@ -134,12 +134,6 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     }
     chordReverb.reset();
 
-    // Reserve space for the largest normal Android BURST selection.
-    // Avoid reallocations when switching from small to larger buffers.
-    wetDryScratch.setSize (
-        juce::jmax (2, getTotalNumOutputChannels()),
-        juce::jmax (8192, block), false, true, false);
-    wetDryScratch.clear();
     inputGainLinearSmoothed = juce::Decibels::decibelsToGain (
         apvts.getRawParameterValue (ParamID::inputGainDb)->load());
 
@@ -459,15 +453,6 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             buffer.setSample (channel, i,
                 buffer.getSample (channel, i) * inputGainLinearSmoothed);
     }
-
-    if (wetDryScratch.getNumChannels() < buffer.getNumChannels()
-        || wetDryScratch.getNumSamples() < n)
-    {
-        wetDryScratch.setSize (
-            buffer.getNumChannels(), n, true, true, false);
-    }
-    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-        wetDryScratch.copyFrom (ch, 0, buffer, ch, 0, n);
 
     const bool midiClockMode =
         apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
