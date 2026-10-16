@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <utility>
 
 constexpr int sampleRate = 48000;
 constexpr int blockSize = 128;
@@ -84,6 +85,8 @@ static Results inspect(Results r,const std::string& mode) {
         throw std::runtime_error(mode+" sustained input produced inaudible output");
     if(r.longestZeroRun>sampleRate*0.13)
         throw std::runtime_error(mode+" dropout >130ms on steady source");
+    if(r.largestStep>0.65f)
+        throw std::runtime_error(mode+" abrupt step >0.65 FS");
     return r;
 }
 static Results hazeTest() {
