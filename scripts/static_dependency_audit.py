@@ -789,11 +789,41 @@ for need in [
     "processSolarfaze",
     "processPolyphrase",
     "polyCrossfadeRemaining",
-    "22.0 / 0.085",
+    "secondsTable[9]",
+    "0.085, 0.170, 0.341, 0.682, 1.3, 2.7, 5.5, 11.0, 22.0",
     "std::array<std::array<ResonatorState, 12>, 2>",
+    "std::array<RoseDetectorState, 48>",
+    "float tick (float drive",
+    "ultraInputDiff[0].allpass",
+    "ultraTankFeedback",
+    "solarBands[(size_t) ch][(size_t) band].tune",
+    "solarRatio[1] = 1.0 / solarRatio[0]",
+    "const float depth = std::abs (2.0f * depthKnob - 1.0f)",
+    "void setDirectCc (",
 ]:
     if need not in vongon:
         fail(f"Vongon-inspired DSP contract missing: {need}")
+
+# New controls must be usable and input gain must reach the real audio path.
+for need in [
+    "ParamID::inputGainDb",
+    "inputGainLinearSmoothed",
+    "vongonProcessor.handleMidi (",
+    "vongonProcessor.process (",
+]:
+    if need not in (R / "Source/PluginProcessor.cpp").read_text():
+        fail(f"EFFECTS gain/Vongon integration missing: {need}")
+for need in [
+    "INPUT GAIN ",
+    "updateInputGainFromX",
+    "paintVongonParameterPanel",
+    "setVongonParameterFromX",
+]:
+    if need not in (R / "Source/PluginEditor.cpp").read_text():
+        fail(f"EFFECTS input gain/Vongon UI contract missing: {need}")
+if "inputGainDb" not in (R / "Source/ParameterIDs.h").read_text():
+    fail("EFFECTS INPUT GAIN parameter ID missing")
+
 
 for need in [
     "vongonFrames",
