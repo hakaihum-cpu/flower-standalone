@@ -605,9 +605,8 @@ private:
         const float vibratoAlpha = onePoleCoeff (sampleRate, 15.0f);
         const float damping = onePoleCoeff (
             sampleRate, 650.0f + 15500.0f * brightness * brightness);
-        const float wetMix = mix <= 0.5f ? 2.0f * mix : 1.0f;
-        const float dryMix = mix <= 0.5f
-            ? 1.0f : 2.0f * (1.0f - mix);
+        // Independent effect level: no re-injection of original input.
+        const float wetMix = mix;
         const float wetAlpha = onePoleCoeff (sampleRate, 15.0f);
         const float baseMs = 7.0f;
         const auto applyReverb = [&]() noexcept
@@ -639,13 +638,17 @@ private:
                     ? 0.0f : wetMix;
                 ultraWetSmoothed += wetAlpha
                     * (targetWet - ultraWetSmoothed);
-                const float dry = revBypass ? 1.0f : dryMix;
+                // If Reverb is bypassed, allow the *other* effect
+                // (Vibrato) through; both bypassed means silence.
+                const bool vibratoActive = ! vibBypass && depth > 0.0001f;
+                const float serialPass = revBypass && vibratoActive
+                    ? 1.0f : 0.0f;
                 buffer.setSample (0, sample, protect (
-                    left * dry + ultraWetSmoothed
+                    left * serialPass + ultraWetSmoothed
                         * (0.8f * tanks[0] + 0.2f * tanks[1])));
                 if (channels > 1)
                     buffer.setSample (1, sample, protect (
-                        right * dry + ultraWetSmoothed
+                        right * serialPass + ultraWetSmoothed
                             * (0.2f * tanks[0] + 0.8f * tanks[1])));
             }
         };
@@ -865,8 +868,9 @@ private:
                     wet[ch] * 1.25f * synthLevel);
                 roseToneLow[(size_t) ch] +=
                     toneCoeff * (synth - roseToneLow[(size_t) ch]);
-                const float out = dry[ch] * (1.0f - roseMixSmoothed)
-                    + roseToneLow[(size_t) ch] * roseMixSmoothed;
+                // Resonator output only. MIX is resonator output level.
+                const float out = roseToneLow[(size_t) ch]
+                    * roseMixSmoothed;
                 buffer.setSample (ch, i, protect (out));
             }
         }
@@ -1240,12 +1244,12 @@ private:
                     + (monoStyle && ch == 0
                         ? externalReturn : fbSignal) * infiniteBoost;
                 polyDelay.setSample (ch, polyWrite, protect (write));
-                const float wet = bypass && trails
-                    ? delayed[ch] * polyWetSmoothed
-                    : (delayed[ch] - dry[ch]) * polyWetSmoothed;
+                const float wet = delayed[ch] * polyWetSmoothed;
+                // Right output is the external send in MONO style; no
+                // unprocessed pass-through in other configurations.
                 const float output = monoStyle && channels > 1 && ch == 1
-                    ? polyToneOut[0] // external feedback SEND
-                    : dry[ch] + wet;
+                    ? polyToneOut[0]
+                    : wet;
                 buffer.setSample (ch, i, protect (output));
             }
 
