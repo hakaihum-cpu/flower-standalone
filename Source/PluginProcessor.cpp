@@ -1708,6 +1708,8 @@ bool RealtimeChordFxAudioProcessor::saveUserPreset (int slot)
         "vongonX", vongonX.load (std::memory_order_relaxed), nullptr);
     snapshot.setProperty (
         "vongonY", vongonY.load (std::memory_order_relaxed), nullptr);
+    snapshot.setProperty (
+        "vongonMidiPcBank", vongonProcessor.exportMidiSnapshot(), nullptr);
 
     for (int i = 1; i <= 3; ++i)
         snapshot.removeProperty (
@@ -1775,6 +1777,9 @@ bool RealtimeChordFxAudioProcessor::loadUserPreset (int slot)
     if (! audioOutputName.isVoid())
         restored.setProperty ("audioOutputName", audioOutputName, nullptr);
 
+    // Restore manual Vongon controls together with the selected preset.
+    vongonProcessor.importMidiSnapshot (
+        restored.getProperty ("vongonMidiPcBank").toString());
     apvts.replaceState (restored);
 
     cloudsX.store (
