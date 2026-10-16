@@ -228,6 +228,17 @@ public:
                 resonator = {};
         roseToneLow = { 0.0f, 0.0f };
         rosePhase = 0.0;
+        for (int note = 0; note < 48; ++note)
+        {
+            auto& detector = roseDetectors[(size_t) note];
+            detector = {};
+            const double midiNote = (double) note + 36.0; // C2..B5
+            const double frequency = 440.0
+                * std::pow (2.0, (midiNote - 69.0) / 12.0);
+            detector.coeff = 2.0f * std::sin (
+                juce::MathConstants<float>::pi
+                * (float) frequency / (float) sampleRate);
+        }
 
         solarLow = { 0.0f, 0.0f };
         solarUpper = { 0.0f, 0.0f };
@@ -253,6 +264,7 @@ public:
         polyOldDelay = polyCurrentDelay;
         polyTargetDelay = polyCurrentDelay;
         polyCrossfadeRemaining = { 0, 0 };
+        polySamplesWritten = 0;
     }
 
     void reset() noexcept
@@ -265,13 +277,21 @@ public:
             for (auto& resonator : channel)
                 resonator = {};
         roseToneLow = { 0.0f, 0.0f };
+        for (auto& detector : roseDetectors)
+        {
+            detector.low = 0.0f;
+            detector.band = 0.0f;
+            detector.envelope = 0.0f;
+        }
 
         solarLow = { 0.0f, 0.0f };
         solarUpper = { 0.0f, 0.0f };
         solarDelay.clear();
         solarWrite = 0;
 
-        polyDelay.clear();
+        // Logical reset: silence unwritten samples without clearing 22.5s
+        // of audio memory during the time-critical callback.
+        polySamplesWritten = 0;
         polyWrite = 0;
         polyLowpass = { 0.0f, 0.0f };
         polyCrossfadeRemaining = { 0, 0 };
@@ -321,6 +341,14 @@ private:
     {
         float y1 = 0.0f;
         float y2 = 0.0f;
+    };
+
+    struct RoseDetectorState
+    {
+        float low = 0.0f;
+        float band = 0.0f;
+        float envelope = 0.0f;
+        float coeff = 0.0f;
     };
 
     static float protect (float sample) noexcept
@@ -749,6 +777,13 @@ private:
             juce::jmax (64, juce::roundToInt (sampleRate * 0.045));
     }
 
+    float readPolyDelay (int channel, double samples) const noexcept
+    {
+        if (samples > (double) polySamplesWritten - 2.0)
+            return 0.0f;
+        return readDelay (polyDelay, channel, polyWrite, samples);
+    }
+
     void processPolyphrase (
         juce::AudioBuffer<float>& buffer,
         float x,
@@ -848,14 +883,10 @@ private:
                         1.0f
                         - (float) polyCrossfadeRemaining[(size_t) ch]
                           / (float) total;
-                    const float oldRead = readDelay (
-                        polyDelay, ch, polyWrite,
-                        polyOldDelay[(size_t) ch]
-                        + mod * modDepthSamples);
-                    const float newRead = readDelay (
-                        polyDelay, ch, polyWrite,
-                        polyTargetDelay[(size_t) ch]
-                        + mod * modDepthSamples);
+                    const float oldRead = readPolyDelay (
+                        ch, polyOldDelay[(size_t) ch] + mod * modDepthSamples);
+                    const float newRead = readPolyDelay (
+                        ch, polyTargetDelay[(size_t) ch] + mod * modDepthSamples);
                     delayed[ch] =
                         oldRead + (newRead - oldRead) * t;
 
@@ -865,9 +896,8 @@ private:
                 }
                 else
                 {
-                    delayed[ch] = readDelay (
-                        polyDelay, ch, polyWrite,
-                        readDelaySamples + mod * modDepthSamples);
+                    delayed[ch] = readPolyDelay (
+                        ch, readDelaySamples + mod * modDepthSamples);
                 }
 
                 polyLowpass[(size_t) ch] +=
@@ -903,6 +933,8 @@ private:
             }
 
             polyWrite = (polyWrite + 1) % polyDelay.getNumSamples();
+            polySamplesWritten = juce::jmin (
+                polyDelay.getNumSamples(), polySamplesWritten + 1);
         }
     }
 
@@ -931,6 +963,7 @@ private:
     int ultraRandomSamples = 1;
     juce::Reverb ultraReverb;
 
+    std::array<RoseDetectorState, 48> roseDetectors {};
     std::array<std::array<ResonatorState, 12>, 2> roseState {};
     std::array<float, 2> roseToneLow { 0.0f, 0.0f };
     double rosePhase = 0.0;
@@ -944,6 +977,7 @@ private:
 
     juce::AudioBuffer<float> polyDelay;
     int polyWrite = 0;
+    int polySamplesWritten = 0;
     std::array<float, 2> polyLowpass { 0.0f, 0.0f };
     std::array<double, 2> polyCurrentDelay { 0.0, 0.0 };
     std::array<double, 2> polyOldDelay { 0.0, 0.0 };
