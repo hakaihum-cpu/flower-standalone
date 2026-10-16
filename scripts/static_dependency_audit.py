@@ -808,7 +808,8 @@ for need in [
 # ROSETONES upper-XY silence. Check the structures rather than mute failures.
 for need in [
     "spanFramesUntilRefresh = 64",
-    "lane.playPosition += speed * direction - 1.0",
+    "lane.stutterStart = nextStart",
+    "readSpan (headPosition, nextStart)",
     "params.og && leftSide",
     "const float activeMix = params.mix * historyReady",
 ]:
