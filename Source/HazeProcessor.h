@@ -365,9 +365,12 @@ private:
         const float minFactor = params.og ? 0.0015f : 0.006f;
         const float factor = std::pow (
             minFactor, std::pow (repeat, params.og ? 1.05f : 1.25f));
+        // Very short (<90 ms) clean-mode slices sounded like
+        // repeated hard clicks across the right side of Eureka XY.
+        // Preserve deliberately destructive OG behaviour separately.
         const int requestedMinimumSpan = params.og
             ? 24
-            : std::max (96, (int) std::lround (sampleRate * 0.003));
+            : std::max (128, (int) std::lround (sampleRate * 0.090));
         const int minimumSpan = std::min (requestedMinimumSpan, loop);
         return std::clamp (
             (int) std::lround (loop * factor),
@@ -397,7 +400,7 @@ private:
             * (0.35f + 0.65f * randomUnit());
 
         const float reverseChance =
-            effectiveRepeat() * amount * (params.og ? 0.48f : 0.24f);
+            params.og ? effectiveRepeat() * amount * 0.48f : 0.0f;
         lane.reverse = randomUnit() < reverseChance;
 
         // Counter-clockwise HAZE introduces random jumps into old/silent
@@ -500,7 +503,7 @@ private:
 
         const int seam = std::clamp (
             params.og ? 12
-                      : (int) std::lround (sampleRate * 0.008),
+                      : (int) std::lround (sampleRate * 0.016),
             8, std::max (8, span / 4));
 
         auto readSpan = [&] (double localPosition,
@@ -519,11 +522,12 @@ private:
         float value = readSpan (local, start);
         if (! params.og && local >= (double) (span - seam))
         {
-            const float t =
-                (float) ((local - (double) (span - seam)) / (double) seam);
+            const float linear = (float) (
+                (local - (double) (span - seam)) / (double) seam);
+            const float t = linear * linear * (3.0f - 2.0f * linear);
             const double headPosition =
                 local - (double) (span - seam);
-            // Blend into the NEXT freshly captured phrase at the seam.
+            // Smooth the next phrase boundary without harsh short repeats.
             value += (readSpan (headPosition, nextStart) - value) * t;
         }
 
