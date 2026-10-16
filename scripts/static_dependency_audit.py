@@ -870,6 +870,17 @@ for need in [
         fail(f"Audio-reactive frame hold regression: {need}")
 
 
+# #195 Android clang failure: JUCE jlimit(T,T,T) does not accept a
+# float/double expression mixture. The native test shim must enforce the
+# same template-deduction constraints to catch such mistakes before APK.
+if "float) (((double) polySamplesWritten" not in vongon:
+    fail("POLYPHRASE #195 JUCE jlimit expression must cast its complete ratio")
+shim = (R / "tests/dsp_juce_shim/JuceHeader.h").read_text()
+if "template <typename T>\nconstexpr T jlimit(T low,T high,T value)" not in shim:
+    fail("offline JUCE shim must use a single-Type jlimit template")
+if "std::common_type_t" in shim:
+    fail("offline JUCE shim must not promote mixed arithmetic types")
+
 # New controls must be usable and input gain must reach the real audio path.
 for need in [
     "ParamID::inputGainDb",
