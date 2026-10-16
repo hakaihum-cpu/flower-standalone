@@ -101,6 +101,8 @@ static Results hazeTest() {
             float x=sampleInput(t+i);
             b.setSample(0,i,x);b.setSample(1,i,x);
         }
+        if(t==sampleRate*3){p.time=0.42f;p.repeat=0.82f;dsp.setParams(p);}
+        if(t==sampleRate*5){p.time=0.14f;p.repeat=0.45f;dsp.setParams(p);}
         dsp.captureBlock(b);
         dsp.renderBlock(b);
         appendBlock(r,b);
@@ -123,8 +125,11 @@ static Results polyTest() {
             const float x=sampleInput(t+i);
             b.setSample(0,i,x);b.setSample(1,i,x);
         }
-        const float x=t<(sampleRate*3)?0.0f:0.20f;
-        dsp.process(b,VongonInspiredProcessor::polyphrase,x,0.63f,false);
+        if(t==sampleRate*3)
+            dsp.setDirectCc(VongonInspiredProcessor::polyphrase,8,70);
+        if(t==sampleRate*5)
+            dsp.setDirectCc(VongonInspiredProcessor::polyphrase,8,0);
+        dsp.process(b,VongonInspiredProcessor::polyphrase,0.2f,0.63f,false);
         appendBlock(r,b);
     }
     return r;
@@ -156,16 +161,35 @@ int main() {
         const auto poly=inspect(polyTest(),"POLYPHRASE");
         wav("audio-regression/polyphrase.wav",poly.mono);
         const auto rose=inspect(roseTest(),"ROSETONES-upper-XY");
+        // Regress every quadrant of the previously silent upper XY half.
+        for(float y : {0.55f,0.75f,0.95f}) {
+            for(float x : {0.12f,0.50f,0.88f}) {
+                VongonInspiredProcessor voice;
+                voice.prepare(sampleRate);
+                Results probe;
+                juce::AudioBuffer<float> b(2,blockSize);
+                for(int t=0;t<sampleRate*3;t+=blockSize) {
+                    for(int i=0;i<blockSize;++i) {
+                        const float input=sampleInput(t+i);
+                        b.setSample(0,i,input);b.setSample(1,i,input);
+                    }
+                    voice.process(b,VongonInspiredProcessor::rosetones,x,y,false);
+                    appendBlock(probe,b);
+                }
+                inspect(std::move(probe),"ROSETONES XY "+
+                    std::to_string(x)+","+std::to_string(y));
+            }
+        }
         wav("audio-regression/rosetones-upper.wav",rose.mono);
         std::ofstream log("audio-regression/metrics.csv");
         log<<"mode,tail_rms,largest_step,longest_zero_samples,nonfinite\n";
-        for(const auto& pair:{
-            std::pair<std::string,Results>("EUREKA",haze),
-            {"POLYPHRASE",poly},{"ROSETONES",rose}}) {
-            const auto& r=pair.second;
-            log<<pair.first<<","<<r.tailRms<<","<<r.largestStep<<","
+        const auto writeMetrics=[&](const char* name,const Results& r) {
+            log<<name<<","<<r.tailRms<<","<<r.largestStep<<","
                <<r.longestZeroRun<<","<<r.nonfinite<<"\n";
-        }
+        };
+        writeMetrics("EUREKA",haze);
+        writeMetrics("POLYPHRASE",poly);
+        writeMetrics("ROSETONES",rose);
         std::cout<<"Actual DSP offline regression PASSED\n";
         return 0;
     } catch(const std::exception& error) {
