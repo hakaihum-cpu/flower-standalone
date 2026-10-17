@@ -11,14 +11,36 @@
 
 int main()
 {
-    // Visual MIDI note => screen grid. C4..C5 is exactly one image;
-    // C#5 begins divisions; C7 and above are capped at 10x10.
-    for (int n = 60; n <= 72; ++n)
-        assert (effects_video::divisionsForNote (n) == 1);
-    assert (effects_video::divisionsForNote (73) == 2);
-    assert (effects_video::divisionsForNote (84) > 2);
-    assert (effects_video::divisionsForNote (96) == 10);
-    assert (effects_video::divisionsForNote (108) == 10);
+    // Actual audio pitch, not a MIDI note, drives the Vongon video grid.
+    assert (effects_video::divisionsForPitchHz (0.0f) == 1);
+    assert (effects_video::divisionsForPitchHz (74.0f) == 1);
+    assert (effects_video::divisionsForPitchHz (75.0f) == 2);
+    assert (effects_video::divisionsForPitchHz (1100.0f) == 10);
+    assert (effects_video::divisionsForPitchHz (6000.0f) == 10);
+    int previousDivisions = 1;
+    for (float hz : {75.0f, 110.0f, 220.0f, 440.0f, 880.0f, 1100.0f})
+    {
+        const int divisions = effects_video::divisionsForPitchHz (hz);
+        assert (divisions > previousDivisions);
+        previousDivisions = divisions;
+    }
+    // The independent downsampled YIN path recognizes a real 220 Hz input.
+    chordfx::YinPitchDetector videoPitch;
+    videoPitch.prepare (12000.0, 1024, 512);
+    int goodEstimates = 0;
+    for (int i = 0; i < 16000; ++i)
+    {
+        const float audio = 0.5f * std::sin (
+            2.0f * 3.14159265358979323846f * 220.0f * (float) i / 12000.0f);
+        const auto estimate = videoPitch.pushSample (audio);
+        if (estimate.valid)
+        {
+            assert (std::abs (estimate.hz - 220.0f) < 8.0f);
+            assert (effects_video::divisionsForPitchHz (estimate.hz) >= 2);
+            ++goodEstimates;
+        }
+    }
+    assert (goodEstimates >= 2);
     assert (effects_video::vongonModeForXY (0.25f, 0.75f) == 5);
     assert (effects_video::vongonModeForXY (0.75f, 0.75f) == 6);
     assert (effects_video::vongonModeForXY (0.25f, 0.25f) == 7);
@@ -61,18 +83,6 @@ int main()
     }
     assert (effects_video::tileAlternateSeek (2, 192, 3u) > 0);
     assert (effects_video::tileAlternateSeek (2, 192, 3u) < 192);
-
-    // Xorshift pseudo-random sample must produce about 20% divisions.
-    std::uint32_t seed = 0x45464658u;
-    int splitCount = 0;
-    for (int i = 0; i < 10000; ++i)
-    {
-        seed ^= seed << 13;
-        seed ^= seed >> 17;
-        seed ^= seed << 5;
-        if (effects_video::shouldDivideOnNote (seed)) ++splitCount;
-    }
-    assert (splitCount > 1850 && splitCount < 2150);
 
     // CHORD-B equal-temperament tuning regression.  The generated sine stays
     // exactly at A4=440 Hz when the source is in tune, and follows the live
