@@ -468,8 +468,10 @@ for need in [
 ]:
     if need not in src and need not in processor_controls and need not in processor_header:
         fail(f"WET/BOOST/SAVE-LOAD contract missing: {need}")
-# Enforce wet-only output: an audio input is required to generate the
-# effect but the original input must never be mixed back in after DSP.
+# Preserve wet-only individual effect engines: CHORD/DREAMY/EUREKA etc.
+# must not introduce hidden dry passthrough inside their own DSP.
+# A user-controlled, default-zero global DRY monitor is permitted only
+# through the isolated post-FX input tap audited below.
 for need in [
     "buffer.applyGain (wet)",
     "buffer.clear();",
