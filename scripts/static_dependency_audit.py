@@ -905,15 +905,49 @@ for need in [
     "if (attack && chordVisualCooldown <= 0)",
     "eurekaFramePhase += 4.5f / 30.0f",
     "const bool fullVideo = total == 9 * 192 || total == 6 * 192",
-    "vongonFramePhase += playbackFps / 30.0f",
+    "const float musicalEnergy = juce::jlimit",
+    "const float gestureEnergy = juce::jlimit",
+    "const float drive = juce::jmax (musicalEnergy, gestureEnergy)",
+    "const float targetFps = drive < 0.018f ? 0.0f",
+    "vongonFramePhase += vongonVideoSpeed / 30.0f",
+    "vongonRewindFrames > 0",
+    "vongonGhostFrame = currentVongonFrame",
+    "vongonFxStyle =",
+    "vongonFringeRevision != dotVongonRevision",
+    "vongonRedFringe",
+    "vongonCyanFringe",
     "eurekaSwitchClipPending |= attack",
-    "vongonSwitchClipPending |= attack",
     "paintVideoEffect (g, currentEurekaFrame",
     "paintVideoEffect (",
     "g, currentVongonFrame",
 ]:
     if need not in editor:
-        fail(f"Audio-reactive frame hold regression: {need}")
+        fail(f"Vongon reactive video effects missing: {need}")
+for forbidden in [
+    "vongonFramePhase += playbackFps / 30.0f",
+    "row + (videoEffectTick % period)",
+    "if (((y + dotUiTick) % 8) == 0)",
+    "g.drawLine (px, 72.0f, px, 558.0f, 1.0f);",
+    "g.drawLine (0.0f, py, 720.0f, py, 1.0f);",
+    "g.fillRect (0.0f, 0.0f, 720.0f, 88.0f);",
+]:
+    if forbidden in editor:
+        fail(f"Vongon unwanted clock-driven lines/crosshair/curtain: {forbidden}")
+vstart = editor.find("void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (")
+vend = editor.find("void RealtimeChordFxAudioProcessorEditor::paintVongonMode (", vstart)
+if vstart < 0 or vend < 0:
+    fail("Vongon video rendering function boundaries missing")
+vfx = editor[vstart:vend]
+for need in [
+    "vongonVisualFx < 0.025f",
+    "vongonGhostFrame",
+    "bandY",
+    "vongonRewindFrames",
+]:
+    if need not in editor:
+        fail(f"Vongon event-reactive visual change missing: {need}")
+if "for (int row = 0; row < 720; row += period)" in vfx:
+    fail("Vongon periodic scanning lines must not be drawn")
 
 
 # #195 Android clang failure: JUCE jlimit(T,T,T) does not accept a
