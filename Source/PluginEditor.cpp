@@ -1315,19 +1315,21 @@ void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (
             0, srcTop, video.getWidth(), srcHeight);
         // A second independent tear adds a VHS head-switching feel.
         g.setOpacity (0.30f * energy);
+        const int secondTop = juce::jlimit (
+            0, video.getHeight() - 1,
+            juce::roundToInt (
+                (bandY + bandH + 14.0f)
+                * (float) video.getHeight() / 720.0f));
+        const int secondHeight = juce::jlimit (
+            1, video.getHeight() - secondTop,
+            juce::roundToInt (
+                bandH * 0.46f * (float) video.getHeight() / 720.0f));
         g.drawImage (
             video,
             juce::roundToInt (-offset * 0.6f),
             juce::roundToInt (bandY + bandH + 14.0f),
             720, juce::jmax (1, juce::roundToInt (bandH * 0.46f)),
-            0,
-            juce::jlimit (0, video.getHeight() - 1,
-                juce::roundToInt (
-                    (bandY + bandH + 14.0f)
-                    * (float) video.getHeight() / 720.0f)),
-            video.getWidth(),
-            juce::jmax (1, juce::roundToInt (
-                bandH * 0.46f * (float) video.getHeight() / 720.0f)));
+            0, secondTop, video.getWidth(), secondHeight);
     }
 
     // Chromatic misregistration: red and cyan channels have independent
