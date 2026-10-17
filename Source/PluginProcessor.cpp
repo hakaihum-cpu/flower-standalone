@@ -57,6 +57,14 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
 {
     currentSampleRate = sr > 1000.0 ? sr : 48000.0;
     pitchDetector.prepare (currentSampleRate, 1024, 256);
+    // Separate low-rate pitch analysis for the Vongon video grid.
+    videoPitchDetector.prepare (currentSampleRate / 4.0, 1024, 512);
+    audioTileDivisions.store (1, std::memory_order_relaxed);
+    videoPitchAccumulator = 0.0f;
+    videoPitchDecimation = 0;
+    videoPitchCandidate = 1;
+    videoPitchStableCount = 0;
+    videoPitchSamplesSinceValid = 0;
     theory.reset();
     sampleChordRenderer.prepare (currentSampleRate);
     sineArpeggiator.prepare (currentSampleRate);
@@ -499,6 +507,15 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     {
         lastEffectMode = effectMode;
         resetModeAudioState (effectMode);
+        // Do not reuse stale pitch from another effect; keep the detector
+        // and its CPU budget completely separate from CHORD tracking.
+        videoPitchDetector.reset();
+        audioTileDivisions.store (1, std::memory_order_relaxed);
+        videoPitchAccumulator = 0.0f;
+        videoPitchDecimation = 0;
+        videoPitchCandidate = 1;
+        videoPitchStableCount = 0;
+        videoPitchSamplesSinceValid = 0;
     }
     if (effectMode == 0 && chordMode != lastChordMode)
     {
@@ -530,25 +547,6 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         if (effectMode >= 5 && effectMode <= 8)
             vongonProcessor.handleMidi (
                 message, effectMode, midiInputChannel, event.samplePosition);
-
-        // Test each physical MIDI note-on, including rapid passages that
-        // occur between two 30Hz GUI polls. A successful high-note event is
-        // latched; low notes and unsuccessful draws do not erase it.
-        // This is constant-time MIDI bookkeeping, NOT audio pitch detection.
-        if (message.isNoteOn() && message.getVelocity() > 0.0f
-            && message.isForChannel (midiInputChannel))
-        {
-            visualMidiRandomState ^= visualMidiRandomState << 13;
-            visualMidiRandomState ^= visualMidiRandomState >> 17;
-            visualMidiRandomState ^= visualMidiRandomState << 5;
-            const int note = message.getNoteNumber();
-            if (note > 72 && note <= 108
-                && effects_video::shouldDivideOnNote (visualMidiRandomState))
-            {
-                visualMidiNote.store (note, std::memory_order_relaxed);
-                visualMidiSequence.fetch_add (1u, std::memory_order_release);
-            }
-        }
 
         if (! message.isController()
             || ! message.isForChannel (midiInputChannel))
@@ -688,11 +686,58 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             }
         }
 
+        // Analyse the input BEFORE effects, just as CHORD's detector does.
+        // Four-point box average reduces aliasing; a 12 kHz/512-hop YIN
+        // estimates only ~23 times/s rather than loading every audio frame.
+        // This influences VIDEO only and never modifies the audio samples.
+        if (effectMode >= 5 && effectMode <= 8)
+        {
+            videoPitchAccumulator += mono;
+            if (++videoPitchDecimation == 4)
+            {
+                const float decimated = videoPitchAccumulator * 0.25f;
+                videoPitchAccumulator = 0.0f;
+                videoPitchDecimation = 0;
+                const auto estimate = videoPitchDetector.pushSample (decimated);
+                if (estimate.valid)
+                {
+                    videoPitchSamplesSinceValid = 0;
+                    const int divisions =
+                        effects_video::divisionsForPitchHz (estimate.hz);
+                    if (divisions == videoPitchCandidate)
+                        ++videoPitchStableCount;
+                    else
+                    {
+                        videoPitchCandidate = divisions;
+                        videoPitchStableCount = 1;
+                    }
+                    // Two consistent estimates avoid octave-jitter flicker.
+                    if (videoPitchStableCount >= 2)
+                        audioTileDivisions.store (
+                            divisions, std::memory_order_relaxed);
+                }
+            }
+        }
+
         // Preserve discrete stereo input. Mono devices are duplicated only as
         // a compatibility fallback.
         buffer.setSample (0, i, left);
         if (buffer.getNumChannels() >= 2)
             buffer.setSample (1, i, right);
+    }
+
+    if (effectMode >= 5 && effectMode <= 8)
+    {
+        videoPitchSamplesSinceValid = juce::jmin (
+            juce::roundToInt (currentSampleRate),
+            videoPitchSamplesSinceValid + n);
+        if (videoPitchSamplesSinceValid
+            > juce::roundToInt (currentSampleRate * 0.45))
+        {
+            audioTileDivisions.store (1, std::memory_order_relaxed);
+            videoPitchStableCount = 0;
+            videoPitchCandidate = 1;
+        }
     }
 
     inputPeakRaw.store (blockPeak, std::memory_order_relaxed);
