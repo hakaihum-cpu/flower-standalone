@@ -262,6 +262,13 @@ public:
                 resonator.line.assign (2048, 0.0f);
             }
         roseToneLow = { 0.0f, 0.0f };
+        // Approved EFFECTS #191 ROSETONES state, independent of newer
+        // ULTRASHEER/SOLARFAZE/POLYPHRASE and current MIDI preset banks.
+        for (auto& channel : roseLegacyState)
+            for (auto& resonator : channel)
+                resonator = {};
+        roseLegacyToneLow = { 0.0f, 0.0f };
+        roseLegacyPhase = 0.0;
         roseMixSmoothed = 0.5f;
         roseFeedbackSmoothed = 0.7f;
         rosePhase = 0.0;
@@ -340,6 +347,13 @@ public:
                 resonator.delaySmoothed = 0.0f;
             }
         roseToneLow = { 0.0f, 0.0f };
+        // Approved EFFECTS #191 ROSETONES state, independent of newer
+        // ULTRASHEER/SOLARFAZE/POLYPHRASE and current MIDI preset banks.
+        for (auto& channel : roseLegacyState)
+            for (auto& resonator : channel)
+                resonator = {};
+        roseLegacyToneLow = { 0.0f, 0.0f };
+        roseLegacyPhase = 0.0;
         roseMixSmoothed = 0.5f;
         roseFeedbackSmoothed = 0.7f;
         for (auto& detector : roseDetectors)
@@ -726,171 +740,91 @@ private:
     }
 
     void processRosetones (
-        juce::AudioBuffer<float>& buffer, float x, float y) noexcept
+        juce::AudioBuffer<float>& buffer,
+        float x,
+        float y) noexcept
     {
         const int channels = juce::jmin (2, buffer.getNumChannels());
         const int samples = buffer.getNumSamples();
         if (channels <= 0 || samples <= 0)
             return;
-        if (ccOn (rosetones, 13))
-            return;
 
-        // Manual architecture: 48 chromatic input filters C2..B5, folded
-        // by pitch class into 12 separately excited tuned resonators.
-        // OCTAVE revoices the outputs; it does not change pitch detection.
-        const float slider = ccValue (rosetones, 87, x);
-        const float octave = 2.0f
-            + (float) juce::roundToInt (slider * 36.0f) / 12.0f;
-        const float glide = ccValue (rosetones, 83, 1.0f);
-        const float glideAlpha = ccRaw (rosetones, 83) < 0
-            ? 1.0f : 1.0f - std::exp (
-                -(float) samples / juce::jmax (1.0f,
-                    (float) sampleRate * (0.012f + 0.42f * (1.0f - glide))));
-        roseOctaveSmoothed += glideAlpha * (octave - roseOctaveSmoothed);
-
-        const float sens = ccValue (rosetones, 85, y);
-        const float inputGain = 1.25f + 2.25f * sens;
-        const float feedback = ccValue (rosetones, 86, y);
-        // Feedback occurs once per resonator delay circuit, NOT once
-        // per audio sample. Previous 0.3-0.65 default damped almost all
-        // the synthesized signal before the user could hear it.
-        const float feedbackGain = juce::jlimit (
-            0.955f, 0.997f, 0.955f + feedback * 0.042f);
-        const float mix = 0.25f
-            + 0.75f * ccValue (rosetones, 80, y);
-        const float tone = ccValue (rosetones, 82, x);
+        // X chooses octave/register and tone. Y controls sensitivity/resonance.
+        const int octave =
+            x < 0.25f ? 3
+            : x < 0.50f ? 4
+            : x < 0.75f ? 5
+                        : 6;
+        const float sensitivity = 0.45f + 1.75f * y;
+        const float radius = juce::jlimit (
+            0.88f, 0.9965f, 0.91f + y * 0.084f);
         const float toneCoeff = onePoleCoeff (
-            sampleRate, 800.0f + 12000.0f * tone * tone);
-        const float synthLevel = 2.0f * ccValue (rosetones, 81, 0.5f);
-        const float modulation = ccValue (rosetones, 84, 0.4f * x * y);
-        const int mode = ccRaw (rosetones, 14) < 0 ? 2
-            : ccRaw (rosetones, 14) < 43 ? 0
-            : ccRaw (rosetones, 14) < 86 ? 1 : 2;
-        const int interval = ccRaw (rosetones, 90) < 0 ? 0
-            : juce::jmin (11, ccRaw (rosetones, 90) * 12 / 128);
+            sampleRate, 900.0f + 9200.0f * x * x);
+        const float synthMix = 0.12f + 0.66f * y;
+        const float modDepth = 0.0007f + 0.004f * x * y;
+        const float modRate = 0.07f + 0.26f * x;
 
-        // High-cost pitch math once per audio buffer, not per sample.
-        float delayLength[2][12] {};
-        float panning[2][12] {};
-        const double phase = rosePhase;
-        for (int note = 0; note < 12; ++note)
-        {
-            const double midi = 12.0 * (double) roseOctaveSmoothed
-                + (double) note + (double) interval;
-            const double baseHz = 440.0
-                * std::pow (2.0, (midi - 69.0) / 12.0);
-            const float vibrato = (mode == 1 || mode == 2)
-                ? 0.18f * modulation * std::sin (
-                    (float) phase + (float) note * 0.52f) : 0.0f;
-            for (int ch = 0; ch < channels; ++ch)
-            {
-                const float chorus = (mode == 0 || mode == 2)
-                    ? (ch == 0 ? -0.14f : 0.14f) * modulation : 0.0f;
-                const double frequency = baseHz
-                    * std::pow (2.0, (double) (vibrato + chorus) / 12.0);
-                auto& voice = roseState[(size_t) ch][(size_t) note];
-                const float desiredDelay = (float) (
-                    sampleRate / juce::jmax (30.0, frequency));
-                if (voice.delaySmoothed <= 0.0f)
-                    voice.delaySmoothed = desiredDelay;
-                // Smooth octave/glide and chorus updates between buffers.
-                voice.delaySmoothed += 0.12f
-                    * (desiredDelay - voice.delaySmoothed);
-                delayLength[ch][note] = voice.delaySmoothed;
-                const float pan = (float) note / 11.0f;
-                const float spread = (mode == 0 || mode == 2)
-                    ? 0.35f : 0.78f;
-                panning[ch][note] = channels == 1 ? 1.0f
-                    : ch == 0 ? 1.0f - spread * pan
-                              : 1.0f - spread * (1.0f - pan);
-            }
-        }
-        rosePhase += juce::MathConstants<double>::twoPi
-            * (0.09 + 0.2 * (double) modulation)
-            * (double) samples / sampleRate;
-        if (rosePhase >= juce::MathConstants<double>::twoPi)
-            rosePhase = std::fmod (
-                rosePhase, juce::MathConstants<double>::twoPi);
-
-        std::array<float, 12> midiGates {};
-        for (int midiNote = 0; midiNote < 128; ++midiNote)
-            midiGates[(size_t) (midiNote % 12)] = juce::jmax (
-                midiGates[(size_t) (midiNote % 12)],
-                roseNotes[(size_t) midiNote]);
-
-        const float attack = onePoleCoeff (sampleRate, 85.0f);
-        const float release = onePoleCoeff (sampleRate, 12.0f);
-        const float mixSmooth = onePoleCoeff (sampleRate, 18.0f);
         for (int i = 0; i < samples; ++i)
         {
-            roseMixSmoothed += mixSmooth * (mix - roseMixSmoothed);
-            roseFeedbackSmoothed += mixSmooth
-                * (feedbackGain - roseFeedbackSmoothed);
-            const float dryL = buffer.getSample (0, i);
-            const float dryR = channels > 1 ? buffer.getSample (1, i) : dryL;
-            const float mono = std::tanh (
-                0.5f * (dryL + dryR) * inputGain);
-            std::array<float, 12> pitchEnergy {};
-            std::array<float, 12> pitchSigned {};
-            for (int bandIndex = 0; bandIndex < 48; ++bandIndex)
-            {
-                auto& detector = roseDetectors[(size_t) bandIndex];
-                const float high = mono - detector.low
-                    - 0.11f * detector.band;
-                detector.band += detector.coeff * high;
-                detector.low += detector.coeff * detector.band;
-                const float energy = std::abs (detector.band);
-                detector.envelope +=
-                    (energy > detector.envelope ? attack : release)
-                    * (energy - detector.envelope);
-                const size_t pitchClass = (size_t) (bandIndex % 12);
-                pitchEnergy[pitchClass] += detector.envelope;
-                pitchSigned[pitchClass] += detector.band;
-            }
+            const float mod =
+                std::sin ((float) roseLegacyPhase) * modDepth;
+            roseLegacyPhase +=
+                juce::MathConstants<double>::twoPi
+                * (double) modRate / sampleRate;
+            if (roseLegacyPhase >= juce::MathConstants<double>::twoPi)
+                roseLegacyPhase -= juce::MathConstants<double>::twoPi;
 
-            // The former design fed a unipolar rectified ENVELOPE into
-            // each delay. That creates mostly DC and indiscriminate
-            // excitation, not tuned musical resonances. Drive each
-            // feedback line with its signed pitch-selective band signal.
-            const float dominant = *std::max_element (
-                pitchEnergy.begin(), pitchEnergy.end());
-            roseNoiseState ^= roseNoiseState << 13;
-            roseNoiseState ^= roseNoiseState >> 17;
-            roseNoiseState ^= roseNoiseState << 5;
-            const float noise = (float) (roseNoiseState & 65535u)
-                / 32767.5f - 1.0f;
-            float wet[2] { 0.0f, 0.0f };
+            float dry[2] { 0.0f, 0.0f };
+            for (int ch = 0; ch < channels; ++ch)
+                dry[ch] = buffer.getSample (ch, i);
+
+            const float mono =
+                channels > 1 ? 0.5f * (dry[0] + dry[1]) : dry[0];
+            const float excitation =
+                std::tanh (mono * sensitivity);
+
+            float synth[2] { 0.0f, 0.0f };
             for (int note = 0; note < 12; ++note)
             {
-                const float energy = pitchEnergy[(size_t) note];
-                const float gate = juce::jlimit (0.0f, 1.0f,
-                    (energy - juce::jmax (
-                        0.002f, dominant * 0.22f))
-                    / juce::jmax (0.01f, dominant * 0.45f));
-                const float noteDrive = gate
-                    * pitchSigned[(size_t) note] * 0.04f
-                    + noise * midiGates[(size_t) note] * 0.015f;
+                const double midi = 12.0 * (double) octave + (double) note;
+                const double frequency =
+                    440.0 * std::pow (2.0, (midi - 69.0) / 12.0)
+                    * (1.0 + mod * (note % 2 == 0 ? 1.0 : -1.0));
+                const double omega =
+                    juce::MathConstants<double>::twoPi
+                    * frequency / sampleRate;
+                const float a1 =
+                    2.0f * radius * (float) std::cos (omega);
+                const float a2 = -(radius * radius);
+
                 for (int ch = 0; ch < channels; ++ch)
                 {
-                    auto& state = roseState[(size_t) ch][(size_t) note];
-                    const float voice = state.tick (
-                        noteDrive,
-                        delayLength[ch][note], roseFeedbackSmoothed);
-                    wet[ch] += voice * panning[ch][note];
+                    auto& state = roseLegacyState[(size_t) ch][(size_t) note];
+                    const float inputGain =
+                        ((note + ch) % 2 == 0 ? 1.0f : 0.72f)
+                        * (0.012f + 0.012f * y);
+                    const float next =
+                        excitation * inputGain
+                        + a1 * state.y1
+                        + a2 * state.y2;
+                    state.y2 = state.y1;
+                    state.y1 = protect (next);
+                    synth[ch] += state.y1;
                 }
             }
 
-            const float dry[2] { dryL, dryR };
             for (int ch = 0; ch < channels; ++ch)
             {
-                const float synth = std::tanh (
-                    wet[ch] * 1.25f * synthLevel);
-                roseToneLow[(size_t) ch] +=
-                    toneCoeff * (synth - roseToneLow[(size_t) ch]);
-                // Resonator output only. MIX is resonator output level.
-                const float out = roseToneLow[(size_t) ch]
-                    * roseMixSmoothed;
-                buffer.setSample (ch, i, protect (out));
+                synth[ch] *= 0.11f;
+                roseLegacyToneLow[(size_t) ch] +=
+                    toneCoeff * (synth[ch] - roseLegacyToneLow[(size_t) ch]);
+                const float shaped =
+                    std::tanh (roseLegacyToneLow[(size_t) ch] * 1.25f);
+                buffer.setSample (
+                    ch, i,
+                    protect (
+                        dry[ch]
+                        + shaped * synthMix));
             }
         }
     }
@@ -1340,6 +1274,16 @@ private:
     std::array<RoseDetectorState, 48> roseDetectors {};
     std::array<std::array<ResonatorState, 12>, 2> roseState {};
     std::array<float, 2> roseToneLow { 0.0f, 0.0f };
+    // Isolated ROSETONES legacy filter bank exactly as in EFFECTS #191.
+    struct LegacyRoseState
+    {
+        float y1 = 0.0f;
+        float y2 = 0.0f;
+    };
+    std::array<std::array<LegacyRoseState, 12>, 2> roseLegacyState {};
+    std::array<float, 2> roseLegacyToneLow { 0.0f, 0.0f };
+    double roseLegacyPhase = 0.0;
+
     float roseMixSmoothed = 0.5f;
     float roseFeedbackSmoothed = 0.7f;
     double rosePhase = 0.0;
