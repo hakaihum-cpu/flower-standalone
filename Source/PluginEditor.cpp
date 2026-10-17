@@ -742,6 +742,16 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
 {
     processor.applyPendingMidiInputChanges();
 
+    // External MIDI MODE can switch away from MULTI while a loop is playing.
+    // Respect that command before the UI re-applies any recorded Vongon XY.
+    if (multiModeEnabled
+        && juce::roundToInt (
+            processor.state().getRawParameterValue (ParamID::effectMode)->load()) < 5)
+    {
+        multiModeEnabled = false;
+        multiPointerDown = false;
+    }
+
     // Incoming MIDI note-on, not audio pitch detection, chooses a visual
     // grid on roughly 1 in 5 notes.  Other notes restore single-frame video.
     const auto noteSequence = processor.getVisualMidiSequence();
@@ -784,14 +794,6 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
 
     const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
-
-    // An external MIDI MODE CC may select a non-Vongon effect while MULTI
-    // is showing; exit the visual submode rather than displaying a ghost UI.
-    if (multiModeEnabled && effectMode < 5)
-    {
-        multiModeEnabled = false;
-        multiPointerDown = false;
-    }
 
     const float activity = juce::jmax (
         processor.getInputPeakRaw(),
