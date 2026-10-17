@@ -1502,14 +1502,14 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
         const int clips = juce::jmax (1, total / framesPerClip);
         const int clip = vongonFrameIndex / framesPerClip;
         const int position = vongonFrameIndex % framesPerClip;
-        // B and C are other clips; the last stream is A seeked ahead.
-        constexpr int clipOffsets[3] = { 2, 5, 0 };
-        const int positionOffsets[3] = {
-            framesPerClip / 4, framesPerClip / 2, 3 * framesPerClip / 4
-        };
-        const int otherClip = (clip + clipOffsets[slot]) % clips;
+        const int clipOffset = slot == 2 ? 0
+            : effects_video::tileAlternateClipOffset (
+                slot, clips, lastVisualMidiSequence);
+        const int positionOffset = effects_video::tileAlternateSeek (
+            slot, framesPerClip, lastVisualMidiSequence);
+        const int otherClip = (clip + clipOffset) % clips;
         const int otherFrame = otherClip * framesPerClip
-            + (position + positionOffsets[slot]) % framesPerClip;
+            + (position + positionOffset) % framesPerClip;
         midiTileAlternateFrames[(size_t) slot] =
             vongonFrames.getFrame (otherFrame);
     }
