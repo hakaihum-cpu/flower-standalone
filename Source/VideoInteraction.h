@@ -21,6 +21,77 @@ inline int divisionsForPitchHz (float hz) noexcept
     return std::clamp (2 + (int) std::lround (8.0f * octaves / range), 2, 10);
 }
 
+// Onset-latched, roughly 1-in-5 video split.  The GUI calls this at
+// 30 Hz with the pre-FX input RMS and the independently detected pitch grid.
+// A sustained note is ONE chance, not 30 chances per second.  Pitch changes
+// within an accepted split still change the number of video tiles.
+// Quiet for 3 ticks (~100 ms) rearms the next audible onset and clears tiles.
+class AudioMosaicGate
+{
+public:
+    struct Result
+    {
+        int divisions = 1;
+        bool started = false;
+    };
+
+    void reset() noexcept
+    {
+        armed = true;
+        quietTicks = 0;
+        holdTicks = 0;
+        heldDivisions = 1;
+    }
+
+    Result advance (float rms, int pitchDivisions) noexcept
+    {
+        constexpr int quietToRearm = 3;
+        constexpr int holdDuration = 75; // Up to 2.5 seconds at 30 Hz.
+        const float level = std::isfinite (rms) ? rms : 0.0f;
+        pitchDivisions = std::clamp (pitchDivisions, 1, 10);
+
+        quietTicks = level < 0.0018f
+            ? std::min (quietTicks + 1, quietToRearm) : 0;
+        if (quietTicks == quietToRearm)
+        {
+            armed = true;
+            holdTicks = 0;
+            heldDivisions = 1;
+        }
+
+        Result result;
+        if (armed && level >= 0.003f && pitchDivisions > 1)
+        {
+            armed = false;
+            randomState ^= randomState << 13;
+            randomState ^= randomState >> 17;
+            randomState ^= randomState << 5;
+            if (randomState % 5u == 0u)
+            {
+                holdTicks = holdDuration;
+                heldDivisions = pitchDivisions;
+                result.started = true;
+            }
+        }
+
+        if (holdTicks > 0)
+        {
+            if (pitchDivisions > 1)
+                heldDivisions = pitchDivisions;
+            result.divisions = heldDivisions;
+            --holdTicks;
+        }
+        return result;
+    }
+
+private:
+    std::uint32_t randomState = 0x45464658u;
+    bool armed = true;
+    int quietTicks = 0;
+    int holdTicks = 0;
+    int heldDivisions = 1;
+};
+
 // Hash event+cell into a reproducible pseudorandom value.
 // A change of event alters the arrangement, not a permanent A/B/C order.
 inline std::uint32_t tileHash (std::uint32_t seed) noexcept
