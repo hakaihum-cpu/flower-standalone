@@ -1303,10 +1303,13 @@ timer_end = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paint 
 if timer_start < 0 or timer_end < 0:
     fail("Audio-pitch video tile timer boundaries missing")
 timer_code = editor_visual[timer_start:timer_end]
-pitch_tile_end = timer_code.find("    // Fire CLEAR as soon as the long-press threshold")
-if pitch_tile_end < 0:
+# Verify the audio-driven mosaic update in its actual timer section.
+# MULTI long-press CLEAR is handled earlier in the same callback.
+pitch_tile_start = timer_code.find("    const int effectMode = juce::jlimit")
+pitch_tile_end = timer_code.find("    if ((effectMode == 0 || effectMode == 4)", pitch_tile_start)
+if pitch_tile_start < 0 or pitch_tile_end < 0:
     fail("Audio pitch tile timer event-section boundary missing")
-pitch_tile_code = timer_code[:pitch_tile_end]
+pitch_tile_code = timer_code[pitch_tile_start:pitch_tile_end]
 for required in [
     "audioMosaicGate.advance (",
     "audioTileDivisions = tiles.divisions",
