@@ -1429,21 +1429,54 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
 {
     if (! currentVongonFrame.isValid() || midiTileDivisions <= 1)
         return;
-    const juce::Image& image = dotModeEnabled() && dotDisplayCache.isValid()
+
+    const bool dot = dotModeEnabled();
+    const juce::Image& mainImage = dot && dotDisplayCache.isValid()
         ? dotDisplayCache : currentVongonFrame;
+
+    // Decode only three alternate frames per new split event, never one
+    // JPEG per cell or per paint. The original moving frame remains tile 0.
+    // Sample different positions and clips from the user's existing bank.
+    if (! dot && midiTilePreparedSequence != lastVisualMidiSequence)
+    {
+        const int total = vongonFrames.getFrameCount();
+        const int framesPerClip = total == 9 * 192 || total == 6 * 192
+            ? 192 : 36;
+        const int clips = juce::jmax (1, total / framesPerClip);
+        const int clip = vongonFrameIndex / framesPerClip;
+        const int position = vongonFrameIndex % framesPerClip;
+        const int clipOffsets[3] = { 0, 2, 5 };
+        const int positionOffsets[3] = {
+            framesPerClip / 4, framesPerClip / 2, 3 * framesPerClip / 4
+        };
+        for (int i = 0; i < 3; ++i)
+        {
+            const int otherClip = (clip + clipOffsets[i]) % clips;
+            const int otherFrame = otherClip * framesPerClip
+                + (position + positionOffsets[i]) % framesPerClip;
+            midiTileAlternateFrames[(size_t) i] =
+                vongonFrames.getFrame (otherFrame);
+        }
+        midiTilePreparedSequence = lastVisualMidiSequence;
+    }
+
     const int size = juce::jlimit (2, 10, midiTileDivisions);
+    const float cellSize = design / (float) size;
     juce::Graphics::ScopedSaveState save (g);
     g.reduceClipRegion (juce::Rectangle<int> (0, 0, 720, 720));
-    // All cells contain the actual currently selected video frame; no
-    // AI stills, black panels or additional images are generated.
     for (int row = 0; row < size; ++row)
         for (int col = 0; col < size; ++col)
         {
-            const float cellSize = design / (float) size;
-            const auto rect = juce::Rectangle<float> (
-                (float) col * cellSize,
-                (float) row * cellSize, cellSize, cellSize);
-            g.drawImage (image, rect,
+            const int variant = (col + 2 * row) % 4;
+            const juce::Image& candidate = variant != 0 && ! dot
+                ? midiTileAlternateFrames[(size_t) (variant - 1)]
+                : mainImage;
+            const juce::Image& picture =
+                candidate.isValid() ? candidate : mainImage;
+            const auto target = juce::Rectangle<float> (
+                (float) col * cellSize, (float) row * cellSize,
+                cellSize, cellSize);
+            g.drawImage (picture, target,
                          juce::RectanglePlacement::stretchToFit);
         }
 }
