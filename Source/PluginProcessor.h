@@ -50,7 +50,8 @@ public:
     float getInputRmsRaw() const noexcept { return inputRmsRaw.load (std::memory_order_relaxed); }
     float getInputNonZeroRatio() const noexcept { return inputNonZeroRatio.load (std::memory_order_relaxed); }
     int getDetectedMidi() const noexcept { return detectedMidi.load (std::memory_order_relaxed); }
-    // Latest external MIDI note-on.  The UI owns the probability/grid mapping.
+    // Most recent accepted MIDI note-on (about 1 of 5 eligible high notes).
+    // An event is retained until the 30Hz UI reads it, including fast passages.
     int getVisualMidiNote() const noexcept { return visualMidiNote.load (std::memory_order_relaxed); }
     unsigned int getVisualMidiSequence() const noexcept { return visualMidiSequence.load (std::memory_order_acquire); }
     int getVisualFrame() const noexcept { return visualFrame.load (std::memory_order_relaxed); }
@@ -172,6 +173,7 @@ private:
     std::atomic<int> detectedMidi { -1 };
     std::atomic<int> visualMidiNote { -1 };
     std::atomic<unsigned int> visualMidiSequence { 0 };
+    std::uint32_t visualMidiRandomState = 0x45464658u; // audio thread only
     std::atomic<bool> chordAHoldRefreshRequested { false };
     std::atomic<int> visualFrame { 0 };
     // CC110=X, CC111=Y, CC112=MODE, CC113=CHORD A/B.
