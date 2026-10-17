@@ -1371,7 +1371,10 @@ void RealtimeChordFxAudioProcessorEditor::chooseEffectFromMenu (int index)
         return;
 
     multiPointerDown = false;
-    multiTransport = 0;
+    // Preserve recorded XY until the explicit long-press CLEAR.
+    // Leaving MULTI during recording finalizes the current take.
+    if (index != 10 && multiModeEnabled && multiTransport == 1)
+        stopMultiRecordingAndPlay();
     multiModeEnabled = index == 10;
     vongonPanelVisible = false;
     eurekaPanelVisible = false;
