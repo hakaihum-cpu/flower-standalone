@@ -1517,6 +1517,15 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
     const float cellSize = design / (float) size;
     juce::Graphics::ScopedSaveState save (g);
     g.reduceClipRegion (juce::Rectangle<int> (0, 0, 720, 720));
+    // Hard replace the full video canvas with real picture tiles.
+    // No alpha overlays, no blending with the underlying full-frame video.
+    g.setOpacity (1.0f);
+    g.setColour (juce::Colours::black);
+    g.fillRect (0.0f, 0.0f, 720.0f, 720.0f);
+    g.setImageResamplingQuality (juce::Graphics::mediumResamplingQuality);
+
+    // Integer pixel boundaries prevent sampling bleed between neighbouring
+    // tiles. 1px black gutters make the actual picture subdivisions legible.
     for (int row = 0; row < size; ++row)
         for (int col = 0; col < size; ++col)
         {
@@ -1526,9 +1535,15 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
                 : mainImage;
             const juce::Image& picture =
                 candidate.isValid() ? candidate : mainImage;
+            const int left = juce::roundToInt ((float) col * cellSize);
+            const int right = juce::roundToInt ((float) (col + 1) * cellSize);
+            const int top = juce::roundToInt ((float) row * cellSize);
+            const int bottom = juce::roundToInt ((float) (row + 1) * cellSize);
             const auto target = juce::Rectangle<float> (
-                (float) col * cellSize, (float) row * cellSize,
-                cellSize, cellSize);
+                (float) (left + 1), (float) (top + 1),
+                (float) juce::jmax (1, right - left - 2),
+                (float) juce::jmax (1, bottom - top - 2));
+            g.setOpacity (1.0f);
             g.drawImage (picture, target,
                          juce::RectanglePlacement::stretchToFit);
         }
@@ -1725,19 +1740,24 @@ void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (
 void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
     juce::Graphics& g, int effectMode)
 {
-    if (currentVongonFrame.isValid())
-        paintMediaFrame (
-            g, currentVongonFrame,
-            juce::Rectangle<float> (0, 0, design, design),
-            2, dotVongonRevision);
-    paintVideoEffect (
-        g, currentVongonFrame,
-        processor.getVongonX(), processor.getVongonY());
-    // Tile the *video image*, not the VHS displacement. Compositing after
-    // the transient effects prevents an opaque distortion layer from hiding
-    // the actual repeated video cells.
-    if (midiTileDivisions > 1)
+    if (midiTileDivisions > 1 && currentVongonFrame.isValid())
+    {
+        // A MIDI split is a REPLACEMENT 2x2..10x10 VIDEO CANVAS, not
+        // a translucency/scanline layer over one full-screen video.
+        // Never draw a full-screen video or VHS overlay behind these tiles.
         drawMidiVideoTiles (g);
+    }
+    else
+    {
+        if (currentVongonFrame.isValid())
+            paintMediaFrame (
+                g, currentVongonFrame,
+                juce::Rectangle<float> (0, 0, design, design),
+                2, dotVongonRevision);
+        paintVideoEffect (
+            g, currentVongonFrame,
+            processor.getVongonX(), processor.getVongonY());
+    }
 
     const float x = juce::jlimit (0.0f, 1.0f, processor.getVongonX());
     const float y = juce::jlimit (0.0f, 1.0f, processor.getVongonY());
