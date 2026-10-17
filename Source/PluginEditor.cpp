@@ -785,6 +785,14 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
     const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
+    // An external MIDI MODE CC may select a non-Vongon effect while MULTI
+    // is showing; exit the visual submode rather than displaying a ghost UI.
+    if (multiModeEnabled && effectMode < 5)
+    {
+        multiModeEnabled = false;
+        multiPointerDown = false;
+    }
+
     const float activity = juce::jmax (
         processor.getInputPeakRaw(),
         processor.getInputRmsRaw() * 2.2f);
