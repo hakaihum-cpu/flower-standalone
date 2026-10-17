@@ -148,6 +148,7 @@ private:
     float chordPitchAccumulator = 0.0f;
     int chordPitchDecimation = 0;
     bool chordPitchAnalysisActive = false;
+    float chordAOutputGain = 0.0f; // 8-ms attack/release, audio thread only
     chordfx::TheoryEngine theory;
     chordfx::SampleChordRenderer sampleChordRenderer;
     chordfx::SineArpeggiator sineArpeggiator;
