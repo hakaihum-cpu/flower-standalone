@@ -917,7 +917,11 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         const float gestureEnergy = juce::jmax (
             juce::jlimit (0.0f, 1.0f, xyDelta * 7.0f),
             parameterEdited ? 0.72f : 0.0f);
-        const float drive = juce::jmax (musicalEnergy, gestureEnergy);
+        // A MIDI-triggered mosaic also advances its moving video cells
+        // while held. Untriggered idle video still freezes as requested.
+        const float drive = juce::jmax (
+            juce::jmax (musicalEnergy, gestureEnergy),
+            midiTileHoldTicks > 0 ? 0.45f : 0.0f);
         const bool attack =
             activity > 0.009f
             && activity > vongonVisualPreviousActivity * 1.35f + 0.002f;
@@ -1474,30 +1478,39 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
     const juce::Image& mainImage = dot && dotDisplayCache.isValid()
         ? dotDisplayCache : currentVongonFrame;
 
-    // Decode only three alternate frames per new split event, never one
-    // JPEG per cell or per paint. The original moving frame remains tile 0.
-    // Sample different positions and clips from the user's existing bank.
+    // The previous implementation decoded three still pictures once,
+    // which caused barely visible boundaries with static interiors.
+    // Refresh one *different* clip/seek every advancing source frame:
+    // three staggered, independently evolving video streams at ~8 fps
+    // per alternate tile, plus the primary live stream at up to 24 fps.
+    // Never decode a JPEG per cell or add work to the audio callback.
     if (! dot && midiTilePreparedSequence != lastVisualMidiSequence)
     {
+        midiTilePreparedSequence = lastVisualMidiSequence;
+        midiTileLastVongonRevision = -1;
+        midiTileAlternateUpdateSlot = 0;
+        for (auto& frame : midiTileAlternateFrames)
+            frame = {};
+    }
+    if (! dot && midiTileLastVongonRevision != dotVongonRevision)
+    {
+        midiTileLastVongonRevision = dotVongonRevision;
+        const int slot = midiTileAlternateUpdateSlot++ % 3;
         const int total = vongonFrames.getFrameCount();
-        const int framesPerClip = total == 9 * 192 || total == 6 * 192
-            ? 192 : 36;
+        const int framesPerClip =
+            total == 9 * 192 || total == 6 * 192 ? 192 : 36;
         const int clips = juce::jmax (1, total / framesPerClip);
         const int clip = vongonFrameIndex / framesPerClip;
         const int position = vongonFrameIndex % framesPerClip;
-        const int clipOffsets[3] = { 0, 2, 5 };
+        constexpr int clipOffsets[3] = { 0, 2, 5 };
         const int positionOffsets[3] = {
             framesPerClip / 4, framesPerClip / 2, 3 * framesPerClip / 4
         };
-        for (int i = 0; i < 3; ++i)
-        {
-            const int otherClip = (clip + clipOffsets[i]) % clips;
-            const int otherFrame = otherClip * framesPerClip
-                + (position + positionOffsets[i]) % framesPerClip;
-            midiTileAlternateFrames[(size_t) i] =
-                vongonFrames.getFrame (otherFrame);
-        }
-        midiTilePreparedSequence = lastVisualMidiSequence;
+        const int otherClip = (clip + clipOffsets[slot]) % clips;
+        const int otherFrame = otherClip * framesPerClip
+            + (position + positionOffsets[slot]) % framesPerClip;
+        midiTileAlternateFrames[(size_t) slot] =
+            vongonFrames.getFrame (otherFrame);
     }
 
     const int size = juce::jlimit (2, 10, midiTileDivisions);
