@@ -2624,7 +2624,8 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setFont (juce::FontOptions (16.0f));
     g.drawText ("MODE", 54, 510, 220, 30, juce::Justification::centredLeft);
     const juce::String modeText =
-        effectMode == 8 ? "POLYPHRASE"
+        multiModeEnabled ? "MULTI"
+        : effectMode == 8 ? "POLYPHRASE"
         : effectMode == 7 ? "SOLARFAZE"
         : effectMode == 6 ? "ROSETONES"
         : effectMode == 5 ? "ULTRASHEER"
@@ -3157,7 +3158,13 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             const int chord = juce::jlimit (0, 1, juce::roundToInt (
                 processor.state().getRawParameterValue (ParamID::chordMode)->load()));
 
-            if (effect == 0 && chord == 0)
+            if (multiModeEnabled)
+            {
+                multiModeEnabled = false;
+                setChoiceActual (ParamID::chordMode, 0);       // MULTI -> A
+                setChoiceActual (ParamID::effectMode, 0);
+            }
+            else if (effect == 0 && chord == 0)
                 setChoiceActual (ParamID::chordMode, 1);       // A -> B
             else if (effect == 0)
                 setChoiceActual (ParamID::effectMode, 1);      // B -> DREAMY
@@ -3177,8 +3184,11 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
                 setChoiceActual (ParamID::effectMode, 8);      // SOLARFAZE -> POLYPHRASE
             else
             {
-                setChoiceActual (ParamID::effectMode, 0);      // POLYPHRASE -> A
-                setChoiceActual (ParamID::chordMode, 0);
+                // POLYPHRASE -> MULTI; the next MODE click returns to A.
+                multiModeEnabled = true;
+                multiTransport = multiRecordCount > 0 ? 2 : 0;
+                vongonPanelVisible = false;
+                applyMultiXY (multiX, multiY);
             }
         }
         else if (p.y >= 540 && p.y < 572)
