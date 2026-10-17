@@ -735,6 +735,7 @@ int RealtimeChordFxAudioProcessorEditor::nextVisualFrame (
 
 void RealtimeChordFxAudioProcessorEditor::timerCallback()
 {
+    processor.applyPendingMidiInputChanges();
     ++videoEffectTick;
     if (! hasKeyboardFocus (true))
         grabKeyboardFocus();
