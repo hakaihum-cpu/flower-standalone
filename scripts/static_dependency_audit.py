@@ -535,10 +535,10 @@ for blocked in [
 ]:
     if blocked in processor_controls or blocked in processor_header:
         fail(f"unwanted DRY audio leak remains: {blocked}")
-# ROSETONES alone intentionally uses the prior user-approved signal mix.
-# Do not impose the later wet-only design on the restored ROSETONES mode.
-if "+ shaped * synthMix" not in (R / "Source/VongonInspiredProcessor.h").read_text():
-    fail("ROSETONES approved earlier dry/resonator mix missing")
+# ROSETONES uses the exact user-selected 48-filter algorithm and
+# resonator-only output. This guard must not force the older #191 dry blend.
+if "const float out = roseToneLow[(size_t) ch]" not in (R / "Source/VongonInspiredProcessor.h").read_text():
+    fail("ROSETONES selected reference wet-only output missing")
 if "float outL = wetL * activeMix" not in (R / "Source/HazeProcessor.h").read_text():
     fail("EUREKA wet-only output regression")
 if "left[n] = softProtect (wetL * wetMix)" not in (R / "Source/EffectsCloudsEngine.h").read_text():
