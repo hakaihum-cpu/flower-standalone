@@ -104,9 +104,7 @@ private:
     juce::Image vongonRedFringe;
     juce::Image vongonCyanFringe;
     int vongonFringeRevision = -1;
-    int videoEffectTick = 0;
     bool eurekaSwitchClipPending = false;
-    bool vongonSwitchClipPending = false;
     int chordVisualCooldown = 0;
     int eurekaVisualCooldown = 0;
     int vongonVisualCooldown = 0;
