@@ -121,7 +121,7 @@ if len(source_lines) != 7:
 position = 0
 for size in sizes:
     frame = added[position:position + size]
-    if size < 64 or frame[:2] != b'\\xff\\xd8' or frame[-2:] != b'\\xff\\xd9':
+    if size < 64 or frame[:2] != b'\xff\xd8' or frame[-2:] != b'\xff\xd9':
         raise SystemExit('[FAIL] new EUREKA JPEG frame boundary mismatch')
     position += size
 if position != len(added):
