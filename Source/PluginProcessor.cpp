@@ -39,6 +39,8 @@ RealtimeChordFxAudioProcessor::RealtimeChordFxAudioProcessor()
         .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "CHORDFX_STATE", createParameterLayout())
 {
+    for (auto& pending : midiInputPending)
+        pending.store (-1, std::memory_order_relaxed);
     initialiseChordBotDefaults();
 }
 
@@ -500,17 +502,67 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     if (midiClockMode) handleMidiClock (midi);
     else processInternalMotionClock (n);
 
-    // Consume Vongon MIDI input before the existing MIDI OUT path clears it.
-    // Existing CHORD/CHORDBOT and controller MIDI output remain isolated.
-    if (effectMode >= 5 && effectMode <= 8)
+    // Capture MIDI IN for all EFFECTS before the MIDI OUT buffer is cleared.
+    // No parameter notification, allocation or GUI call on the audio thread.
+    const int midiInputChannel = juce::jlimit (1, 16,
+        juce::roundToInt (
+            apvts.getRawParameterValue (ParamID::midiChannel)->load()));
+    for (const auto event : midi)
     {
-        const int midiInputChannel = juce::jlimit (1, 16,
-            juce::roundToInt (
-                apvts.getRawParameterValue (ParamID::midiChannel)->load()));
-        for (const auto event : midi)
+        const auto& message = event.getMessage();
+        if (effectMode >= 5 && effectMode <= 8)
             vongonProcessor.handleMidi (
-                event.getMessage(), effectMode,
-                midiInputChannel, event.samplePosition);
+                message, effectMode, midiInputChannel, event.samplePosition);
+
+        if (! message.isController()
+            || ! message.isForChannel (midiInputChannel))
+            continue;
+
+        const int cc = message.getControllerNumber();
+        const int value = message.getControllerValue();
+        const bool common = cc >= 110 && cc <= 118;
+        const bool chord = effectMode == 0 && cc >= 20 && cc <= 27;
+        const bool eureka = effectMode == 2 && cc >= 40 && cc <= 56;
+        const bool bot = effectMode == 3 && (cc == 120 || cc == 121);
+        if (! common && ! chord && ! eureka && ! bot)
+            continue;
+
+        midiInputPending[(size_t) cc].store (
+            value, std::memory_order_release);
+        if (cc == 110 || cc == 111)
+        {
+            if (cc == 110)
+                midiInputX.store (value, std::memory_order_relaxed);
+            else
+                midiInputY.store (value, std::memory_order_relaxed);
+            const int xMidi = midiInputX.load (std::memory_order_relaxed);
+            const int yMidi = midiInputY.load (std::memory_order_relaxed);
+            const float x = (float) xMidi / 127.0f;
+            const float y = (float) yMidi / 127.0f;
+            if (effectMode <= 1)
+            {
+                // External MIDI IN must not be echoed to MIDI OUT.
+                controllerX.store (xMidi, std::memory_order_relaxed);
+                controllerY.store (yMidi, std::memory_order_relaxed);
+                visualFrame.store (controllerFrameForXY (xMidi, yMidi),
+                                   std::memory_order_relaxed);
+            }
+            else if (effectMode == 4)
+                setCloudsXY (x, y, false);
+            else if (effectMode >= 5)
+                setVongonXY (x, y, false);
+            // EUREKA uses parameter updates on the message thread below.
+        }
+        if (effectMode == 3)
+        {
+            if (cc == 120)
+                chordBotRequestedPad.store (
+                    juce::jlimit (0, 8, value * 9 / 128),
+                    std::memory_order_release);
+            else if (cc == 121 && value >= 64)
+                chordBotRequestedPad.store (
+                    -1, std::memory_order_release);
+        }
     }
 
     midi.clear();
@@ -1661,6 +1713,107 @@ RealtimeChordFxAudioProcessor::hazeParamsFromState() const noexcept
 void RealtimeChordFxAudioProcessor::setParameterActual (const char* id, float actual)
 {
     if (auto* p = apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (actual));
+}
+
+void RealtimeChordFxAudioProcessor::applyPendingMidiInputChanges()
+{
+    // Called by the standalone editor's 30 Hz message-thread timer.
+    // Audio-thread MIDI events only set lock-free pending values.
+    auto setNormalised = [this] (const char* id, float normalised)
+    {
+        if (auto* param = apvts.getParameter (id))
+            param->setValueNotifyingHost (
+                juce::jlimit (0.0f, 1.0f, normalised));
+    };
+
+    for (int cc = 0; cc < 128; ++cc)
+    {
+        const int value = midiInputPending[(size_t) cc].exchange (
+            -1, std::memory_order_acq_rel);
+        if (value < 0)
+            continue;
+
+        const float norm = (float) value / 127.0f;
+        if (cc == 110 || cc == 111)
+        {
+            // EUREKA's touch X/Y maps to density, loop position and hall.
+            const int mode = juce::roundToInt (
+                apvts.getRawParameterValue (ParamID::effectMode)->load());
+            if (mode == 2)
+            {
+                const float x = (float) midiInputX.load (
+                    std::memory_order_relaxed) / 127.0f;
+                const float y = (float) midiInputY.load (
+                    std::memory_order_relaxed) / 127.0f;
+                setNormalised (ParamID::hazeRepeat, 0.18f + 0.82f * x);
+                setNormalised (ParamID::hazeTime, 0.12f + 0.76f * y);
+                setNormalised (ParamID::hazeReverb,
+                               std::pow (x * y, 1.25f));
+            }
+            continue;
+        }
+        if (cc == 112)
+        {
+            setNormalised (ParamID::effectMode,
+                           (float) (value * 9 / 128) / 8.0f);
+            continue;
+        }
+        if (cc == 113)
+        {
+            setNormalised (ParamID::chordMode, value >= 64 ? 1.0f : 0.0f);
+            continue;
+        }
+        if (cc == 114)
+        {
+            const bool shouldRun = value >= 64;
+            if (shouldRun != running.load (std::memory_order_acquire))
+                toggleRunState();
+            continue;
+        }
+        if (cc == 115) { setNormalised (ParamID::wet, norm); continue; }
+        if (cc == 116) { setNormalised (ParamID::boostDb, norm); continue; }
+        if (cc == 117) { setNormalised (ParamID::inputGainDb, norm); continue; }
+        if (cc == 118) { setNormalised (ParamID::displayMode, norm); continue; }
+        if (cc == 120 || cc == 121)
+            continue; // CHORDBOT pad events were consumed on audio thread.
+
+        const char* id = nullptr;
+        switch (cc)
+        {
+            case 20: id = ParamID::complex; break;
+            case 21: id = ParamID::bar; break;
+            case 22: id = ParamID::width; break;
+            case 23: id = ParamID::length; break;
+            case 24: id = ParamID::hold; break;
+            case 25: id = ParamID::effect; break;
+            case 26: id = ParamID::clockMode; break;
+            case 27: id = ParamID::internalBpm; break;
+            case 40: id = ParamID::hazeMix; break;
+            case 41: id = ParamID::hazeTime; break;
+            case 42: id = ParamID::hazeAmount; break;
+            case 43: id = ParamID::hazeFilter; break;
+            case 44: id = ParamID::hazeRepeat; break;
+            case 45: id = ParamID::hazeMod; break;
+            case 46: id = ParamID::hazeReverb; break;
+            case 47: id = ParamID::hazeSpeed; break;
+            case 48: id = ParamID::hazeLoops; break;
+            case 49: id = ParamID::hazeWarble; break;
+            case 50: id = ParamID::hazeTranspose; break;
+            case 51: id = ParamID::hazeEcho; break;
+            case 52: id = ParamID::hazeOg; break;
+            case 53: id = ParamID::hazeLock; break;
+            case 54: id = ParamID::hazeBypass; break;
+            case 55: id = ParamID::hazeGain; break;
+            case 56: id = ParamID::hazePath; break;
+            default: break;
+        }
+        if (id != nullptr)
+        {
+            setNormalised (id, norm);
+            if (cc == 24)
+                notifyChordAHoldChanged();
+        }
+    }
 }
 
 bool RealtimeChordFxAudioProcessor::saveMidiControllerPreset (int slot)
