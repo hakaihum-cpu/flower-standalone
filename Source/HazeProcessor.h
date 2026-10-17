@@ -580,8 +580,19 @@ private:
         }
         if (wrapped)
         {
+            const bool seamAlreadyPlayed = ! params.og
+                && lane.pendingStutterStartValid;
             lane.stutterStart = lane.pendingStutterStartValid
                 ? lane.pendingStutterStart : nextStart;
+            // The overlap above has already played the NEXT phrase's first
+            // 'seam' samples. Starting again at 0 would jump backward ~16ms
+            // on every repeat, producing an audible rhythmic tick.
+            if (seamAlreadyPlayed)
+            {
+                lane.playPosition += (double) seam;
+                if (lane.playPosition >= (double) span)
+                    lane.playPosition -= (double) span;
+            }
             lane.pendingStutterStartValid = false;
         }
 
