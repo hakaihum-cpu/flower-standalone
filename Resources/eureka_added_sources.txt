@@ -1,0 +1,9 @@
+# EUREKA appended user-provided videos; original four clips unchanged
+# Each video: first 8 seconds at 4.5 fps, 36 ordered JPEG frames, 640x360.
+Person_walking_and_smiling_20261017222551.mp4
+Woman_leaning_against_classroom_…_20261017222853.mp4
+Woman_putting_on_glasses_20261017222903.mp4
+Woman_reading_book_in_library_20261017222903.mp4
+Woman_standing_in_school_hallway_20261017222145.mp4
+Woman_standing_on_school_rooftop_20261017222546.mp4
+Woman_watching_cat_near_gate_20261017222554.mp4
