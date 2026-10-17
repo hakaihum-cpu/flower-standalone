@@ -889,11 +889,14 @@ for need in [
     "chordPitchAccumulator += mono",
     "if (++chordPitchDecimation == 4)",
     "pitchDetector.pushSample (decimated)",
-    "if (effectMode <= 2)",
+    "const bool analyseChordPitch = effectMode == 0",
+    "apvts.getRawParameterValue (ParamID::chordMidiOut)->load() >= 0.5f",
+    "if (analyseChordPitch)",
+    "chordPitchAnalysisActive = analyseChordPitch",
 ]:
     if need not in processor:
         fail(f"CHORD/DREAMY/EUREKA low-rate pitch path missing: {need}")
-for need in ["chordPitchAccumulator", "chordPitchDecimation"]:
+for need in ["chordPitchAccumulator", "chordPitchDecimation", "chordPitchAnalysisActive"]:
     if need not in processor_header:
         fail(f"CHORD-family YIN decimation state missing: {need}")
 for need in [
