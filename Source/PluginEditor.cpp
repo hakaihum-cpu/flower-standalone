@@ -1059,8 +1059,7 @@ void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g
         0.0f, 14.0f,
         processor.state().getRawParameterValue (ParamID::boostDb)->load());
     const juce::Rectangle<float> boostBounds (
-        effectMode >= 5 && multiModeEnabled ? 390.0f : 300.0f,
-        16.0f, 76.0f, 38.0f);
+        300.0f, 16.0f, 76.0f, 38.0f);
     g.setColour (juce::Colours::black.withAlpha (0.50f));
     g.fillRoundedRectangle (boostBounds, 6.0f);
     g.setColour (uiColour (boostDb > 0.01f ? 0.96f : 0.62f));
@@ -1284,7 +1283,7 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
                 juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (11.5f));
     g.setColour (uiColour (0.70f));
-    g.drawText ("GRANULAR XY", 164, 24, 180, 24,
+    g.drawText ("GRANULAR XY", 176, 24, 120, 24,
                 juce::Justification::centredLeft);
     g.setColour (uiColour (0.94f));
     g.drawText ("CONFIG", 604, 22, 88, 24,
@@ -1744,19 +1743,21 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
 
     g.setColour (uiColour (0.96f));
     g.setFont (juce::FontOptions (21.0f).withStyle ("Bold"));
-    g.drawText (multiModeEnabled ? "MULTI / " + name : name,
-                28, 18, multiModeEnabled ? 348 : 260, 34,
-                juce::Justification::centredLeft);
+    g.drawText (multiModeEnabled ? "MULTI" : name,
+                28, 18, 260, 34, juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (11.5f));
     g.setColour (uiColour (0.70f));
-    g.drawText (descriptor, 270, 24, 240, 24,
-                juce::Justification::centredLeft);
+    if (! multiModeEnabled)
+        g.drawFittedText (
+            descriptor, 26, 54, 267, 20,
+            juce::Justification::centredLeft, 1);
     g.setColour (uiColour (0.94f));
     g.drawText ("CONFIG", 604, 22, 88, 24,
                 juce::Justification::centredRight);
     if (! multiModeEnabled)
-        g.drawText (vongonPanelVisible ? "CLOSE" : "PARAM",
-                    402, 20, 82, 30, juce::Justification::centred);
+        g.drawFittedText (
+            vongonPanelVisible ? "CLOSE" : "PARAM",
+            380, 20, 61, 30, juce::Justification::centred, 1);
 
     if (multiModeEnabled)
     {
@@ -1922,8 +1923,8 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
                 176, 24, 260, 24, juce::Justification::centredLeft);
 
     g.setColour (uiColour (0.94f));
-    g.drawText (eurekaPanelVisible ? "CLOSE" : "PANEL",
-                402, 22, 82, 24, juce::Justification::centred);
+    g.drawFittedText (eurekaPanelVisible ? "CLOSE" : "PANEL",
+                380, 22, 61, 24, juce::Justification::centred, 1);
     g.drawText ("CONFIG", 604, 22, 88, 24,
                 juce::Justification::centredRight);
 
@@ -2099,7 +2100,7 @@ void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
     g.setColour (uiColour (
         chordBotEditMode ? 0.98f : 0.74f));
     g.drawText (chordBotEditMode ? "DONE" : "EDIT",
-                404, 22, 78, 26, juce::Justification::centred);
+                381, 22, 60, 26, juce::Justification::centred);
     g.setColour (uiColour (0.84f));
     g.drawText ("CONFIG",
                 604, 22, 88, 26, juce::Justification::centredRight);
@@ -3387,9 +3388,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (currentEffectMode != 3
         && juce::Rectangle<float> (
-            currentEffectMode >= 5 && multiModeEnabled
-                ? 390.0f : 300.0f,
-            16.0f, 76.0f, 38.0f).contains (p))
+            300.0f, 16.0f, 76.0f, 38.0f).contains (p))
     {
         const float current = juce::jlimit (
             0.0f, 14.0f,
@@ -3440,7 +3439,8 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (effectMode >= 5 && effectMode <= 8)
     {
-        if (p.x >= 390.0f && p.x < 495.0f && p.y <= 70.0f)
+        if (! multiModeEnabled
+            && p.x >= 379.0f && p.x < 441.0f && p.y <= 70.0f)
         {
             vongonPanelVisible = ! vongonPanelVisible;
             vongonPanelPage = 0;
@@ -3509,7 +3509,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (effectMode == 3)
     {
-        if (p.x >= 390 && p.x < 495 && p.y <= 70)
+        if (p.x >= 379 && p.x < 441 && p.y <= 70)
         {
             chordBotEditMode = ! chordBotEditMode;
             chordBotEditSlot = -1;
@@ -3586,7 +3586,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (effectMode == 2)
     {
-        if (p.x >= 390.0f && p.x < 495.0f && p.y <= 70.0f)
+        if (p.x >= 379.0f && p.x < 441.0f && p.y <= 70.0f)
         {
             eurekaPanelVisible = ! eurekaPanelVisible;
             eurekaXYTouchDown = false;
