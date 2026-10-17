@@ -1006,6 +1006,45 @@ for need in [
 if "processor.applyPendingMidiInputChanges();" not in midi_editor:
     fail("all-mode MIDI IN message-thread bridge missing")
 
+# Diagnose the actual MIDI split gate, not the unrelated white VHS stripes.
+# Keep diagnostics on the MIDI settings page: never add a video overlay.
+for need in [
+    "visualMidiDiagnostic.store (",
+    "result = 1;",
+    "result = 2;",
+    "result = 3;",
+    "message.getChannel()",
+]:
+    if need not in midi_proc:
+        fail(f"MIDI tile receive gate cannot be diagnosed: {need}")
+for need in [
+    "getVisualMidiDiagnostic() const noexcept",
+    "visualMidiDiagnostic { -1 }",
+]:
+    if need not in midi_head:
+        fail(f"MIDI tile receive diagnostic state missing: {need}")
+config_start = midi_editor.find(
+    "void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (")
+config_end = midi_editor.find(
+    "void RealtimeChordFxAudioProcessorEditor::refreshMidiOutputs()", config_start)
+if config_start < 0 or config_end < 0:
+    fail("MIDI control diagnostic page boundaries missing")
+config_page = midi_editor[config_start:config_end]
+for need in [
+    "processor.getVisualMidiDiagnostic()",
+    "MIDI NOTE RX:",
+    "CHANNEL MISMATCH",
+    "OUTSIDE C#5..C8",
+    "NOT SELECTED (80%)",
+    "TILE TRIGGERED",
+]:
+    if need not in config_page:
+        fail(f"MIDI split diagnostic UI missing: {need}")
+if "MIDI NOTE RX:" in midi_editor[
+        midi_editor.find("void RealtimeChordFxAudioProcessorEditor::paintVongonMode ("):
+        midi_editor.find("void RealtimeChordFxAudioProcessorEditor::paintVongonParameterPanel (")]:
+    fail("MIDI diagnostic must not obscure Vongon video")
+
 # New controls must be usable and input gain must reach the real audio path.
 for need in [
     "ParamID::inputGainDb",
