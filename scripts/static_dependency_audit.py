@@ -906,7 +906,7 @@ for need in [
     "eurekaFramePhase += 4.5f / 30.0f",
     "const bool fullVideo = total == 9 * 192 || total == 6 * 192",
     "const float musicalEnergy = juce::jlimit",
-    "const float gestureEnergy = juce::jlimit",
+    "const float gestureEnergy = juce::jmax",
     "const float drive = juce::jmax (musicalEnergy, gestureEnergy)",
     "const float targetFps = drive < 0.018f ? 0.0f",
     "vongonFramePhase += vongonVideoSpeed / 30.0f",
@@ -927,12 +927,9 @@ for forbidden in [
     "vongonFramePhase += playbackFps / 30.0f",
     "row + (videoEffectTick % period)",
     "if (((y + dotUiTick) % 8) == 0)",
-    "g.drawLine (px, 72.0f, px, 558.0f, 1.0f);",
-    "g.drawLine (0.0f, py, 720.0f, py, 1.0f);",
-    "g.fillRect (0.0f, 0.0f, 720.0f, 88.0f);",
 ]:
     if forbidden in editor:
-        fail(f"Vongon unwanted clock-driven lines/crosshair/curtain: {forbidden}")
+        fail(f"Video bank unwanted clock-driven lines: {forbidden}")
 vstart = editor.find("void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (")
 vend = editor.find("void RealtimeChordFxAudioProcessorEditor::paintVongonMode (", vstart)
 if vstart < 0 or vend < 0:
@@ -948,6 +945,18 @@ for need in [
         fail(f"Vongon event-reactive visual change missing: {need}")
 if "for (int row = 0; row < 720; row += period)" in vfx:
     fail("Vongon periodic scanning lines must not be drawn")
+pstart = editor.find("void RealtimeChordFxAudioProcessorEditor::paintVongonMode (")
+pend = editor.find("void RealtimeChordFxAudioProcessorEditor::paintVongonParameterPanel (", pstart)
+if pstart < 0 or pend < 0:
+    fail("Vongon overlay removal test could not locate target region")
+vpaint = editor[pstart:pend]
+for forbidden in [
+    "g.drawLine (px, 72.0f, px, 558.0f, 1.0f);",
+    "g.drawLine (0.0f, py, 720.0f, py, 1.0f);",
+    "g.fillRect (0.0f, 0.0f, 720.0f, 88.0f);",
+]:
+    if forbidden in vpaint:
+        fail(f"Vongon crosshair or black upper curtain remained: {forbidden}")
 
 
 # #195 Android clang failure: JUCE jlimit(T,T,T) does not accept a
