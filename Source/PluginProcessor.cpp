@@ -62,6 +62,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     pitchDetector.prepare (currentSampleRate / 4.0, 768, 128);
     chordPitchAccumulator = 0.0f;
     chordPitchDecimation = 0;
+    chordPitchAnalysisActive = false;
     // Separate low-rate pitch analysis for the Vongon video grid.
     videoPitchDetector.prepare (currentSampleRate / 4.0, 1024, 512);
     audioTileDivisions.store (1, std::memory_order_relaxed);
@@ -508,6 +509,22 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
 
+    // CHORD needs input pitch for its synthesized harmony. DREAMY and
+    // EUREKA need chord analysis only when their optional CHORD MIDI OUT
+    // is on; neither effect's WET DSP uses YIN for its audible output.
+    const bool analyseChordPitch = effectMode == 0
+        || ((effectMode == 1 || effectMode == 2)
+            && apvts.getRawParameterValue (ParamID::chordMidiOut)->load() >= 0.5f);
+    if (analyseChordPitch != chordPitchAnalysisActive)
+    {
+        chordPitchAnalysisActive = analyseChordPitch;
+        pitchDetector.reset();
+        chordPitchAccumulator = 0.0f;
+        chordPitchDecimation = 0;
+        pendingMidi = -1;
+        stableCount = 0;
+    }
+
     if (effectMode != lastEffectMode)
     {
         lastEffectMode = effectMode;
@@ -684,7 +701,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         // original sample rate. Decimate ONLY the analysis signal (4:1).
         // This avoids expensive full-rate YIN analysis on Android and
         // leaves Vongon/CLOUDS audio paths exactly as before.
-        if (effectMode <= 2)
+        if (analyseChordPitch)
         {
             chordPitchAccumulator += mono;
             if (++chordPitchDecimation == 4)
