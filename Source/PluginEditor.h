@@ -4,6 +4,7 @@
 #include <vector>
 #include "FramePack.h"
 #include "PluginProcessor.h"
+#include "VideoInteraction.h"
 
 class RealtimeChordFxAudioProcessorEditor final : public juce::AudioProcessorEditor,
                                                    private juce::Timer
@@ -31,6 +32,14 @@ private:
     void timerCallback() override;
     void paintMain (juce::Graphics&);
     void paintGlobalControls (juce::Graphics&);
+    void paintEffectsMenu (juce::Graphics&);
+    void paintEffectsShortcut (juce::Graphics&);
+    void chooseEffectFromMenu (int index);
+    void drawMidiVideoTiles (juce::Graphics&);
+    void applyMultiXY (float x, float y);
+    void startMultiRecording();
+    void stopMultiRecordingAndPlay();
+    void clearMultiRecording();
     bool dotModeEnabled() const;
     juce::Colour uiColour (float alpha) const;
     void paintMediaFrame (juce::Graphics&, const juce::Image&,
@@ -88,6 +97,8 @@ private:
     int loadedFrame = -1;
     int loadedEurekaFrame = -1;
     int loadedVongonFrame = -1;
+    unsigned int lastVisualMidiSequence = 0;
+    int midiTileDivisions = 1;
     int eurekaFrameIndex = 0;
     int vongonFrameIndex = 0;
     float eurekaFramePhase = 0.0f;
@@ -116,6 +127,21 @@ private:
     float vongonVisualPreviousActivity = 0.0f;
     uint32_t visualRandomState = 0x45464658u;
     bool configVisible = false;
+    bool effectsMenuVisible = false;
+    bool multiModeEnabled = false;
+    // MULTI recorder lives on the 30Hz UI thread, independent of the
+    // original MIDI motion-recorder and audio engine.
+    int multiTransport = 0; // 0=idle 1=REC 2=PLAY
+    static constexpr int multiRecordCapacity = 1800;
+    std::array<juce::Point<float>, multiRecordCapacity> multiRecordedXY {};
+    int multiRecordCount = 0;
+    int multiPlaybackIndex = 0;
+    float multiX = 0.25f;
+    float multiY = 0.75f;
+    bool multiPointerDown = false;
+    bool multiPointerMoved = false;
+    juce::Point<float> multiPointerStart;
+    double multiPointerDownMs = 0.0;
     bool inputGainDragging = false;
     bool audioConfigVisible = false;
     bool midiControlConfigVisible = false;
