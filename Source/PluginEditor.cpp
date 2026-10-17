@@ -1502,7 +1502,8 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
         const int clips = juce::jmax (1, total / framesPerClip);
         const int clip = vongonFrameIndex / framesPerClip;
         const int position = vongonFrameIndex % framesPerClip;
-        constexpr int clipOffsets[3] = { 0, 2, 5 };
+        // B and C are other clips; the last stream is A seeked ahead.
+        constexpr int clipOffsets[3] = { 2, 5, 0 };
         const int positionOffsets[3] = {
             framesPerClip / 4, framesPerClip / 2, 3 * framesPerClip / 4
         };
@@ -1529,7 +1530,8 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
     for (int row = 0; row < size; ++row)
         for (int col = 0; col < size; ++col)
         {
-            const int variant = (col + 2 * row) % 4;
+            const int variant = effects_video::tileSourceVariant (
+                row, col, size, lastVisualMidiSequence);
             const juce::Image& candidate = variant != 0 && ! dot
                 ? midiTileAlternateFrames[(size_t) (variant - 1)]
                 : mainImage;
@@ -1543,9 +1545,17 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
                 (float) (left + 1), (float) (top + 1),
                 (float) juce::jmax (1, right - left - 2),
                 (float) juce::jmax (1, bottom - top - 2));
+            // Source rectangle is the *entire* independent frame, not
+            // one quadrant of a fullscreen A frame. Always fit it into
+            // a single destination tile at full opacity.
             g.setOpacity (1.0f);
-            g.drawImage (picture, target,
-                         juce::RectanglePlacement::stretchToFit);
+            g.drawImage (
+                picture,
+                juce::roundToInt (target.getX()),
+                juce::roundToInt (target.getY()),
+                juce::roundToInt (target.getWidth()),
+                juce::roundToInt (target.getHeight()),
+                0, 0, picture.getWidth(), picture.getHeight());
         }
 }
 
