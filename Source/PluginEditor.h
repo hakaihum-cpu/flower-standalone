@@ -102,7 +102,6 @@ private:
     unsigned int lastVisualMidiSequence = 0;
     int midiTileDivisions = 1;
     int midiTileHoldTicks = 0; // hold successful MIDI tiling for ~2.5 s
-    unsigned int midiTilePaintCount = 0; // diagnostic: completed full-grid paint passes
     int midiTileTriggerNote = -1;
     std::array<juce::Image, 3> midiTileAlternateFrames {};
     unsigned int midiTilePreparedSequence = 0;
