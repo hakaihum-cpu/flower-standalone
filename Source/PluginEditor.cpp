@@ -847,21 +847,26 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
 
         if (vongonClipCooldown > 0)
             --vongonClipCooldown;
+        if (vongonFxCooldown > 0)
+            --vongonFxCooldown;
 
         if (attack || gesture)
+            vongonVisualFx = juce::jmax (
+                vongonVisualFx,
+                juce::jlimit (0.34f, 1.0f,
+                    0.46f + 0.38f * drive + 0.30f * y));
+
+        if ((attack || gesture) && vongonFxCooldown == 0)
         {
-            // An onset/gesture changes an actual video treatment, not an
-            // artificial clock-driven scanline or constant photo slideshow.
+            // Hold each treatment for at least 270ms even while dragging:
+            // rapid parameter changes must not become a slideshow of FX.
+            vongonFxCooldown = 8;
             vongonGhostFrame = currentVongonFrame;
             visualRandomState ^= visualRandomState << 13;
             visualRandomState ^= visualRandomState >> 17;
             visualRandomState ^= visualRandomState << 5;
             vongonFxStyle = (int) (visualRandomState % 5u);
             ++vongonFxEvent;
-            vongonVisualFx = juce::jmax (
-                vongonVisualFx,
-                juce::jlimit (0.34f, 1.0f,
-                    0.46f + 0.38f * drive + 0.30f * y));
             // Short tape pull-back on some transients; not a running loop.
             if (vongonFxStyle == 1 || vongonFxStyle == 4)
                 vongonRewindFrames = 4
@@ -1293,12 +1298,15 @@ void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (
         g.setOpacity (juce::jlimit (0.20f, 0.92f, 0.35f + energy));
         const float srcY = bandY * (float) video.getHeight() / 720.0f;
         const float srcH = bandH * (float) video.getHeight() / 720.0f;
+        const int srcTop = juce::jlimit (
+            0, video.getHeight() - 1, juce::roundToInt (srcY));
+        const int srcHeight = juce::jlimit (
+            1, video.getHeight() - srcTop, juce::roundToInt (srcH));
         g.drawImage (
             video,
             juce::roundToInt (offset), juce::roundToInt (bandY),
             720, juce::jmax (1, juce::roundToInt (bandH)),
-            0, juce::roundToInt (srcY), video.getWidth(),
-            juce::jmax (1, juce::roundToInt (srcH)));
+            0, srcTop, video.getWidth(), srcHeight);
         // A second independent tear adds a VHS head-switching feel.
         g.setOpacity (0.30f * energy);
         g.drawImage (
@@ -1307,9 +1315,10 @@ void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (
             juce::roundToInt (bandY + bandH + 14.0f),
             720, juce::jmax (1, juce::roundToInt (bandH * 0.46f)),
             0,
-            juce::roundToInt (
-                (bandY + bandH + 14.0f)
-                * (float) video.getHeight() / 720.0f),
+            juce::jlimit (0, video.getHeight() - 1,
+                juce::roundToInt (
+                    (bandY + bandH + 14.0f)
+                    * (float) video.getHeight() / 720.0f)),
             video.getWidth(),
             juce::jmax (1, juce::roundToInt (
                 bandH * 0.46f * (float) video.getHeight() / 720.0f)));
