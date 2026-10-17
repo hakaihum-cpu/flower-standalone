@@ -5,6 +5,18 @@
 
 namespace effects_video
 {
+// EUREKA follows actual input energy instead of advancing at a permanent
+// 4.5 fps. Quiet input settles to a still frame; stronger transients run the
+// user's original video faster (capped below its original 24 fps source).
+// No image-overlay, texture, or extra frame decoding is introduced.
+inline float eurekaReactiveFrameRate (float inputActivity) noexcept
+{
+    if (! std::isfinite (inputActivity)) return 0.0f;
+    const float energy = std::clamp (
+        (inputActivity - 0.002f) * 20.0f, 0.0f, 1.0f);
+    return energy < 0.01f ? 0.0f : 2.0f + 7.0f * energy;
+}
+
 // Input audio pitch drives mosaic tile count; MIDI note gates are removed.
 // The separate audible-onset gate below chooses split events at ~20%.
 // Silence or invalid pitch returns one full image when not holding a split.
