@@ -913,6 +913,38 @@ if "template <typename T>\nconstexpr T jlimit(T low,T high,T value)" not in shim
 if "std::common_type_t" in shim:
     fail("offline JUCE shim must not promote mixed arithmetic types")
 
+# MIDI IN operates for all existing EFFECTS modes without blocking the
+# audio callback. These controls are not the MIDI OUT X/Y configuration.
+midi_proc = (R / "Source/PluginProcessor.cpp").read_text()
+midi_head = (R / "Source/PluginProcessor.h").read_text()
+midi_editor = (R / "Source/PluginEditor.cpp").read_text()
+for need in [
+    "midiInputPending[(size_t) cc].store (",
+    "message.isController()",
+    "message.isForChannel (midiInputChannel)",
+    "cc >= 110 && cc <= 118",
+    "effectMode == 0 && cc >= 20 && cc <= 27",
+    "effectMode == 2 && cc >= 40 && cc <= 56",
+    "effectMode == 3 && (cc == 120 || cc == 121)",
+    "setCloudsXY (x, y, false)",
+    "setVongonXY (x, y, false)",
+    "void RealtimeChordFxAudioProcessor::applyPendingMidiInputChanges()",
+    "case 24: id = ParamID::hold",
+    "case 46: id = ParamID::hazeReverb",
+    "ParamID::effectMode",
+    "notifyChordAHoldChanged()",
+]:
+    if need not in midi_proc:
+        fail(f"all-mode MIDI IN route missing: {need}")
+for need in [
+    "std::array<std::atomic<int>, 128> midiInputPending",
+    "void applyPendingMidiInputChanges()",
+]:
+    if need not in midi_head:
+        fail(f"all-mode MIDI IN queue missing: {need}")
+if "processor.applyPendingMidiInputChanges();" not in midi_editor:
+    fail("all-mode MIDI IN message-thread bridge missing")
+
 # New controls must be usable and input gain must reach the real audio path.
 for need in [
     "ParamID::inputGainDb",
