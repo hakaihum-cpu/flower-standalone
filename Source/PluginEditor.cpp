@@ -334,6 +334,7 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
     if (! burstAppliedByOutputRestore && audioBufferMode != 0)
         applyAudioBufferMode (audioBufferMode);
 
+    lastVisualMidiSequence = processor.getVisualMidiSequence();
     startTimerHz (30);
 }
 
@@ -740,6 +741,37 @@ int RealtimeChordFxAudioProcessorEditor::nextVisualFrame (
 void RealtimeChordFxAudioProcessorEditor::timerCallback()
 {
     processor.applyPendingMidiInputChanges();
+
+    // Incoming MIDI note-on, not audio pitch detection, chooses a visual
+    // grid on roughly 1 in 5 notes.  Other notes restore single-frame video.
+    const auto noteSequence = processor.getVisualMidiSequence();
+    if (noteSequence != lastVisualMidiSequence)
+    {
+        lastVisualMidiSequence = noteSequence;
+        visualRandomState ^= visualRandomState << 13;
+        visualRandomState ^= visualRandomState >> 17;
+        visualRandomState ^= visualRandomState << 5;
+        const int note = processor.getVisualMidiNote();
+        midiTileDivisions =
+            note >= 60 && note <= 108
+            && effects_video::shouldDivideOnNote (visualRandomState)
+            ? effects_video::divisionsForNote (note) : 1;
+    }
+
+    if (multiModeEnabled && multiTransport == 1)
+    {
+        if (multiRecordCount < multiRecordCapacity)
+            multiRecordedXY[(size_t) multiRecordCount++] = { multiX, multiY };
+        if (multiRecordCount == multiRecordCapacity)
+            stopMultiRecordingAndPlay();
+    }
+    else if (multiModeEnabled && multiTransport == 2 && multiRecordCount > 0
+             && ! multiPointerDown)
+    {
+        const auto p = multiRecordedXY[(size_t) multiPlaybackIndex];
+        multiPlaybackIndex = (multiPlaybackIndex + 1) % multiRecordCount;
+        applyMultiXY (p.x, p.y);
+    }
     if (! hasKeyboardFocus (true))
         grabKeyboardFocus();
 
@@ -976,10 +1008,13 @@ void RealtimeChordFxAudioProcessorEditor::paint (juce::Graphics& g)
         paintAudioConfig (g);
     else if (configVisible)
         paintConfig (g);
+    else if (effectsMenuVisible)
+        paintEffectsMenu (g);
     else
     {
         paintMain (g);
         paintGlobalControls (g);
+        paintEffectsShortcut (g);
     }
 
     paintDotUiFrame (g);
@@ -995,7 +1030,7 @@ void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g
     const float boostDb = juce::jlimit (
         0.0f, 14.0f,
         processor.state().getRawParameterValue (ParamID::boostDb)->load());
-    const juce::Rectangle<float> boostBounds (390.0f, 16.0f, 76.0f, 38.0f);
+    const juce::Rectangle<float> boostBounds (300.0f, 16.0f, 76.0f, 38.0f);
     g.setColour (juce::Colours::black.withAlpha (0.50f));
     g.fillRoundedRectangle (boostBounds, 6.0f);
     g.setColour (uiColour (boostDb > 0.01f ? 0.96f : 0.62f));
@@ -1435,6 +1470,8 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
             g, currentVongonFrame,
             juce::Rectangle<float> (0, 0, design, design),
             2, dotVongonRevision);
+    if (midiTileDivisions > 1)
+        drawMidiVideoTiles (g);
     paintVideoEffect (
         g, currentVongonFrame,
         processor.getVongonX(), processor.getVongonY());
@@ -1456,7 +1493,8 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
 
     g.setColour (uiColour (0.96f));
     g.setFont (juce::FontOptions (21.0f).withStyle ("Bold"));
-    g.drawText (name, 28, 18, 260, 34,
+    g.drawText (multiModeEnabled ? "MULTI / " + name : name,
+                28, 18, multiModeEnabled ? 348 : 260, 34,
                 juce::Justification::centredLeft);
     g.setFont (juce::FontOptions (11.5f));
     g.setColour (uiColour (0.70f));
@@ -1465,10 +1503,34 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
     g.setColour (uiColour (0.94f));
     g.drawText ("CONFIG", 604, 22, 88, 24,
                 juce::Justification::centredRight);
-    g.drawText (vongonPanelVisible ? "CLOSE" : "PARAM",
-                500, 20, 74, 30, juce::Justification::centred);
+    if (! multiModeEnabled)
+        g.drawText (vongonPanelVisible ? "CLOSE" : "PARAM",
+                    402, 20, 82, 30, juce::Justification::centred);
 
-    if (vongonPanelVisible)
+    if (multiModeEnabled)
+    {
+        if (multiTransport == 1)
+        {
+            g.setColour (juce::Colour (0xffef4540));
+            g.drawRect (juce::Rectangle<float> (8.0f, 8.0f, 704.0f, 704.0f), 3.0f);
+            g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
+            g.drawText (juce::String::fromUTF8 (u8"● REC"), 28, 56, 130, 26,
+                        juce::Justification::centredLeft);
+        }
+        else if (multiTransport == 2)
+        {
+            g.setColour (uiColour (0.88f));
+            g.setFont (juce::FontOptions (12.0f).withStyle ("Bold"));
+            g.drawText ("XY PLAY", 28, 55, 132, 25,
+                        juce::Justification::centredLeft);
+        }
+        g.setColour (uiColour (0.70f));
+        g.setFont (juce::FontOptions (10.0f));
+        g.drawText ("TAP: REC/PLAY    DRAG: 4 FX    HOLD: CLEAR",
+                    215, 674, 475, 22, juce::Justification::centredRight);
+    }
+
+    if (! multiModeEnabled && vongonPanelVisible)
     {
         paintVongonParameterPanel (g, effectMode);
         return;
@@ -1610,7 +1672,7 @@ void RealtimeChordFxAudioProcessorEditor::paintHaze (juce::Graphics& g)
 
     g.setColour (uiColour (0.94f));
     g.drawText (eurekaPanelVisible ? "CLOSE" : "PANEL",
-                490, 22, 78, 24, juce::Justification::centred);
+                402, 22, 82, 24, juce::Justification::centred);
     g.drawText ("CONFIG", 604, 22, 88, 24,
                 juce::Justification::centredRight);
 
