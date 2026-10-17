@@ -2,6 +2,7 @@
 from pathlib import Path
 import base64
 import hashlib
+import struct
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -11,12 +12,23 @@ CLASSROOM_OUT = ROOT / 'Resources' / 'classroom_frames.pack'
 CLASSROOM_SHA256 = '1e888dbed69e259c52d2cb2bd192faa5c7f29dcf76eafcda9fdb2a2d03f2d658'
 CLASSROOM_SIZE = 4464088
 
-# User-supplied EUREKA videos: four 8-second MP4 sources sampled to 36 JPEG frames each (144 total).
+# Original approved four EUREKA videos, 8 seconds / 36 JPEG frames each.
+# Their immutable bytes are kept intact, then seven more user MP4 sources are
+# appended in the same clip order and frame format (11 x 36 = 396 frames).
 EUREKA_CHUNK_DIR = ROOT / 'Resources' / 'eureka_frame_chunks'
 EUREKA_OUT = ROOT / 'Resources' / 'eureka_frames.pack'
 EUREKA_SHA256 = '827b5aa6a339927cb909a5ffe1b129513d946911cc78ea96d34aa110e6cd1883'
 EUREKA_SIZE = 1872671
 EUREKA_COUNT = 144
+EUREKA_ADDED_DIR = ROOT / 'Resources' / 'eureka_added_frame_chunks'
+EUREKA_ADDED_SIZES = ROOT / 'Resources' / 'eureka_added_frame_sizes.txt'
+EUREKA_ADDED_SOURCES = ROOT / 'Resources' / 'eureka_added_sources.txt'
+EUREKA_ADDED_PARTS = 30
+EUREKA_ADDED_COUNT = 7 * 36
+EUREKA_ADDED_SIZE = 2475138
+EUREKA_ADDED_SHA256 = 'be0772700a74386c87815f53949e7e925b36e93259397ff282ac300bf6eb0b0b'
+EUREKA_FINAL_COUNT = EUREKA_COUNT + EUREKA_ADDED_COUNT
+EUREKA_FINAL_SIZE = EUREKA_SIZE + EUREKA_ADDED_SIZE + EUREKA_ADDED_COUNT * 12
 
 # 9 original user video clips, 8 seconds each at native 24 fps.
 # Each original byte is stored in a deterministic Git blob chunk.
@@ -79,8 +91,66 @@ eureka_sha = hashlib.sha256(eureka).hexdigest()
 if eureka_sha != EUREKA_SHA256:
     raise SystemExit(
         f'[FAIL] reconstructed EUREKA pack sha256 {eureka_sha} != {EUREKA_SHA256}')
-validate_crf1(eureka, EUREKA_COUNT, 'EUREKA frame pack')
-EUREKA_OUT.write_bytes(eureka)
+validate_crf1(eureka, EUREKA_COUNT, 'original EUREKA frame pack')
+
+# Decode only newly supplied material; do not overwrite/re-encode any of the
+# previously approved EUREKA images.
+added_paths = sorted(EUREKA_ADDED_DIR.glob('part_*.b64'))
+if len(added_paths) != EUREKA_ADDED_PARTS:
+    raise SystemExit(
+        f'[FAIL] expected {EUREKA_ADDED_PARTS} EUREKA added chunks, '
+        f'got {len(added_paths)}')
+added = decode_chunks(added_paths)
+if len(added) != EUREKA_ADDED_SIZE:
+    raise SystemExit(
+        f'[FAIL] new EUREKA bytes {len(added)} != {EUREKA_ADDED_SIZE}')
+added_sha = hashlib.sha256(added).hexdigest()
+if added_sha != EUREKA_ADDED_SHA256:
+    raise SystemExit(f'[FAIL] new EUREKA JPEG digest mismatch: {added_sha}')
+sizes = [int(s) for s in EUREKA_ADDED_SIZES.read_text().splitlines() if s.strip()]
+if len(sizes) != EUREKA_ADDED_COUNT or sum(sizes) != len(added):
+    raise SystemExit('[FAIL] new EUREKA frame sizes or count mismatch')
+source_lines = [
+    x for x in EUREKA_ADDED_SOURCES.read_text(encoding='utf-8').splitlines()
+    if x and not x.startswith('#')
+]
+if len(source_lines) != 7:
+    raise SystemExit('[FAIL] new EUREKA source count mismatch')
+
+# Validate 252 JPEG payload boundaries before constructing the CRF1 table.
+position = 0
+for size in sizes:
+    frame = added[position:position + size]
+    if size < 64 or frame[:2] != b'\\xff\\xd8' or frame[-2:] != b'\\xff\\xd9':
+        raise SystemExit('[FAIL] new EUREKA JPEG frame boundary mismatch')
+    position += size
+if position != len(added):
+    raise SystemExit('[FAIL] new EUREKA JPEG stream length mismatch')
+
+old_header_size = 8 + EUREKA_COUNT * 12
+new_header_size = 8 + EUREKA_FINAL_COUNT * 12
+table_delta = new_header_size - old_header_size
+new_entries = bytearray()
+
+# Shift offsets only; keep the original 144 JPEG payloads untouched.
+for index in range(EUREKA_COUNT):
+    offset, flags, size = struct.unpack_from('<III', eureka, 8 + index * 12)
+    if offset < old_header_size or offset + size > len(eureka):
+        raise SystemExit(f'[FAIL] original EUREKA frame table {index} invalid')
+    new_entries.extend(struct.pack('<III', offset + table_delta, flags, size))
+
+cursor = new_header_size + len(eureka) - old_header_size
+for size in sizes:
+    new_entries.extend(struct.pack('<III', cursor, 0, size))
+    cursor += size
+eureka_merged = (
+    b'CRF1' + struct.pack('<I', EUREKA_FINAL_COUNT)
+    + new_entries + eureka[old_header_size:] + added
+)
+if len(eureka_merged) != EUREKA_FINAL_SIZE or cursor != len(eureka_merged):
+    raise SystemExit('[FAIL] merged EUREKA frame pack size mismatch')
+validate_crf1(eureka_merged, EUREKA_FINAL_COUNT, 'merged EUREKA frame pack')
+EUREKA_OUT.write_bytes(eureka_merged)
 
 # Reconstruct and verify all 9 full-rate Vongon video clips before JUCER.
 # Do not use the old 4.5-fps committed pack when building.
@@ -118,7 +188,7 @@ ICON_OUT.write_bytes(icon)
 print(
     f'[PASS] classroom pack: {len(classroom)} bytes sha256={classroom_sha}')
 print(
-    f'[PASS] EUREKA pack: {len(eureka)} bytes / {EUREKA_COUNT} frames sha256={eureka_sha}')
+    f'[PASS] EUREKA pack: {len(eureka_merged)} bytes / {EUREKA_FINAL_COUNT} frames sha256={hashlib.sha256(eureka_merged).hexdigest()}')
 print(
     f'[PASS] launcher icon: {len(icon)} bytes sha256={icon_sha}')
 print(
