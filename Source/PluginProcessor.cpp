@@ -507,6 +507,15 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             vongonProcessor.handleMidi (
                 message, effectMode, midiInputChannel, event.samplePosition);
 
+        // Capture MIDI IN note-on without allocations/graphics on the audio thread.
+        // Note-offs and zero-velocity note-ons never trigger visual division.
+        if (message.isNoteOn() && message.getVelocity() > 0.0f
+            && message.isForChannel (midiInputChannel))
+        {
+            visualMidiNote.store (message.getNoteNumber(), std::memory_order_relaxed);
+            visualMidiSequence.fetch_add (1u, std::memory_order_release);
+        }
+
         if (! message.isController()
             || ! message.isForChannel (midiInputChannel))
             continue;
