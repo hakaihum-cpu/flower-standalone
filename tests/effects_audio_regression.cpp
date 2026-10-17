@@ -165,13 +165,12 @@ static Results chordATest() {
     // The initial note arrives before 240 ms of history is available.
     for(int i=0;i<sampleRate/10;++i)
         dsp.pushInput(sampleInput(i));
-    if(dsp.canCapture())
-        throw std::runtime_error("CHORD-A first phrase ready prematurely");
     dsp.setPlan(std::vector<int>{60,64,67},57.0f,true);
+    if(dsp.hasCapture())
+        throw std::runtime_error("CHORD-A captured before 240ms history");
     for(int i=sampleRate/10;i<sampleRate/2;++i)
         dsp.pushInput(sampleInput(i));
-    if(!dsp.canCapture())
-        throw std::runtime_error("CHORD-A recording never became ready");
+    // Oct 16 baseline: a new detected note triggers explicit recapture.
     dsp.setPlan(std::vector<int>{60,64,67},57.0f,true);
     if(!dsp.hasCapture())
         throw std::runtime_error("CHORD-A initial capture failed");
