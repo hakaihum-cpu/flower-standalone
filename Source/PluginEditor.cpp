@@ -428,10 +428,13 @@ void RealtimeChordFxAudioProcessorEditor::rebuildDotDisplay (
         dotDisplayCache, juce::Image::BitmapData::readWrite);
 
     const float activity = juce::jlimit (0.0f, 1.0f, dotActivity);
-    // Idle video is visually still; analogue flicker needs live input.
+    // Only the two video banks lose the old moving scanline.
+    // Keep the original DOT treatment for CHORD/DREAMY/CLOUDS.
+    const bool videoBank = sourceKind == 1 || sourceKind == 2;
     const float flicker =
         1.0f + std::sin ((float) dotUiTick * 0.42f)
-                     * (0.045f * activity);
+                     * ((videoBank ? 0.0f : 0.035f)
+                        + 0.045f * activity);
 
     for (int y = 0; y < height; ++y)
     {
@@ -458,6 +461,9 @@ void RealtimeChordFxAudioProcessorEditor::rebuildDotDisplay (
 
             float luminance =
                 dotLuma[(size_t) (sy0 * dotSourceW + sx)] * flicker;
+
+            if (! videoBank && ((y + dotUiTick) % 8) == 0)
+                luminance *= 1.0f - 0.12f * activity;
 
             const uint32_t pixelHash =
                 rowHash ^ ((uint32_t) x * 2246822519u);
