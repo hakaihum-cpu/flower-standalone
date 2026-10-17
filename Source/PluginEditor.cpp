@@ -1030,7 +1030,9 @@ void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g
     const float boostDb = juce::jlimit (
         0.0f, 14.0f,
         processor.state().getRawParameterValue (ParamID::boostDb)->load());
-    const juce::Rectangle<float> boostBounds (300.0f, 16.0f, 76.0f, 38.0f);
+    const juce::Rectangle<float> boostBounds (
+        effectMode >= 5 && multiModeEnabled ? 390.0f : 300.0f,
+        16.0f, 76.0f, 38.0f);
     g.setColour (juce::Colours::black.withAlpha (0.50f));
     g.fillRoundedRectangle (boostBounds, 6.0f);
     g.setColour (uiColour (boostDb > 0.01f ? 0.96f : 0.62f));
@@ -3248,7 +3250,10 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     }
 
     if (currentEffectMode != 3
-        && juce::Rectangle<float> (300.0f, 16.0f, 76.0f, 38.0f).contains (p))
+        && juce::Rectangle<float> (
+            currentEffectMode >= 5 && multiModeEnabled
+                ? 390.0f : 300.0f,
+            16.0f, 76.0f, 38.0f).contains (p))
     {
         const float current = juce::jlimit (
             0.0f, 14.0f,
