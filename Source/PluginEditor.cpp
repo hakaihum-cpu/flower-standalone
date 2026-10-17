@@ -758,6 +758,13 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             ? effects_video::divisionsForNote (note) : 1;
     }
 
+    // Fire CLEAR as soon as the long-press threshold is reached, rather
+    // than waiting for the user to lift the finger.
+    if (multiModeEnabled && multiPointerDown && ! multiPointerMoved
+        && juce::Time::getMillisecondCounterHiRes()
+            - multiPointerDownMs >= 700.0)
+        clearMultiRecording();
+
     if (multiModeEnabled && multiTransport == 1)
     {
         if (multiRecordCount < multiRecordCapacity)
