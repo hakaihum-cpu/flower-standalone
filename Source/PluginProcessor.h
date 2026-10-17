@@ -162,6 +162,10 @@ private:
     std::atomic<bool> hazeShuffleRequested { false };
     juce::Reverb chordReverb;
     float inputGainLinearSmoothed = 1.0f;
+    // Input tap is allocated in prepareToPlay, never on the audio callback.
+    // Dry=0 bypasses the tap entirely, preserving the approved wet-only audio.
+    juce::AudioBuffer<float> dryInputTap;
+    float dryLevelSmoothed = 0.0f;
 
     double currentSampleRate = 48000.0;
     std::atomic<bool> running { false };
