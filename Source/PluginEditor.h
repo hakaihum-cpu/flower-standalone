@@ -101,6 +101,8 @@ private:
     int vongonFxStyle = 0;
     int vongonFxEvent = 0;
     int vongonClipCooldown = 0;
+    std::uint32_t vongonParameterSignature = 0;
+    int vongonParameterSignatureMode = -1;
     juce::Image vongonGhostFrame;
     juce::Image vongonRedFringe;
     juce::Image vongonCyanFringe;
