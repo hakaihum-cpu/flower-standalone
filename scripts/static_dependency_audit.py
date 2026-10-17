@@ -645,14 +645,19 @@ chord_a_audio = dreamy[pa0:pa1]
 if "softProtectBuffer (buffer)" in chord_a_audio:
     fail("CHORD-A output-safety contract drift")
 for need in [
-    "chordAOutputEnvelope += smoothing",
-    "const float output = chord * 0.78f * chordAOutputEnvelope;",
-    "sampleChordRenderer.canCapture()",
+    "sampleChordRenderer.renderSample (audible)",
+    "const float output = audible ? chord * 0.65f : 0.0f;",
     "buffer.setSample (0, i, output)",
     "processChordReverb (buffer)",
 ]:
     if need not in chord_a_audio:
-        fail(f"CHORD-A generated-only output contract missing: {need}")
+        fail(f"CHORD-A dry-free baseline contract missing: {need}")
+for forbidden in [
+    "chordAOutputEnvelope",
+    "sampleChordRenderer.canCapture()",
+]:
+    if forbidden in chord_a_audio:
+        fail(f"CHORD-A unauthorized October 17 change remains: {forbidden}")
 for rejected in [
     "dryLeft * 0.78f + chord * 0.46f",
     "dryRight * 0.78f + chord * 0.46f",
@@ -857,12 +862,16 @@ for need in [
 ]:
     if need not in vongon:
         fail(f"ROSETONES signed input resonator contract missing: {need}")
-for need in [
+# The explicitly restored Oct 16 dry-free CHORD-A baseline resets voice
+# playback phases on progression; no Oct 17 capture-ready modification.
+for forbidden in [
     "bool canCapture() const noexcept",
-    "if (recapture || captureLength <= 0)",
+    "if (recapture || captureLength <= 0)\n                phase[(size_t) i]",
 ]:
-    if need not in renderers:
-        fail(f"CHORD-A continuity/capture contract missing: {need}")
+    if forbidden in chord_a_renderer:
+        fail(f"CHORD-A reverted renderer contract violated: {forbidden}")
+if renderers.count("phase[(size_t) i] = 0.0;") < 1:
+    fail("CHORD-A approved voice phase reset missing")
 
 # Regression guards for the reported EUREKA/POLYPHRASE audio cuts and
 # ROSETONES upper-XY silence. Check the structures rather than mute failures.
