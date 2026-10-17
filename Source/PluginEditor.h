@@ -34,6 +34,8 @@ private:
     void paintGlobalControls (juce::Graphics&);
     void paintEffectsMenu (juce::Graphics&);
     void paintEffectsShortcut (juce::Graphics&);
+    void paintDryPopup (juce::Graphics&);
+    void setDryFromPoint (float x);
     void chooseEffectFromMenu (int index);
     void drawMidiVideoTiles (juce::Graphics&);
     void applyMultiXY (float x, float y);
@@ -103,6 +105,8 @@ private:
     int midiTileTriggerNote = -1;
     std::array<juce::Image, 3> midiTileAlternateFrames {};
     unsigned int midiTilePreparedSequence = 0;
+    int midiTileLastVongonRevision = -1;
+    int midiTileAlternateUpdateSlot = 0;
     int eurekaFrameIndex = 0;
     int vongonFrameIndex = 0;
     float eurekaFramePhase = 0.0f;
@@ -132,6 +136,8 @@ private:
     uint32_t visualRandomState = 0x45464658u;
     bool configVisible = false;
     bool effectsMenuVisible = false;
+    bool dryPopupVisible = false;
+    bool dryPopupDragging = false;
     bool multiModeEnabled = false;
     // MULTI recorder lives on the 30Hz UI thread, independent of the
     // original MIDI motion-recorder and audio engine.
