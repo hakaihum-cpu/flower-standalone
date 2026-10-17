@@ -535,8 +535,10 @@ for blocked in [
 ]:
     if blocked in processor_controls or blocked in processor_header:
         fail(f"unwanted DRY audio leak remains: {blocked}")
-if "const float out = roseToneLow[(size_t) ch]" not in (R / "Source/VongonInspiredProcessor.h").read_text():
-    fail("ROSETONES wet-only output regression")
+# ROSETONES alone intentionally uses the prior user-approved signal mix.
+# Do not impose the later wet-only design on the restored ROSETONES mode.
+if "+ shaped * synthMix" not in (R / "Source/VongonInspiredProcessor.h").read_text():
+    fail("ROSETONES approved earlier dry/resonator mix missing")
 if "float outL = wetL * activeMix" not in (R / "Source/HazeProcessor.h").read_text():
     fail("EUREKA wet-only output regression")
 if "left[n] = softProtect (wetL * wetMix)" not in (R / "Source/EffectsCloudsEngine.h").read_text():
@@ -906,8 +908,8 @@ for need in [
     if need not in vongon:
         fail(f"Vongon-inspired DSP contract missing: {need}")
 
-# Keep EUREKA's click-smoothed stutter, while ROSETONES alone is restored
-# to the user-selected EFFECTS #191 12-filter resonance algorithm.
+# EUREKA click-hardening remains intact; ROSETONES alone must match the
+# selected fix/effects-audio-rosetones-vongon-ui-rgrotate implementation.
 for need in [
     "sampleRate * 0.090",
     "sampleRate * 0.016",
@@ -915,28 +917,25 @@ for need in [
 ]:
     if need not in haze:
         fail(f"EUREKA right-XY smooth stutter contract missing: {need}")
-for need in [
-    "std::array<std::array<LegacyRoseState, 12>, 2>",
-    "const float sensitivity = 0.45f + 1.75f * y",
-    "roseLegacyState",
-    "roseLegacyToneLow",
-    "const float radius = juce::jlimit",
-    "dry[ch]",
-    "+ shaped * synthMix",
-]:
-    if need not in vongon:
-        fail(f"ROSETONES #191 restored filter bank contract missing: {need}")
 rose_start = vongon.find("void processRosetones (")
 rose_end = vongon.find("void processSolarfaze (", rose_start)
 if rose_start < 0 or rose_end < 0:
-    fail("ROSETONES legacy DSP region missing")
+    fail("ROSETONES selected reference DSP boundaries missing")
 rose_code = vongon[rose_start:rose_end]
-for prohibited in [
-    "roseDetectors", "pitchSigned", "roseNoiseState", "roseFeedbackSmoothed",
-    "roseOctaveSmoothed", "roseNotes",
+for need in [
+    "48 chromatic input filters C2..B5",
+    "const float slider = ccValue (rosetones, 87, x)",
+    "const float feedbackGain = juce::jlimit",
+    "const float noteDrive = gate",
+    "pitchSigned[(size_t) note]",
+    "roseDetectors[(size_t) bandIndex]",
+    "roseFeedbackSmoothed",
+    "const float out = roseToneLow[(size_t) ch]",
 ]:
-    if prohibited in rose_code:
-        fail(f"ROSETONES restored #191 DSP contaminated by newer logic: {prohibited}")
+    if need not in rose_code:
+        fail(f"ROSETONES selected 48-filter algorithm missing: {need}")
+if "roseLegacyState" in vongon or "roseLegacyToneLow" in vongon:
+    fail("ROSETONES older #191 resonator state unexpectedly reintroduced")
 # The explicitly restored Oct 16 dry-free CHORD-A baseline resets voice
 # playback phases on progression; no Oct 17 capture-ready modification.
 for forbidden in [
@@ -1011,9 +1010,9 @@ for need in [
     "if (polyCrossfadeRemaining[(size_t) channel] > 0)",
     "const float validFade",
     "wetTarget * history - polyWetSmoothed",
-    "std::array<std::array<LegacyRoseState, 12>, 2>",
-    "const float excitation =",
-    "roseLegacyToneLow",
+    "pitchSigned[pitchClass] += detector.band",
+    "0.955f + feedback * 0.042f",
+    "wet[ch] * 1.25f * synthLevel",
 ]:
     if need not in vongon:
         fail(f"Vongon dropout/voice-level regression: {need}")
