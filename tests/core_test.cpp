@@ -41,6 +41,43 @@ int main()
         }
     }
     assert (goodEstimates >= 2);
+
+    // A sound onset, NOT every detected pitch update, gets one 1-in-5
+    // chance. Test repeated notes with quiet gaps, sustained notes,
+    // changing pitches inside accepted splits, and the ~2.5s hold.
+    effects_video::AudioMosaicGate gate;
+    int acceptedOnsets = 0;
+    for (int onset = 0; onset < 1000; ++onset)
+    {
+        for (int quiet = 0; quiet < 4; ++quiet)
+        {
+            const auto idle = gate.advance (0.0f, 1);
+            assert (! idle.started && idle.divisions == 1);
+        }
+        const auto first = gate.advance (0.02f, 5);
+        if (first.started) ++acceptedOnsets;
+        assert (first.divisions == (first.started ? 5 : 1));
+        for (int sustain = 0; sustain < 60; ++sustain)
+        {
+            const auto next = gate.advance (0.02f, 8);
+            assert (! next.started); // no second lottery on sustained input
+            assert (next.divisions == (first.started ? 8 : 1));
+        }
+    }
+    assert (acceptedOnsets > 160 && acceptedOnsets < 240);
+
+    // A note continuing past 2.5s cannot initiate another split without
+    // a new quiet period, even when the pitch varies.
+    for (int sustained = 0; sustained < 120; ++sustained)
+    {
+        const auto result = gate.advance (0.02f, sustained % 2 ? 7 : 4);
+        assert (! result.started && result.divisions == 1);
+    }
+    gate.reset();
+    for (int quiet = 0; quiet < 4; ++quiet)
+        assert (gate.advance (0.0f, 1).divisions == 1);
+    // An unpitched onset must not draw or consume the chance.
+    assert (! gate.advance (0.02f, 1).started);
     assert (effects_video::vongonModeForXY (0.25f, 0.75f) == 5);
     assert (effects_video::vongonModeForXY (0.75f, 0.75f) == 6);
     assert (effects_video::vongonModeForXY (0.25f, 0.25f) == 7);
