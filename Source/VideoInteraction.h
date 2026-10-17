@@ -20,6 +20,21 @@ inline int divisionsForNote (int midiNote) noexcept
     return std::min (10, 1 + (aboveC5 * 9 + 23) / 24);
 }
 
+// Pick the VIDEO played inside a tile (never an image quadrant).
+// 0: full A frame, 1: full B frame, 2: full C frame,
+// 3: full A at a different playback position.
+// Some MIDI-triggered mosaics repeat A in every cell; others mix A/B/C.
+// A 2x2 mixed tile arrangement is exactly:
+//     A     B
+//     C     A(offset)
+inline int tileSourceVariant (int row, int col, int divisions,
+                             std::uint32_t eventSequence) noexcept
+{
+    if (divisions < 2 || eventSequence % 5u == 0u)
+        return 0;
+    return (row * divisions + col) % 4;
+}
+
 // MULTI: upper left/right = ULTRASHEER/ROSETONES,
 // lower left/right = SOLARFAZE/POLYPHRASE.
 inline int vongonModeForXY (float x, float y) noexcept
