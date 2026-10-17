@@ -99,14 +99,12 @@ private:
     int loadedFrame = -1;
     int loadedEurekaFrame = -1;
     int loadedVongonFrame = -1;
-    unsigned int lastVisualMidiSequence = 0;
-    int midiTileDivisions = 1;
-    int midiTileHoldTicks = 0; // hold successful MIDI tiling for ~2.5 s
-    int midiTileTriggerNote = -1;
-    std::array<juce::Image, 3> midiTileAlternateFrames {};
-    unsigned int midiTilePreparedSequence = 0;
-    int midiTileLastVongonRevision = -1;
-    int midiTileAlternateUpdateSlot = 0;
+    int audioTileDivisions = 1;
+    unsigned int audioTileEventSequence = 0; // varies the layout when pitch band changes
+    std::array<juce::Image, 3> audioTileAlternateFrames {};
+    unsigned int audioTilePreparedSequence = 0;
+    int audioTileLastVongonRevision = -1;
+    int audioTileAlternateUpdateSlot = 0;
     int eurekaFrameIndex = 0;
     int vongonFrameIndex = 0;
     float eurekaFramePhase = 0.0f;
