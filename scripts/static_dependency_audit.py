@@ -49,6 +49,7 @@ required = [
     "Source/HazeProcessor.h", "Source/EffectsCloudsEngine.h",
     "Source/VongonInspiredProcessor.h",
     "Source/TheoryEngine.cpp", "Source/YinPitchDetector.cpp",
+    "Source/VideoInteraction.h",
     "Source/GranularPitchBank.cpp", "Source/PsolaHarmonyBank.h", "Source/FramePack.cpp",
     "Resources/classroom_frames.pack",
     "Resources/classroom_frames_manifest.csv",
@@ -198,6 +199,7 @@ target_source_files = [
     "Source/FramePack.cpp","Source/FramePack.h",
     "Source/GranularPitchBank.cpp","Source/GranularPitchBank.h",
     "Source/ParameterIDs.h",
+    "Source/VideoInteraction.h",
     "Source/ChordRenderers.h",
     "Source/HazeProcessor.h",
     "Source/EffectsCloudsEngine.h",
@@ -1142,5 +1144,60 @@ print("[PASS] pinned Clouds DSP / musical XY / attribution contracts verified")
 print("[PASS] CHORD-B continuously-smoothed cents-offset contract verified")
 print("[PASS] EUREKA click-hardening / output-safety contracts verified")
 print("[PASS] three global preset slots verified")
+# Visual MIDI-only tiling, Vongon MULTI and direct selector must remain
+# message-thread concerns. The approved DSP behavior is not modified.
+video_logic = (R / "Source/VideoInteraction.h").read_text()
+processor_visual = (R / "Source/PluginProcessor.cpp").read_text()
+editor_visual = (R / "Source/PluginEditor.cpp").read_text()
+editor_header_visual = (R / "Source/PluginEditor.h").read_text()
+for need in [
+    "divisionsForNote (int midiNote)",
+    "shouldDivideOnNote (std::uint32_t randomState)",
+    "vongonModeForXY (float x, float y)",
+    "localX (float x)",
+    "localY (float y)",
+]:
+    if need not in video_logic:
+        fail(f"Visual MIDI/MULTI mapping missing: {need}")
+if 'file="Source/VideoInteraction.h"' not in jucer_text:
+    fail("Visual interaction helper not declared in JUCE project")
+for need in [
+    "message.isNoteOn() && message.getVelocity() > 0.0f",
+    "message.isForChannel (midiInputChannel)",
+    "visualMidiNote.store (message.getNoteNumber()",
+    "visualMidiSequence.fetch_add (1u",
+]:
+    if need not in processor_visual:
+        fail(f"MIDI note-on to video notification missing: {need}")
+for need in [
+    "paintEffectsMenu (juce::Graphics& g)",
+    "paintEffectsShortcut (juce::Graphics& g)",
+    "chooseEffectFromMenu (int index)",
+    "drawMidiVideoTiles (juce::Graphics& g)",
+    "startMultiRecording()",
+    "stopMultiRecordingAndPlay()",
+    "clearMultiRecording()",
+    "multiPointerDownMs = juce::Time::getMillisecondCounterHiRes()",
+    "heldMs >= 700.0 && ! multiPointerMoved",
+    "multiTransport == 1",
+    "multiTransport == 2",
+    "effects_video::shouldDivideOnNote (visualRandomState)",
+    "effects_video::divisionsForNote (note)",
+    "effects_video::vongonModeForXY (multiX, multiY)",
+    "processor.setVongonXY (",
+    'g.drawText ("EFFECTS", 499, 22, 84, 24',
+    '"CHORD-A", "CHORD-B", "DREAMY", "EUREKA"',
+    '"CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES"',
+    '"SOLARFAZE", "POLYPHRASE", "MULTI"',
+]:
+    if need not in editor_visual:
+        fail(f"EFFECTS direct menu/MULTI recorder contract missing: {need}")
+for need in ["multiModeEnabled", "multiRecordedXY", "multiTransport",
+             "effectsMenuVisible", "lastVisualMidiSequence"]:
+    if need not in editor_header_visual:
+        fail(f"Visual control/editor state missing: {need}")
+if 'boostBounds (300.0f' in editor_visual:
+    fail("Visual header button collision: BOOST must have dynamic position")
+
 print("[PASS] Vongon-inspired 4-mode DSP / supplied-video / DOT contracts verified")
 print("[PASS] CHORD/Dreamy noise-hardening contracts verified")
