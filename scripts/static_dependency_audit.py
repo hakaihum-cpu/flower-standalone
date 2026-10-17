@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import csv, hashlib, re, sys, xml.etree.ElementTree as ET
+import base64, csv, hashlib, re, sys, xml.etree.ElementTree as ET
 
 R = Path(__file__).resolve().parents[1]
 JUCER = R / "RealtimeChordFX_Standalone.jucer"
@@ -86,19 +86,67 @@ eureka_chunks = sorted((R / "Resources/eureka_frame_chunks").glob("*.b64"))
 if len(eureka_chunks) != 21:
     fail(f"expected 21 EUREKA source chunks, got {len(eureka_chunks)}")
 
+# The four original clips must survive byte-for-byte; seven new clips append
+# 252 ordered frames without replacing the original EUREKA source bank.
+eureka_original = base64.b64decode(''.join(
+    chunk.read_text().strip()
+    for chunk in eureka_chunks), validate=True)
+if len(eureka_original) != 1872671 or hashlib.sha256(eureka_original).hexdigest() != (
+        "827b5aa6a339927cb909a5ffe1b129513d946911cc78ea96d34aa110e6cd1883"):
+    fail("original four EUREKA clips changed")
+
+eureka_added_chunks = sorted(
+    (R / "Resources/eureka_added_frame_chunks").glob("part_*.b64"))
+if len(eureka_added_chunks) != 30:
+    fail(f"expected 30 additional EUREKA clip chunks, got {len(eureka_added_chunks)}")
+eureka_added = base64.b64decode(''.join(
+    chunk.read_text().strip()
+    for chunk in eureka_added_chunks), validate=True)
+if len(eureka_added) != 2475138 or hashlib.sha256(eureka_added).hexdigest() != (
+        "be0772700a74386c87815f53949e7e925b36e93259397ff282ac300bf6eb0b0b"):
+    fail("new EUREKA user-video asset digest mismatch")
+eureka_sizes = [
+    int(x) for x in (R / "Resources/eureka_added_frame_sizes.txt").read_text().splitlines()
+    if x.strip()]
+if len(eureka_sizes) != 252 or sum(eureka_sizes) != 2475138:
+    fail("additional EUREKA frame-size index mismatch")
+source_manifest = (R / "Resources/eureka_added_sources.txt").read_text(encoding="utf-8")
+for source in [
+    "Person_walking_and_smiling_20261017222551.mp4",
+    "Woman_leaning_against_classroom_…_20261017222853.mp4",
+    "Woman_putting_on_glasses_20261017222903.mp4",
+    "Woman_reading_book_in_library_20261017222903.mp4",
+    "Woman_standing_in_school_hallway_20261017222145.mp4",
+    "Woman_standing_on_school_rooftop_20261017222546.mp4",
+    "Woman_watching_cat_near_gate_20261017222554.mp4",
+]:
+    if source not in source_manifest:
+        fail(f"EUREKA video source missing: {source}")
+
 eureka_pack = (R / "Resources/eureka_frames.pack").read_bytes()
-if len(eureka_pack) != 1872671:
-    fail(f"EUREKA frame pack size mismatch: {len(eureka_pack)}")
-eureka_sha = hashlib.sha256(eureka_pack).hexdigest()
-if eureka_sha != "827b5aa6a339927cb909a5ffe1b129513d946911cc78ea96d34aa110e6cd1883":
-    fail(f"EUREKA frame pack sha256 mismatch: {eureka_sha}")
+if len(eureka_pack) != 4350833:
+    fail(f"merged EUREKA frame pack size mismatch: {len(eureka_pack)}")
 if eureka_pack[:4] != b"CRF1":
     fail("EUREKA frame pack magic mismatch")
 eureka_count = int.from_bytes(eureka_pack[4:8], "little")
-if eureka_count != 144:
+if eureka_count != 396:
     fail(f"EUREKA frame count mismatch: {eureka_count}")
+old_table_end = 8 + 144 * 12
+new_table_end = 8 + 396 * 12
+orig_payload = eureka_original[old_table_end:]
+if eureka_pack[new_table_end:new_table_end + len(orig_payload)] != orig_payload:
+    fail("existing EUREKA original JPEG payloads were modified")
+if not eureka_pack.endswith(eureka_added):
+    fail("appended EUREKA JPEG payload does not match the uploaded seven clips")
+# Inspect each frame offset/size and check the standalone FramePack layout.
+for frame_idx in range(eureka_count):
+    pos = 8 + frame_idx * 12
+    offset = int.from_bytes(eureka_pack[pos:pos + 4], "little")
+    size = int.from_bytes(eureka_pack[pos + 8:pos + 12], "little")
+    if offset < new_table_end or size < 64 or offset + size > len(eureka_pack):
+        fail(f"merged EUREKA frame table entry invalid: {frame_idx}")
 
-# New user-supplied Vongon-mode videos only.  EUREKA keeps its own immutable bank.
+# Vongon's original full-rate video bank and effects remain unchanged.
 vongon_pack = (R / "Resources/vongon_frames.pack").read_bytes()
 if len(vongon_pack) != 12151319:
     fail(f"Vongon frame pack size mismatch: {len(vongon_pack)}")
