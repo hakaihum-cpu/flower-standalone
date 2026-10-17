@@ -83,7 +83,8 @@ int main()
     assert (effects_video::eurekaReactiveFrameRate (0.002f) == 0.0f);
     assert (effects_video::eurekaReactiveFrameRate (0.04f) >
             effects_video::eurekaReactiveFrameRate (0.01f));
-    assert (effects_video::eurekaReactiveFrameRate (1.0f) <= 9.0f);
+    // Never exceed the previous 4.5fps EUREKA decode load on Android.
+    assert (effects_video::eurekaReactiveFrameRate (1.0f) <= 4.5f);
 
     // A sound onset, NOT every detected pitch update, gets one 1-in-5
     // chance. Test repeated notes with quiet gaps, sustained notes,
