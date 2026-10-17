@@ -54,10 +54,6 @@ public:
     // An event is retained until the 30Hz UI reads it, including fast passages.
     int getVisualMidiNote() const noexcept { return visualMidiNote.load (std::memory_order_relaxed); }
     unsigned int getVisualMidiSequence() const noexcept { return visualMidiSequence.load (std::memory_order_acquire); }
-    // Packed last Note On: [result: bits 16..17][MIDI channel: bits 8..12][note: bits 0..6].
-    // result: 0=other channel, 1=out of split range, 2=probability miss, 3=split.
-    // -1 means that no MIDI Note On has reached the audio processor.
-    int getVisualMidiDiagnostic() const noexcept { return visualMidiDiagnostic.load (std::memory_order_relaxed); }
     int getVisualFrame() const noexcept { return visualFrame.load (std::memory_order_relaxed); }
     juce::String getChordLabel() const;
     void setMidiControllerXY (int x, int y, bool touchDown) noexcept;
@@ -181,7 +177,6 @@ private:
     std::atomic<int> detectedMidi { -1 };
     std::atomic<int> visualMidiNote { -1 };
     std::atomic<unsigned int> visualMidiSequence { 0 };
-    std::atomic<int> visualMidiDiagnostic { -1 };
     std::uint32_t visualMidiRandomState = 0x45464658u; // audio thread only
     std::atomic<bool> chordAHoldRefreshRequested { false };
     std::atomic<int> visualFrame { 0 };
