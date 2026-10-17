@@ -101,6 +101,8 @@ private:
     int midiTileDivisions = 1;
     int midiTileHoldTicks = 0; // hold successful MIDI tiling for ~2.5 s
     int midiTileTriggerNote = -1;
+    std::array<juce::Image, 3> midiTileAlternateFrames {};
+    unsigned int midiTilePreparedSequence = 0;
     int eurekaFrameIndex = 0;
     int vongonFrameIndex = 0;
     float eurekaFramePhase = 0.0f;
