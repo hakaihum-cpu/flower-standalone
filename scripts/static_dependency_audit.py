@@ -654,19 +654,20 @@ chord_a_audio = dreamy[pa0:pa1]
 if "softProtectBuffer (buffer)" in chord_a_audio:
     fail("CHORD-A output-safety contract drift")
 for need in [
-    "sampleChordRenderer.renderSample (audible)",
-    "const float output = audible ? chord * 0.65f : 0.0f;",
+    "sampleChordRenderer.renderSample (",
+    "audible || chordAOutputGain > 0.0f",
+    "const float output = chord * (0.65f * chordAOutputGain);",
     "buffer.setSample (0, i, output)",
     "processChordReverb (buffer)",
 ]:
     if need not in chord_a_audio:
-        fail(f"CHORD-A dry-free baseline contract missing: {need}")
+        fail(f"CHORD-A wet-only smooth gate contract missing: {need}")
 for forbidden in [
-    "chordAOutputEnvelope",
+    "const float output = audible ? chord * 0.65f : 0.0f;",
     "sampleChordRenderer.canCapture()",
 ]:
     if forbidden in chord_a_audio:
-        fail(f"CHORD-A unauthorized October 17 change remains: {forbidden}")
+        fail(f"CHORD-A audible discontinuity or old capture path returned: {forbidden}")
 for rejected in [
     "dryLeft * 0.78f + chord * 0.46f",
     "dryRight * 0.78f + chord * 0.46f",
