@@ -1245,6 +1245,23 @@ for required in [
     if required not in tile_paint:
         fail(f"Live mosaic video tiles missing: {required}")
 
+# Tiled painting intentionally bypasses paintMediaFrame(). It must
+# independently refresh the DOT texture from the CURRENT Vongon frame
+# before reusing it in every rescaled cell, including when entering a
+# split immediately after showing a different effect.
+for required in [
+    "dotLumaSourceKind != 2",
+    "dotLumaRevision != dotVongonRevision",
+    "rebuildDotLuma (currentVongonFrame, 2, dotVongonRevision)",
+    "dotRenderedSourceKind != 2",
+    "dotRenderedRevision != dotVongonRevision",
+    "dotRenderedTick != dotUiTick",
+    "rebuildDotDisplay (",
+    "dotSourceW, dotSourceH, 2, dotVongonRevision",
+]:
+    if required not in tile_paint:
+        fail(f"MIDI mosaic DOT frame refresh missing: {required}")
+
 # Global DRY is explicit, saved in processor parameters, and independent
 # of generated wet effects. All modes—including MIDI-only CHORDBOT—use
 # the same after-FX tap; its default zero preserves approved wet-only audio.
