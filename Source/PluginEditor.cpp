@@ -752,17 +752,6 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         multiPointerDown = false;
     }
 
-    // Video layout follows the *input audio pitch*; MIDI note messages do
-    // not trigger the grid. Reading one atomic integer is UI-thread safe.
-    const int measuredDivisions = juce::jlimit (
-        1, 10, processor.getAudioTileDivisions());
-    if (measuredDivisions != audioTileDivisions)
-    {
-        audioTileDivisions = measuredDivisions;
-        if (audioTileDivisions > 1)
-            ++audioTileEventSequence; // choose fresh random clips/offsets
-    }
-
     // Fire CLEAR as soon as the long-press threshold is reached, rather
     // than waiting for the user to lift the finger.
     if (multiModeEnabled && multiPointerDown && ! multiPointerMoved
@@ -793,6 +782,23 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
     const float activity = juce::jmax (
         processor.getInputPeakRaw(),
         processor.getInputRmsRaw() * 2.2f);
+
+    // One ~20% draw per audible onset. On accepted events the INPUT PITCH
+    // still decides the live 2x2..10x10 tile count. No MIDI trigger and
+    // no video overlay. Do not re-roll while a sound is sustained.
+    if (effectMode >= 5 && effectMode <= 8)
+    {
+        const auto tiles = audioMosaicGate.advance (
+            processor.getInputRmsRaw(), processor.getAudioTileDivisions());
+        audioTileDivisions = tiles.divisions;
+        if (tiles.started)
+            ++audioTileEventSequence;
+    }
+    else
+    {
+        audioMosaicGate.reset();
+        audioTileDivisions = 1;
+    }
 
     if ((effectMode == 0 || effectMode == 4) && frames.getFrameCount() > 0)
     {
