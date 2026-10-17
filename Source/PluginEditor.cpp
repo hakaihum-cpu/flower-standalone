@@ -1315,11 +1315,7 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
 
 void RealtimeChordFxAudioProcessorEditor::paintEffectsShortcut (juce::Graphics& g)
 {
-    // All mode screens share a top-right shortcut, immediately left of CONFIG.
-    // Use an opaque hit area so the underlying video cannot confuse its label.
-    g.setColour (juce::Colours::black.withAlpha (0.48f));
-    g.fillRoundedRectangle (
-        juce::Rectangle<float> (496.0f, 14.0f, 91.0f, 42.0f), 4.0f);
+    // Text-only shortcut matching CONFIG, without an opaque video mask.
     g.setColour (uiColour (0.94f));
     g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
     g.drawText ("EFFECTS", 499, 22, 84, 24, juce::Justification::centred);
