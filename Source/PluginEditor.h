@@ -92,6 +92,18 @@ private:
     int vongonFrameIndex = 0;
     float eurekaFramePhase = 0.0f;
     float vongonFramePhase = 0.0f;
+    float vongonVideoSpeed = 0.0f;
+    float vongonVisualFx = 0.0f;
+    float vongonPreviousX = 0.5f;
+    float vongonPreviousY = 0.5f;
+    int vongonRewindFrames = 0;
+    int vongonFxStyle = 0;
+    int vongonFxEvent = 0;
+    int vongonClipCooldown = 0;
+    juce::Image vongonGhostFrame;
+    juce::Image vongonRedFringe;
+    juce::Image vongonCyanFringe;
+    int vongonFringeRevision = -1;
     int videoEffectTick = 0;
     bool eurekaSwitchClipPending = false;
     bool vongonSwitchClipPending = false;
