@@ -25,33 +25,42 @@ int main()
     assert (effects_video::vongonModeForXY (0.75f, 0.25f) == 8);
     assert (std::abs (effects_video::localX (0.75f) - 0.5f) < 1.0e-6f);
     assert (std::abs (effects_video::localY (0.25f) - 0.5f) < 1.0e-6f);
-    // Full-video tessellation is NOT slicing fullscreen image A into
-    // quadrants. Each destination cell chooses one entire input clip frame.
-    // For a mixed 2x2 event: [ A B ; C A(seeked) ].
-    assert (effects_video::tileSourceVariant (0, 0, 2, 1u) == 0);
-    assert (effects_video::tileSourceVariant (0, 1, 2, 1u) == 1);
-    assert (effects_video::tileSourceVariant (1, 0, 2, 1u) == 2);
-    assert (effects_video::tileSourceVariant (1, 1, 2, 1u) == 3);
-    // Some events deliberately repeat the entire A video in every cell.
+    // Each tile gets a complete video frame, not a quadrant of one
+    // fullscreen image. Order is NOT hardcoded from a user's example.
+    bool layoutsDiffer = false;
+    for (unsigned int event = 1; event <= 32; ++event)
+    {
+        for (int row = 0; row < 2; ++row)
+            for (int col = 0; col < 2; ++col)
+            {
+                const int kind = effects_video::tileSourceVariant (
+                    row, col, 2, event);
+                assert (kind >= 0 && kind <= 3);
+                if (effects_video::tileSourceVariant (
+                        row, col, 2, 1u) != kind)
+                    layoutsDiffer = true;
+            }
+    }
+    assert (layoutsDiffer);
+    // Occasional 2x2 mosaics repeat A in every cell.
     for (int row = 0; row < 2; ++row)
         for (int col = 0; col < 2; ++col)
             assert (effects_video::tileSourceVariant (
-                row, col, 2, 5u) == 0);
-    // 10x10 is 100 independently addressed full-image destinations.
-    int aCells = 0, bCells = 0, cCells = 0, seekedACells = 0;
+                row, col, 2, 8u) == 0);
+    // 10x10 has 100 independently selected destinations, with sources
+    // in range; neither clip nor playback offsets are fixed.
     for (int row = 0; row < 10; ++row)
         for (int col = 0; col < 10; ++col)
-        {
-            const int kind = effects_video::tileSourceVariant (
-                row, col, 10, 1u);
-            if (kind == 0) ++aCells;
-            else if (kind == 1) ++bCells;
-            else if (kind == 2) ++cCells;
-            else if (kind == 3) ++seekedACells;
-            else assert (false);
-        }
-    assert (aCells == 25 && bCells == 25
-            && cCells == 25 && seekedACells == 25);
+            assert (effects_video::tileSourceVariant (
+                row, col, 10, 3u) < 4);
+    for (int slot = 0; slot < 2; ++slot)
+    {
+        const int clipOffset = effects_video::tileAlternateClipOffset (
+            slot, 9, 3u);
+        assert (clipOffset > 0 && clipOffset < 9);
+    }
+    assert (effects_video::tileAlternateSeek (2, 192, 3u) > 0);
+    assert (effects_video::tileAlternateSeek (2, 192, 3u) < 192);
 
     // Xorshift pseudo-random sample must produce about 20% divisions.
     std::uint32_t seed = 0x45464658u;
