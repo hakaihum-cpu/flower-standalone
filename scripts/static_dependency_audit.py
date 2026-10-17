@@ -1164,7 +1164,9 @@ if 'file="Source/VideoInteraction.h"' not in jucer_text:
 for need in [
     "message.isNoteOn() && message.getVelocity() > 0.0f",
     "message.isForChannel (midiInputChannel)",
-    "visualMidiNote.store (message.getNoteNumber()",
+    "const int note = message.getNoteNumber()",
+    "visualMidiRandomState % 5u",
+    "visualMidiNote.store (note, std::memory_order_relaxed)",
     "visualMidiSequence.fetch_add (1u",
 ]:
     if need not in processor_visual:
@@ -1181,8 +1183,9 @@ for need in [
     "heldMs >= 700.0 && ! multiPointerMoved",
     "multiTransport == 1",
     "multiTransport == 2",
-    "effects_video::shouldDivideOnNote (visualRandomState)",
-    "effects_video::divisionsForNote (note)",
+    "midiTileHoldTicks = 75",
+    "midiTileDivisions = effects_video::divisionsForNote (note)",
+    "drawMidiVideoTiles (g)",
     "effects_video::vongonModeForXY (multiX, multiY)",
     "processor.setVongonXY (",
     'g.drawText ("EFFECTS", 499, 22, 84, 24',
@@ -1198,6 +1201,25 @@ for need in ["multiModeEnabled", "multiRecordedXY", "multiTransport",
         fail(f"Visual control/editor state missing: {need}")
 if 'boostBounds (300.0f' in editor_visual:
     fail("Visual header button collision: BOOST must have dynamic position")
+# Regression: the 1-in-5 choice happens in the MIDI callback exactly once.
+# If the UI also draws a 1-in-5 probability, the chance becomes 1-in-25.
+timer_start = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::timerCallback()")
+timer_end = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paint (", timer_start)
+if timer_start < 0 or timer_end < 0:
+    fail("Visual MIDI tile timer boundaries missing")
+timer_code = editor_visual[timer_start:timer_end]
+if "shouldDivideOnNote" in timer_code or "visualRandomState % 5u" in timer_code:
+    fail("MIDI tiles incorrectly randomized again on GUI thread (1 in 25)")
+if "midiTileHoldTicks = 75" not in timer_code or "midiTileHoldTicks == 0" not in timer_code:
+    fail("MIDI tiled frame is not kept visible long enough")
+paint_start = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paintVongonMode (")
+paint_end = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paintVongonParameterPanel (", paint_start)
+if paint_start < 0 or paint_end < 0:
+    fail("Vongon mosaic painting boundaries missing")
+paint = editor_visual[paint_start:paint_end]
+if paint.find("drawMidiVideoTiles (g)") < paint.find("paintVideoEffect ("):
+    fail("Vongon video overlay would be drawn after and obscure tiled cells")
+
 
 print("[PASS] Vongon-inspired 4-mode DSP / supplied-video / DOT contracts verified")
 print("[PASS] CHORD/Dreamy noise-hardening contracts verified")
