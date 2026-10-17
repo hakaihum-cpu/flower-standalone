@@ -1292,8 +1292,33 @@ paint_end = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paintV
 if paint_start < 0 or paint_end < 0:
     fail("Vongon mosaic painting boundaries missing")
 paint = editor_visual[paint_start:paint_end]
-if paint.find("drawMidiVideoTiles (g)") < paint.find("paintVideoEffect ("):
-    fail("Vongon video overlay would be drawn after and obscure tiled cells")
+# The correct behavior is a full-opacity replacement video canvas, not
+# a semitransparent overlay on top of the original fullscreen picture.
+for required in [
+    "if (midiTileDivisions > 1 && currentVongonFrame.isValid())",
+    "drawMidiVideoTiles (g);",
+    "else\n    {\n        if (currentVongonFrame.isValid())",
+    "paintMediaFrame (",
+    "paintVideoEffect (",
+]:
+    if required not in paint:
+        fail(f"Vongon replace-not-overlay mosaic paint missing: {required}")
+mosaic_branch_end = paint.find("    else\n    {\n        if (currentVongonFrame.isValid())")
+if mosaic_branch_end < paint.find("drawMidiVideoTiles (g);"):
+    fail("Video mosaic is not painted before normal full-frame branch")
+mosaic_branch = paint[:mosaic_branch_end]
+if "paintVideoEffect (" in mosaic_branch or "paintMediaFrame (" in mosaic_branch:
+    fail("Full video/VHS still drawn underneath MIDI mosaic")
+for required in [
+    "g.setOpacity (1.0f)",
+    "g.setColour (juce::Colours::black)",
+    "g.fillRect (0.0f, 0.0f, 720.0f, 720.0f)",
+    "const int variant = (col + 2 * row) % 4",
+    "g.drawImage (picture, target",
+]:
+    if required not in tile_paint:
+        fail(f"Opaque full-screen MIDI video tiles missing: {required}")
+
 
 
 print("[PASS] Vongon-inspired 4-mode DSP / supplied-video / DOT contracts verified")
