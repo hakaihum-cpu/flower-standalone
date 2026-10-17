@@ -1239,8 +1239,8 @@ for required in [
     "midiTileLastVongonRevision != dotVongonRevision",
     "const int slot = midiTileAlternateUpdateSlot++ % 3",
     "midiTileAlternateFrames[(size_t) slot]",
-    "const int variant = (col + 2 * row) % 4",
-    "g.drawImage (picture, target",
+    "effects_video::tileSourceVariant (",
+    "0, 0, picture.getWidth(), picture.getHeight()",
 ]:
     if required not in tile_paint:
         fail(f"Live mosaic video tiles missing: {required}")
@@ -1267,6 +1267,21 @@ for required in [
 ]:
     if required not in editor_visual:
         fail(f"All-mode DRY control unavailable: {required}")
+for obsolete in [
+    "const int variant = (col + 2 * row) % 4",
+    "constexpr int clipOffsets[3] = { 2, 5, 0 }",
+]:
+    if obsolete in editor_visual:
+        fail(f"Fixed example tile order is prohibited: {obsolete}")
+for required in [
+    "tileHash (std::uint32_t seed)",
+    "tileSourceVariant (int row, int col, int divisions,",
+    "tileAlternateClipOffset (int slot, int clipCount,",
+    "tileAlternateSeek (int slot, int framesPerClip,",
+]:
+    if required not in video_logic:
+        fail(f"Randomized full-video tile source mapping absent: {required}")
+
 if "dryPopupVisible" not in editor_header_visual:
     fail("DRY popup missing from editor state")
 
@@ -1313,8 +1328,8 @@ for required in [
     "g.setOpacity (1.0f)",
     "g.setColour (juce::Colours::black)",
     "g.fillRect (0.0f, 0.0f, 720.0f, 720.0f)",
-    "const int variant = (col + 2 * row) % 4",
-    "g.drawImage (picture, target",
+    "effects_video::tileSourceVariant (",
+    "0, 0, picture.getWidth(), picture.getHeight()",
 ]:
     if required not in tile_paint:
         fail(f"Opaque full-screen MIDI video tiles missing: {required}")
