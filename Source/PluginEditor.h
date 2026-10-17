@@ -66,6 +66,7 @@ private:
     bool resetAudioDevice();
     juce::String makeAudioBufferStatus() const;
     juce::String currentOutputName() const;
+    void refreshMidiInputs();
     void refreshMidiOutputs();
     void cycleMidiOutput (int direction);
     void updateMidiControllerFromPoint (juce::Point<float>);
@@ -120,7 +121,9 @@ private:
     double audioActualSampleRate = 0.0;
     juce::String audioDeviceMessage;
     juce::String audioBufferError;
+    juce::Array<juce::MidiDeviceInfo> midiInputs;
     juce::Array<juce::MidiDeviceInfo> midiOutputs;
+    int midiInputRefreshTick = 0;
     int selectedMidiOutput = -1;
     int midiPresetSlot = 1;
     juce::String midiPresetMessage;
