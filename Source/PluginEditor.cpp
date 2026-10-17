@@ -1995,7 +1995,7 @@ void RealtimeChordFxAudioProcessorEditor::paintChordBot (juce::Graphics& g)
     g.setColour (uiColour (
         chordBotEditMode ? 0.98f : 0.74f));
     g.drawText (chordBotEditMode ? "DONE" : "EDIT",
-                500, 22, 72, 26, juce::Justification::centred);
+                404, 22, 78, 26, juce::Justification::centred);
     g.setColour (uiColour (0.84f));
     g.drawText ("CONFIG",
                 604, 22, 88, 26, juce::Justification::centredRight);
@@ -3214,11 +3214,41 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
+    if (effectsMenuVisible)
+    {
+        if (p.y <= 78.0f && p.x >= 580.0f)
+        {
+            effectsMenuVisible = false;
+            repaint();
+            return;
+        }
+        if (p.y >= 126.0f && p.y < 672.0f)
+        {
+            const int column = p.x >= 372.0f ? 1 : 0;
+            const int row = (int) ((p.y - 126.0f) / 91.0f);
+            const int item = row * 2 + column;
+            const juce::Rectangle<float> target (
+                28.0f + 344.0f * (float) column,
+                126.0f + 91.0f * (float) row, 319.0f, 71.0f);
+            if (item < 11 && target.contains (p))
+                chooseEffectFromMenu (item);
+        }
+        repaint();
+        return;
+    }
+
     const int currentEffectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
+    if (p.y <= 70.0f && p.x >= 496.0f && p.x < 590.0f)
+    {
+        effectsMenuVisible = true;
+        repaint();
+        return;
+    }
+
     if (currentEffectMode != 3
-        && juce::Rectangle<float> (390.0f, 16.0f, 76.0f, 38.0f).contains (p))
+        && juce::Rectangle<float> (300.0f, 16.0f, 76.0f, 38.0f).contains (p))
     {
         const float current = juce::jlimit (
             0.0f, 14.0f,
@@ -3237,7 +3267,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    if (p.x >= 575 && p.y <= 70)
+    if (p.x >= 590 && p.y <= 70)
     {
         if (chordBotPressedPad >= 0)
         {
@@ -3256,9 +3286,20 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
+    if (multiModeEnabled && effectMode >= 5 && effectMode <= 8
+        && p.y > 70.0f)
+    {
+        multiPointerDown = true;
+        multiPointerMoved = false;
+        multiPointerStart = p;
+        multiPointerDownMs = juce::Time::getMillisecondCounterHiRes();
+        repaint();
+        return;
+    }
+
     if (effectMode >= 5 && effectMode <= 8)
     {
-        if (p.x >= 485.0f && p.x < 580.0f && p.y <= 70.0f)
+        if (p.x >= 390.0f && p.x < 495.0f && p.y <= 70.0f)
         {
             vongonPanelVisible = ! vongonPanelVisible;
             vongonPanelPage = 0;
@@ -3327,7 +3368,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (effectMode == 3)
     {
-        if (p.x >= 480 && p.x < 580 && p.y <= 70)
+        if (p.x >= 390 && p.x < 495 && p.y <= 70)
         {
             chordBotEditMode = ! chordBotEditMode;
             chordBotEditSlot = -1;
@@ -3404,7 +3445,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (effectMode == 2)
     {
-        if (p.x >= 470.0f && p.x < 575.0f && p.y <= 70.0f)
+        if (p.x >= 390.0f && p.x < 495.0f && p.y <= 70.0f)
         {
             eurekaPanelVisible = ! eurekaPanelVisible;
             eurekaXYTouchDown = false;
@@ -3566,8 +3607,30 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
         repaint();
         return;
     }
-    if (midiControlConfigVisible || audioConfigVisible || configVisible)
+    if (midiControlConfigVisible || audioConfigVisible || configVisible
+        || effectsMenuVisible)
         return;
+
+    if (multiModeEnabled && multiPointerDown)
+    {
+        const auto p = toDesign (e.position);
+        if (p.getDistanceFrom (multiPointerStart) > 10.0f)
+            multiPointerMoved = true;
+        if (multiPointerMoved)
+        {
+            // A drag alters the global 2x2 Vongon XY; short taps are
+            // reserved for starting/stopping the recorder.
+            if (multiTransport == 2)
+                multiTransport = 0;
+            const float x = juce::jlimit (0.0f, 1.0f, p.x / design);
+            const float y = juce::jlimit (
+                0.0f, 1.0f,
+                1.0f - (p.y - 70.0f) / (design - 70.0f));
+            applyMultiXY (x, y);
+        }
+        repaint();
+        return;
+    }
 
     const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
@@ -3621,6 +3684,24 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 
 void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 {
+    if (multiModeEnabled && multiPointerDown)
+    {
+        const double heldMs =
+            juce::Time::getMillisecondCounterHiRes() - multiPointerDownMs;
+        multiPointerDown = false;
+        if (heldMs >= 700.0 && ! multiPointerMoved)
+            clearMultiRecording();
+        else if (! multiPointerMoved)
+        {
+            if (multiTransport == 1)
+                stopMultiRecordingAndPlay();
+            else
+                startMultiRecording();
+        }
+        repaint();
+        return;
+    }
+
     inputGainDragging = false;
     vongonDraggingParameter = -1;
     eurekaXYTouchDown = false;
