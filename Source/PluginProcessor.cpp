@@ -63,6 +63,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordPitchAccumulator = 0.0f;
     chordPitchDecimation = 0;
     chordPitchAnalysisActive = false;
+    chordAOutputGain = 0.0f;
     // Separate low-rate pitch analysis for the Vongon video grid.
     videoPitchDetector.prepare (currentSampleRate / 4.0, 1024, 512);
     audioTileDivisions.store (1, std::memory_order_relaxed);
@@ -321,6 +322,7 @@ void RealtimeChordFxAudioProcessor::resetModeAudioState (int mode)
     // layer is audible.
     if (mode == 0)
     {
+        chordAOutputGain = 0.0f;
         sineArpeggiator.reset();
         sineArpeggiator.setTuningOffsetSemitones (
             chordBTuningOffsetSemitones);
@@ -350,13 +352,19 @@ void RealtimeChordFxAudioProcessor::processChordAudio (juce::AudioBuffer<float>&
         running.load (std::memory_order_acquire)
         && haveChord
         && chordMidiGateOpen;
-
+    // The previous instantaneous zeroing of the sampled chord at gate
+    // transitions produced discontinuities audible as pops. Fade over
+    // 8 ms and let the playback phase continue through the short release.
+    const float fadeStep = 1.0f
+        / juce::jmax (1.0f, (float) currentSampleRate * 0.008f);
     for (int i = 0; i < n; ++i)
     {
-        const float chord = sampleChordRenderer.renderSample (audible);
-        // CHORD-A output is generated harmony only; input is retained
-        // internally for tracking/capture, never routed to the speakers.
-        const float output = audible ? chord * 0.65f : 0.0f;
+        chordAOutputGain = juce::jlimit (0.0f, 1.0f,
+            chordAOutputGain + (audible ? fadeStep : -fadeStep));
+        const float chord = sampleChordRenderer.renderSample (
+            audible || chordAOutputGain > 0.0f);
+        // CHORD-A remains wet-only. No input signal is sent to the speaker.
+        const float output = chord * (0.65f * chordAOutputGain);
         buffer.setSample (0, i, output);
         if (channels > 1)
             buffer.setSample (1, i, output);
@@ -552,6 +560,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             sampleChordRenderer.setPlan (currentPlan.midiNotes, lastInputMidiFloat, true);
             sineArpeggiator.setPlan (currentPlan.midiNotes);
         }
+        chordAOutputGain = 0.0f;
     }
 
     handleMotionCommand();
@@ -633,6 +642,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         sampleChordRenderer.reset();
         sineArpeggiator.reset();
         chordBTuningOffsetSemitones = 0.0f;
+        chordAOutputGain = 0.0f;
         sineArpeggiator.setTuningOffsetSemitones (0.0f);
         chordBRandomFx.reset();
         hazeProcessor.clear();
