@@ -1165,7 +1165,7 @@ for need in [
     "message.isNoteOn() && message.getVelocity() > 0.0f",
     "message.isForChannel (midiInputChannel)",
     "const int note = message.getNoteNumber()",
-    "visualMidiRandomState % 5u",
+    "effects_video::shouldDivideOnNote (visualMidiRandomState)",
     "visualMidiNote.store (note, std::memory_order_relaxed)",
     "visualMidiSequence.fetch_add (1u",
 ]:
