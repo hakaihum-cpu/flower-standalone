@@ -1,23 +1,24 @@
 #pragma once
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 namespace effects_video
 {
-// Only one out of approximately five MIDI note-ons changes the picture.
-// The caller advances its existing xorshift RNG on each note-on.
-inline bool shouldDivideOnNote (std::uint32_t randomState) noexcept
+// Input audio drives the full-frame video mosaic; no MIDI note gate or
+// random trigger remains.  Silence/invalid pitch returns one full image.
+// Valid low notes start at 2x2; increasing frequency reaches 10x10.
+// Frequency is measured in Hz by a low-rate, independent YIN detector.
+inline int divisionsForPitchHz (float hz) noexcept
 {
-    return randomState % 5u == 0u;
-}
+    if (! std::isfinite (hz) || hz < 75.0f)
+        return 1;
 
-// C4..C5 stays a single picture. Rising from C#5 to C7 progressively
-// increases the number of repeated cells; practical notes above C7 cap at 10x10.
-inline int divisionsForNote (int midiNote) noexcept
-{
-    if (midiNote <= 72) return 1;
-    const int aboveC5 = std::min (24, midiNote - 72);
-    return std::min (10, 1 + (aboveC5 * 9 + 23) / 24);
+    constexpr float lowestHz = 75.0f;
+    constexpr float highestHz = 1100.0f;
+    const float octaves = std::log2 (std::clamp (hz, lowestHz, highestHz) / lowestHz);
+    const float range = std::log2 (highestHz / lowestHz);
+    return std::clamp (2 + (int) std::lround (8.0f * octaves / range), 2, 10);
 }
 
 // Hash event+cell into a reproducible pseudorandom value.
