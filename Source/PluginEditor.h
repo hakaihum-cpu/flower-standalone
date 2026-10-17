@@ -97,6 +97,7 @@ private:
     float vongonPreviousX = 0.5f;
     float vongonPreviousY = 0.5f;
     int vongonRewindFrames = 0;
+    int vongonFxCooldown = 0;
     int vongonFxStyle = 0;
     int vongonFxEvent = 0;
     int vongonClipCooldown = 0;
