@@ -334,7 +334,7 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
     if (! burstAppliedByOutputRestore && audioBufferMode != 0)
         applyAudioBufferMode (audioBufferMode);
 
-    lastVisualMidiSequence = processor.getVisualMidiSequence();
+    audioTileDivisions = processor.getAudioTileDivisions();
     startTimerHz (30);
 }
 
@@ -752,29 +752,15 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         multiPointerDown = false;
     }
 
-    // The audio-thread MIDI note-on handler has ALREADY drawn the 1-in-5
-    // probability. Never apply a second 1-in-5 filter here (which made the
-    // screen split only once in ~25 notes).
-    const auto noteSequence = processor.getVisualMidiSequence();
-    if (noteSequence != lastVisualMidiSequence)
+    // Video layout follows the *input audio pitch*; MIDI note messages do
+    // not trigger the grid. Reading one atomic integer is UI-thread safe.
+    const int measuredDivisions = juce::jlimit (
+        1, 10, processor.getAudioTileDivisions());
+    if (measuredDivisions != audioTileDivisions)
     {
-        lastVisualMidiSequence = noteSequence;
-        const int note = processor.getVisualMidiNote();
-        if (note > 72 && note <= 108)
-        {
-            midiTileTriggerNote = note;
-            midiTileDivisions = effects_video::divisionsForNote (note);
-            midiTileHoldTicks = 75; // 2.5 seconds at 30Hz
-        }
-    }
-    else if (midiTileHoldTicks > 0)
-    {
-        --midiTileHoldTicks;
-        if (midiTileHoldTicks == 0)
-        {
-            midiTileDivisions = 1;
-            midiTileTriggerNote = -1;
-        }
+        audioTileDivisions = measuredDivisions;
+        if (audioTileDivisions > 1)
+            ++audioTileEventSequence; // choose fresh random clips/offsets
     }
 
     // Fire CLEAR as soon as the long-press threshold is reached, rather
@@ -917,11 +903,11 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         const float gestureEnergy = juce::jmax (
             juce::jlimit (0.0f, 1.0f, xyDelta * 7.0f),
             parameterEdited ? 0.72f : 0.0f);
-        // A MIDI-triggered mosaic also advances its moving video cells
-        // while held. Untriggered idle video still freezes as requested.
+        // Keep each audio-pitch mosaic moving while its tiles are visible.
+        // Silence restores the original single-video idle behavior.
         const float drive = juce::jmax (
             juce::jmax (musicalEnergy, gestureEnergy),
-            midiTileHoldTicks > 0 ? 0.45f : 0.0f);
+            audioTileDivisions > 1 ? 0.45f : 0.0f);
         const bool attack =
             activity > 0.009f
             && activity > vongonVisualPreviousActivity * 1.35f + 0.002f;
@@ -1469,9 +1455,9 @@ void RealtimeChordFxAudioProcessorEditor::chooseEffectFromMenu (int index)
     }
 }
 
-void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
+void RealtimeChordFxAudioProcessorEditor::drawAudioVideoTiles (juce::Graphics& g)
 {
-    if (! currentVongonFrame.isValid() || midiTileDivisions <= 1)
+    if (! currentVongonFrame.isValid() || audioTileDivisions <= 1)
         return;
 
     const bool dot = dotModeEnabled();
@@ -1484,18 +1470,18 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
     // three staggered, independently evolving video streams at ~8 fps
     // per alternate tile, plus the primary live stream at up to 24 fps.
     // Never decode a JPEG per cell or add work to the audio callback.
-    if (! dot && midiTilePreparedSequence != lastVisualMidiSequence)
+    if (! dot && audioTilePreparedSequence != audioTileEventSequence)
     {
-        midiTilePreparedSequence = lastVisualMidiSequence;
-        midiTileLastVongonRevision = -1;
-        midiTileAlternateUpdateSlot = 0;
-        for (auto& frame : midiTileAlternateFrames)
+        audioTilePreparedSequence = audioTileEventSequence;
+        audioTileLastVongonRevision = -1;
+        audioTileAlternateUpdateSlot = 0;
+        for (auto& frame : audioTileAlternateFrames)
             frame = {};
     }
-    if (! dot && midiTileLastVongonRevision != dotVongonRevision)
+    if (! dot && audioTileLastVongonRevision != dotVongonRevision)
     {
-        midiTileLastVongonRevision = dotVongonRevision;
-        const int slot = midiTileAlternateUpdateSlot++ % 3;
+        audioTileLastVongonRevision = dotVongonRevision;
+        const int slot = audioTileAlternateUpdateSlot++ % 3;
         const int total = vongonFrames.getFrameCount();
         const int framesPerClip =
             total == 9 * 192 || total == 6 * 192 ? 192 : 36;
@@ -1504,17 +1490,17 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
         const int position = vongonFrameIndex % framesPerClip;
         const int clipOffset = slot == 2 ? 0
             : effects_video::tileAlternateClipOffset (
-                slot, clips, lastVisualMidiSequence);
+                slot, clips, audioTileEventSequence);
         const int positionOffset = effects_video::tileAlternateSeek (
-            slot, framesPerClip, lastVisualMidiSequence);
+            slot, framesPerClip, audioTileEventSequence);
         const int otherClip = (clip + clipOffset) % clips;
         const int otherFrame = otherClip * framesPerClip
             + (position + positionOffset) % framesPerClip;
-        midiTileAlternateFrames[(size_t) slot] =
+        audioTileAlternateFrames[(size_t) slot] =
             vongonFrames.getFrame (otherFrame);
     }
 
-    const int size = juce::jlimit (2, 10, midiTileDivisions);
+    const int size = juce::jlimit (2, 10, audioTileDivisions);
     const float cellSize = design / (float) size;
     juce::Graphics::ScopedSaveState save (g);
     g.reduceClipRegion (juce::Rectangle<int> (0, 0, 720, 720));
@@ -1531,9 +1517,9 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
         for (int col = 0; col < size; ++col)
         {
             const int variant = effects_video::tileSourceVariant (
-                row, col, size, lastVisualMidiSequence);
+                row, col, size, audioTileEventSequence);
             const juce::Image& candidate = variant != 0 && ! dot
-                ? midiTileAlternateFrames[(size_t) (variant - 1)]
+                ? audioTileAlternateFrames[(size_t) (variant - 1)]
                 : mainImage;
             const juce::Image& picture =
                 candidate.isValid() ? candidate : mainImage;
@@ -1750,12 +1736,12 @@ void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (
 void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
     juce::Graphics& g, int effectMode)
 {
-    if (midiTileDivisions > 1 && currentVongonFrame.isValid())
+    if (audioTileDivisions > 1 && currentVongonFrame.isValid())
     {
-        // A MIDI split is a REPLACEMENT 2x2..10x10 VIDEO CANVAS, not
+        // A audio pitch split is a REPLACEMENT 2x2..10x10 VIDEO CANVAS, not
         // a translucency/scanline layer over one full-screen video.
         // Never draw a full-screen video or VHS overlay behind these tiles.
-        drawMidiVideoTiles (g);
+        drawAudioVideoTiles (g);
     }
     else
     {
