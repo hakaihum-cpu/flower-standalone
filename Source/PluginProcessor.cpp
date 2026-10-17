@@ -535,38 +535,19 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         // occur between two 30Hz GUI polls. A successful high-note event is
         // latched; low notes and unsuccessful draws do not erase it.
         // This is constant-time MIDI bookkeeping, NOT audio pitch detection.
-        if (message.isNoteOn() && message.getVelocity() > 0.0f)
+        if (message.isNoteOn() && message.getVelocity() > 0.0f
+            && message.isForChannel (midiInputChannel))
         {
+            visualMidiRandomState ^= visualMidiRandomState << 13;
+            visualMidiRandomState ^= visualMidiRandomState >> 17;
+            visualMidiRandomState ^= visualMidiRandomState << 5;
             const int note = message.getNoteNumber();
-            const int channel = message.getChannel();
-            int result = 0; // Note On reached processor, but MIDI CH differs.
-
-            if (message.isForChannel (midiInputChannel))
+            if (note > 72 && note <= 108
+                && effects_video::shouldDivideOnNote (visualMidiRandomState))
             {
-                // Preserve the existing probability state and cadence:
-                // it advances on every Note On on the configured channel.
-                visualMidiRandomState ^= visualMidiRandomState << 13;
-                visualMidiRandomState ^= visualMidiRandomState >> 17;
-                visualMidiRandomState ^= visualMidiRandomState << 5;
-
-                result = 1; // On expected channel, below/above split range.
-                if (note > 72 && note <= 108)
-                {
-                    result = 2; // Eligible high note, ~80% lottery miss.
-                    if (effects_video::shouldDivideOnNote (visualMidiRandomState))
-                    {
-                        visualMidiNote.store (note, std::memory_order_relaxed);
-                        visualMidiSequence.fetch_add (1u, std::memory_order_release);
-                        result = 3; // MIDI split event was accepted.
-                    }
-                }
+                visualMidiNote.store (note, std::memory_order_relaxed);
+                visualMidiSequence.fetch_add (1u, std::memory_order_release);
             }
-
-            // One atomic write for the config-page diagnostic, no allocation
-            // or message-thread/UI operation inside the audio callback.
-            visualMidiDiagnostic.store (
-                (result << 16) | (channel << 8) | note,
-                std::memory_order_relaxed);
         }
 
         if (! message.isController()
