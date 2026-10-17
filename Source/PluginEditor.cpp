@@ -334,7 +334,6 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
     if (! burstAppliedByOutputRestore && audioBufferMode != 0)
         applyAudioBufferMode (audioBufferMode);
 
-    refreshMidiInputs();
     startTimerHz (30);
 }
 
@@ -736,12 +735,6 @@ int RealtimeChordFxAudioProcessorEditor::nextVisualFrame (
 
 void RealtimeChordFxAudioProcessorEditor::timerCallback()
 {
-    // Enables newly-connected USB MIDI devices even after editor startup.
-    if (++midiInputRefreshTick >= 90)
-    {
-        midiInputRefreshTick = 0;
-        refreshMidiInputs();
-    }
     processor.applyPendingMidiInputChanges();
     ++videoEffectTick;
     if (! hasKeyboardFocus (true))
@@ -2423,25 +2416,8 @@ void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics
         g.drawText (midiPresetMessage, 54, 650, 560, 22, juce::Justification::centredLeft);
     g.setColour (uiColour (0.68f));
     g.drawText (
-        "MIDI IN AUTO " + juce::String (midiInputs.size())
-        + " DEVICE(S)    XY: CC110 / CC111    MODE: CC112",
+        "MIDI IN (ANDROID AUTO)    XY: CC110 / CC111    MODE: CC112",
         54, 674, 620, 22, juce::Justification::centredLeft);
-}
-
-void RealtimeChordFxAudioProcessorEditor::refreshMidiInputs()
-{
-    midiInputs = juce::MidiInput::getAvailableDevices();
-    if (auto* holder = juce::StandalonePluginHolder::getInstance())
-    {
-        // JUCE StandalonePluginHolder already registers its AudioProcessorPlayer
-        // as the MIDI input callback. Enable hardware endpoints, do not
-        // register the callback a second time (duplicate Note/CC events).
-        for (const auto& device : midiInputs)
-            if (! holder->deviceManager.isMidiInputDeviceEnabled (
-                    device.identifier))
-                holder->deviceManager.setMidiInputDeviceEnabled (
-                    device.identifier, true);
-    }
 }
 
 void RealtimeChordFxAudioProcessorEditor::refreshMidiOutputs()
