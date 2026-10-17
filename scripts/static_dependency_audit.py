@@ -909,7 +909,7 @@ for need in [
     "const bool fullVideo = total == 9 * 192 || total == 6 * 192",
     "const float musicalEnergy = juce::jlimit",
     "const float gestureEnergy = juce::jmax",
-    "const float drive = juce::jmax (musicalEnergy, gestureEnergy)",
+    "midiTileHoldTicks > 0 ? 0.45f : 0.0f",
     "const float targetFps = drive < 0.018f ? 0.0f",
     "vongonFramePhase += vongonVideoSpeed / 30.0f",
     "vongonRewindFrames > 0",
@@ -1199,8 +1199,75 @@ for need in ["multiModeEnabled", "multiRecordedXY", "multiTransport",
              "effectsMenuVisible", "lastVisualMidiSequence"]:
     if need not in editor_header_visual:
         fail(f"Visual control/editor state missing: {need}")
+# The 720px top bar keeps BOOST at 300..376, mode settings at
+# 380..441, DRY at 438..495, EFFECTS at 496..590, CONFIG beyond 590.
+# The settings/DRY text areas overlap only minimally by design.
 if 'boostBounds (300.0f' in editor_visual:
-    fail("Visual header button collision: BOOST must have dynamic position")
+    fail("Obsolete BOOST drawing constructor reappeared")
+if 'const juce::Rectangle<float> boostBounds (\n        300.0f' not in editor_visual:
+    fail("BOOST header location not updated for DRY shortcut")
+# CLOUDS video must not obscure original frames with upper/lower
+# black curtains or an XY crosshair. Other modes retain their own UI.
+cloud_start = editor_visual.find(
+    "void RealtimeChordFxAudioProcessorEditor::paintClouds (")
+cloud_end = editor_visual.find(
+    "void RealtimeChordFxAudioProcessorEditor::paintEffectsShortcut (", cloud_start)
+if cloud_start < 0 or cloud_end < 0:
+    fail("CLOUDS painter boundaries missing")
+cloud_paint = editor_visual[cloud_start:cloud_end]
+for obsolete in [
+    "g.fillRect (0.0f, 0.0f, 720.0f, 86.0f)",
+    "g.fillRect (0.0f, 560.0f, 720.0f, 160.0f)",
+    "g.drawLine (px, 72.0f, px, 558.0f",
+    "g.drawLine (0.0f, py, 720.0f, py",
+    "g.fillRect (px - 4.0f, py - 4.0f, 8.0f, 8.0f)",
+]:
+    if obsolete in cloud_paint:
+        fail(f"CLOUDS video masking/crosshair regression: {obsolete}")
+# A MIDI-triggered 2..10x grid must display actual moving film,
+# not three static JPEGs decoded just once at the trigger.
+tile_start = editor_visual.find(
+    "void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (")
+tile_end = editor_visual.find(
+    "void RealtimeChordFxAudioProcessorEditor::applyMultiXY (", tile_start)
+if tile_start < 0 or tile_end < 0:
+    fail("MIDI tile rendering boundaries missing")
+tile_paint = editor_visual[tile_start:tile_end]
+for required in [
+    "midiTileLastVongonRevision != dotVongonRevision",
+    "const int slot = midiTileAlternateUpdateSlot++ % 3",
+    "midiTileAlternateFrames[(size_t) slot]",
+    "const int variant = (col + 2 * row) % 4",
+    "g.drawImage (picture, target",
+]:
+    if required not in tile_paint:
+        fail(f"Live mosaic video tiles missing: {required}")
+
+# Global DRY is explicit, saved in processor parameters, and independent
+# of generated wet effects. All modes—including MIDI-only CHORDBOT—use
+# the same after-FX tap; its default zero preserves approved wet-only audio.
+for required in [
+    'ParamID::dryLevel, "DRY", 0.0f, 1.0f, 0.0f',
+    "dryInputTap.copyFrom (channel, 0, buffer",
+    "const bool dryTapActive = dryTarget > 0.0f || dryLevelSmoothed > 0.0f",
+    "softProtectSample (wetSample",
+    "rawInput * dryLevelSmoothed",
+]:
+    if required not in processor_controls:
+        fail(f"Optional 0-default global DRY mix missing: {required}")
+if 'inline constexpr const char* dryLevel = "dryLevel";' not in parameter_ids:
+    fail("Global DRY parameter ID missing")
+for required in [
+    "paintDryPopup (juce::Graphics& g)",
+    "setDryFromPoint (float x)",
+    'g.drawText ("DRY", 444, 22, 46, 24',
+    "if (dryPopupVisible)",
+]:
+    if required not in editor_visual:
+        fail(f"All-mode DRY control unavailable: {required}")
+if "dryPopupVisible" not in editor_header_visual:
+    fail("DRY popup missing from editor state")
+
 # Regression: the 1-in-5 choice happens in the MIDI callback exactly once.
 # If the UI also draws a 1-in-5 probability, the chance becomes 1-in-25.
 timer_start = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::timerCallback()")
