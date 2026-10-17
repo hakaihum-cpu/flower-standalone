@@ -59,6 +59,8 @@ public:
             lane.cachedSpan = 0;
             lane.spanFramesUntilRefresh = 0;
             lane.stutterStartValid = false;
+            lane.pendingStutterStartValid = false;
+            lane.pendingStutterStart = 0;
             lane.playPosition = 0.0;
             lane.previousPlayPosition = 0.0;
             lane.jumpCrossfade = 0;
@@ -105,6 +107,8 @@ public:
             lane.cachedSpan = 0;
             lane.spanFramesUntilRefresh = 0;
             lane.stutterStartValid = false;
+            lane.pendingStutterStartValid = false;
+            lane.pendingStutterStart = 0;
             lane.playPosition = 0.0;
             lane.previousPlayPosition = 0.0;
             lane.jumpCrossfade = 0;
@@ -276,6 +280,8 @@ private:
         int spanFramesUntilRefresh = 0;
         bool stutterStartValid = false;
         int stutterStart = 0;
+        int pendingStutterStart = 0;
+        bool pendingStutterStartValid = false;
         double playPosition = 0.0;
         double previousPlayPosition = 0.0;
         int jumpCrossfade = 0;
@@ -522,13 +528,22 @@ private:
         float value = readSpan (local, start);
         if (! params.og && local >= (double) (span - seam))
         {
-            const float linear = (float) (
-                (local - (double) (span - seam)) / (double) seam);
+            // Capture the NEXT phrase's absolute start only once, at the
+            // beginning of the overlap. The previous implementation read
+            // a different nextStart every audio sample as recordPosition
+            // advanced, creating repetitive zipper-like ticks.
+            if (! lane.pendingStutterStartValid)
+            {
+                lane.pendingStutterStart = nextStart;
+                lane.pendingStutterStartValid = true;
+            }
+            const float linear = juce::jlimit (0.0f, 1.0f, (float) (
+                (local - (double) (span - seam)) / (double) seam));
             const float t = linear * linear * (3.0f - 2.0f * linear);
             const double headPosition =
                 local - (double) (span - seam);
-            // Smooth the next phrase boundary without harsh short repeats.
-            value += (readSpan (headPosition, nextStart) - value) * t;
+            value += (readSpan (
+                headPosition, lane.pendingStutterStart) - value) * t;
         }
 
         const double direction = lane.reverse ? -1.0 : 1.0;
@@ -564,7 +579,11 @@ private:
             wrapped = true;
         }
         if (wrapped)
-            lane.stutterStart = nextStart;
+        {
+            lane.stutterStart = lane.pendingStutterStartValid
+                ? lane.pendingStutterStart : nextStart;
+            lane.pendingStutterStartValid = false;
+        }
 
         return finite (value);
     }
