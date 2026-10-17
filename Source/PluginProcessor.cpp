@@ -507,13 +507,23 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             vongonProcessor.handleMidi (
                 message, effectMode, midiInputChannel, event.samplePosition);
 
-        // Capture MIDI IN note-on without allocations/graphics on the audio thread.
-        // Note-offs and zero-velocity note-ons never trigger visual division.
+        // Test each physical MIDI note-on, including rapid passages that
+        // occur between two 30Hz GUI polls. A successful high-note event is
+        // latched; low notes and unsuccessful draws do not erase it.
+        // This is constant-time MIDI bookkeeping, NOT audio pitch detection.
         if (message.isNoteOn() && message.getVelocity() > 0.0f
             && message.isForChannel (midiInputChannel))
         {
-            visualMidiNote.store (message.getNoteNumber(), std::memory_order_relaxed);
-            visualMidiSequence.fetch_add (1u, std::memory_order_release);
+            visualMidiRandomState ^= visualMidiRandomState << 13;
+            visualMidiRandomState ^= visualMidiRandomState >> 17;
+            visualMidiRandomState ^= visualMidiRandomState << 5;
+            const int note = message.getNoteNumber();
+            if (note > 72 && note <= 108
+                && (visualMidiRandomState % 5u) == 0u)
+            {
+                visualMidiNote.store (note, std::memory_order_relaxed);
+                visualMidiSequence.fetch_add (1u, std::memory_order_release);
+            }
         }
 
         if (! message.isController()
