@@ -882,6 +882,32 @@ for forbidden in [
 if renderers.count("phase[(size_t) i] = 0.0;") < 1:
     fail("CHORD-A approved voice phase reset missing")
 
+# CHORD-A/DREAMY/EUREKA share quarter-rate YIN for audio-thread
+# budget. The Vongon DSP and wet samples must remain independent.
+for need in [
+    "pitchDetector.prepare (currentSampleRate / 4.0, 768, 128)",
+    "chordPitchAccumulator += mono",
+    "if (++chordPitchDecimation == 4)",
+    "pitchDetector.pushSample (decimated)",
+    "if (effectMode <= 2)",
+]:
+    if need not in processor:
+        fail(f"CHORD/DREAMY/EUREKA low-rate pitch path missing: {need}")
+for need in ["chordPitchAccumulator", "chordPitchDecimation"]:
+    if need not in processor_header:
+        fail(f"CHORD-family YIN decimation state missing: {need}")
+for need in [
+    "eurekaReactiveFrameRate (float inputActivity)",
+]:
+    if need not in (R / "Source/VideoInteraction.h").read_text():
+        fail(f"EUREKA audiovisual reaction helper missing: {need}")
+if "eurekaFramePhase += 4.5f / 30.0f" in editor:
+    fail("EUREKA returned to passive fixed-rate video playback")
+if "paintVideoEffect (g, currentEurekaFrame" not in editor:
+    fail("EUREKA video rendering path unexpectedly changed")
+if "mode < 5 || mode > 8" not in editor:
+    fail("Vongon-only overlay boundary unexpectedly changed")
+
 # Regression guards for the reported EUREKA/POLYPHRASE audio cuts and
 # ROSETONES upper-XY silence. Check the structures rather than mute failures.
 for need in [
@@ -907,7 +933,9 @@ for need in [
         fail(f"Vongon dropout/voice-level regression: {need}")
 for need in [
     "if (attack && chordVisualCooldown <= 0)",
-    "eurekaFramePhase += 4.5f / 30.0f",
+    "effects_video::eurekaReactiveFrameRate (activity)",
+    "eurekaFramePhase += eurekaVideoSpeed / 30.0f",
+    "eurekaVideoRewindFrames > 0",
     "const bool fullVideo = total == 9 * 192 || total == 6 * 192",
     "const float musicalEnergy = juce::jlimit",
     "const float gestureEnergy = juce::jmax",
