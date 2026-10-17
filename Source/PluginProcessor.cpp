@@ -172,7 +172,15 @@ void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e
     if (midi == pendingMidi) ++stableCount;
     else { pendingMidi = midi; stableCount = 1; }
 
-    if (stableCount < 2) return;
+    // Restore the CHORD-A two-hit threshold only. CHORD-B and the
+    // DREAMY/EUREKA trackers keep the three-hit threshold introduced
+    // before the rollback.
+    const int effectMode = juce::roundToInt (
+        apvts.getRawParameterValue (ParamID::effectMode)->load());
+    const int chordMode = juce::roundToInt (
+        apvts.getRawParameterValue (ParamID::chordMode)->load());
+    const int requiredStableCount = effectMode == 0 && chordMode == 0 ? 2 : 3;
+    if (stableCount < requiredStableCount) return;
 
     const int previous = detectedMidi.load (std::memory_order_relaxed);
 
