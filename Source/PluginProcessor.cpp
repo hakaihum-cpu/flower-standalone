@@ -56,7 +56,12 @@ bool RealtimeChordFxAudioProcessor::isBusesLayoutSupported (const BusesLayout& l
 void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
 {
     currentSampleRate = sr > 1000.0 ? sr : 48000.0;
-    pitchDetector.prepare (currentSampleRate, 1024, 256);
+    // 1/4-rate YIN avoids a large autocorrelation workload on the
+    // real-time audio thread. 768/128 at 12 kHz retains >=75 Hz tracking
+    // and responsive note changes; only the detector feed is decimated.
+    pitchDetector.prepare (currentSampleRate / 4.0, 768, 128);
+    chordPitchAccumulator = 0.0f;
+    chordPitchDecimation = 0;
     // Separate low-rate pitch analysis for the Vongon video grid.
     videoPitchDetector.prepare (currentSampleRate / 4.0, 1024, 512);
     audioTileDivisions.store (1, std::memory_order_relaxed);
@@ -605,6 +610,8 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     if (clearRequested.exchange (false, std::memory_order_acq_rel))
     {
         pitchDetector.reset();
+        chordPitchAccumulator = 0.0f;
+        chordPitchDecimation = 0;
         theory.reset();
         sampleChordRenderer.reset();
         sineArpeggiator.reset();
@@ -673,16 +680,24 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         if (pitchSamplesSinceValid < 100000000)
             ++pitchSamplesSinceValid;
 
-        // Chord tracking is only needed by CHORD/DREAMY/EUREKA.
-        // Vongon and CLOUDS do not consume this YIN result; avoiding it
-        // lowers audio-thread work without changing their DSP.
+        // Keep actual CHORD capture, DREAMY, and EUREKA input at the
+        // original sample rate. Decimate ONLY the analysis signal (4:1).
+        // This avoids expensive full-rate YIN analysis on Android and
+        // leaves Vongon/CLOUDS audio paths exactly as before.
         if (effectMode <= 2)
         {
-            const auto estimate = pitchDetector.pushSample (mono);
-            if (estimate.valid)
+            chordPitchAccumulator += mono;
+            if (++chordPitchDecimation == 4)
             {
-                pitchSamplesSinceValid = 0;
-                acceptPitch (estimate);
+                const float decimated = chordPitchAccumulator * 0.25f;
+                chordPitchAccumulator = 0.0f;
+                chordPitchDecimation = 0;
+                const auto estimate = pitchDetector.pushSample (decimated);
+                if (estimate.valid)
+                {
+                    pitchSamplesSinceValid = 0;
+                    acceptPitch (estimate);
+                }
             }
         }
 
