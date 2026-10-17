@@ -42,6 +42,49 @@ int main()
     }
     assert (goodEstimates >= 2);
 
+    // CHORD-A, DREAMY and EUREKA: YIN receives a 4:1 averaged input,
+    // but the audible DSP/capture continues to receive every 48-kHz sample.
+    // Verify the exact decimation, analysis window and hop used by the
+    // processor. The note range includes bass, A3, A4 and high notes.
+    chordfx::YinPitchDetector chordPitch;
+    chordPitch.prepare (12000.0, 768, 128);
+    for (const float hz : {82.4069f, 110.0f, 220.0f, 440.0f, 880.0f})
+    {
+        chordPitch.reset();
+        float accumulator = 0.0f;
+        int decimation = 0;
+        int validEstimates = 0;
+        for (int sample = 0; sample < 24000; ++sample)
+        {
+            const float input = 0.22f * std::sin (
+                2.0f * 3.14159265358979323846f * hz
+                * (float) sample / 48000.0f);
+            accumulator += input;
+            if (++decimation == 4)
+            {
+                const auto estimate = chordPitch.pushSample (
+                    accumulator * 0.25f);
+                decimation = 0;
+                accumulator = 0.0f;
+                if (estimate.valid)
+                {
+                    assert (std::abs (estimate.hz - hz)
+                        < std::max (3.0f, hz * 0.012f));
+                    ++validEstimates;
+                }
+            }
+        }
+        assert (validEstimates >= 3);
+    }
+
+    // EUREKA's original sequential video clip source stays intact, but
+    // playback now stops when quiet and follows actual signal intensity.
+    assert (effects_video::eurekaReactiveFrameRate (0.0f) == 0.0f);
+    assert (effects_video::eurekaReactiveFrameRate (0.002f) == 0.0f);
+    assert (effects_video::eurekaReactiveFrameRate (0.04f) >
+            effects_video::eurekaReactiveFrameRate (0.01f));
+    assert (effects_video::eurekaReactiveFrameRate (1.0f) <= 9.0f);
+
     // A sound onset, NOT every detected pitch update, gets one 1-in-5
     // chance. Test repeated notes with quiet gaps, sustained notes,
     // changing pitches inside accepted splits, and the ~2.5s hold.
