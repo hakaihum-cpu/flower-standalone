@@ -911,7 +911,7 @@ for need in [
     "const bool fullVideo = total == 9 * 192 || total == 6 * 192",
     "const float musicalEnergy = juce::jlimit",
     "const float gestureEnergy = juce::jmax",
-    "midiTileHoldTicks > 0 ? 0.45f : 0.0f",
+    "audioTileHoldTicks > 0 ? 0.45f : 0.0f",
     "const float targetFps = drive < 0.018f ? 0.0f",
     "vongonFramePhase += vongonVideoSpeed / 30.0f",
     "vongonRewindFrames > 0",
@@ -1146,38 +1146,42 @@ print("[PASS] pinned Clouds DSP / musical XY / attribution contracts verified")
 print("[PASS] CHORD-B continuously-smoothed cents-offset contract verified")
 print("[PASS] EUREKA click-hardening / output-safety contracts verified")
 print("[PASS] three global preset slots verified")
-# Visual MIDI-only tiling, Vongon MULTI and direct selector must remain
-# message-thread concerns. The approved DSP behavior is not modified.
+# Vongon video mosaics follow pitched audio, NOT incoming MIDI notes.
+# Existing CHORD/DREAMY/EUREKA pitch tracking stays independent.
 video_logic = (R / "Source/VideoInteraction.h").read_text()
 processor_visual = (R / "Source/PluginProcessor.cpp").read_text()
 editor_visual = (R / "Source/PluginEditor.cpp").read_text()
 editor_header_visual = (R / "Source/PluginEditor.h").read_text()
 for need in [
-    "divisionsForNote (int midiNote)",
-    "shouldDivideOnNote (std::uint32_t randomState)",
+    "divisionsForPitchHz (float hz)",
     "vongonModeForXY (float x, float y)",
     "localX (float x)",
     "localY (float y)",
 ]:
     if need not in video_logic:
-        fail(f"Visual MIDI/MULTI mapping missing: {need}")
+        fail(f"Audio pitch video/MULTI mapping missing: {need}")
 if 'file="Source/VideoInteraction.h"' not in jucer_text:
     fail("Visual interaction helper not declared in JUCE project")
 for need in [
-    "message.isNoteOn() && message.getVelocity() > 0.0f",
-    "message.isForChannel (midiInputChannel)",
-    "const int note = message.getNoteNumber()",
-    "effects_video::shouldDivideOnNote (visualMidiRandomState)",
-    "visualMidiNote.store (note, std::memory_order_relaxed)",
-    "visualMidiSequence.fetch_add (1u",
+    "videoPitchDetector.prepare (currentSampleRate / 4.0, 1024, 512)",
+    "videoPitchDetector.pushSample (decimated)",
+    "videoPitchAccumulator += mono",
+    "videoPitchStableCount >= 2",
+    "effects_video::divisionsForPitchHz (estimate.hz)",
+    "audioTileDivisions.store (",
+    "currentSampleRate * 0.45",
 ]:
     if need not in processor_visual:
-        fail(f"MIDI note-on to video notification missing: {need}")
+        fail(f"Audio pitch mosaic signal route missing: {need}")
+if "shouldDivideOnNote" in processor_visual or "visualMidiSequence" in processor_visual:
+    fail("Obsolete MIDI Note On mosaic trigger still active")
+if "videoPitchDetector" not in (R / "Source/PluginProcessor.h").read_text():
+    fail("Independent low-rate video pitch detector missing")
 for need in [
     "paintEffectsMenu (juce::Graphics& g)",
     "paintEffectsShortcut (juce::Graphics& g)",
     "chooseEffectFromMenu (int index)",
-    "drawMidiVideoTiles (juce::Graphics& g)",
+    "drawAudioVideoTiles (juce::Graphics& g)",
     "startMultiRecording()",
     "stopMultiRecordingAndPlay()",
     "clearMultiRecording()",
@@ -1185,9 +1189,9 @@ for need in [
     "heldMs >= 700.0 && ! multiPointerMoved",
     "multiTransport == 1",
     "multiTransport == 2",
-    "midiTileHoldTicks = 75",
-    "midiTileDivisions = effects_video::divisionsForNote (note)",
-    "drawMidiVideoTiles (g)",
+    "processor.getAudioTileDivisions()",
+    "audioTileDivisions = measuredDivisions",
+    "drawAudioVideoTiles (g)",
     "effects_video::vongonModeForXY (multiX, multiY)",
     "processor.setVongonXY (",
     'g.drawText ("EFFECTS", 499, 22, 84, 24',
@@ -1198,7 +1202,7 @@ for need in [
     if need not in editor_visual:
         fail(f"EFFECTS direct menu/MULTI recorder contract missing: {need}")
 for need in ["multiModeEnabled", "multiRecordedXY", "multiTransport",
-             "effectsMenuVisible", "lastVisualMidiSequence"]:
+             "effectsMenuVisible", "audioTileEventSequence"]:
     if need not in editor_header_visual:
         fail(f"Visual control/editor state missing: {need}")
 # The 720px top bar keeps BOOST at 300..376, mode settings at
@@ -1226,19 +1230,19 @@ for obsolete in [
 ]:
     if obsolete in cloud_paint:
         fail(f"CLOUDS video masking/crosshair regression: {obsolete}")
-# A MIDI-triggered 2..10x grid must display actual moving film,
+# An audio-pitch-driven 2..10x grid must display actual moving film,
 # not three static JPEGs decoded just once at the trigger.
 tile_start = editor_visual.find(
-    "void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (")
+    "void RealtimeChordFxAudioProcessorEditor::drawAudioVideoTiles (")
 tile_end = editor_visual.find(
     "void RealtimeChordFxAudioProcessorEditor::applyMultiXY (", tile_start)
 if tile_start < 0 or tile_end < 0:
-    fail("MIDI tile rendering boundaries missing")
+    fail("Audio tile rendering boundaries missing")
 tile_paint = editor_visual[tile_start:tile_end]
 for required in [
-    "midiTileLastVongonRevision != dotVongonRevision",
-    "const int slot = midiTileAlternateUpdateSlot++ % 3",
-    "midiTileAlternateFrames[(size_t) slot]",
+    "audioTileLastVongonRevision != dotVongonRevision",
+    "const int slot = audioTileAlternateUpdateSlot++ % 3",
+    "audioTileAlternateFrames[(size_t) slot]",
     "effects_video::tileSourceVariant (",
     "0, 0, picture.getWidth(), picture.getHeight()",
 ]:
@@ -1285,23 +1289,30 @@ for required in [
 if "dryPopupVisible" not in editor_header_visual:
     fail("DRY popup missing from editor state")
 
-# Regression: the 1-in-5 choice happens in the MIDI callback exactly once.
-# If the UI also draws a 1-in-5 probability, the chance becomes 1-in-25.
+# Regression: only the audio pitch detector controls tile count, with
+# no MIDI draw probability or performance-video diagnostic overlay.
 timer_start = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::timerCallback()")
 timer_end = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paint (", timer_start)
 if timer_start < 0 or timer_end < 0:
-    fail("Visual MIDI tile timer boundaries missing")
+    fail("Audio-pitch video tile timer boundaries missing")
 timer_code = editor_visual[timer_start:timer_end]
-# Vongon's separate video-FX randomization also uses '% 5u'; it must
-# NOT count as an extra MIDI tile draw. Inspect the MIDI-only UI section.
-midi_tile_end = timer_code.find("    // Fire CLEAR as soon as the long-press threshold")
-if midi_tile_end < 0:
-    fail("MIDI tile timer event-section boundary missing")
-midi_tile_code = timer_code[:midi_tile_end]
-if "shouldDivideOnNote" in midi_tile_code or "visualRandomState % 5u" in midi_tile_code:
-    fail("MIDI tiles incorrectly randomized again on GUI thread (1 in 25)")
-if "midiTileHoldTicks = 75" not in midi_tile_code or "midiTileHoldTicks == 0" not in midi_tile_code:
-    fail("MIDI tiled frame is not kept visible long enough")
+pitch_tile_end = timer_code.find("    // Fire CLEAR as soon as the long-press threshold")
+if pitch_tile_end < 0:
+    fail("Audio pitch tile timer event-section boundary missing")
+pitch_tile_code = timer_code[:pitch_tile_end]
+for required in [
+    "processor.getAudioTileDivisions()",
+    "measuredDivisions != audioTileDivisions",
+    "++audioTileEventSequence",
+]:
+    if required not in pitch_tile_code:
+        fail(f"Live audio pitch cannot update video grid: {required}")
+for obsolete in [
+    "getVisualMidiSequence()", "getVisualMidiNote()",
+    "shouldDivideOnNote", "audioTileHoldTicks",
+]:
+    if obsolete in pitch_tile_code:
+        fail(f"Obsolete MIDI mosaic trigger remains: {obsolete}")
 paint_start = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paintVongonMode (")
 paint_end = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paintVongonParameterPanel (", paint_start)
 if paint_start < 0 or paint_end < 0:
@@ -1310,8 +1321,8 @@ paint = editor_visual[paint_start:paint_end]
 # The correct behavior is a full-opacity replacement video canvas, not
 # a semitransparent overlay on top of the original fullscreen picture.
 for required in [
-    "if (midiTileDivisions > 1 && currentVongonFrame.isValid())",
-    "drawMidiVideoTiles (g);",
+    "if (audioTileDivisions > 1 && currentVongonFrame.isValid())",
+    "drawAudioVideoTiles (g);",
     "else\n    {\n        if (currentVongonFrame.isValid())",
     "paintMediaFrame (",
     "paintVideoEffect (",
@@ -1319,11 +1330,11 @@ for required in [
     if required not in paint:
         fail(f"Vongon replace-not-overlay mosaic paint missing: {required}")
 mosaic_branch_end = paint.find("    else\n    {\n        if (currentVongonFrame.isValid())")
-if mosaic_branch_end < paint.find("drawMidiVideoTiles (g);"):
+if mosaic_branch_end < paint.find("drawAudioVideoTiles (g);"):
     fail("Video mosaic is not painted before normal full-frame branch")
 mosaic_branch = paint[:mosaic_branch_end]
 if "paintVideoEffect (" in mosaic_branch or "paintMediaFrame (" in mosaic_branch:
-    fail("Full video/VHS still drawn underneath MIDI mosaic")
+    fail("Full video/VHS still drawn underneath audio-pitch mosaic")
 for required in [
     "g.setOpacity (1.0f)",
     "g.setColour (juce::Colours::black)",
@@ -1332,7 +1343,7 @@ for required in [
     "0, 0, picture.getWidth(), picture.getHeight()",
 ]:
     if required not in tile_paint:
-        fail(f"Opaque full-screen MIDI video tiles missing: {required}")
+        fail(f"Opaque full-screen audio-pitch video tiles missing: {required}")
 
 
 
