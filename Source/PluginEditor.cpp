@@ -823,34 +823,100 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
              && effectMode <= 8
              && vongonFrames.getFrameCount() > 0)
     {
+        const float x = juce::jlimit (0.0f, 1.0f, processor.getVongonX());
+        const float y = juce::jlimit (0.0f, 1.0f, processor.getVongonY());
+        const float xyDelta = std::abs (x - vongonPreviousX)
+                            + std::abs (y - vongonPreviousY);
+        vongonPreviousX = x;
+        vongonPreviousY = y;
+
+        // Activity and physical XY movement control time itself. Silence
+        // with stationary parameters must settle to a held video frame.
+        const float musicalEnergy = juce::jlimit (
+            0.0f, 1.0f, (activity - 0.004f) * 12.0f);
+        const float gestureEnergy = juce::jlimit (
+            0.0f, 1.0f, xyDelta * 7.0f);
+        const float drive = juce::jmax (musicalEnergy, gestureEnergy);
         const bool attack =
-            activity > 0.006f
-            && activity > vongonVisualPreviousActivity * 1.30f + 0.0015f;
-        vongonSwitchClipPending |= attack;
+            activity > 0.009f
+            && activity > vongonVisualPreviousActivity * 1.35f + 0.002f;
+        const bool gesture = gestureEnergy > 0.15f;
+
         const int total = vongonFrames.getFrameCount();
-        // Nine user-source 192-frame / 8-second clips play at 24 fps.
-        // Older six-clip full-rate and 216-frame shipped banks remain readable.
         const bool fullVideo = total == 9 * 192 || total == 6 * 192;
         const int clipFrames = fullVideo ? 192 : 36;
-        const int clips = total / clipFrames;
-        const float playbackFps = fullVideo ? 24.0f : 4.5f;
-        vongonFramePhase += playbackFps / 30.0f;
+        const int clips = juce::jmax (1, total / clipFrames);
+        const float maximumFps = fullVideo ? 24.0f : 4.5f;
+
+        if (vongonClipCooldown > 0)
+            --vongonClipCooldown;
+
+        if (attack || gesture)
+        {
+            // An onset/gesture changes an actual video treatment, not an
+            // artificial clock-driven scanline or constant photo slideshow.
+            vongonGhostFrame = currentVongonFrame;
+            visualRandomState ^= visualRandomState << 13;
+            visualRandomState ^= visualRandomState >> 17;
+            visualRandomState ^= visualRandomState << 5;
+            vongonFxStyle = (int) (visualRandomState % 5u);
+            ++vongonFxEvent;
+            vongonVisualFx = juce::jmax (
+                vongonVisualFx,
+                juce::jlimit (0.34f, 1.0f,
+                    0.46f + 0.38f * drive + 0.30f * y));
+            // Short tape pull-back on some transients; not a running loop.
+            if (vongonFxStyle == 1 || vongonFxStyle == 4)
+                vongonRewindFrames = 4
+                    + juce::roundToInt (x * 10.0f);
+        }
+        vongonVisualFx = juce::jmax (
+            vongonVisualFx * 0.925f, musicalEnergy * 0.12f);
+
+        // A new distinct clip can be selected at an onset, but only after
+        // a long cooldown. Within the clip, motion and degradation are
+        // much more important than repeatedly changing videos.
+        if (attack && clips > 1 && vongonClipCooldown == 0)
+        {
+            const int previousClip = vongonFrameIndex / clipFrames;
+            const int nextClip = nextVisualFrame (clips, previousClip);
+            vongonFrameIndex = nextClip * clipFrames;
+            vongonFramePhase = 0.0f;
+            vongonClipCooldown = 120; // >=4 seconds between clip cuts
+            vongonRewindFrames = 0;
+        }
+
+        const float targetFps = drive < 0.018f ? 0.0f
+            : juce::jmin (maximumFps,
+                (2.0f + maximumFps * drive)
+                * (0.48f + 0.52f * x));
+        vongonVideoSpeed += 0.23f
+            * (targetFps - vongonVideoSpeed);
+        if (targetFps == 0.0f && vongonVideoSpeed < 0.14f)
+            vongonVideoSpeed = 0.0f;
+
+        vongonFramePhase += vongonVideoSpeed / 30.0f;
         while (vongonFramePhase >= 1.0f)
         {
             vongonFramePhase -= 1.0f;
-            const int position = vongonFrameIndex % clipFrames;
             const int clip = vongonFrameIndex / clipFrames;
-            if (position == clipFrames - 1)
+            const int position = vongonFrameIndex % clipFrames;
+            if (vongonRewindFrames > 0)
             {
-                const int nextClip =
-                    vongonSwitchClipPending && clips > 1
-                    ? (clip + 1) % clips : clip;
-                vongonFrameIndex = nextClip * clipFrames;
-                vongonSwitchClipPending = false;
+                vongonFrameIndex = clip * clipFrames
+                    + (position + clipFrames - 1) % clipFrames;
+                --vongonRewindFrames;
             }
             else
-                ++vongonFrameIndex;
+            {
+                // A held note advances smoothly through its own clip.
+                // Reaching the end loops within that clip, never a
+                // fixed-rate mandatory switch to the next clip.
+                vongonFrameIndex = clip * clipFrames
+                    + (position + 1) % clipFrames;
+            }
         }
+
         if (vongonFrameIndex != loadedVongonFrame)
         {
             currentVongonFrame = vongonFrames.getFrame (
@@ -861,7 +927,6 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         vongonVisualPreviousActivity =
             0.60f * vongonVisualPreviousActivity + 0.40f * activity;
     }
-
     dotActivity = juce::jlimit (0.0f, 1.0f, activity * 18.0f);
     if (dotModeEnabled() && ++dotTimerDivider >= 2)
     {
@@ -1185,37 +1250,143 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
 void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (
     juce::Graphics& g, const juce::Image& source, float x, float y)
 {
-    if (! source.isValid()) return;
+    if (! source.isValid())
+        return;
 
-    // Playback follows the user-supplied clip in sequence. Parameters act
-    // on the moving picture itself rather than selecting random stills.
-    const float intensity = juce::jlimit (
-        0.0f, 1.0f, 0.12f + x * 0.42f + dotActivity * 0.28f);
-    const float movement = std::sin (
-        (float) videoEffectTick * 0.16f + y * 4.0f);
-    const float offset = (2.0f + 13.0f * x) * movement;
-    juce::Graphics::ScopedSaveState save (g);
+    // Do not superimpose scrolling scanlines over the video. EUREKA keeps
+    // its own ordered visual bank. Only Vongon video gets these live
+    // treatments, and they decay completely during quiet inactivity.
+    const int mode = juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::effectMode)->load());
+    if (mode < 5 || mode > 8 || vongonVisualFx < 0.025f)
+        return;
+
+    const float energy = juce::jlimit (
+        0.0f, 1.0f,
+        vongonVisualFx * (0.45f + 0.35f * x + 0.30f * y));
+    const bool dot = dotModeEnabled();
+    const juce::Image& video = dot && dotDisplayCache.isValid()
+        ? dotDisplayCache : source;
+
+    juce::Graphics::ScopedSaveState state (g);
     g.reduceClipRegion (juce::Rectangle<int> (0, 0, 720, 720));
-    if (! dotModeEnabled())
+    const float bandY = (float) ((vongonFxEvent * 137 + 83) % 580);
+    const float bandH = 24.0f + 100.0f * y * energy;
+    const float offset = (x >= 0.5f ? 1.0f : -1.0f)
+        * (8.0f + 65.0f * x) * energy;
+    const int style = vongonFxStyle;
+
+    // Video feedback: an earlier source frame is briefly superimposed,
+    // rather than replacing the moving picture with another still.
+    if (style == 1 || style == 3 || style == 4)
     {
-        g.setOpacity (0.07f + 0.18f * intensity);
-        g.drawImage (
-            source,
-            juce::Rectangle<float> (
-                offset, 0.0f, design, design),
+        const juce::Image& echo = ! dot && vongonGhostFrame.isValid()
+            ? vongonGhostFrame : video;
+        g.setOpacity (0.15f + 0.23f * energy);
+        g.drawImage (echo,
+            juce::Rectangle<float> (offset * 0.5f, -offset * 0.15f,
+                                    720.0f, 720.0f),
             juce::RectanglePlacement::stretchToFit);
     }
-    // Gentle horizontal analogue-video displacement, also in DOT mode.
-    // No opaque black panel and no artificial frame replacement.
-    g.setColour (uiColour (0.10f + intensity * 0.20f));
-    const int period = juce::jmax (12, 30 - juce::roundToInt (x * 16.0f));
-    for (int row = 0; row < 720; row += period)
+
+    // A portion of the real video image is displaced horizontally: a
+    // tracking error or tape shear, never a static line overlaid on top.
+    if (style == 0 || style == 2 || style == 4)
     {
-        const float shift = offset * (0.18f + 0.12f * y);
-        g.drawHorizontalLine (
-            row + (videoEffectTick % period),
-            juce::jmax (0.0f, shift),
-            juce::jmin (720.0f, 720.0f + shift));
+        g.setOpacity (juce::jlimit (0.20f, 0.92f, 0.35f + energy));
+        const float srcY = bandY * (float) video.getHeight() / 720.0f;
+        const float srcH = bandH * (float) video.getHeight() / 720.0f;
+        g.drawImage (
+            video,
+            juce::Rectangle<float> (offset, bandY, 720.0f, bandH),
+            juce::Rectangle<float> (
+                0.0f, srcY, (float) video.getWidth(), srcH));
+        // A second independent tear adds a VHS head-switching feel.
+        g.setOpacity (0.30f * energy);
+        g.drawImage (
+            video,
+            juce::Rectangle<float> (
+                -offset * 0.6f, bandY + bandH + 14.0f,
+                720.0f, bandH * 0.46f),
+            juce::Rectangle<float> (
+                0.0f,
+                (bandY + bandH + 14.0f) * (float) video.getHeight() / 720.0f,
+                (float) video.getWidth(),
+                bandH * 0.46f * (float) video.getHeight() / 720.0f));
+    }
+
+    // Chromatic misregistration: red and cyan channels have independent
+    // displacement. Small cached images keep pixel work off the audio
+    // thread and avoid full-resolution processing on each paint call.
+    if (! dot && (style == 2 || style == 3 || style == 4))
+    {
+        if (vongonFringeRevision != dotVongonRevision
+            || ! vongonRedFringe.isValid()
+            || ! vongonCyanFringe.isValid())
+        {
+            constexpr int w = 160, h = 90;
+            juce::Image small (juce::Image::RGB, w, h, true);
+            juce::Graphics downsample (small);
+            downsample.drawImage (
+                source,
+                juce::Rectangle<float> (
+                    0.0f, 0.0f, (float) w, (float) h),
+                juce::RectanglePlacement::stretchToFit);
+
+            vongonRedFringe = juce::Image (
+                juce::Image::ARGB, w, h, true);
+            vongonCyanFringe = juce::Image (
+                juce::Image::ARGB, w, h, true);
+            juce::Image::BitmapData input (
+                small, juce::Image::BitmapData::readOnly);
+            juce::Image::BitmapData red (
+                vongonRedFringe, juce::Image::BitmapData::readWrite);
+            juce::Image::BitmapData cyan (
+                vongonCyanFringe, juce::Image::BitmapData::readWrite);
+
+            for (int row = 0; row < h; ++row)
+                for (int col = 0; col < w; ++col)
+                {
+                    const auto pixel = input.getPixelColour (col, row);
+                    red.setPixelColour (col, row,
+                        juce::Colour::fromRGBA (
+                            pixel.getRed(), 0, 0, 185));
+                    cyan.setPixelColour (col, row,
+                        juce::Colour::fromRGBA (
+                            0, pixel.getGreen(), pixel.getBlue(), 185));
+                }
+            vongonFringeRevision = dotVongonRevision;
+        }
+
+        const float split = 3.0f + 13.0f * energy * (0.3f + x);
+        g.setOpacity (0.14f + 0.40f * energy);
+        g.drawImage (
+            vongonRedFringe,
+            juce::Rectangle<float> (
+                -split, 0.0f, 720.0f, 720.0f),
+            juce::RectanglePlacement::stretchToFit);
+        g.drawImage (
+            vongonCyanFringe,
+            juce::Rectangle<float> (
+                split, 0.0f, 720.0f, 720.0f),
+            juce::RectanglePlacement::stretchToFit);
+    }
+
+    // Sparse tape tracking noise appears on events only. No evenly
+    // spaced lines and no monotonically scrolling 1-mm stripe pattern.
+    if (style == 0 || style == 4)
+    {
+        g.setOpacity (1.0f);
+        for (int i = 0; i < 3; ++i)
+        {
+            const int yy = (vongonFxEvent * 173 + i * 239) % 718;
+            g.setColour (
+                juce::Colours::white.withAlpha (
+                    (0.08f + 0.18f * energy) / (float) (i + 1)));
+            g.fillRect (
+                18.0f + (float) (i * 97), (float) yy,
+                160.0f + 400.0f * energy, 1.0f);
+        }
     }
 }
 
@@ -1230,11 +1401,6 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
     paintVideoEffect (
         g, currentVongonFrame,
         processor.getVongonX(), processor.getVongonY());
-
-    // Keep the supplied Vongon video fully visible, including the lower area.
-    // Do not mask it with the former translucent black footer panel.
-    g.setColour (juce::Colours::black.withAlpha (0.34f));
-    g.fillRect (0.0f, 0.0f, 720.0f, 88.0f);
 
     const float x = juce::jlimit (0.0f, 1.0f, processor.getVongonX());
     const float y = juce::jlimit (0.0f, 1.0f, processor.getVongonY());
@@ -1271,13 +1437,6 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
         paintVongonParameterPanel (g, effectMode);
         return;
     }
-
-    const float px = x * design;
-    const float py = 70.0f + (1.0f - y) * 650.0f;
-    g.setColour (uiColour (touch ? 0.86f : 0.34f));
-    g.drawLine (px, 72.0f, px, 558.0f, 1.0f);
-    g.drawLine (0.0f, py, 720.0f, py, 1.0f);
-    g.fillRect (px - 4.0f, py - 4.0f, 8.0f, 8.0f);
 
     g.setColour (uiColour (0.80f));
     g.setFont (juce::FontOptions (10.8f));
