@@ -1310,6 +1310,153 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
         24, 666, 672, 24, juce::Justification::centredLeft, 1);
 }
 
+
+void RealtimeChordFxAudioProcessorEditor::paintEffectsShortcut (juce::Graphics& g)
+{
+    // All mode screens share a top-right shortcut, immediately left of CONFIG.
+    // Use an opaque hit area so the underlying video cannot confuse its label.
+    g.setColour (juce::Colours::black.withAlpha (0.48f));
+    g.fillRoundedRectangle (
+        juce::Rectangle<float> (496.0f, 14.0f, 91.0f, 42.0f), 4.0f);
+    g.setColour (uiColour (0.94f));
+    g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
+    g.drawText ("EFFECTS", 499, 22, 84, 24, juce::Justification::centred);
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintEffectsMenu (juce::Graphics& g)
+{
+    g.fillAll (juce::Colours::black);
+    static constexpr const char* names[] = {
+        "CHORD-A", "CHORD-B", "DREAMY", "EUREKA",
+        "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES",
+        "SOLARFAZE", "POLYPHRASE", "MULTI"
+    };
+    const int mode = juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::effectMode)->load());
+    const int chord = juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::chordMode)->load());
+    const int selected = multiModeEnabled ? 10
+        : mode == 0 ? chord : mode + 1;
+
+    g.setColour (uiColour (0.96f));
+    g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
+    g.drawText ("EFFECTS", 30, 22, 200, 35,
+                juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (15.0f).withStyle ("Bold"));
+    g.drawText ("CLOSE", 602, 22, 90, 35,
+                juce::Justification::centredRight);
+    g.setFont (juce::FontOptions (12.0f));
+    g.setColour (uiColour (0.72f));
+    g.drawText ("SELECT MODE", 30, 78, 350, 30,
+                juce::Justification::centredLeft);
+
+    for (int i = 0; i < 11; ++i)
+    {
+        const int col = i % 2, row = i / 2;
+        const juce::Rectangle<float> bounds (
+            28.0f + 344.0f * (float) col,
+            126.0f + 91.0f * (float) row,
+            319.0f, 71.0f);
+        g.setColour (uiColour (i == selected ? 0.22f : 0.07f));
+        g.fillRoundedRectangle (bounds, 4.0f);
+        g.setColour (uiColour (i == selected ? 0.96f : 0.45f));
+        g.drawRoundedRectangle (bounds, 4.0f,
+                                i == selected ? 2.5f : 1.0f);
+        g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
+        g.drawText (names[i], bounds, juce::Justification::centred);
+    }
+}
+
+void RealtimeChordFxAudioProcessorEditor::chooseEffectFromMenu (int index)
+{
+    if (index < 0 || index > 10)
+        return;
+
+    multiPointerDown = false;
+    multiTransport = 0;
+    multiModeEnabled = index == 10;
+    vongonPanelVisible = false;
+    eurekaPanelVisible = false;
+    chordBotEditMode = false;
+    vongonXYTouchDown = false;
+    effectsMenuVisible = false;
+
+    if (index == 0 || index == 1)
+    {
+        setChoiceActual (ParamID::chordMode, index);
+        setChoiceActual (ParamID::effectMode, 0);
+    }
+    else if (index < 10)
+    {
+        setChoiceActual (ParamID::effectMode, index - 1);
+    }
+    else
+    {
+        // MULTI has no synthetic/parallel audio engine: one of the four
+        // unchanged Vongon effects is selected by the global 2x2 XY area.
+        applyMultiXY (multiX, multiY);
+    }
+}
+
+void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
+{
+    if (! currentVongonFrame.isValid() || midiTileDivisions <= 1)
+        return;
+    const juce::Image& image = dotModeEnabled() && dotDisplayCache.isValid()
+        ? dotDisplayCache : currentVongonFrame;
+    const int size = juce::jlimit (2, 10, midiTileDivisions);
+    juce::Graphics::ScopedSaveState save (g);
+    g.reduceClipRegion (juce::Rectangle<int> (0, 0, 720, 720));
+    // All cells contain the actual currently selected video frame; no
+    // AI stills, black panels or additional images are generated.
+    for (int row = 0; row < size; ++row)
+        for (int col = 0; col < size; ++col)
+        {
+            const float cellSize = design / (float) size;
+            const auto rect = juce::Rectangle<float> (
+                (float) col * cellSize,
+                (float) row * cellSize, cellSize, cellSize);
+            g.drawImage (image, rect,
+                         juce::RectanglePlacement::stretchToFit);
+        }
+}
+
+void RealtimeChordFxAudioProcessorEditor::applyMultiXY (float x, float y)
+{
+    multiX = juce::jlimit (0.0f, 1.0f, x);
+    multiY = juce::jlimit (0.0f, 1.0f, y);
+    const int target = effects_video::vongonModeForXY (multiX, multiY);
+    const int current = juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::effectMode)->load());
+    if (current != target)
+        setChoiceActual (ParamID::effectMode, target);
+    processor.setVongonXY (
+        effects_video::localX (multiX),
+        effects_video::localY (multiY), false);
+}
+
+void RealtimeChordFxAudioProcessorEditor::startMultiRecording()
+{
+    multiRecordCount = 0;
+    multiPlaybackIndex = 0;
+    multiTransport = 1;
+    multiRecordedXY[(size_t) multiRecordCount++] = { multiX, multiY };
+}
+
+void RealtimeChordFxAudioProcessorEditor::stopMultiRecordingAndPlay()
+{
+    multiPlaybackIndex = 0;
+    multiTransport = multiRecordCount > 0 ? 2 : 0;
+}
+
+void RealtimeChordFxAudioProcessorEditor::clearMultiRecording()
+{
+    multiTransport = 0;
+    multiRecordCount = 0;
+    multiPlaybackIndex = 0;
+    multiPointerDown = false;
+}
+
 void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (
     juce::Graphics& g, const juce::Image& source, float x, float y)
 {
