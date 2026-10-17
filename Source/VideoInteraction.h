@@ -5,8 +5,9 @@
 
 namespace effects_video
 {
-// Input audio drives the full-frame video mosaic; no MIDI note gate or
-// random trigger remains.  Silence/invalid pitch returns one full image.
+// Input audio pitch drives mosaic tile count; MIDI note gates are removed.
+// The separate audible-onset gate below chooses split events at ~20%.
+// Silence or invalid pitch returns one full image when not holding a split.
 // Valid low notes start at 2x2; increasing frequency reaches 10x10.
 // Frequency is measured in Hz by a low-rate, independent YIN detector.
 inline int divisionsForPitchHz (float hz) noexcept
