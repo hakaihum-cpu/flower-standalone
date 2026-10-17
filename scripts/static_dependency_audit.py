@@ -899,7 +899,7 @@ for need in [
 for need in [
     "if (attack && chordVisualCooldown <= 0)",
     "eurekaFramePhase += 4.5f / 30.0f",
-    "const bool fullVideo = total == 6 * 192",
+    "const bool fullVideo = total == 9 * 192 || total == 6 * 192",
     "vongonFramePhase += playbackFps / 30.0f",
     "eurekaSwitchClipPending |= attack",
     "vongonSwitchClipPending |= attack",
