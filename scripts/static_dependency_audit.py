@@ -1208,9 +1208,15 @@ timer_end = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paint 
 if timer_start < 0 or timer_end < 0:
     fail("Visual MIDI tile timer boundaries missing")
 timer_code = editor_visual[timer_start:timer_end]
-if "shouldDivideOnNote" in timer_code or "visualRandomState % 5u" in timer_code:
+# Vongon's separate video-FX randomization also uses '% 5u'; it must
+# NOT count as an extra MIDI tile draw. Inspect the MIDI-only UI section.
+midi_tile_end = timer_code.find("    // Fire CLEAR as soon as the long-press threshold")
+if midi_tile_end < 0:
+    fail("MIDI tile timer event-section boundary missing")
+midi_tile_code = timer_code[:midi_tile_end]
+if "shouldDivideOnNote" in midi_tile_code or "visualRandomState % 5u" in midi_tile_code:
     fail("MIDI tiles incorrectly randomized again on GUI thread (1 in 25)")
-if "midiTileHoldTicks = 75" not in timer_code or "midiTileHoldTicks == 0" not in timer_code:
+if "midiTileHoldTicks = 75" not in midi_tile_code or "midiTileHoldTicks == 0" not in midi_tile_code:
     fail("MIDI tiled frame is not kept visible long enough")
 paint_start = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paintVongonMode (")
 paint_end = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paintVongonParameterPanel (", paint_start)
