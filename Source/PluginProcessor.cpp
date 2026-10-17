@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ParameterIDs.h"
+#include "VideoInteraction.h"
 #include <cmath>
 
 namespace
@@ -519,7 +520,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             visualMidiRandomState ^= visualMidiRandomState << 5;
             const int note = message.getNoteNumber();
             if (note > 72 && note <= 108
-                && (visualMidiRandomState % 5u) == 0u)
+                && effects_video::shouldDivideOnNote (visualMidiRandomState))
             {
                 visualMidiNote.store (note, std::memory_order_relaxed);
                 visualMidiSequence.fetch_add (1u, std::memory_order_release);
