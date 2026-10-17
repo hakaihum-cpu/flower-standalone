@@ -833,12 +833,32 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         vongonPreviousX = x;
         vongonPreviousY = y;
 
-        // Activity and physical XY movement control time itself. Silence
-        // with stationary parameters must settle to a held video frame.
+        // All the individual Vongon panel/MIDI CC parameters can also
+        // animate the video, not just XY. Reading their atomics at 30 Hz
+        // does not touch audio processing.
+        int controlCount = 0;
+        const auto* controls = getVongonControls (effectMode, controlCount);
+        std::uint32_t parameterSignature = 2166136261u;
+        for (int i = 0; i < controlCount; ++i)
+        {
+            const auto cc = controls[i].cc;
+            const auto val = processor.getVongonCc (effectMode, cc);
+            parameterSignature ^= (std::uint32_t) (129 * cc + val + 2);
+            parameterSignature *= 16777619u;
+        }
+        const bool parameterEdited =
+            vongonParameterSignatureMode == effectMode
+            && vongonParameterSignature != parameterSignature;
+        vongonParameterSignatureMode = effectMode;
+        vongonParameterSignature = parameterSignature;
+
+        // Audio dynamics, XY gestures, and parameter edits control time.
+        // Silent and untouched video settles to a held original frame.
         const float musicalEnergy = juce::jlimit (
             0.0f, 1.0f, (activity - 0.004f) * 12.0f);
-        const float gestureEnergy = juce::jlimit (
-            0.0f, 1.0f, xyDelta * 7.0f);
+        const float gestureEnergy = juce::jmax (
+            juce::jlimit (0.0f, 1.0f, xyDelta * 7.0f),
+            parameterEdited ? 0.72f : 0.0f);
         const float drive = juce::jmax (musicalEnergy, gestureEnergy);
         const bool attack =
             activity > 0.009f
