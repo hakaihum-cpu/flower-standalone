@@ -74,6 +74,9 @@ public:
         vongonProcessor.requestPolyTrigger();
     }
     void releaseMidiControllerTouch() noexcept;
+    // Consume MIDI IN CC parameter changes on the UI/message thread.
+    // The audio thread only stages integers in lock-free atomics.
+    void applyPendingMidiInputChanges();
     void notifyMidiControllerConfigChanged() noexcept { controllerDirty.store (true, std::memory_order_release); }
     void notifyChordAHoldChanged() noexcept { chordAHoldRefreshRequested.store (true, std::memory_order_release); }
     int getMidiControllerX() const noexcept { return controllerX.load (std::memory_order_relaxed); }
@@ -167,6 +170,11 @@ private:
     std::atomic<int> detectedMidi { -1 };
     std::atomic<bool> chordAHoldRefreshRequested { false };
     std::atomic<int> visualFrame { 0 };
+    // CC110=X, CC111=Y, CC112=MODE, CC113=CHORD A/B.
+    // CC20-27=CHORD; CC40-56=EUREKA; CC115-118=global.
+    std::array<std::atomic<int>, 128> midiInputPending {};
+    std::atomic<int> midiInputX { 64 };
+    std::atomic<int> midiInputY { 64 };
 
     int pendingMidi = -1;
     int stableCount = 0;
