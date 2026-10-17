@@ -911,6 +911,21 @@ if "paintVideoEffect (g, currentEurekaFrame" not in editor:
 if "mode < 5 || mode > 8" not in editor:
     fail("Vongon-only overlay boundary unexpectedly changed")
 
+# CHORD-A must NOT force the live chord waveform to zero on gate-off:
+# the linear release keeps the captured loop alive until the 8ms gain fade ends.
+for need in [
+    "chordAOutputGain = juce::jlimit (0.0f, 1.0f,",
+    "chordAOutputGain + (audible ? fadeStep : -fadeStep)",
+    "audible || chordAOutputGain > 0.0f",
+    "chord * (0.65f * chordAOutputGain)",
+]:
+    if need not in processor:
+        fail(f"CHORD-A anti-click gate envelope missing: {need}")
+if "audible ? chord * 0.65f : 0.0f" in processor:
+    fail("CHORD-A instantaneous wet output gate reintroduced")
+if "chordAOutputGain" not in processor_header:
+    fail("CHORD-A gate smoothing state missing")
+
 # Regression guards for the reported EUREKA/POLYPHRASE audio cuts and
 # ROSETONES upper-XY silence. Check the structures rather than mute failures.
 for need in [
