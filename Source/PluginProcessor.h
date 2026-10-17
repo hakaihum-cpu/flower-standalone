@@ -143,6 +143,10 @@ private:
 
     juce::AudioProcessorValueTreeState apvts;
     chordfx::YinPitchDetector pitchDetector;
+    // CHORD / DREAMY / EUREKA analyse one averaged input sample per four
+    // audio frames. The wet audio and CHORD-A capture remain full rate.
+    float chordPitchAccumulator = 0.0f;
+    int chordPitchDecimation = 0;
     chordfx::TheoryEngine theory;
     chordfx::SampleChordRenderer sampleChordRenderer;
     chordfx::SineArpeggiator sineArpeggiator;
