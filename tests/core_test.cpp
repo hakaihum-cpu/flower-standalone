@@ -3,6 +3,7 @@
 #include "../Source/GranularPitchBank.h"
 #include "../Source/PsolaHarmonyBank.h"
 #include "../Source/ChordRenderers.h"
+#include "../Source/VideoInteraction.h"
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -10,6 +11,32 @@
 
 int main()
 {
+    // Visual MIDI note => screen grid. C4..C5 is exactly one image;
+    // C#5 begins divisions; C7 and above are capped at 10x10.
+    for (int n = 60; n <= 72; ++n)
+        assert (effects_video::divisionsForNote (n) == 1);
+    assert (effects_video::divisionsForNote (73) == 2);
+    assert (effects_video::divisionsForNote (84) > 2);
+    assert (effects_video::divisionsForNote (96) == 10);
+    assert (effects_video::divisionsForNote (108) == 10);
+    assert (effects_video::vongonModeForXY (0.25f, 0.75f) == 5);
+    assert (effects_video::vongonModeForXY (0.75f, 0.75f) == 6);
+    assert (effects_video::vongonModeForXY (0.25f, 0.25f) == 7);
+    assert (effects_video::vongonModeForXY (0.75f, 0.25f) == 8);
+    assert (std::abs (effects_video::localX (0.75f) - 0.5f) < 1.0e-6f);
+    assert (std::abs (effects_video::localY (0.25f) - 0.5f) < 1.0e-6f);
+    // Xorshift pseudo-random sample must produce about 20% divisions.
+    std::uint32_t seed = 0x45464658u;
+    int splitCount = 0;
+    for (int i = 0; i < 10000; ++i)
+    {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        if (effects_video::shouldDivideOnNote (seed)) ++splitCount;
+    }
+    assert (splitCount > 1850 && splitCount < 2150);
+
     // CHORD-B equal-temperament tuning regression.  The generated sine stays
     // exactly at A4=440 Hz when the source is in tune, and follows the live
     // source's fractional-semitone offset without changing chord pitch class.
