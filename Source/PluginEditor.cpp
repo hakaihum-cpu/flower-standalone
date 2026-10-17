@@ -736,7 +736,6 @@ int RealtimeChordFxAudioProcessorEditor::nextVisualFrame (
 void RealtimeChordFxAudioProcessorEditor::timerCallback()
 {
     processor.applyPendingMidiInputChanges();
-    ++videoEffectTick;
     if (! hasKeyboardFocus (true))
         grabKeyboardFocus();
 
@@ -1404,7 +1403,6 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
 
     const float x = juce::jlimit (0.0f, 1.0f, processor.getVongonX());
     const float y = juce::jlimit (0.0f, 1.0f, processor.getVongonY());
-    const bool touch = processor.getVongonTouch();
 
     const juce::String name =
         effectMode == 5 ? "ULTRASHEER"
