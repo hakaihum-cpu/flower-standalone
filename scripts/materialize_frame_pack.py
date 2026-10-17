@@ -18,6 +18,16 @@ EUREKA_SHA256 = '827b5aa6a339927cb909a5ffe1b129513d946911cc78ea96d34aa110e6cd188
 EUREKA_SIZE = 1872671
 EUREKA_COUNT = 144
 
+# 9 original user video clips, 8 seconds each at native 24 fps.
+# Each original byte is stored in a deterministic Git blob chunk.
+VONGON_CHUNK_DIR = ROOT / 'Resources' / 'vongon_frame_parts'
+VONGON_OUT = ROOT / 'Resources' / 'vongon_frames.pack'
+VONGON_SHA256 = '1de677ca54121e613375cbfcbb50852d9c64ee277357fed0d7498d36a0b6e131'
+VONGON_SIZE = 12151319
+VONGON_COUNT = 1728
+VONGON_CHUNKS = 18
+VONGON_CHUNK_SIZE = 691200
+
 # User-selected launcher artwork.
 ICON_B64 = ROOT / 'Resources' / 'effects_app_icon.b64'
 ICON_OUT = ROOT / 'Resources' / 'effects_app_icon.jpg'
@@ -72,6 +82,26 @@ if eureka_sha != EUREKA_SHA256:
 validate_crf1(eureka, EUREKA_COUNT, 'EUREKA frame pack')
 EUREKA_OUT.write_bytes(eureka)
 
+# Reconstruct and verify all 9 full-rate Vongon video clips before JUCER.
+# Do not use the old 4.5-fps committed pack when building.
+vongon_parts = sorted(VONGON_CHUNK_DIR.glob('part_*.bin'))
+if len(vongon_parts) != VONGON_CHUNKS:
+    raise SystemExit(
+        f'[FAIL] expected {VONGON_CHUNKS} Vongon frame chunks, got {len(vongon_parts)}')
+for part in vongon_parts[:-1]:
+    if part.stat().st_size != VONGON_CHUNK_SIZE:
+        raise SystemExit(f'[FAIL] Vongon chunk byte length mismatch: {part.name}')
+vongon = b''.join(part.read_bytes() for part in vongon_parts)
+if len(vongon) != VONGON_SIZE:
+    raise SystemExit(
+        f'[FAIL] reconstructed Vongon pack size {len(vongon)} != {VONGON_SIZE}')
+vongon_sha = hashlib.sha256(vongon).hexdigest()
+if vongon_sha != VONGON_SHA256:
+    raise SystemExit(
+        f'[FAIL] reconstructed Vongon pack sha256 {vongon_sha} != {VONGON_SHA256}')
+validate_crf1(vongon, VONGON_COUNT, 'Vongon frame pack')
+VONGON_OUT.write_bytes(vongon)
+
 icon_encoded = ''.join(ICON_B64.read_text(encoding='ascii').split())
 icon = base64.b64decode(icon_encoded, validate=True)
 if len(icon) != ICON_SIZE:
@@ -91,3 +121,5 @@ print(
     f'[PASS] EUREKA pack: {len(eureka)} bytes / {EUREKA_COUNT} frames sha256={eureka_sha}')
 print(
     f'[PASS] launcher icon: {len(icon)} bytes sha256={icon_sha}')
+print(
+    f'[PASS] Vongon pack: {len(vongon)} bytes / {VONGON_COUNT} frames sha256={vongon_sha}')

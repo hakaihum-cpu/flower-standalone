@@ -99,15 +99,15 @@ if eureka_count != 144:
 
 # New user-supplied Vongon-mode videos only.  EUREKA keeps its own immutable bank.
 vongon_pack = (R / "Resources/vongon_frames.pack").read_bytes()
-if len(vongon_pack) != 1403092:
+if len(vongon_pack) != 12151319:
     fail(f"Vongon frame pack size mismatch: {len(vongon_pack)}")
 vongon_sha = hashlib.sha256(vongon_pack).hexdigest()
-if vongon_sha != "1bb7e165022ac796f01e8611342612b8127c5c17d58a2957a7902ca0e27b7bda":
+if vongon_sha != "1de677ca54121e613375cbfcbb50852d9c64ee277357fed0d7498d36a0b6e131":
     fail(f"Vongon frame pack sha256 mismatch: {vongon_sha}")
 if vongon_pack[:4] != b"CRF1":
     fail("Vongon frame pack magic mismatch")
 vongon_count = int.from_bytes(vongon_pack[4:8], "little")
-if vongon_count != 216:
+if vongon_count != 1728:
     fail(f"Vongon frame count mismatch: {vongon_count}")
 
 vongon_manifest = (R / "Resources/vongon_frames_sources.txt").read_text()
@@ -118,6 +118,11 @@ for need in [
     "389663512_1792072607026324.mp4",
     "721211298_1792072531100205.mp4",
     "989951027_1792072484719362.mp4",
+    "Woman_crying_during_everyday_act…_20261017115051.mp4",
+    "Woman_sitting_and_thinking_20261017114947.mp4",
+    "Woman_walking_on_beach_20261017114145.mp4",
+    "24 fps",
+    "1728 frames",
     "EUREKA visual bank is unchanged",
     "DOT mode consumes the same current Vongon frame",
 ]:
