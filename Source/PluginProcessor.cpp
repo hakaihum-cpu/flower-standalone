@@ -139,6 +139,11 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
 
     inputGainLinearSmoothed = juce::Decibels::decibelsToGain (
         apvts.getRawParameterValue (ParamID::inputGainDb)->load());
+    // Preallocate on the non-realtime prepare thread; zero extra DSP work
+    // when DRY is zero. 64K samples is more than the Android callback size.
+    dryInputTap.setSize (2, juce::jmax (65536, block * 2), false, true, false);
+    dryInputTap.clear();
+    dryLevelSmoothed = 0.0f;
 
     inputPeakRaw.store (0.0f, std::memory_order_relaxed);
     inputRmsRaw.store (0.0f, std::memory_order_relaxed);
@@ -463,6 +468,24 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         for (int channel = 0; channel < availableInputChannels; ++channel)
             buffer.setSample (channel, i,
                 buffer.getSample (channel, i) * inputGainLinearSmoothed);
+    }
+
+    // Preserve the original, input-gain-adjusted samples before any effect
+    // overwrites them. The tap is never mixed into a mode's wet DSP.
+    const float dryTarget = juce::jlimit (
+        0.0f, 1.0f,
+        apvts.getRawParameterValue (ParamID::dryLevel)->load());
+    const bool dryTapActive = dryTarget > 0.0f || dryLevelSmoothed > 0.0f;
+    const int drySamples = dryTapActive
+        ? juce::jmin (n, dryInputTap.getNumSamples()) : 0;
+    if (drySamples > 0)
+    {
+        for (int channel = 0; channel < juce::jmin (2, buffer.getNumChannels()); ++channel)
+        {
+            const int sourceChannel = juce::jmin (
+                channel, availableInputChannels - 1);
+            dryInputTap.copyFrom (channel, 0, buffer, sourceChannel, 0, drySamples);
+        }
     }
 
     const bool midiClockMode =
@@ -814,6 +837,32 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             buffer.applyGain (juce::Decibels::decibelsToGain (boostDb));
             softProtectBuffer (buffer);
         }
+    }
+
+    // DRY is a separate output level common to ALL modes, including
+    // the otherwise MIDI-only CHORDBOT. Add clean input after wet FX and
+    // WET/BOOST, with a short click-free ramp. DRY=0 keeps old output
+    // byte-for-byte on the original wet path.
+    if (drySamples > 0)
+    {
+        const float alpha = 1.0f - std::exp (
+            -1.0f / juce::jmax (1.0f, (float) currentSampleRate * 0.020f));
+        const int channels = juce::jmin (2, buffer.getNumChannels());
+        for (int sample = 0; sample < drySamples; ++sample)
+        {
+            dryLevelSmoothed += alpha * (dryTarget - dryLevelSmoothed);
+            for (int channel = 0; channel < channels; ++channel)
+            {
+                const float wetSample = buffer.getSample (channel, sample);
+                const float rawInput = dryInputTap.getSample (channel, sample);
+                buffer.setSample (
+                    channel, sample,
+                    softProtectSample (wetSample
+                                       + rawInput * dryLevelSmoothed));
+            }
+        }
+        if (dryTarget == 0.0f && dryLevelSmoothed < 0.000001f)
+            dryLevelSmoothed = 0.0f;
     }
 }
 
@@ -2005,6 +2054,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::hold, "HOLD", 0.0f, 1.0f, 0.0f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::effect, "EFFECT", 0.0f, 1.0f, 0.0f));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::wet, "WET", 0.0f, 1.0f, 1.0f));
+    p.add (std::make_unique<juce::AudioParameterFloat> (
+        ParamID::dryLevel, "DRY", 0.0f, 1.0f, 0.0f));
     p.add (std::make_unique<juce::AudioParameterFloat> (
         ParamID::boostDb, "BOOST",
         juce::NormalisableRange<float> (0.0f, 14.0f, 0.5f), 0.0f));
