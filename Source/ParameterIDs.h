@@ -10,6 +10,7 @@ inline constexpr const char* length = "length";
 inline constexpr const char* hold = "hold";
 inline constexpr const char* effect = "effect";
 inline constexpr const char* wet = "wet";
+inline constexpr const char* dryLevel = "dryLevel";
 inline constexpr const char* boostDb = "boostDb";
 inline constexpr const char* inputGainDb = "inputGainDb";
 inline constexpr const char* displayMode = "displayMode";
