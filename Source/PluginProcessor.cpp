@@ -172,8 +172,7 @@ void RealtimeChordFxAudioProcessor::acceptPitch (const chordfx::PitchEstimate& e
     if (midi == pendingMidi) ++stableCount;
     else { pendingMidi = midi; stableCount = 1; }
 
-    // Reject brief YIN mistakes before replacing the sampled chord.
-    if (stableCount < 3) return;
+    if (stableCount < 2) return;
 
     const int previous = detectedMidi.load (std::memory_order_relaxed);
 
@@ -323,27 +322,13 @@ void RealtimeChordFxAudioProcessor::processChordAudio (juce::AudioBuffer<float>&
         running.load (std::memory_order_acquire)
         && haveChord
         && chordMidiGateOpen;
-    // A first note can be detected before the required 240 ms of input
-    // history exists. Do not stay permanently silent until the next note.
-    if (audible && ! sampleChordRenderer.hasCapture()
-        && sampleChordRenderer.canCapture())
-        sampleChordRenderer.setPlan (
-            currentPlan.midiNotes, lastInputMidiFloat, true);
-
-    const bool hasMaterial = sampleChordRenderer.hasCapture();
-    const float target = audible && hasMaterial ? 1.0f : 0.0f;
-    const float smoothing = 1.0f - std::exp (
-        -1.0f / juce::jmax (
-            1.0f, (float) currentSampleRate * 0.025f));
 
     for (int i = 0; i < n; ++i)
     {
-        chordAOutputEnvelope += smoothing
-            * (target - chordAOutputEnvelope);
-        // Keep reading the captured audio during release; only the
-        // synthesized output fades. Never add the input DRY signal.
-        const float chord = sampleChordRenderer.renderSample (hasMaterial);
-        const float output = chord * 0.78f * chordAOutputEnvelope;
+        const float chord = sampleChordRenderer.renderSample (audible);
+        // CHORD-A output is generated harmony only; input is retained
+        // internally for tracking/capture, never routed to the speakers.
+        const float output = audible ? chord * 0.65f : 0.0f;
         buffer.setSample (0, i, output);
         if (channels > 1)
             buffer.setSample (1, i, output);
@@ -573,7 +558,6 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         pitchDetector.reset();
         theory.reset();
         sampleChordRenderer.reset();
-        chordAOutputEnvelope = 0.0f;
         sineArpeggiator.reset();
         chordBTuningOffsetSemitones = 0.0f;
         sineArpeggiator.setTuningOffsetSemitones (0.0f);
