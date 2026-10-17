@@ -1044,6 +1044,8 @@ void RealtimeChordFxAudioProcessorEditor::paint (juce::Graphics& g)
     }
 
     paintDotUiFrame (g);
+    if (dryPopupVisible)
+        paintDryPopup (g);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g)
@@ -1328,10 +1330,62 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
 
 void RealtimeChordFxAudioProcessorEditor::paintEffectsShortcut (juce::Graphics& g)
 {
-    // Text-only shortcut matching CONFIG, without an opaque video mask.
+    // Global text-only header controls; no video-masking rectangles.
     g.setColour (uiColour (0.94f));
     g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
+    g.drawText ("DRY", 444, 22, 46, 24, juce::Justification::centred);
     g.drawText ("EFFECTS", 499, 22, 84, 24, juce::Justification::centred);
+}
+
+void RealtimeChordFxAudioProcessorEditor::setDryFromPoint (float x)
+{
+    const float amount = juce::jlimit (
+        0.0f, 1.0f, (x - 177.0f) / 366.0f);
+    if (auto* dry = processor.state().getParameter (ParamID::dryLevel))
+        dry->setValueNotifyingHost (dry->convertTo0to1 (amount));
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintDryPopup (juce::Graphics& g)
+{
+    // Opaque overlay prevents inadvertent operations on the underlying XY.
+    // One continuous horizontal indicator, independently stored per preset.
+    g.setColour (juce::Colours::black.withAlpha (0.96f));
+    g.fillRoundedRectangle (
+        juce::Rectangle<float> (100.0f, 185.0f, 520.0f, 318.0f), 10.0f);
+    g.setColour (uiColour (0.76f));
+    g.drawRoundedRectangle (
+        juce::Rectangle<float> (100.0f, 185.0f, 520.0f, 318.0f),
+        10.0f, 1.4f);
+    g.setFont (juce::FontOptions (21.0f).withStyle ("Bold"));
+    g.setColour (uiColour (0.96f));
+    g.drawText ("DRY", 140, 211, 220, 36,
+                juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
+    g.drawText ("CLOSE", 500, 212, 86, 36,
+                juce::Justification::centredRight);
+
+    const float value = juce::jlimit (0.0f, 1.0f,
+        processor.state().getRawParameterValue (
+            ParamID::dryLevel)->load());
+    g.setFont (juce::FontOptions (27.0f).withStyle ("Bold"));
+    g.drawText (juce::String (juce::roundToInt (value * 100.0f)) + "%",
+                220, 274, 280, 40, juce::Justification::centred);
+    const juce::Rectangle<float> bar (177.0f, 354.0f, 366.0f, 10.0f);
+    g.setColour (uiColour (0.25f));
+    g.fillRoundedRectangle (bar, 4.0f);
+    g.setColour (uiColour (0.95f));
+    g.fillRoundedRectangle (
+        bar.withWidth (bar.getWidth() * value), 4.0f);
+    g.fillEllipse (177.0f + 366.0f * value - 8.0f,
+                   349.0f, 16.0f, 20.0f);
+    g.setFont (juce::FontOptions (13.0f));
+    g.drawText ("0", 174, 393, 70, 25,
+                juce::Justification::centredLeft);
+    g.drawText ("100", 484, 393, 62, 25,
+                juce::Justification::centredRight);
+    g.setColour (uiColour (0.68f));
+    g.drawText ("ORIGINAL INPUT LEVEL  /  ALL EFFECTS",
+                150, 442, 420, 23, juce::Justification::centred);
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintEffectsMenu (juce::Graphics& g)
@@ -3274,6 +3328,22 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
+    if (dryPopupVisible)
+    {
+        if (juce::Rectangle<float> (
+                162.0f, 332.0f, 396.0f, 64.0f).contains (p))
+        {
+            dryPopupDragging = true;
+            setDryFromPoint (p.x);
+        }
+        else if (juce::Rectangle<float> (
+                     496.0f, 206.0f, 102.0f, 55.0f).contains (p)
+                 || p.y < 70.0f)
+            dryPopupVisible = false;
+        repaint();
+        return;
+    }
+
     if (effectsMenuVisible)
     {
         if (p.y <= 78.0f && p.x >= 580.0f)
@@ -3299,6 +3369,14 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     const int currentEffectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+
+    if (p.y <= 70.0f && p.x >= 438.0f && p.x < 495.0f)
+    {
+        dryPopupVisible = true;
+        dryPopupDragging = false;
+        repaint();
+        return;
+    }
 
     if (p.y <= 70.0f && p.x >= 496.0f && p.x < 590.0f)
     {
@@ -3664,6 +3742,14 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
 void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 {
+    if (dryPopupVisible)
+    {
+        if (dryPopupDragging)
+            setDryFromPoint (toDesign (e.position).x);
+        repaint();
+        return;
+    }
+
     if (configVisible && inputGainDragging)
     {
         updateInputGainFromX (toDesign (e.position).x);
@@ -3747,6 +3833,12 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 
 void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 {
+    if (dryPopupDragging)
+    {
+        dryPopupDragging = false;
+        repaint();
+        return;
+    }
     if (multiModeEnabled && multiPointerDown)
     {
         const double heldMs =
