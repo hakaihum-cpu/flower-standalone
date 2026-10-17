@@ -872,6 +872,8 @@ for need in [
     "sampleRate * 0.090",
     "params.og ? 0.0005 : 0.010",
     "sampleRate * 0.016",
+    "lane.pendingStutterStartValid",
+    "lane.playPosition += (double) seam",
     "softProtect (out[i])",
 ]:
     if need not in haze:
@@ -904,8 +906,8 @@ for need in [
     if need not in vongon:
         fail(f"Vongon-inspired DSP contract missing: {need}")
 
-# Four user-reported regressions must not silently revert to random
-# still-image slideshow, DC-driven ROSETONES or hard short-loop clicks.
+# Keep EUREKA's click-smoothed stutter, while ROSETONES alone is restored
+# to the user-selected EFFECTS #191 12-filter resonance algorithm.
 for need in [
     "sampleRate * 0.090",
     "sampleRate * 0.016",
@@ -914,12 +916,27 @@ for need in [
     if need not in haze:
         fail(f"EUREKA right-XY smooth stutter contract missing: {need}")
 for need in [
-    "std::max_element",
-    "pitchSigned",
-    "roseNoiseState",
+    "std::array<std::array<LegacyRoseState, 12>, 2>",
+    "const float sensitivity = 0.45f + 1.75f * y",
+    "roseLegacyState",
+    "roseLegacyToneLow",
+    "const float radius = juce::jlimit",
+    "dry[ch]",
+    "+ shaped * synthMix",
 ]:
     if need not in vongon:
-        fail(f"ROSETONES signed input resonator contract missing: {need}")
+        fail(f"ROSETONES #191 restored filter bank contract missing: {need}")
+rose_start = vongon.find("void processRosetones (")
+rose_end = vongon.find("void processSolarfaze (", rose_start)
+if rose_start < 0 or rose_end < 0:
+    fail("ROSETONES legacy DSP region missing")
+rose_code = vongon[rose_start:rose_end]
+for prohibited in [
+    "roseDetectors", "pitchSigned", "roseNoiseState", "roseFeedbackSmoothed",
+    "roseOctaveSmoothed", "roseNotes",
+]:
+    if prohibited in rose_code:
+        fail(f"ROSETONES restored #191 DSP contaminated by newer logic: {prohibited}")
 # The explicitly restored Oct 16 dry-free CHORD-A baseline resets voice
 # playback phases on progression; no Oct 17 capture-ready modification.
 for forbidden in [
@@ -979,8 +996,11 @@ if "chordAOutputGain" not in processor_header:
 # ROSETONES upper-XY silence. Check the structures rather than mute failures.
 for need in [
     "spanFramesUntilRefresh = 64",
-    "lane.stutterStart = nextStart",
-    "readSpan (headPosition, nextStart)",
+    "lane.stutterStart = lane.pendingStutterStartValid",
+    "lane.pendingStutterStart = nextStart",
+    "readSpan (",
+    "headPosition, lane.pendingStutterStart",
+    "lane.playPosition += (double) seam",
     "params.og && leftSide",
     "const float activeMix = params.mix * historyReady",
 ]:
@@ -991,10 +1011,9 @@ for need in [
     "if (polyCrossfadeRemaining[(size_t) channel] > 0)",
     "const float validFade",
     "wetTarget * history - polyWetSmoothed",
-    "0.955f + feedback * 0.042f",
-    "pitchSigned[pitchClass] += detector.band",
-    "const float noteDrive = gate",
-    "wet[ch] * 1.25f * synthLevel",
+    "std::array<std::array<LegacyRoseState, 12>, 2>",
+    "const float excitation =",
+    "roseLegacyToneLow",
 ]:
     if need not in vongon:
         fail(f"Vongon dropout/voice-level regression: {need}")
