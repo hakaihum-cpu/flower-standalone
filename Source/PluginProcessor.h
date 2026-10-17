@@ -50,10 +50,9 @@ public:
     float getInputRmsRaw() const noexcept { return inputRmsRaw.load (std::memory_order_relaxed); }
     float getInputNonZeroRatio() const noexcept { return inputNonZeroRatio.load (std::memory_order_relaxed); }
     int getDetectedMidi() const noexcept { return detectedMidi.load (std::memory_order_relaxed); }
-    // Most recent accepted MIDI note-on (about 1 of 5 eligible high notes).
-    // An event is retained until the 30Hz UI reads it, including fast passages.
-    int getVisualMidiNote() const noexcept { return visualMidiNote.load (std::memory_order_relaxed); }
-    unsigned int getVisualMidiSequence() const noexcept { return visualMidiSequence.load (std::memory_order_acquire); }
+    // Separate audio-derived mosaic grid, read by the 30Hz editor timer.
+    // One full image at rest, 2x2..10x10 while a pitched input is present.
+    int getAudioTileDivisions() const noexcept { return audioTileDivisions.load (std::memory_order_relaxed); }
     int getVisualFrame() const noexcept { return visualFrame.load (std::memory_order_relaxed); }
     juce::String getChordLabel() const;
     void setMidiControllerXY (int x, int y, bool touchDown) noexcept;
@@ -175,9 +174,14 @@ private:
     std::atomic<float> inputRmsRaw { 0.0f };
     std::atomic<float> inputNonZeroRatio { 0.0f };
     std::atomic<int> detectedMidi { -1 };
-    std::atomic<int> visualMidiNote { -1 };
-    std::atomic<unsigned int> visualMidiSequence { 0 };
-    std::uint32_t visualMidiRandomState = 0x45464658u; // audio thread only
+    std::atomic<int> audioTileDivisions { 1 };
+    chordfx::YinPitchDetector videoPitchDetector;
+    // Decimate the input by 4 before YIN: audio CPU stays bounded.
+    float videoPitchAccumulator = 0.0f;
+    int videoPitchDecimation = 0;
+    int videoPitchCandidate = 1;
+    int videoPitchStableCount = 0;
+    int videoPitchSamplesSinceValid = 0;
     std::atomic<bool> chordAHoldRefreshRequested { false };
     std::atomic<int> visualFrame { 0 };
     // CC110=X, CC111=Y, CC112=MODE, CC113=CHORD A/B.
