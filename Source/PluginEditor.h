@@ -109,6 +109,8 @@ private:
     int eurekaFrameIndex = 0;
     int vongonFrameIndex = 0;
     float eurekaFramePhase = 0.0f;
+    float eurekaVideoSpeed = 0.0f;
+    int eurekaVideoRewindFrames = 0;
     float vongonFramePhase = 0.0f;
     float vongonVideoSpeed = 0.0f;
     float vongonVisualFx = 0.0f;
