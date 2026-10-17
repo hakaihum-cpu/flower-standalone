@@ -147,6 +147,7 @@ private:
     // audio frames. The wet audio and CHORD-A capture remain full rate.
     float chordPitchAccumulator = 0.0f;
     int chordPitchDecimation = 0;
+    bool chordPitchAnalysisActive = false;
     chordfx::TheoryEngine theory;
     chordfx::SampleChordRenderer sampleChordRenderer;
     chordfx::SineArpeggiator sineArpeggiator;
