@@ -752,20 +752,29 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         multiPointerDown = false;
     }
 
-    // Incoming MIDI note-on, not audio pitch detection, chooses a visual
-    // grid on roughly 1 in 5 notes.  Other notes restore single-frame video.
+    // The audio-thread MIDI note-on handler has ALREADY drawn the 1-in-5
+    // probability. Never apply a second 1-in-5 filter here (which made the
+    // screen split only once in ~25 notes).
     const auto noteSequence = processor.getVisualMidiSequence();
     if (noteSequence != lastVisualMidiSequence)
     {
         lastVisualMidiSequence = noteSequence;
-        visualRandomState ^= visualRandomState << 13;
-        visualRandomState ^= visualRandomState >> 17;
-        visualRandomState ^= visualRandomState << 5;
         const int note = processor.getVisualMidiNote();
-        midiTileDivisions =
-            note >= 60 && note <= 108
-            && effects_video::shouldDivideOnNote (visualRandomState)
-            ? effects_video::divisionsForNote (note) : 1;
+        if (note > 72 && note <= 108)
+        {
+            midiTileTriggerNote = note;
+            midiTileDivisions = effects_video::divisionsForNote (note);
+            midiTileHoldTicks = 75; // 2.5 seconds at 30Hz
+        }
+    }
+    else if (midiTileHoldTicks > 0)
+    {
+        --midiTileHoldTicks;
+        if (midiTileHoldTicks == 0)
+        {
+            midiTileDivisions = 1;
+            midiTileTriggerNote = -1;
+        }
     }
 
     // Fire CLEAR as soon as the long-press threshold is reached, rather
@@ -1635,11 +1644,14 @@ void RealtimeChordFxAudioProcessorEditor::paintVongonMode (
             g, currentVongonFrame,
             juce::Rectangle<float> (0, 0, design, design),
             2, dotVongonRevision);
-    if (midiTileDivisions > 1)
-        drawMidiVideoTiles (g);
     paintVideoEffect (
         g, currentVongonFrame,
         processor.getVongonX(), processor.getVongonY());
+    // Tile the *video image*, not the VHS displacement. Compositing after
+    // the transient effects prevents an opaque distortion layer from hiding
+    // the actual repeated video cells.
+    if (midiTileDivisions > 1)
+        drawMidiVideoTiles (g);
 
     const float x = juce::jlimit (0.0f, 1.0f, processor.getVongonX());
     const float y = juce::jlimit (0.0f, 1.0f, processor.getVongonY());
