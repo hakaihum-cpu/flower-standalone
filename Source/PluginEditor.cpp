@@ -2964,7 +2964,27 @@ void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics
     g.setColour (uiColour (0.52f));
     g.drawText ("CHORD OUT sends the generated ChordPlan notes to the selected MIDI OUT.", 54, 570, 620, 20, juce::Justification::centredLeft);
     g.drawText ("L1: WET -5%    R1: WET +5%    96 motion ticks / bar", 54, 592, 610, 20, juce::Justification::centredLeft);
-    g.drawText ("X 0..127 / Y 0..127. CLOCK uses 24 PPQN.", 54, 614, 610, 20, juce::Justification::centredLeft);
+    // Show the last actual MIDI Note On and its tile eligibility in
+    // MIDI CONTROL only. Never place a diagnostic overlay on the video.
+    juce::String noteRx = "NONE RECEIVED";
+    const int midiDiagnostic = processor.getVisualMidiDiagnostic();
+    if (midiDiagnostic >= 0)
+    {
+        const int receivedNote = midiDiagnostic & 0x7f;
+        const int receivedChannel = (midiDiagnostic >> 8) & 0x1f;
+        const int result = (midiDiagnostic >> 16) & 0x03;
+        static constexpr const char* outcomes[] = {
+            "CHANNEL MISMATCH", "OUTSIDE C#5..C8",
+            "NOT SELECTED (80%)", "TILE TRIGGERED"
+        };
+        noteRx = "CH " + juce::String (receivedChannel)
+            + "  NOTE " + juce::String (receivedNote)
+            + "  " + outcomes[result];
+    }
+    g.drawFittedText (
+        "MIDI NOTE RX: " + noteRx
+        + "  HITS " + juce::String (processor.getVisualMidiSequence()),
+        54, 614, 622, 22, juce::Justification::centredLeft, 1);
     if (midiPresetMessage.isNotEmpty())
         g.drawText (midiPresetMessage, 54, 650, 560, 22, juce::Justification::centredLeft);
     g.setColour (uiColour (0.68f));
