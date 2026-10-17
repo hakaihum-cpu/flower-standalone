@@ -428,9 +428,10 @@ void RealtimeChordFxAudioProcessorEditor::rebuildDotDisplay (
         dotDisplayCache, juce::Image::BitmapData::readWrite);
 
     const float activity = juce::jlimit (0.0f, 1.0f, dotActivity);
+    // Idle video is visually still; analogue flicker needs live input.
     const float flicker =
         1.0f + std::sin ((float) dotUiTick * 0.42f)
-                     * (0.035f + 0.045f * activity);
+                     * (0.045f * activity);
 
     for (int y = 0; y < height; ++y)
     {
@@ -457,9 +458,6 @@ void RealtimeChordFxAudioProcessorEditor::rebuildDotDisplay (
 
             float luminance =
                 dotLuma[(size_t) (sy0 * dotSourceW + sx)] * flicker;
-
-            if (((y + dotUiTick) % 8) == 0)
-                luminance *= 1.0f - 0.12f * activity;
 
             const uint32_t pixelHash =
                 rowHash ^ ((uint32_t) x * 2246822519u);
@@ -1297,21 +1295,24 @@ void RealtimeChordFxAudioProcessorEditor::paintVideoEffect (
         const float srcH = bandH * (float) video.getHeight() / 720.0f;
         g.drawImage (
             video,
-            juce::Rectangle<float> (offset, bandY, 720.0f, bandH),
-            juce::Rectangle<float> (
-                0.0f, srcY, (float) video.getWidth(), srcH));
+            juce::roundToInt (offset), juce::roundToInt (bandY),
+            720, juce::jmax (1, juce::roundToInt (bandH)),
+            0, juce::roundToInt (srcY), video.getWidth(),
+            juce::jmax (1, juce::roundToInt (srcH)));
         // A second independent tear adds a VHS head-switching feel.
         g.setOpacity (0.30f * energy);
         g.drawImage (
             video,
-            juce::Rectangle<float> (
-                -offset * 0.6f, bandY + bandH + 14.0f,
-                720.0f, bandH * 0.46f),
-            juce::Rectangle<float> (
-                0.0f,
-                (bandY + bandH + 14.0f) * (float) video.getHeight() / 720.0f,
-                (float) video.getWidth(),
-                bandH * 0.46f * (float) video.getHeight() / 720.0f));
+            juce::roundToInt (-offset * 0.6f),
+            juce::roundToInt (bandY + bandH + 14.0f),
+            720, juce::jmax (1, juce::roundToInt (bandH * 0.46f)),
+            0,
+            juce::roundToInt (
+                (bandY + bandH + 14.0f)
+                * (float) video.getHeight() / 720.0f),
+            video.getWidth(),
+            juce::jmax (1, juce::roundToInt (
+                bandH * 0.46f * (float) video.getHeight() / 720.0f)));
     }
 
     // Chromatic misregistration: red and cyan channels have independent
