@@ -1254,11 +1254,6 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
             juce::Rectangle<float> (0, 0, design, design),
             0, dotFrameRevision);
 
-    g.setColour (juce::Colours::black.withAlpha (0.34f));
-    g.fillRect (0.0f, 0.0f, 720.0f, 86.0f);
-    g.setColour (juce::Colours::black.withAlpha (0.58f));
-    g.fillRect (0.0f, 560.0f, 720.0f, 160.0f);
-
     const float x = juce::jlimit (0.0f, 1.0f, processor.getCloudsX());
     const float y = juce::jlimit (0.0f, 1.0f, processor.getCloudsY());
     const bool touch = processor.getCloudsTouch();
@@ -1292,14 +1287,6 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
     g.setColour (uiColour (0.94f));
     g.drawText ("CONFIG", 604, 22, 88, 24,
                 juce::Justification::centredRight);
-
-    // Active XY field is y=70..720.  The marker and guide lines are display-only.
-    const float px = x * design;
-    const float py = 70.0f + (1.0f - y) * 650.0f;
-    g.setColour (uiColour (touch ? 0.82f : 0.34f));
-    g.drawLine (px, 72.0f, px, 558.0f, 1.0f);
-    g.drawLine (0.0f, py, 720.0f, py, 1.0f);
-    g.fillRect (px - 4.0f, py - 4.0f, 8.0f, 8.0f);
 
     g.setFont (juce::FontOptions (10.5f).withStyle ("Bold"));
     g.setColour (uiColour (freeze ? 0.98f : 0.66f));
