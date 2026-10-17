@@ -836,22 +836,43 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
     }
     else if (effectMode == 2 && eurekaFrames.getFrameCount() > 0)
     {
-        // The supplied MP4 was stored as ordered 36-frame/8-second clips.
-        // Play each clip sequentially; never choose random stills.
+        // Keep EUREKA's approved 36-frame/clip source and clip selection.
+        // Playback now follows AUDIO dynamics instead of a permanent 4.5fps
+        // slideshow. Transients briefly replay nearby frames as a visual
+        // stutter within the current clip. No translucent/fullscreen overlay.
         const bool attack =
             activity > 0.006f
             && activity > eurekaVisualPreviousActivity * 1.28f + 0.0015f;
         eurekaSwitchClipPending |= attack;
+        if (eurekaVisualCooldown > 0)
+            --eurekaVisualCooldown;
+        if (attack && eurekaVisualCooldown == 0)
+        {
+            eurekaVisualCooldown = 8; // <= ~4 reactive stutters/second.
+            eurekaVideoRewindFrames = juce::jlimit (
+                1, 3, 1 + juce::roundToInt (eurekaXYX * 2.0f));
+        }
+
         const int total = eurekaFrames.getFrameCount();
         const int clipFrames = 36;
         const int clips = total / clipFrames;
-        eurekaFramePhase += 4.5f / 30.0f;
+        const float targetFps = effects_video::eurekaReactiveFrameRate (activity);
+        eurekaVideoSpeed += 0.24f * (targetFps - eurekaVideoSpeed);
+        if (targetFps == 0.0f && eurekaVideoSpeed < 0.10f)
+            eurekaVideoSpeed = 0.0f;
+        eurekaFramePhase += eurekaVideoSpeed / 30.0f;
         while (eurekaFramePhase >= 1.0f)
         {
             eurekaFramePhase -= 1.0f;
             const int position = eurekaFrameIndex % clipFrames;
             const int clip = eurekaFrameIndex / clipFrames;
-            if (position == clipFrames - 1)
+            if (eurekaVideoRewindFrames > 0)
+            {
+                eurekaFrameIndex = clip * clipFrames
+                    + (position + clipFrames - 1) % clipFrames;
+                --eurekaVideoRewindFrames;
+            }
+            else if (position == clipFrames - 1)
             {
                 const int nextClip =
                     eurekaSwitchClipPending && clips > 1
