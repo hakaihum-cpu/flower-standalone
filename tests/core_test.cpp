@@ -74,7 +74,11 @@ int main()
     for (int sustained = 0; sustained < 120; ++sustained)
     {
         const auto result = gate.advance (0.02f, sustained % 2 ? 7 : 4);
-        assert (! result.started && result.divisions == 1);
+        assert (! result.started);
+        // A prior selected onset may still be in its 75-tick hold.
+        // Regardless of pitch changes it must eventually expire.
+        if (sustained >= 75)
+            assert (result.divisions == 1);
     }
     gate.reset();
     for (int quiet = 0; quiet < 4; ++quiet)
