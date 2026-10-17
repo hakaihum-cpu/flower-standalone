@@ -911,7 +911,7 @@ for need in [
     "const bool fullVideo = total == 9 * 192 || total == 6 * 192",
     "const float musicalEnergy = juce::jlimit",
     "const float gestureEnergy = juce::jmax",
-    "audioTileHoldTicks > 0 ? 0.45f : 0.0f",
+    "audioTileDivisions > 1 ? 0.45f : 0.0f",
     "const float targetFps = drive < 0.018f ? 0.0f",
     "vongonFramePhase += vongonVideoSpeed / 30.0f",
     "vongonRewindFrames > 0",
