@@ -1154,6 +1154,10 @@ editor_visual = (R / "Source/PluginEditor.cpp").read_text()
 editor_header_visual = (R / "Source/PluginEditor.h").read_text()
 for need in [
     "divisionsForPitchHz (float hz)",
+    "class AudioMosaicGate",
+    "randomState % 5u == 0u",
+    "holdDuration = 75",
+    "quietToRearm = 3",
     "vongonModeForXY (float x, float y)",
     "localX (float x)",
     "localY (float y)",
@@ -1190,7 +1194,9 @@ for need in [
     "multiTransport == 1",
     "multiTransport == 2",
     "processor.getAudioTileDivisions()",
-    "audioTileDivisions = measuredDivisions",
+    "audioMosaicGate.advance (",
+    "audioTileDivisions = tiles.divisions",
+    "if (tiles.started)",
     "drawAudioVideoTiles (g)",
     "effects_video::vongonModeForXY (multiX, multiY)",
     "processor.setVongonXY (",
@@ -1289,8 +1295,9 @@ for required in [
 if "dryPopupVisible" not in editor_header_visual:
     fail("DRY popup missing from editor state")
 
-# Regression: only the audio pitch detector controls tile count, with
-# no MIDI draw probability or performance-video diagnostic overlay.
+# Regression: one ~20% probability draw on an audible onset, but the
+# count of video tiles is still governed by the detected input pitch.
+# No MIDI drawing gate or performance-video diagnostic overlay.
 timer_start = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::timerCallback()")
 timer_end = editor_visual.find("void RealtimeChordFxAudioProcessorEditor::paint (", timer_start)
 if timer_start < 0 or timer_end < 0:
@@ -1301,15 +1308,16 @@ if pitch_tile_end < 0:
     fail("Audio pitch tile timer event-section boundary missing")
 pitch_tile_code = timer_code[:pitch_tile_end]
 for required in [
-    "processor.getAudioTileDivisions()",
-    "measuredDivisions != audioTileDivisions",
+    "audioMosaicGate.advance (",
+    "audioTileDivisions = tiles.divisions",
+    "if (tiles.started)",
     "++audioTileEventSequence",
 ]:
     if required not in pitch_tile_code:
         fail(f"Live audio pitch cannot update video grid: {required}")
 for obsolete in [
     "getVisualMidiSequence()", "getVisualMidiNote()",
-    "shouldDivideOnNote", "audioTileHoldTicks",
+    "shouldDivideOnNote", "audioTileHoldTicks", "midiTileDivisions",
 ]:
     if obsolete in pitch_tile_code:
         fail(f"Obsolete MIDI mosaic trigger remains: {obsolete}")
