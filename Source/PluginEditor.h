@@ -99,6 +99,8 @@ private:
     int loadedVongonFrame = -1;
     unsigned int lastVisualMidiSequence = 0;
     int midiTileDivisions = 1;
+    int midiTileHoldTicks = 0; // hold successful MIDI tiling for ~2.5 s
+    int midiTileTriggerNote = -1;
     int eurekaFrameIndex = 0;
     int vongonFrameIndex = 0;
     float eurekaFramePhase = 0.0f;
