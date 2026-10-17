@@ -99,8 +99,9 @@ private:
     int loadedFrame = -1;
     int loadedEurekaFrame = -1;
     int loadedVongonFrame = -1;
+    effects_video::AudioMosaicGate audioMosaicGate;
     int audioTileDivisions = 1;
-    unsigned int audioTileEventSequence = 0; // varies the layout when pitch band changes
+    unsigned int audioTileEventSequence = 0; // randomize clips on accepted sound onsets
     std::array<juce::Image, 3> audioTileAlternateFrames {};
     unsigned int audioTilePreparedSequence = 0;
     int audioTileLastVongonRevision = -1;
