@@ -1475,25 +1475,7 @@ void RealtimeChordFxAudioProcessorEditor::drawMidiVideoTiles (juce::Graphics& g)
         return;
 
     const bool dot = dotModeEnabled();
-    if (dot)
-    {
-        // The tiled Vongon path bypasses paintMediaFrame(), which normally
-        // refreshes the DOT cache. Without this, a previous mode's frame
-        // can remain in all the cells even as the live video advances.
-        if (dotLumaSourceKind != 2
-            || dotLumaRevision != dotVongonRevision)
-            rebuildDotLuma (currentVongonFrame, 2, dotVongonRevision);
-
-        if (! dotDisplayCache.isValid()
-            || dotRenderedSourceKind != 2
-            || dotRenderedRevision != dotVongonRevision
-            || dotRenderedTick != dotUiTick
-            || dotDisplayCache.getWidth() != dotSourceW
-            || dotDisplayCache.getHeight() != dotSourceH)
-            rebuildDotDisplay (
-                dotSourceW, dotSourceH, 2, dotVongonRevision);
-    }
-    const juce::Image& mainImage = dot
+    const juce::Image& mainImage = dot && dotDisplayCache.isValid()
         ? dotDisplayCache : currentVongonFrame;
 
     // The previous implementation decoded three still pictures once,
