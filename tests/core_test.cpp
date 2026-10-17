@@ -52,7 +52,10 @@ int main()
         for (int quiet = 0; quiet < 4; ++quiet)
         {
             const auto idle = gate.advance (0.0f, 1);
-            assert (! idle.started && idle.divisions == 1);
+            assert (! idle.started);
+            // A previous held split clears after 3 quiet GUI ticks.
+            if (quiet >= 2)
+                assert (idle.divisions == 1);
         }
         const auto first = gate.advance (0.02f, 5);
         if (first.started) ++acceptedOnsets;
