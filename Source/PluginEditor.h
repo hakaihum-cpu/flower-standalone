@@ -37,7 +37,7 @@ private:
     void paintDryPopup (juce::Graphics&);
     void setDryFromPoint (float x);
     void chooseEffectFromMenu (int index);
-    void drawMidiVideoTiles (juce::Graphics&);
+    void drawAudioVideoTiles (juce::Graphics&);
     void applyMultiXY (float x, float y);
     void startMultiRecording();
     void stopMultiRecordingAndPlay();
