@@ -1065,7 +1065,7 @@ for need in [
     "vongonFringeRevision != dotVongonRevision",
     "vongonRedFringe",
     "vongonCyanFringe",
-    "eurekaSwitchClipPending |= attack",
+    "eurekaFrameIndex = randomClip * clipFrames + randomStart",
     "paintVideoEffect (g, currentEurekaFrame",
     "paintVideoEffect (",
     "g, currentVongonFrame",
