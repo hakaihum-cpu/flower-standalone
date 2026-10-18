@@ -981,6 +981,7 @@ for need in [
     "const int clips = total / clipFrames",
     "const bool randomSustainCut",
     "const bool switchNow",
+    "eurekaEntered",
     "attack || randomSustainCut",
     "const int randomClip = nextVisualFrame (clips, previousClip)",
     "const int randomStart = nextVisualFrame (clipFrames, -1)",
@@ -999,8 +1000,18 @@ for forbidden in [
 ]:
     if forbidden in eureka_playback:
         fail(f"EUREKA sequential/end-only clip switch reintroduced: {forbidden}")
-if "int eurekaClipCooldown = 0" not in editor_header:
-    fail("EUREKA random clip cooldown state missing")
+for need in [
+    "int eurekaClipCooldown = 0",
+    "bool eurekaWasActive = false",
+]:
+    if need not in editor_header:
+        fail(f"EUREKA random clip selection state missing: {need}")
+for need in [
+    "const bool eurekaEntered = effectMode == 2 && ! eurekaWasActive",
+    "eurekaWasActive = effectMode == 2",
+]:
+    if need not in editor:
+        fail(f"EUREKA random initial clip choice missing: {need}")
 if "eurekaFramePhase += 4.5f / 30.0f" in editor:
     fail("EUREKA returned to passive fixed-rate video playback")
 if "paintVideoEffect (g, currentEurekaFrame" not in editor:
