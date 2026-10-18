@@ -127,7 +127,7 @@ private:
     juce::Image vongonRedFringe;
     juce::Image vongonCyanFringe;
     int vongonFringeRevision = -1;
-    bool eurekaSwitchClipPending = false;
+    int eurekaClipCooldown = 0; // minimum interval between random live clip cuts
     int chordVisualCooldown = 0;
     int eurekaVisualCooldown = 0;
     int vongonVisualCooldown = 0;
