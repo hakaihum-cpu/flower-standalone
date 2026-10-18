@@ -143,15 +143,32 @@ if len(eureka_more_sizes) != 180 or sum(eureka_more_sizes) != len(eureka_more):
 more_sources = (R / "Resources/eureka_more_sources.txt").read_text(encoding="utf-8")
 for source in [
     "436441182_1792311285651534.mp4",
-    "162265794_1792312586022108.mp4",
-    "652788400_1792312226633408.mp4",
+    "1.mp4",
+    "2.mp4",
     "881269787_1792311671806683.mp4",
     "131027485_1792311397114360.mp4",
 ]:
     if source not in more_sources:
         fail(f"new EUREKA MP4 source missing: {source}")
 eureka_pack = (R / "Resources/eureka_frames.pack").read_bytes()
-if len(eureka_pack) != 6849154:
+# Two square user videos replace the two portrait slots only.
+replacement_chunks = sorted(
+    (R / "Resources/eureka_replacement_frame_chunks").glob("part_*.b64"))
+if len(replacement_chunks) != 14:
+    fail(f"EUREKA video swap must contain 14 chunks, got {len(replacement_chunks)}")
+replacement = base64.b64decode(''.join(
+    chunk.read_text().strip() for chunk in replacement_chunks), validate=True)
+if len(replacement) != 818160 or hashlib.sha256(replacement).hexdigest() != (
+        "55d559fc90c4fd4878e87ae20552435916d5f9835f67a798ab4145a699375cef"):
+    fail("two new EUREKA square video files are missing or altered")
+replacement_sizes = [
+    int(x) for x in (R / "Resources/eureka_replacement_frame_sizes.txt")
+    .read_text().splitlines() if x.strip()]
+if len(replacement_sizes) != 72 or sum(replacement_sizes) != len(replacement):
+    fail("EUREKA video swap must have 72 correctly indexed JPEG frames")
+# The two earlier portrait slots represented 266088 and 288551 bytes.
+expected_pack_size = 6849154 - (266088 + 288551) + 818160
+if len(eureka_pack) != expected_pack_size:
     fail(f"complete EUREKA frame pack size mismatch: {len(eureka_pack)}")
 if eureka_pack[:4] != b"CRF1":
     fail("EUREKA frame pack magic mismatch")
@@ -164,8 +181,30 @@ orig_payload = eureka_original[old_table_end:]
 existing_payload = orig_payload + eureka_added
 if eureka_pack[new_table_end:new_table_end + len(existing_payload)] != existing_payload:
     fail("previous 11 EUREKA clips were modified")
-if not eureka_pack.endswith(eureka_more):
-    fail("five new EUREKA clips are missing from the rebuilt pack")
+# Compare every one of the five added clips in output: 3 untouched clips
+# must be byte-for-byte identical, and only the 2 portrait slots change.
+old_offsets = [0]
+for size in eureka_more_sizes:
+    old_offsets.append(old_offsets[-1] + size)
+swap_offsets = [0]
+for size in replacement_sizes:
+    swap_offsets.append(swap_offsets[-1] + size)
+for clip_frame in range(180):
+    index = 396 + clip_frame
+    pos = 8 + index * 12
+    off = int.from_bytes(eureka_pack[pos:pos + 4], "little")
+    size = int.from_bytes(eureka_pack[pos + 8:pos + 12], "little")
+    frame = eureka_pack[off:off + size]
+    if 36 <= clip_frame < 108:
+        swap_idx = clip_frame - 36
+        expected = replacement[swap_offsets[swap_idx]:swap_offsets[swap_idx + 1]]
+    else:
+        expected = eureka_more[old_offsets[clip_frame]:old_offsets[clip_frame + 1]]
+    if frame != expected:
+        fail(f"EUREKA frame {index} differs from selected videos")
+if "162265794_1792312586022108.mp4" in more_sources or (
+        "652788400_1792312226633408.mp4" in more_sources):
+    fail("old portrait files still identified as EUREKA sources")
 if eureka_count != 36 * (4 + 7 + 5):
     fail("EUREKA clip boundary count differs from 16 x 36")
 # Inspect offsets and verify that every packed frame is a complete JPEG.
