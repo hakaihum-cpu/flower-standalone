@@ -128,6 +128,7 @@ private:
     juce::Image vongonCyanFringe;
     int vongonFringeRevision = -1;
     int eurekaClipCooldown = 0; // minimum interval between random live clip cuts
+    bool eurekaWasActive = false; // pick a random video when EUREKA is entered
     int chordVisualCooldown = 0;
     int eurekaVisualCooldown = 0;
     int vongonVisualCooldown = 0;
