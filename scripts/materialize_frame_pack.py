@@ -39,8 +39,18 @@ EUREKA_EXTRA_PARTS = 31
 EUREKA_EXTRA_COUNT = 5 * 36
 EUREKA_EXTRA_SIZE = 2496161
 EUREKA_EXTRA_SHA256 = 'eea7aae42c68680718cbb236c625f164b405f551a13ba1926e5a6b98d96eb27e'
+# Replace only extra clip slots 1 and 2 (global clips 12, 13 of 16).
+# The other 14 user videos, CRF1 format, and audio processing remain as-is.
+EUREKA_SWAP_DIR = ROOT / 'Resources' / 'eureka_replacement_frame_chunks'
+EUREKA_SWAP_SIZES = ROOT / 'Resources' / 'eureka_replacement_frame_sizes.txt'
+EUREKA_SWAP_PARTS = 14
+EUREKA_SWAP_COUNT = 2 * 36
+EUREKA_SWAP_BYTES = 818160
+EUREKA_SWAP_SHA256 = '55d559fc90c4fd4878e87ae20552435916d5f9835f67a798ab4145a699375cef'
+EUREKA_ORIGINAL_PORTRAIT_BYTES = 266088 + 288551
+EUREKA_SWAPPED_EXTRA_SIZE = EUREKA_EXTRA_SIZE - EUREKA_ORIGINAL_PORTRAIT_BYTES + EUREKA_SWAP_BYTES
 EUREKA_COMPLETE_COUNT = EUREKA_FINAL_COUNT + EUREKA_EXTRA_COUNT
-EUREKA_COMPLETE_SIZE = EUREKA_FINAL_SIZE + EUREKA_EXTRA_SIZE + EUREKA_EXTRA_COUNT * 12
+EUREKA_COMPLETE_SIZE = EUREKA_FINAL_SIZE + EUREKA_SWAPPED_EXTRA_SIZE + EUREKA_EXTRA_COUNT * 12
 
 # 9 original user video clips, 8 seconds each at native 24 fps.
 # Each original byte is stored in a deterministic Git blob chunk.
@@ -192,6 +202,46 @@ for size in extra_sizes:
     cursor += size
 if cursor != len(extra):
     raise SystemExit('[FAIL] extra EUREKA JPEG stream length mismatch')
+
+# Both original 720x1280 portrait clips in the five-video addition are
+# replaced with the user's newly supplied 1.mp4 and 2.mp4 (1080x1080).
+# Assemble only at materialization: all other frames remain byte-identical.
+swap_parts = sorted(EUREKA_SWAP_DIR.glob('part_*.b64'))
+if len(swap_parts) != EUREKA_SWAP_PARTS:
+    raise SystemExit(
+        f'[FAIL] expected {EUREKA_SWAP_PARTS} portrait replacement parts, '
+        f'got {len(swap_parts)}')
+swapped = decode_chunks(swap_parts)
+if len(swapped) != EUREKA_SWAP_BYTES:
+    raise SystemExit('[FAIL] EUREKA replacement bytes incorrect')
+if hashlib.sha256(swapped).hexdigest() != EUREKA_SWAP_SHA256:
+    raise SystemExit('[FAIL] EUREKA replacement video SHA256 incorrect')
+swap_sizes = [int(x) for x in EUREKA_SWAP_SIZES.read_text().splitlines() if x.strip()]
+if len(swap_sizes) != EUREKA_SWAP_COUNT or sum(swap_sizes) != len(swapped):
+    raise SystemExit('[FAIL] EUREKA replacement frame index invalid')
+new_frames = []
+new_sizes = []
+read_offset = 0
+swap_offset = 0
+for frame_index, old_size in enumerate(extra_sizes):
+    original_frame = extra[read_offset:read_offset + old_size]
+    read_offset += old_size
+    if 36 <= frame_index < 108:
+        replacement_size = swap_sizes[frame_index - 36]
+        frame = swapped[swap_offset:swap_offset + replacement_size]
+        swap_offset += replacement_size
+    else:
+        frame = original_frame
+    if len(frame) < 64 or frame[:2] != b'\\xff\\xd8' or frame[-2:] != b'\\xff\\xd9':
+        raise SystemExit(f'[FAIL] EUREKA replacement JPEG invalid: {frame_index}')
+    new_frames.append(frame)
+    new_sizes.append(len(frame))
+if read_offset != len(extra) or swap_offset != len(swapped):
+    raise SystemExit('[FAIL] EUREKA replacement did not consume exact byte spans')
+if sum(new_sizes) != EUREKA_SWAPPED_EXTRA_SIZE:
+    raise SystemExit('[FAIL] EUREKA replacement total byte size incorrect')
+extra = b''.join(new_frames)
+extra_sizes = new_sizes
 
 previous_header = 8 + EUREKA_FINAL_COUNT * 12
 complete_header = 8 + EUREKA_COMPLETE_COUNT * 12
