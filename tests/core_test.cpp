@@ -183,6 +183,23 @@ int main()
         chordfx::SineArpeggiator::midiFrequency (69.0, 0.25)
         - quarterSemitone) < 1.0e-9);
 
+    // MIDI CC65 selects an existing CHORD-B effect without touching the
+    // audio effect algorithms. Sending "random" restores the old lottery.
+    chordfx::ChordBRandomFx midiFx;
+    midiFx.prepare (48000.0);
+    midiFx.setProbability (0.0f);
+    midiFx.setForcedEffect (7);
+    midiFx.chooseForNote();
+    assert (midiFx.getActiveEffect() == chordfx::ChordBRandomFx::reverb);
+    midiFx.setForcedEffect (1);
+    assert (midiFx.getActiveEffect() == chordfx::ChordBRandomFx::shortDelay);
+    midiFx.setForcedEffect (-1);
+    midiFx.chooseForNote();
+    assert (midiFx.getActiveEffect() == chordfx::ChordBRandomFx::none);
+    midiFx.setProbability (1.0f);
+    midiFx.chooseForNote();
+    assert (midiFx.getActiveEffect() >= 1 && midiFx.getActiveEffect() <= 7);
+
     chordfx::TheoryEngine theory;
     theory.setRandomSeed (1);
     theory.setComplexity (1.0f);
