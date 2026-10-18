@@ -1921,7 +1921,7 @@ void RealtimeChordFxAudioProcessor::applyPendingMidiInputChanges()
             // EUREKA's touch X/Y maps to density, loop position and hall.
             const int mode = juce::roundToInt (
                 apvts.getRawParameterValue (ParamID::effectMode)->load());
-            if (mode == 2)
+            if (mode == 2 && (cc == 110 || cc == 111))
             {
                 const float x = (float) midiInputX.load (
                     std::memory_order_relaxed) / 127.0f;
@@ -1954,14 +1954,25 @@ void RealtimeChordFxAudioProcessor::applyPendingMidiInputChanges()
         }
         if (cc == 115) { setNormalised (ParamID::wet, norm); continue; }
         if (cc == 119) { setNormalised (ParamID::dryLevel, norm); continue; }
+        // A pending CC must not alter another mode if MODE was switched
+        // between the audio callback and this 30 Hz message-thread drain.
+        const int mode = juce::roundToInt (
+            apvts.getRawParameterValue (ParamID::effectMode)->load());
+        const bool activeChordB = mode == 0
+            && apvts.getRawParameterValue (ParamID::chordMode)->load() >= 0.5f;
         if (cc == 63 || cc == 67)
         {
-            // DREAMY CC63 and CHORD-B CC67 control the existing tempo.
-            setNormalised (ParamID::internalBpm, norm);
+            if ((cc == 63 && mode == 1) || (cc == 67 && activeChordB))
+                setNormalised (ParamID::internalBpm, norm);
             continue;
         }
-        if (cc == 66) { setNormalised (ParamID::effect, norm); continue; }
-        if (cc == 68) { setNormalised (ParamID::length, norm); continue; }
+        if (cc == 66 || cc == 68)
+        {
+            if (activeChordB)
+                setNormalised (
+                    cc == 66 ? ParamID::effect : ParamID::length, norm);
+            continue;
+        }
         if (cc == 116) { setNormalised (ParamID::boostDb, norm); continue; }
         if (cc == 117) { setNormalised (ParamID::inputGainDb, norm); continue; }
         if (cc == 118) { setNormalised (ParamID::displayMode, norm); continue; }
