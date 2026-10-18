@@ -412,6 +412,7 @@ public:
         activeEffect = none;
         previousEffect = none;
         transitionSamplesRemaining = 0;
+        forcedEffect = -1;
         transitionSamplesTotal = std::max (32, (int) std::lround (sampleRate * 0.006));
         probability = 0.0f;
         tapeFeedbackLpL = tapeFeedbackLpR = 0.0f;
@@ -427,12 +428,30 @@ public:
         probability = std::clamp (amount01, 0.0f, 1.0f);
     }
 
+    // -1 follows the original random FX lottery; 0..7 selects an existing
+    // effect directly through MIDI CC. No new DSP or routing is introduced.
+    void setForcedEffect (int requested) noexcept
+    {
+        const int next = std::clamp (requested, -1, 7);
+        if (next == forcedEffect)
+            return;
+        forcedEffect = next;
+        if (next >= 0 && next != activeEffect)
+        {
+            previousEffect = activeEffect;
+            activeEffect = next;
+            transitionSamplesRemaining = transitionSamplesTotal;
+        }
+    }
+
     void chooseForNote() noexcept
     {
         const float draw = (float) (nextRandom() & 0xffffu) / 65535.0f;
-        const int nextEffect = draw >= probability
-            ? none
-            : 1 + (int) (nextRandom() % 7u);
+        const int nextEffect = forcedEffect >= 0
+            ? forcedEffect
+            : draw >= probability
+                ? none
+                : 1 + (int) (nextRandom() % 7u);
 
         if (nextEffect != activeEffect)
         {
@@ -706,6 +725,7 @@ private:
 
     double sampleRate = 48000.0;
     float probability = 0.0f;
+    int forcedEffect = -1;
     int activeEffect = none;
     int previousEffect = none;
     int transitionSamplesRemaining = 0;
