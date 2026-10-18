@@ -1131,8 +1131,8 @@ for need in [
     "dreamyAmbienceMidi.store (value",
     "setNormalised (ParamID::dryLevel, norm)",
     "setNormalised (ParamID::internalBpm, norm)",
-    "setNormalised (ParamID::effect, norm)",
-    "setNormalised (ParamID::length, norm)",
+    "cc == 66 ? ParamID::effect : ParamID::length",
+    "if (activeChordB)",
     "chordBRandomFx.setForcedEffect (",
     "const int midiAmbience = dreamyAmbienceMidi.load",
 ]:
