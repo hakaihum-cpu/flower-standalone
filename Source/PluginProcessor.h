@@ -59,6 +59,7 @@ public:
     void setCloudsXY (float x, float y, bool touchDown) noexcept;
     float getCloudsX() const noexcept { return cloudsX.load (std::memory_order_relaxed); }
     float getCloudsY() const noexcept { return cloudsY.load (std::memory_order_relaxed); }
+    int getCloudsMidiCc (int cc) const noexcept { return cloudsEngine.getMidiCc (cc); }
     bool getCloudsTouch() const noexcept { return cloudsTouch.load (std::memory_order_relaxed); }
     void setVongonXY (float x, float y, bool touchDown) noexcept;
     float getVongonX() const noexcept { return vongonX.load (std::memory_order_relaxed); }
@@ -200,6 +201,8 @@ private:
     int stableCount = 0;
     float lastInputMidiFloat = 60.0f;
     float chordBTuningOffsetSemitones = 0.0f;
+    std::atomic<int> chordBForcedFx { -1 }; // CC65: 0=random, 1..7=existing FX
+    std::atomic<int> dreamyAmbienceMidi { -1 }; // CC62: -1=XY default
     chordfx::ChordPlan currentPlan;
     bool haveChord = false;
     double samplesUntilChange = 0.0;
