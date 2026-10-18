@@ -830,9 +830,9 @@ for need in [
     "params->feedback",
     "params->reverb",
     "params->dry_wet = juce::jlimit",
-    "params->freeze = freezeZone",
-    "params->trigger = touchDown && ! previousTouchDown",
-    "params->gate = touchDown",
+    "params->freeze = freezeCc < 0 ? freezeZone : freezeCc >= 64",
+    "params->trigger = (touchDown && ! previousTouchDown)",
+    "params->gate = gateCc < 0 ? touchDown : gateCc >= 64",
     "wetMix",
 ]:
     if need not in clouds_engine:
@@ -1096,7 +1096,7 @@ for need in [
     "midiInputPending[(size_t) cc].store (",
     "message.isController()",
     "message.isForChannel (midiInputChannel)",
-    "cc >= 110 && cc <= 118",
+    "cc >= 110 && cc <= 119",
     "effectMode == 0 && cc >= 20 && cc <= 27",
     "effectMode == 2 && cc >= 40 && cc <= 56",
     "effectMode == 3 && (cc == 120 || cc == 121)",
@@ -1118,6 +1118,63 @@ for need in [
         fail(f"all-mode MIDI IN queue missing: {need}")
 if "processor.applyPendingMidiInputChanges();" not in midi_editor:
     fail("all-mode MIDI IN message-thread bridge missing")
+
+# Existing MIDI input bridge and existing DSP controls only. Distinct ranges
+# must remain mode-gated and no MIDI may be echoed to the output.
+for need in [
+    "const bool chordB = effectMode == 0 && chordMode == 1",
+    "cc >= 65 && cc <= 68",
+    "const bool dreamy = effectMode == 1 && cc >= 60 && cc <= 63",
+    "const bool clouds = effectMode == 4 && cc >= 70 && cc <= 81",
+    "cloudsEngine.setMidiCc (cc, value)",
+    "chordBForcedFx.store (",
+    "dreamyAmbienceMidi.store (value",
+    "setNormalised (ParamID::dryLevel, norm)",
+    "setNormalised (ParamID::internalBpm, norm)",
+    "setNormalised (ParamID::effect, norm)",
+    "setNormalised (ParamID::length, norm)",
+    "chordBRandomFx.setForcedEffect (",
+    "const int midiAmbience = dreamyAmbienceMidi.load",
+]:
+    if need not in midi_proc:
+        fail(f"new per-effect MIDI CC path missing: {need}")
+for need in [
+    "chordBForcedFx",
+    "dreamyAmbienceMidi",
+    "getCloudsMidiCc",
+]:
+    if need not in midi_head:
+        fail(f"new per-effect MIDI state missing: {need}")
+for need in [
+    "void setMidiCc (int number, int value) noexcept",
+    "int getMidiCc (int number) const noexcept",
+    "ccNorm (70, smoothedX)",
+    "ccNorm (71, smoothedY)",
+    "ccNorm (72, smoothedY)",
+    "ccNorm (73, smoothedX)",
+    "getMidiCc (74)",
+    "ccNorm (75, smoothedX)",
+    "ccNorm (76, smoothedY)",
+    "ccNorm (77, xyReverb)",
+    "ccNorm (78, xyWet)",
+    "getMidiCc (79)",
+    "getMidiCc (80)",
+    "getMidiCc (81)",
+    "std::array<std::atomic<int>, 12> midiCc",
+]:
+    if need not in clouds_engine:
+        fail(f"CLOUDS individual MIDI CC wiring missing: {need}")
+renderer = (R / "Source/ChordRenderers.h").read_text()
+for need in [
+    "void setForcedEffect (int requested) noexcept",
+    "forcedEffect = next",
+    "const int nextEffect = forcedEffect >= 0",
+    "int forcedEffect = -1;",
+]:
+    if need not in renderer:
+        fail(f"CHORD-B existing FX MIDI selector missing: {need}")
+if "run_build: true" in (R / ".circleci/config.yml").read_text():
+    fail("CI must stay manual run_build=false by default")
 
 # New controls must be usable and input gain must reach the real audio path.
 for need in [
