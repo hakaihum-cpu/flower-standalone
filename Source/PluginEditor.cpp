@@ -1276,23 +1276,45 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
     const float y = juce::jlimit (0.0f, 1.0f, processor.getCloudsY());
     const bool touch = processor.getCloudsTouch();
 
-    const float position = juce::jlimit (0.0f, 1.0f, 0.08f + x * 0.84f);
-    const float size = juce::jlimit (0.0f, 1.0f, 0.14f + y * 0.72f);
-    const float density = juce::jlimit (0.0f, 1.0f, 0.28f + y * 0.44f);
-    const float texture = juce::jlimit (0.0f, 1.0f, 0.24f + x * 0.52f);
-    const float pitch =
+    // Display the same per-mode CC overrides used by Clouds' DSP.
+    const auto ccNorm = [this] (int cc, float fallback) noexcept
+    {
+        const int v = processor.getCloudsMidiCc (cc);
+        return v < 0 ? fallback : (float) v / 127.0f;
+    };
+    const float position = juce::jlimit (
+        0.0f, 1.0f, 0.08f + ccNorm (70, x) * 0.84f);
+    const float size = juce::jlimit (
+        0.0f, 1.0f, 0.14f + ccNorm (71, y) * 0.72f);
+    const float density = juce::jlimit (
+        0.0f, 1.0f, 0.28f + ccNorm (72, y) * 0.44f);
+    const float texture = juce::jlimit (
+        0.0f, 1.0f, 0.24f + ccNorm (73, x) * 0.52f);
+    const float xyPitch =
         x < 0.10f ? -12.0f
         : x < 0.22f ? -7.0f
         : x > 0.90f ? 12.0f
         : x > 0.78f ? 7.0f
                     : 0.0f;
-    const float spread = juce::jlimit (0.0f, 1.0f, 0.18f + x * 0.58f);
-    const float feedback = juce::jlimit (0.0f, 0.42f, 0.03f + y * 0.34f);
+    const float pitch = processor.getCloudsMidiCc (74) < 0
+        ? xyPitch
+        : juce::jlimit (-12.0f, 12.0f,
+            (ccNorm (74, 0.5f) * 2.0f - 1.0f) * 12.0f);
+    const float spread = juce::jlimit (
+        0.0f, 1.0f, 0.18f + ccNorm (75, x) * 0.58f);
+    const float feedback = juce::jlimit (
+        0.0f, 0.42f, 0.03f + ccNorm (76, y) * 0.34f);
     const float reverb = juce::jlimit (
-        0.0f, 0.72f, 0.02f + std::pow (x * y, 1.35f) * 0.68f);
+        0.0f, 0.72f, 0.02f + ccNorm (
+            77, std::pow (x * y, 1.35f)) * 0.68f);
     const float dryWet = juce::jlimit (
-        0.18f, 0.88f, 0.24f + 0.58f * (0.30f * x + 0.70f * y));
-    const bool freeze = y > 0.93f && x < 0.24f;
+        0.18f, 0.88f,
+        0.24f + 0.58f * ccNorm (78, 0.30f * x + 0.70f * y));
+    const int freezeCc = processor.getCloudsMidiCc (79);
+    const bool freeze = freezeCc < 0
+        ? y > 0.93f && x < 0.24f : freezeCc >= 64;
+    const int gateCc = processor.getCloudsMidiCc (81);
+    const bool gate = gateCc < 0 ? touch : gateCc >= 64;
 
     g.setColour (uiColour (0.96f));
     g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
@@ -1310,8 +1332,8 @@ void RealtimeChordFxAudioProcessorEditor::paintClouds (juce::Graphics& g)
     g.setColour (uiColour (freeze ? 0.98f : 0.66f));
     g.drawText (freeze ? "FREEZE" : "FREEZE: TOP-LEFT",
                 24, 86, 170, 20, juce::Justification::centredLeft);
-    g.setColour (uiColour (touch ? 0.94f : 0.62f));
-    g.drawText (touch ? "GATE ON / TRIGGER" : "TOUCH = GATE / TAP = TRIGGER",
+    g.setColour (uiColour (gate ? 0.94f : 0.62f));
+    g.drawText (gate ? "GATE ON / TRIGGER" : "TOUCH = GATE / TAP = TRIGGER",
                 430, 86, 264, 20, juce::Justification::centredRight);
 
     g.setColour (uiColour (0.80f));
