@@ -123,28 +123,60 @@ for source in [
     if source not in source_manifest:
         fail(f"EUREKA video source missing: {source}")
 
+# Added five user MP4 clips must remain complete and separately verifiable.
+# Earlier 11 clips (144 original + 252 appended frames) are immutable.
+eureka_more_chunks = sorted(
+    (R / "Resources/eureka_more_frame_chunks").glob("part_*.b64"))
+if len(eureka_more_chunks) != 31:
+    fail(f"expected 31 EUREKA five-clip chunks, got {len(eureka_more_chunks)}")
+eureka_more = base64.b64decode(''.join(
+    chunk.read_text().strip()
+    for chunk in eureka_more_chunks), validate=True)
+if len(eureka_more) != 2496161 or hashlib.sha256(eureka_more).hexdigest() != (
+        "eea7aae42c68680718cbb236c625f164b405f551a13ba1926e5a6b98d96eb27e"):
+    fail("five newly supplied EUREKA MP4 frames missing or altered")
+eureka_more_sizes = [
+    int(x) for x in (R / "Resources/eureka_more_frame_sizes.txt").read_text().splitlines()
+    if x.strip()]
+if len(eureka_more_sizes) != 180 or sum(eureka_more_sizes) != len(eureka_more):
+    fail("five newly supplied EUREKA JPEG frame index mismatch")
+more_sources = (R / "Resources/eureka_more_sources.txt").read_text(encoding="utf-8")
+for source in [
+    "436441182_1792311285651534.mp4",
+    "162265794_1792312586022108.mp4",
+    "652788400_1792312226633408.mp4",
+    "881269787_1792311671806683.mp4",
+    "131027485_1792311397114360.mp4",
+]:
+    if source not in more_sources:
+        fail(f"new EUREKA MP4 source missing: {source}")
 eureka_pack = (R / "Resources/eureka_frames.pack").read_bytes()
-if len(eureka_pack) != 4350833:
-    fail(f"merged EUREKA frame pack size mismatch: {len(eureka_pack)}")
+if len(eureka_pack) != 6849154:
+    fail(f"complete EUREKA frame pack size mismatch: {len(eureka_pack)}")
 if eureka_pack[:4] != b"CRF1":
     fail("EUREKA frame pack magic mismatch")
 eureka_count = int.from_bytes(eureka_pack[4:8], "little")
-if eureka_count != 396:
+if eureka_count != 576:
     fail(f"EUREKA frame count mismatch: {eureka_count}")
 old_table_end = 8 + 144 * 12
-new_table_end = 8 + 396 * 12
+new_table_end = 8 + 576 * 12
 orig_payload = eureka_original[old_table_end:]
-if eureka_pack[new_table_end:new_table_end + len(orig_payload)] != orig_payload:
-    fail("existing EUREKA original JPEG payloads were modified")
-if not eureka_pack.endswith(eureka_added):
-    fail("appended EUREKA JPEG payload does not match the uploaded seven clips")
-# Inspect each frame offset/size and check the standalone FramePack layout.
+existing_payload = orig_payload + eureka_added
+if eureka_pack[new_table_end:new_table_end + len(existing_payload)] != existing_payload:
+    fail("previous 11 EUREKA clips were modified")
+if not eureka_pack.endswith(eureka_more):
+    fail("five new EUREKA clips are missing from the rebuilt pack")
+if eureka_count != 36 * (4 + 7 + 5):
+    fail("EUREKA clip boundary count differs from 16 x 36")
+# Inspect offsets and verify that every packed frame is a complete JPEG.
 for frame_idx in range(eureka_count):
     pos = 8 + frame_idx * 12
     offset = int.from_bytes(eureka_pack[pos:pos + 4], "little")
     size = int.from_bytes(eureka_pack[pos + 8:pos + 12], "little")
     if offset < new_table_end or size < 64 or offset + size > len(eureka_pack):
-        fail(f"merged EUREKA frame table entry invalid: {frame_idx}")
+        fail(f"EUREKA frame table entry invalid: {frame_idx}")
+    if eureka_pack[offset:offset+2] != bytes([255,216]) or eureka_pack[offset+size-2:offset+size] != bytes([255,217]):
+        fail(f"EUREKA JPEG integrity failure: {frame_idx}")
 
 # Vongon's original full-rate video bank and effects remain unchanged.
 vongon_pack = (R / "Resources/vongon_frames.pack").read_bytes()
