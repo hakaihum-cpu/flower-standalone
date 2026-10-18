@@ -969,6 +969,38 @@ for need in [
 ]:
     if need not in (R / "Source/VideoInteraction.h").read_text():
         fail(f"EUREKA audiovisual reaction helper missing: {need}")
+# EUREKA's 11 user-provided clips must all be reachable DURING playback.
+# No sequential clip list, no mandatory wait until frame 35, and no
+# fixed-interval slideshow. Leave the existing audio DSP and visual bank alone.
+eureka_begin = editor.find("else if (effectMode == 2 && eurekaFrames.getFrameCount() > 0)")
+eureka_end = editor.find("else if (effectMode >= 5", eureka_begin)
+if eureka_begin < 0 or eureka_end <= eureka_begin:
+    fail("EUREKA timer rendering block missing")
+eureka_playback = editor[eureka_begin:eureka_end]
+for need in [
+    "const int clips = total / clipFrames",
+    "const bool randomSustainCut",
+    "const bool switchNow",
+    "attack || randomSustainCut",
+    "const int randomClip = nextVisualFrame (clips, previousClip)",
+    "const int randomStart = nextVisualFrame (clipFrames, -1)",
+    "eurekaFrameIndex = randomClip * clipFrames + randomStart",
+    "eurekaClipCooldown = 18",
+    "const float targetFps = effects_video::eurekaReactiveFrameRate (activity)",
+    "(position + 1) % clipFrames",
+]:
+    if need not in eureka_playback:
+        fail(f"EUREKA live random clip cut contract missing: {need}")
+for forbidden in [
+    "eurekaSwitchClipPending",
+    "else if (position == clipFrames - 1)",
+    "eurekaFrameIndex = nextClip * clipFrames",
+    "(clip + 1) % clips",
+]:
+    if forbidden in eureka_playback:
+        fail(f"EUREKA sequential/end-only clip switch reintroduced: {forbidden}")
+if "int eurekaClipCooldown = 0" not in editor_header:
+    fail("EUREKA random clip cooldown state missing")
 if "eurekaFramePhase += 4.5f / 30.0f" in editor:
     fail("EUREKA returned to passive fixed-rate video playback")
 if "paintVideoEffect (g, currentEurekaFrame" not in editor:
