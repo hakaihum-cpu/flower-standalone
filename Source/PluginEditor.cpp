@@ -778,6 +778,8 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
 
     const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+    const bool eurekaEntered = effectMode == 2 && ! eurekaWasActive;
+    eurekaWasActive = effectMode == 2;
 
     const float activity = juce::jmax (
         processor.getInputPeakRaw(),
@@ -860,8 +862,9 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
             && eurekaClipCooldown == 0
             && nextVisualFrame (64, -1) == 0;
         const bool switchNow =
-            clips > 1 && eurekaClipCooldown == 0
-            && (attack || randomSustainCut);
+            clips > 1 && (eurekaEntered
+                || (eurekaClipCooldown == 0
+                    && (attack || randomSustainCut)));
         if (switchNow)
         {
             const int previousClip = eurekaFrameIndex / clipFrames;
