@@ -232,7 +232,7 @@ for frame_index, old_size in enumerate(extra_sizes):
         swap_offset += replacement_size
     else:
         frame = original_frame
-    if len(frame) < 64 or frame[:2] != b'\\xff\\xd8' or frame[-2:] != b'\\xff\\xd9':
+    if len(frame) < 64 or frame[:2] != b'\xff\xd8' or frame[-2:] != b'\xff\xd9':
         raise SystemExit(f'[FAIL] EUREKA replacement JPEG invalid: {frame_index}')
     new_frames.append(frame)
     new_sizes.append(len(frame))
