@@ -30,6 +30,18 @@ EUREKA_ADDED_SHA256 = 'be0772700a74386c87815f53949e7e925b36e93259397ff282ac300bf
 EUREKA_FINAL_COUNT = EUREKA_COUNT + EUREKA_ADDED_COUNT
 EUREKA_FINAL_SIZE = EUREKA_SIZE + EUREKA_ADDED_SIZE + EUREKA_ADDED_COUNT * 12
 
+# Five more supplied 8-second clips; 36 ordered JPEGs per clip. 16 clips total.
+# These are APPENDED to the earlier 11 clips, without transcoding old sources.
+EUREKA_EXTRA_DIR = ROOT / 'Resources' / 'eureka_more_frame_chunks'
+EUREKA_EXTRA_SIZES = ROOT / 'Resources' / 'eureka_more_frame_sizes.txt'
+EUREKA_EXTRA_SOURCES = ROOT / 'Resources' / 'eureka_more_sources.txt'
+EUREKA_EXTRA_PARTS = 31
+EUREKA_EXTRA_COUNT = 5 * 36
+EUREKA_EXTRA_SIZE = 2496161
+EUREKA_EXTRA_SHA256 = 'eea7aae42c68680718cbb236c625f164b405f551a13ba1926e5a6b98d96eb27e'
+EUREKA_COMPLETE_COUNT = EUREKA_FINAL_COUNT + EUREKA_EXTRA_COUNT
+EUREKA_COMPLETE_SIZE = EUREKA_FINAL_SIZE + EUREKA_EXTRA_SIZE + EUREKA_EXTRA_COUNT * 12
+
 # 9 original user video clips, 8 seconds each at native 24 fps.
 # Each original byte is stored in a deterministic Git blob chunk.
 VONGON_CHUNK_DIR = ROOT / 'Resources' / 'vongon_frame_parts'
@@ -149,8 +161,59 @@ eureka_merged = (
 )
 if len(eureka_merged) != EUREKA_FINAL_SIZE or cursor != len(eureka_merged):
     raise SystemExit('[FAIL] merged EUREKA frame pack size mismatch')
-validate_crf1(eureka_merged, EUREKA_FINAL_COUNT, 'merged EUREKA frame pack')
-EUREKA_OUT.write_bytes(eureka_merged)
+validate_crf1(eureka_merged, EUREKA_FINAL_COUNT, 'merged 11-clip EUREKA frame pack')
+
+# Append five newly supplied clips to the exact previous 11-clip pack.
+# This is an additive CRF1 index extension, not a new media pipeline.
+extra_parts = sorted(EUREKA_EXTRA_DIR.glob('part_*.b64'))
+if len(extra_parts) != EUREKA_EXTRA_PARTS:
+    raise SystemExit(
+        f'[FAIL] expected {EUREKA_EXTRA_PARTS} additional EUREKA chunks, '
+        f'got {len(extra_parts)}')
+extra = decode_chunks(extra_parts)
+if len(extra) != EUREKA_EXTRA_SIZE:
+    raise SystemExit(f'[FAIL] extra EUREKA data size mismatch: {len(extra)}')
+if hashlib.sha256(extra).hexdigest() != EUREKA_EXTRA_SHA256:
+    raise SystemExit('[FAIL] extra EUREKA JPEG digest mismatch')
+extra_sizes = [int(x) for x in EUREKA_EXTRA_SIZES.read_text().splitlines() if x.strip()]
+if len(extra_sizes) != EUREKA_EXTRA_COUNT or sum(extra_sizes) != len(extra):
+    raise SystemExit('[FAIL] extra EUREKA frame index mismatch')
+extra_sources = [
+    x for x in EUREKA_EXTRA_SOURCES.read_text(encoding='utf-8').splitlines()
+    if x and not x.startswith('#')
+]
+if len(extra_sources) != 5:
+    raise SystemExit('[FAIL] extra EUREKA source count mismatch')
+cursor = 0
+for size in extra_sizes:
+    frame = extra[cursor:cursor + size]
+    if size < 64 or frame[:2] != b'\\xff\\xd8' or frame[-2:] != b'\\xff\\xd9':
+        raise SystemExit('[FAIL] extra EUREKA JPEG frame boundary mismatch')
+    cursor += size
+if cursor != len(extra):
+    raise SystemExit('[FAIL] extra EUREKA JPEG stream length mismatch')
+
+previous_header = 8 + EUREKA_FINAL_COUNT * 12
+complete_header = 8 + EUREKA_COMPLETE_COUNT * 12
+header_shift = complete_header - previous_header
+complete_entries = bytearray()
+for frame_index in range(EUREKA_FINAL_COUNT):
+    offset, flags, size = struct.unpack_from(
+        '<III', eureka_merged, 8 + frame_index * 12)
+    if offset < previous_header or offset + size > len(eureka_merged):
+        raise SystemExit(f'[FAIL] prior EUREKA frame index invalid: {frame_index}')
+    complete_entries.extend(struct.pack('<III', offset + header_shift, flags, size))
+cursor = complete_header + len(eureka_merged) - previous_header
+for size in extra_sizes:
+    complete_entries.extend(struct.pack('<III', cursor, 0, size))
+    cursor += size
+eureka_complete = (
+    b'CRF1' + struct.pack('<I', EUREKA_COMPLETE_COUNT)
+    + complete_entries + eureka_merged[previous_header:] + extra)
+if len(eureka_complete) != EUREKA_COMPLETE_SIZE or cursor != len(eureka_complete):
+    raise SystemExit('[FAIL] complete EUREKA frame pack size mismatch')
+validate_crf1(eureka_complete, EUREKA_COMPLETE_COUNT, 'complete 16-clip EUREKA frame pack')
+EUREKA_OUT.write_bytes(eureka_complete)
 
 # Reconstruct and verify all 9 full-rate Vongon video clips before JUCER.
 # Do not use the old 4.5-fps committed pack when building.
@@ -188,7 +251,7 @@ ICON_OUT.write_bytes(icon)
 print(
     f'[PASS] classroom pack: {len(classroom)} bytes sha256={classroom_sha}')
 print(
-    f'[PASS] EUREKA pack: {len(eureka_merged)} bytes / {EUREKA_FINAL_COUNT} frames sha256={hashlib.sha256(eureka_merged).hexdigest()}')
+    f'[PASS] EUREKA pack: {len(eureka_complete)} bytes / {EUREKA_COMPLETE_COUNT} frames sha256={hashlib.sha256(eureka_complete).hexdigest()}')
 print(
     f'[PASS] launcher icon: {len(icon)} bytes sha256={icon_sha}')
 print(
