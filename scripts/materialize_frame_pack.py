@@ -187,7 +187,7 @@ if len(extra_sources) != 5:
 cursor = 0
 for size in extra_sizes:
     frame = extra[cursor:cursor + size]
-    if size < 64 or frame[:2] != b'\\xff\\xd8' or frame[-2:] != b'\\xff\\xd9':
+    if size < 64 or frame[:2] != b'\xff\xd8' or frame[-2:] != b'\xff\xd9':
         raise SystemExit('[FAIL] extra EUREKA JPEG frame boundary mismatch')
     cursor += size
 if cursor != len(extra):
