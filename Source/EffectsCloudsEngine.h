@@ -18,6 +18,28 @@ public:
     static constexpr int nativeBlock = 32;
     using Frame = clouds::ShortFrame;
 
+    EffectsCloudsEngine() noexcept
+    {
+        for (auto& value : midiCc)
+            value.store (-1, std::memory_order_relaxed);
+    }
+
+    // Direct CC overrides follow the existing Vongon mode-specific
+    // pattern. Unsent controllers preserve the exact approved XY map.
+    void setMidiCc (int number, int value) noexcept
+    {
+        if (number >= 70 && number <= 81)
+            midiCc[(size_t) (number - 70)].store (
+                juce::jlimit (0, 127, value), std::memory_order_relaxed);
+    }
+
+    int getMidiCc (int number) const noexcept
+    {
+        return number >= 70 && number <= 81
+            ? midiCc[(size_t) (number - 70)].load (std::memory_order_relaxed)
+            : -1;
+    }
+
     void prepare (double requestedSampleRate) noexcept
     {
         hostRate = requestedSampleRate > 0.0 ? requestedSampleRate : 48000.0;
@@ -31,6 +53,7 @@ public:
         smoothedY = 0.5f;
         visualEnvelope = 0.0f;
         previousTouchDown = false;
+        previousMidiTrigger = false;
         activity.store (0.0f, std::memory_order_relaxed);
 
         engine.Init (largeBuffer.data(), largeBuffer.size(),
@@ -94,6 +117,11 @@ public:
         smoothedY += (y - smoothedY) * xyAlpha;
 
         auto* params = engine.mutable_parameters();
+        const auto ccNorm = [this] (int cc, float fallback) noexcept
+        {
+            const int raw = getMidiCc (cc);
+            return raw < 0 ? fallback : (float) raw / 127.0f;
+        };
 
         // Dedicated CLOUDS mode: every Clouds parameter is derived from the
         // same XY/touch surface.  Continuous parameters use X, Y or X*Y.
@@ -105,13 +133,13 @@ public:
         // extremes of the raw Clouds ranges while still covering the full
         // character of the effect.
         params->position = juce::jlimit (
-            0.0f, 1.0f, 0.08f + smoothedX * 0.84f);
+            0.0f, 1.0f, 0.08f + ccNorm (70, smoothedX) * 0.84f);
         params->size = juce::jlimit (
-            0.0f, 1.0f, 0.14f + smoothedY * 0.72f);
+            0.0f, 1.0f, 0.14f + ccNorm (71, smoothedY) * 0.72f);
         params->density = juce::jlimit (
-            0.0f, 1.0f, 0.28f + smoothedY * 0.44f);
+            0.0f, 1.0f, 0.28f + ccNorm (72, smoothedY) * 0.44f);
         params->texture = juce::jlimit (
-            0.0f, 1.0f, 0.24f + smoothedX * 0.52f);
+            0.0f, 1.0f, 0.24f + ccNorm (73, smoothedX) * 0.52f);
 
         const float pitchSemitones =
             smoothedX < 0.10f ? -12.0f
@@ -119,24 +147,32 @@ public:
             : smoothedX > 0.90f ? 12.0f
             : smoothedX > 0.78f ? 7.0f
                                 : 0.0f;
-        params->pitch = pitchSemitones;
-
+        params->pitch = getMidiCc (74) < 0
+            ? pitchSemitones
+            : juce::jlimit (-12.0f, 12.0f,
+                (ccNorm (74, 0.5f) * 2.0f - 1.0f) * 12.0f);
         params->stereo_spread = juce::jlimit (
-            0.0f, 1.0f, 0.18f + smoothedX * 0.58f);
+            0.0f, 1.0f, 0.18f + ccNorm (75, smoothedX) * 0.58f);
         params->feedback = juce::jlimit (
-            0.0f, 0.42f, 0.03f + smoothedY * 0.34f);
+            0.0f, 0.42f, 0.03f + ccNorm (76, smoothedY) * 0.34f);
+        const float xyReverb = std::pow (
+            smoothedX * smoothedY, 1.35f);
         params->reverb = juce::jlimit (
-            0.0f, 0.72f,
-            0.02f + std::pow (smoothedX * smoothedY, 1.35f) * 0.68f);
+            0.0f, 0.72f, 0.02f + ccNorm (77, xyReverb) * 0.68f);
+        const float xyWet = 0.30f * smoothedX + 0.70f * smoothedY;
         params->dry_wet = juce::jlimit (
-            0.18f, 0.88f,
-            0.24f + 0.58f * (0.30f * smoothedX + 0.70f * smoothedY));
+            0.18f, 0.88f, 0.24f + 0.58f * ccNorm (78, xyWet));
 
         const bool freezeZone =
             smoothedY > 0.93f && smoothedX < 0.24f;
-        params->freeze = freezeZone;
-        params->trigger = touchDown && ! previousTouchDown;
-        params->gate = touchDown;
+        const int freezeCc = getMidiCc (79);
+        params->freeze = freezeCc < 0 ? freezeZone : freezeCc >= 64;
+        const bool midiTrigger = getMidiCc (80) >= 64;
+        params->trigger = (touchDown && ! previousTouchDown)
+            || (midiTrigger && ! previousMidiTrigger);
+        previousMidiTrigger = midiTrigger;
+        const int gateCc = getMidiCc (81);
+        params->gate = gateCc < 0 ? touchDown : gateCc >= 64;
 
         const float targetWet = enabled ? 1.0f : 0.0f;
         const float step = static_cast<float> (
@@ -284,6 +320,8 @@ private:
     std::array<Frame, 4096> outputRing {};
 
     std::atomic<float> activity { 0.0f };
+    std::array<std::atomic<int>, 12> midiCc {};
+    bool previousMidiTrigger = false;
 
     size_t outputRead = 0;
     size_t outputWrite = 0;
@@ -312,6 +350,8 @@ class EffectsCloudsEngine final
 public:
     void prepare (double) noexcept {}
     float getActivity() const noexcept { return 0.0f; }
+    void setMidiCc (int, int) noexcept {}
+    int getMidiCc (int) const noexcept { return -1; }
     void process (juce::AudioBuffer<float>&, bool, float, float, bool) noexcept {}
 };
 
