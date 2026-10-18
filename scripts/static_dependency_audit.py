@@ -154,12 +154,12 @@ eureka_pack = (R / "Resources/eureka_frames.pack").read_bytes()
 # Two square user videos replace the two portrait slots only.
 replacement_chunks = sorted(
     (R / "Resources/eureka_replacement_frame_chunks").glob("part_*.b64"))
-if len(replacement_chunks) != 14:
-    fail(f"EUREKA video swap must contain 14 chunks, got {len(replacement_chunks)}")
+if len(replacement_chunks) != 20:
+    fail(f"EUREKA square 720x720 source must contain 20 chunks, got {len(replacement_chunks)}")
 replacement = base64.b64decode(''.join(
     chunk.read_text().strip() for chunk in replacement_chunks), validate=True)
-if len(replacement) != 818160 or hashlib.sha256(replacement).hexdigest() != (
-        "55d559fc90c4fd4878e87ae20552435916d5f9835f67a798ab4145a699375cef"):
+if len(replacement) != 1613885 or hashlib.sha256(replacement).hexdigest() != (
+        "fb95820d9cdd35b8ea4f197aa87a35af538dfd4421c05be691d58cd794eeff0d"):
     fail("two new EUREKA square video files are missing or altered")
 replacement_sizes = [
     int(x) for x in (R / "Resources/eureka_replacement_frame_sizes.txt")
@@ -167,7 +167,7 @@ replacement_sizes = [
 if len(replacement_sizes) != 72 or sum(replacement_sizes) != len(replacement):
     fail("EUREKA video swap must have 72 correctly indexed JPEG frames")
 # The two earlier portrait slots represented 266088 and 288551 bytes.
-expected_pack_size = 6849154 - (266088 + 288551) + 818160
+expected_pack_size = 6849154 - (266088 + 288551) + 1613885
 if len(eureka_pack) != expected_pack_size:
     fail(f"complete EUREKA frame pack size mismatch: {len(eureka_pack)}")
 if eureka_pack[:4] != b"CRF1":
@@ -182,7 +182,16 @@ existing_payload = orig_payload + eureka_added
 if eureka_pack[new_table_end:new_table_end + len(existing_payload)] != existing_payload:
     fail("previous 11 EUREKA clips were modified")
 # Compare every one of the five added clips in output: 3 untouched clips
-# must be byte-for-byte identical, and only the 2 portrait slots change.
+# must be byte-for-byte identical, and ONLY the 2 square slots change.
+# The existing CI materializer also rejects any JPEG not exactly 720x720.
+materializer = (R / "scripts/materialize_frame_pack.py").read_text()
+for need in [
+    "EUREKA_SWAP_PARTS = 20",
+    "EUREKA_SWAP_BYTES = 1613885",
+    "jpeg_dimensions(frame) != (720, 720)",
+]:
+    if need not in materializer:
+        fail(f"EUREKA 720x720 aspect / no-black-border contract missing: {need}")
 old_offsets = [0]
 for size in eureka_more_sizes:
     old_offsets.append(old_offsets[-1] + size)
