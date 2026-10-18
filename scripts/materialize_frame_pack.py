@@ -40,13 +40,15 @@ EUREKA_EXTRA_COUNT = 5 * 36
 EUREKA_EXTRA_SIZE = 2496161
 EUREKA_EXTRA_SHA256 = 'eea7aae42c68680718cbb236c625f164b405f551a13ba1926e5a6b98d96eb27e'
 # Replace only extra clip slots 1 and 2 (global clips 12, 13 of 16).
-# The other 14 user videos, CRF1 format, and audio processing remain as-is.
+# Square source videos 1.mp4 / 2.mp4 (1080x1080) are directly downscaled
+# to 720x720 JPEG, with NO 640x360 letterbox or black side padding.
+# The other 14 user videos, CRF1 format, and audio remain untouched.
 EUREKA_SWAP_DIR = ROOT / 'Resources' / 'eureka_replacement_frame_chunks'
 EUREKA_SWAP_SIZES = ROOT / 'Resources' / 'eureka_replacement_frame_sizes.txt'
-EUREKA_SWAP_PARTS = 14
+EUREKA_SWAP_PARTS = 20
 EUREKA_SWAP_COUNT = 2 * 36
-EUREKA_SWAP_BYTES = 818160
-EUREKA_SWAP_SHA256 = '55d559fc90c4fd4878e87ae20552435916d5f9835f67a798ab4145a699375cef'
+EUREKA_SWAP_BYTES = 1613885
+EUREKA_SWAP_SHA256 = 'fb95820d9cdd35b8ea4f197aa87a35af538dfd4421c05be691d58cd794eeff0d'
 EUREKA_ORIGINAL_PORTRAIT_BYTES = 266088 + 288551
 EUREKA_SWAPPED_EXTRA_SIZE = EUREKA_EXTRA_SIZE - EUREKA_ORIGINAL_PORTRAIT_BYTES + EUREKA_SWAP_BYTES
 EUREKA_COMPLETE_COUNT = EUREKA_FINAL_COUNT + EUREKA_EXTRA_COUNT
@@ -84,6 +86,35 @@ def validate_crf1(data, expected_count, label):
     if count != expected_count:
         raise SystemExit(
             f'[FAIL] {label} frame count {count} != {expected_count}')
+
+
+def jpeg_dimensions(data):
+    # Lightweight SOF header check; no Pillow/ffmpeg CI dependency.
+    if data[:2] != b'\xff\xd8':
+        raise SystemExit('[FAIL] EUREKA replacement JPEG header invalid')
+    index = 2
+    while index + 4 <= len(data):
+        if data[index] != 0xff:
+            break
+        while index < len(data) and data[index] == 0xff:
+            index += 1
+        if index >= len(data):
+            break
+        marker = data[index]
+        index += 1
+        if marker in (0xd8, 0x01) or 0xd0 <= marker <= 0xd7:
+            continue
+        if marker in (0xd9, 0xda):
+            break
+        segment_len = struct.unpack_from('>H', data, index)[0]
+        if segment_len < 2 or index + segment_len > len(data):
+            break
+        if marker in (0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7,
+                      0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf):
+            h, w = struct.unpack_from('>HH', data, index + 3)
+            return w, h
+        index += segment_len
+    raise SystemExit('[FAIL] EUREKA replacement JPEG size marker missing')
 
 
 classroom_parts = sorted(CLASSROOM_CHUNK_DIR.glob('chunk_*.b64'))
@@ -234,6 +265,9 @@ for frame_index, old_size in enumerate(extra_sizes):
         frame = original_frame
     if len(frame) < 64 or frame[:2] != b'\xff\xd8' or frame[-2:] != b'\xff\xd9':
         raise SystemExit(f'[FAIL] EUREKA replacement JPEG invalid: {frame_index}')
+    if 36 <= frame_index < 108 and jpeg_dimensions(frame) != (720, 720):
+        raise SystemExit(
+            f'[FAIL] EUREKA square slot has wrong frame aspect: {frame_index}')
     new_frames.append(frame)
     new_sizes.append(len(frame))
 if read_offset != len(extra) or swap_offset != len(swapped):
