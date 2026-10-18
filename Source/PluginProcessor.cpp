@@ -388,6 +388,8 @@ void RealtimeChordFxAudioProcessor::processChordB (juce::AudioBuffer<float>& buf
     const float effectAmount = apvts.getRawParameterValue (ParamID::effect)->load();
     sineArpeggiator.setTiming (bpm, length);
     chordBRandomFx.setProbability (effectAmount);
+    chordBRandomFx.setForcedEffect (
+        chordBForcedFx.load (std::memory_order_relaxed));
 
     const bool audible =
         running.load (std::memory_order_acquire)
@@ -585,18 +587,43 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
         const int cc = message.getControllerNumber();
         const int value = message.getControllerValue();
-        const bool common = cc >= 110 && cc <= 118;
+        const bool common = cc >= 110 && cc <= 119;
         const bool chord = effectMode == 0 && cc >= 20 && cc <= 27;
+        const bool chordB = effectMode == 0 && chordMode == 1
+            && cc >= 65 && cc <= 68;
+        const bool dreamy = effectMode == 1 && cc >= 60 && cc <= 63;
+        const bool clouds = effectMode == 4 && cc >= 70 && cc <= 81;
         const bool eureka = effectMode == 2 && cc >= 40 && cc <= 56;
         const bool bot = effectMode == 3 && (cc == 120 || cc == 121);
-        if (! common && ! chord && ! eureka && ! bot)
+        if (! common && ! chord && ! chordB && ! dreamy
+            && ! clouds && ! eureka && ! bot)
             continue;
+        // CLOUDS mode-specific CCs use the same atomic direct-control
+        // path as Vongon. Never call the UI or allocate on this callback.
+        if (clouds)
+        {
+            cloudsEngine.setMidiCc (cc, value);
+            continue;
+        }
+        if (chordB && cc == 65)
+        {
+            const int selection = juce::jlimit (0, 7, value * 8 / 128);
+            chordBForcedFx.store (
+                selection == 0 ? -1 : selection, std::memory_order_relaxed);
+            continue;
+        }
+        if (dreamy && cc == 62)
+        {
+            dreamyAmbienceMidi.store (value, std::memory_order_relaxed);
+            continue;
+        }
 
         midiInputPending[(size_t) cc].store (
             value, std::memory_order_release);
-        if (cc == 110 || cc == 111)
+        if (cc == 110 || cc == 111 || (dreamy && (cc == 60 || cc == 61)))
         {
-            if (cc == 110)
+            const bool xAxis = cc == 110 || cc == 60;
+            if (xAxis)
                 midiInputX.store (value, std::memory_order_relaxed);
             else
                 midiInputY.store (value, std::memory_order_relaxed);
@@ -981,8 +1008,13 @@ void RealtimeChordFxAudioProcessor::processDreamy (juce::AudioBuffer<float>& buf
         (float) controllerY.load (std::memory_order_relaxed) / 127.0f);
     const float bpm = juce::jlimit (50.0f, 200.0f,
         apvts.getRawParameterValue (ParamID::internalBpm)->load());
-    const float ambienceTarget =
-        enabled ? std::pow (x * y, 1.35f) : 0.0f;
+    const int midiAmbience = dreamyAmbienceMidi.load (
+        std::memory_order_relaxed);
+    const float ambienceTarget = enabled
+        ? (midiAmbience < 0
+            ? std::pow (x * y, 1.35f)
+            : (float) midiAmbience / 127.0f)
+        : 0.0f;
     const float ambienceAlpha =
         1.0f - std::exp (
             -(float) numSamples
@@ -1882,8 +1914,10 @@ void RealtimeChordFxAudioProcessor::applyPendingMidiInputChanges()
             continue;
 
         const float norm = (float) value / 127.0f;
-        if (cc == 110 || cc == 111)
+        if (cc == 110 || cc == 111 || cc == 60 || cc == 61)
         {
+            // DREAMY's CC60/61 mirror the same XY controllers; other
+            // modes retain their existing CC110/111 behaviour.
             // EUREKA's touch X/Y maps to density, loop position and hall.
             const int mode = juce::roundToInt (
                 apvts.getRawParameterValue (ParamID::effectMode)->load());
@@ -1919,6 +1953,15 @@ void RealtimeChordFxAudioProcessor::applyPendingMidiInputChanges()
             continue;
         }
         if (cc == 115) { setNormalised (ParamID::wet, norm); continue; }
+        if (cc == 119) { setNormalised (ParamID::dryLevel, norm); continue; }
+        if (cc == 63 || cc == 67)
+        {
+            // DREAMY CC63 and CHORD-B CC67 control the existing tempo.
+            setNormalised (ParamID::internalBpm, norm);
+            continue;
+        }
+        if (cc == 66) { setNormalised (ParamID::effect, norm); continue; }
+        if (cc == 68) { setNormalised (ParamID::length, norm); continue; }
         if (cc == 116) { setNormalised (ParamID::boostDb, norm); continue; }
         if (cc == 117) { setNormalised (ParamID::inputGainDb, norm); continue; }
         if (cc == 118) { setNormalised (ParamID::displayMode, norm); continue; }
