@@ -836,26 +836,50 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
     }
     else if (effectMode == 2 && eurekaFrames.getFrameCount() > 0)
     {
-        // Keep EUREKA's approved 36-frame/clip source and clip selection.
-        // Playback now follows AUDIO dynamics instead of a permanent 4.5fps
-        // slideshow. Transients briefly replay nearby frames as a visual
-        // stutter within the current clip. No translucent/fullscreen overlay.
+        // The 11 user-supplied EUREKA clips must be equally selectable,
+        // including DURING an active clip. Never defer a cut until the
+        // current 36-frame clip ends or step through clips sequentially.
         const bool attack =
             activity > 0.006f
             && activity > eurekaVisualPreviousActivity * 1.28f + 0.0015f;
-        eurekaSwitchClipPending |= attack;
         if (eurekaVisualCooldown > 0)
             --eurekaVisualCooldown;
-        if (attack && eurekaVisualCooldown == 0)
-        {
-            eurekaVisualCooldown = 8; // <= ~4 reactive stutters/second.
-            eurekaVideoRewindFrames = juce::jlimit (
-                1, 3, 1 + juce::roundToInt (eurekaXYX * 2.0f));
-        }
+        if (eurekaClipCooldown > 0)
+            --eurekaClipCooldown;
 
         const int total = eurekaFrames.getFrameCount();
         const int clipFrames = 36;
         const int clips = total / clipFrames;
+
+        // Strong new notes trigger immediate cuts. Sustained audible input
+        // also gets random chances to cut, not fixed-interval changes.
+        // Both paths use the existing seeded visual RNG, and a 0.6 s
+        // minimum gap prevents excessive frame decoding / flickering.
+        const bool randomSustainCut =
+            activity > 0.006f
+            && eurekaClipCooldown == 0
+            && nextVisualFrame (64, -1) == 0;
+        const bool switchNow =
+            clips > 1 && eurekaClipCooldown == 0
+            && (attack || randomSustainCut);
+        if (switchNow)
+        {
+            const int previousClip = eurekaFrameIndex / clipFrames;
+            const int randomClip = nextVisualFrame (clips, previousClip);
+            const int randomStart = nextVisualFrame (clipFrames, -1);
+            eurekaFrameIndex = randomClip * clipFrames + randomStart;
+            eurekaClipCooldown = 18;
+            eurekaVisualCooldown = 8;
+            eurekaVideoRewindFrames = 0;
+            eurekaFramePhase = 0.0f;
+        }
+        else if (attack && eurekaVisualCooldown == 0)
+        {
+            eurekaVisualCooldown = 8;
+            eurekaVideoRewindFrames = juce::jlimit (
+                1, 3, 1 + juce::roundToInt (eurekaXYX * 2.0f));
+        }
+
         const float targetFps = effects_video::eurekaReactiveFrameRate (activity);
         eurekaVideoSpeed += 0.24f * (targetFps - eurekaVideoSpeed);
         if (targetFps == 0.0f && eurekaVideoSpeed < 0.10f)
@@ -872,16 +896,13 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
                     + (position + clipFrames - 1) % clipFrames;
                 --eurekaVideoRewindFrames;
             }
-            else if (position == clipFrames - 1)
-            {
-                const int nextClip =
-                    eurekaSwitchClipPending && clips > 1
-                    ? (clip + 1) % clips : clip;
-                eurekaFrameIndex = nextClip * clipFrames;
-                eurekaSwitchClipPending = false;
-            }
             else
-                ++eurekaFrameIndex;
+            {
+                // End of an individual video loops within that video.
+                // Only input-driven random cuts may choose another clip.
+                eurekaFrameIndex = clip * clipFrames
+                    + (position + 1) % clipFrames;
+            }
         }
         if (eurekaFrameIndex != loadedEurekaFrame)
         {
