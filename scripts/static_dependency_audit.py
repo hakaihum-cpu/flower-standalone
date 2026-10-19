@@ -1672,6 +1672,21 @@ for token in [
 ]:
     if token not in pd_header:
         fail(f"Pd native DSP contract missing: {token}")
+# Never store raw UTF-8 pointers produced by temporary juce::String values.
+# Such pointers dangle before libpd_openfile() and can crash patch imports.
+for token in [
+    "const juce::String filename = file.getFileName();",
+    "const juce::String filename = selectedFile.getFileName();",
+    "filename.toRawUTF8(), folder.toRawUTF8()",
+]:
+    if token not in pd_header:
+        fail(f"Pd filepath lifetime guard missing: {token}")
+for unsafe in [
+    "file.getFileName().toRawUTF8();",
+    "file.getParentDirectory().getFullPathName().toRawUTF8();",
+]:
+    if unsafe in pd_header:
+        fail(f"Pd filepath has dangling UTF-8 pointer: {unsafe}")
 if "EFFECTS_PATCH_V1" in editor_visual or "importPatchJson" in processor_visual:
     fail("Rejected custom JSON patch DSL leaked into Pd implementation")
 for token in [
