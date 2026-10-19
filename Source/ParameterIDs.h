@@ -15,6 +15,7 @@ inline constexpr const char* boostDb = "boostDb";
 inline constexpr const char* inputGainDb = "inputGainDb";
 inline constexpr const char* displayMode = "displayMode";
 inline constexpr const char* audioBufferMode = "audioBufferMode";
+inline constexpr const char* audioInputMode = "audioInputMode";
 inline constexpr const char* hazeMix = "hazeMix";
 inline constexpr const char* hazeTime = "hazeTime";
 inline constexpr const char* hazeAmount = "hazeAmount";
