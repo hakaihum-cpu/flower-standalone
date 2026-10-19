@@ -75,6 +75,7 @@ private:
     void refreshAudioBufferStatus();
     bool applyAudioBufferMode (int mode);
     bool resetAudioDevice();
+    bool applyAudioInputMode (int mode);
     juce::String makeAudioBufferStatus() const;
     juce::String currentOutputName() const;
     void refreshMidiOutputs();
@@ -165,6 +166,7 @@ private:
     int selectedAudioInput = -1;
     int selectedAudioOutput = -1;
     int audioBufferMode = 0;
+    int appliedAudioInputMode = -1; // 0=STEREO; 1=MONO; set only after verified device open
     int audioDefaultBufferFrames = -1;
     int audioFramesPerBurst = 0;
     int audioActualBufferFrames = 0;
