@@ -2850,6 +2850,22 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
                                                     : "Android physical-input name unavailable / no iRig found",
                       54, 376, 520, 25, juce::Justification::centredLeft, 1);
 
+    const juce::Rectangle<float> pdLoadBounds (
+        521.0f, 354.0f, 155.0f, 46.0f);
+    g.setColour (uiColour (0.12f));
+    g.fillRoundedRectangle (pdLoadBounds, 5.0f);
+    g.setColour (uiColour (0.91f));
+    g.drawRoundedRectangle (pdLoadBounds, 5.0f, 1.2f);
+    g.setFont (juce::FontOptions (15.0f).withStyle ("Bold"));
+    g.drawText ("LOAD .PD", pdLoadBounds, juce::Justification::centred);
+    g.setFont (juce::FontOptions (10.5f));
+    g.setColour (uiColour (0.70f));
+    g.drawFittedText (
+        pdLoadMessage.isNotEmpty()
+            ? pdLoadMessage
+            : "Pd: " + processor.getPureDataPatchName(),
+        54, 402, 400, 20, juce::Justification::centredLeft, 1);
+
     const float displayLevel = processor.getInputLevel();
     const float rawPeak = processor.getInputPeakRaw();
     const float rawRms = processor.getInputRmsRaw();
@@ -3039,6 +3055,70 @@ void RealtimeChordFxAudioProcessorEditor::paintAudioConfig (juce::Graphics& g)
         "If EUREKA crackles, try 2–4 BURSTS. RESET reopens the audio device while keeping the current parameter settings.",
         54, 620, 612, 52,
         juce::Justification::centredLeft, 3);
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintPureDataMode (
+    juce::Graphics& g)
+{
+    if (currentPdFrame.isValid())
+    {
+        paintMediaFrame (
+            g, currentPdFrame,
+            juce::Rectangle<float> (0, 0, design, design),
+            pdSource == 0 ? 1 : 2, pdVisualRevision);
+        paintVideoEffect (g, currentPdFrame,
+                          processor.getVongonX(), processor.getVongonY());
+    }
+    g.setColour (uiColour (0.96f));
+    g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
+    g.drawText ("PATCH", 28, 18, 210, 34,
+                juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (11.5f));
+    g.drawFittedText (
+        "Pd: " + processor.getPureDataPatchName(), 28, 55, 450, 24,
+        juce::Justification::centredLeft, 1);
+    g.setColour (uiColour (0.90f));
+    g.drawText ("CONFIG", 604, 22, 88, 24,
+                juce::Justification::centredRight);
+    g.setColour (uiColour (0.72f));
+    g.setFont (juce::FontOptions (10.8f));
+    g.drawFittedText (
+        "EUREKA + VONGON VIDEO / AUDIO-REACTIVE RANDOM",
+        28, 665, 650, 24, juce::Justification::centredLeft, 1);
+}
+
+void RealtimeChordFxAudioProcessorEditor::choosePureDataPatchFile()
+{
+    pdChooser = std::make_unique<juce::FileChooser> (
+        "Import Pure Data .pd patch", juce::File(), "*.pd", true);
+    juce::Component::SafePointer<RealtimeChordFxAudioProcessorEditor> safe (
+        this);
+    pdChooser->launchAsync (
+        juce::FileBrowserComponent::openMode
+            | juce::FileBrowserComponent::canSelectFiles,
+        [safe] (const juce::FileChooser& chooser)
+        {
+            if (auto* editor = safe.getComponent())
+            {
+                const auto file = chooser.getResult();
+                if (file == juce::File())
+                    return;
+                juce::String error;
+                if (editor->processor.importPureDataPatch (file, error))
+                {
+                    editor->setChoiceActual (ParamID::effectMode, 9);
+                    editor->configVisible = false;
+                    editor->audioConfigVisible = false;
+                    editor->pdLoadMessage = "LOADED: "
+                        + editor->processor.getPureDataPatchName();
+                }
+                else
+                {
+                    editor->pdLoadMessage = "PD FAILED: " + error;
+                }
+                editor->repaint();
+            }
+        });
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMidiControlConfig (juce::Graphics& g)
@@ -3377,6 +3457,12 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (configVisible)
     {
+        if (juce::Rectangle<float> (
+                512.0f, 349.0f, 172.0f, 57.0f).contains (p))
+        {
+            choosePureDataPatchFile();
+            return;
+        }
         if (juce::Rectangle<float> (235.0f, 86.0f, 185.0f, 38.0f).contains (p))
         {
             inputGainDragging = true;
