@@ -49,6 +49,49 @@ callback blocks to 64-frame interleaved Pd buffers without heap allocation or
 files opened on the realtime thread. Include silence/invalid-state handling,
 bounded input/output, saved settings, and no output gain surprises.
 
+## PATCH MIDI input and XY bridge (2026-10-20)
+
+The feature branch now forwards incoming MIDI **only when PATCH (mode 9)**
+is selected, before the existing EFFECTS processor replaces its incoming
+MIDI buffer with outgoing controller events. Existing modes 0..8 and their
+MIDI output contracts remain unchanged.
+
+- MIDI Note On / Note Off (all 16 channels) reach Pd Vanilla `[notein]`
+  via libpd_noteon(channel - 1, pitch, velocity); Note Off is velocity 0.
+- External MIDI START / CONTINUE / STOP are sent with libpd_sysrealtime
+  bytes FA / FB / FC to Pd `[realtimein]`.
+- External MIDI CLOCK F8 also reaches `[realtimein]` for tempo sync.
+- Friendly named Vanilla receivers: `[r effects-transport]` outputs 1
+  while started/continued, 0 when stopped; `[r effects-start]`,
+  `[r effects-continue]`, `[r effects-stop]`, `[r effects-clock]`
+  receive bangs on their respective external events.
+- PATCH touchscreen XY (including the existing common MIDI XY CC route)
+  is normalized and sent as `[r effects-x]` and `[r effects-y]` floats
+  0..1, and `[r effects-touch]` is 1 pressed or 0 released. XY still
+  controls the PATCH visuals; receiving patches may freely ignore these.
+- The sample-positioned JUCE MIDI event buffer is preallocated (max 512
+  events per callback), dispatched in order as audio progresses, and
+  constrained by Pd's 64-sample DSP tick resolution. An overflow drops
+  that MIDI burst and releases tracked active notes, rather than making
+  thousands of calls on the realtime audio thread.
+- These inputs are **available**, not forced into a user patch. An audio
+  effect that only uses adc~/dac~ continues to work unchanged.
+- MIDI program changes/other CCs are not promised by this PATCH bridge.
+  The existing EFFECTS global MIDI controls remain separate.
+- As before, patch import and graph changes must not run on the audio callback.
+
+The additional genuine Vanilla test fixture
+`patches/Effects_MIDI_XY_Transport_Test_Synth.pd` contains `[notein]`,
+`[osc~]`, X/Y gain modulation and transport gating. It is intended for
+testing external MIDI key press, START, STOP, CONTINUE, CLOCK and XY without
+requiring an audio input. The host native test
+`tests/effects_pd_midi_xy_regression.cpp` exercises the pinned libpd API
+and verifies output/silence in each scenario before Android compilation.
+This is a **test fixture only**, not another permanent EFFECTS mode.
+
+IMPORTANT: Native compilation, CI regression and Android real-device
+verification are still open gates; do not describe these as passed.
+
 ## PATCH video
 PATCH-only video selection combines all supplied EUREKA clips AND Vongon clips.
 It uses EUREKA onset/sustained-input random cut opportunities and the Vongon
