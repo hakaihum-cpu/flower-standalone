@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 #include "FramePack.h"
+#include <memory>
 #include "PluginProcessor.h"
 #include "VideoInteraction.h"
 
@@ -58,6 +59,8 @@ private:
     void paintChordBot (juce::Graphics&);
     void paintConfig (juce::Graphics&);
     void paintAudioConfig (juce::Graphics&);
+    void paintPureDataMode (juce::Graphics&);
+    void choosePureDataPatchFile();
     void paintMidiControlConfig (juce::Graphics&);
     void paintBar (juce::Graphics&, juce::Rectangle<float>, const juce::String&, float, const juce::String&);
     void setParameterFromX (DragParam, float designX);
@@ -93,12 +96,18 @@ private:
     FramePack frames;
     FramePack eurekaFrames;
     FramePack vongonFrames;
+    juce::Image currentPdFrame;
     juce::Image currentFrame;
     juce::Image currentEurekaFrame;
     juce::Image currentVongonFrame;
     int loadedFrame = -1;
     int loadedEurekaFrame = -1;
     int loadedVongonFrame = -1;
+    int pdLoadedFrame = -1, pdFrameIndex = 0, pdSource = -1, pdClip = -1;
+    int pdVisualRevision = 1, pdClipCooldown = 0;
+    float pdFramePhase = 0.0f, pdVideoSpeed = 0.0f;
+    float pdPreviousActivity = 0.0f, pdPreviousX = 0.5f, pdPreviousY = 0.5f;
+    bool pdWasActive = false;
     effects_video::AudioMosaicGate audioMosaicGate;
     int audioTileDivisions = 1;
     unsigned int audioTileEventSequence = 0; // randomize clips on accepted sound onsets
@@ -170,6 +179,8 @@ private:
     int audioActualBufferFrames = 0;
     double audioActualSampleRate = 0.0;
     juce::String audioDeviceMessage;
+    juce::String pdLoadMessage;
+    std::unique_ptr<juce::FileChooser> pdChooser;
     juce::String audioBufferError;
     juce::Array<juce::MidiDeviceInfo> midiOutputs;
     int selectedMidiOutput = -1;
