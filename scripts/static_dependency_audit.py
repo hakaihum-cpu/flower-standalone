@@ -4,7 +4,7 @@ import base64, csv, hashlib, re, sys, xml.etree.ElementTree as ET
 
 R = Path(__file__).resolve().parents[1]
 JUCER = R / "RealtimeChordFX_Standalone.jucer"
-MODE_CHOICE_TOKEN = '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES", "SOLARFAZE", "POLYPHRASE" }, 0'
+MODE_CHOICE_TOKEN = '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES", "SOLARFAZE", "POLYPHRASE", "PATCH" }, 0'
 
 EXPECTED_MODULES = {
     "juce_audio_basics",
@@ -47,7 +47,9 @@ required = [
     "RealtimeChordFX_Standalone.jucer",
     "Source/PluginProcessor.cpp", "Source/PluginEditor.cpp", "Source/ChordRenderers.h",
     "Source/HazeProcessor.h", "Source/EffectsCloudsEngine.h",
-    "Source/VongonInspiredProcessor.h",
+    "Source/VongonInspiredProcessor.h", "Source/EffectsPureDataEngine.h",
+    "scripts/materialize_effects_libpd.sh", "scripts/patch_android_effects_libpd.py",
+    "patches/Effects_Simple_Stereo_Delay.pd",
     "Source/TheoryEngine.cpp", "Source/YinPitchDetector.cpp",
     "Source/VideoInteraction.h",
     "Source/GranularPitchBank.cpp", "Source/PsolaHarmonyBank.h", "Source/FramePack.cpp",
@@ -332,6 +334,7 @@ target_source_files = [
     "Source/HazeProcessor.h",
     "Source/EffectsCloudsEngine.h",
     "Source/VongonInspiredProcessor.h",
+    "Source/EffectsPureDataEngine.h",
     "Source/PsolaHarmonyBank.h",
     "Source/PluginEditor.cpp","Source/PluginEditor.h",
     "Source/PluginProcessor.cpp","Source/PluginProcessor.h",
@@ -1650,6 +1653,68 @@ for required in [
         fail(f"Opaque full-screen audio-pitch video tiles missing: {required}")
 
 
+
+
+# Pure Data Vanilla import is the PATCH contract; the rejected JSON DSL
+# must never be reintroduced. The existing 0..8 effects stay numbered.
+pd_header = (R / "Source/EffectsPureDataEngine.h").read_text()
+pd_patch = (R / "patches/Effects_Simple_Stereo_Delay.pd").read_text()
+pd_get = (R / "scripts/materialize_effects_libpd.sh").read_text()
+pd_cmake = (R / "scripts/patch_android_effects_libpd.py").read_text()
+for token in [
+    "libpd_init_audio (2, 2,",
+    "libpd_process_float (",
+    "libpd_openfile (",
+    "libpd_closefile (",
+    "libpd_finish_message",
+    "ScopedTryLockType",
+    "std::array<float, tickFrames * 2>",
+]:
+    if token not in pd_header:
+        fail(f"Pd native DSP contract missing: {token}")
+if "EFFECTS_PATCH_V1" in editor_visual or "importPatchJson" in processor_visual:
+    fail("Rejected custom JSON patch DSL leaked into Pd implementation")
+for token in [
+    "importPureDataPatch (",
+    "restorePureDataPatchFromState()",
+    "pdEngine.prepare (currentSampleRate)",
+    "pdEngine.process (buffer)",
+    "Effects_Simple_Stereo_Delay_pd",
+    "pdPatchFile",
+]:
+    if token not in processor_visual:
+        fail(f"Pd import / persistence bridge missing: {token}")
+for token in [
+    "choosePureDataPatchFile()",
+    "pdChooser->launchAsync (",
+    "importPureDataPatch (file, error)",
+    "paintPureDataPatch",
+    "eurekaFrames.getFrame (pdFrameIndex)",
+    "vongonFrames.getFrame (pdFrameIndex)",
+    "const int totalClips = euCount + vgCount",
+    '"LOAD .PD"',
+]:
+    if token not in editor_visual:
+        fail(f"Pure Data CONFIG/video bridge missing: {token}")
+for token in [
+    "EffectsPureDataEngine.h",
+    'file="patches/Effects_Simple_Stereo_Delay.pd"',
+]:
+    if token not in jucer_text:
+        fail(f"Pd source/asset missing from JUCER: {token}")
+if not (pd_get.find("ba0dc63262901d658af8bbda5e619a60fa975e78") >= 0
+        and pd_get.find("f009fd8d7b537e209e09898d487fdf1bf547da2b") >= 0):
+    fail("Pinned libpd 0.16.1 / Vanilla submodule must be exact")
+for token in ["libpd_static", "add_subdirectory(", "target_link_libraries",
+              "JUCE", "EFFECTS_PINNED_LIBPD_LINK_BEGIN"]:
+    if token not in pd_cmake:
+        fail(f"libpd Android CMake bridge missing: {token}")
+if pd_patch.count("#X obj ") != 16 or pd_patch.count("#X connect ") != 18:
+    fail("Vanilla stereo delay test patch changed without audio regression")
+if ("adc~ 1 2" not in pd_patch or "dac~ 1 2" not in pd_patch
+        or "\\$0-delayL" not in pd_patch or "\\$0-delayR" not in pd_patch):
+    fail("Pure Data left/right test delay must be independent")
+print("[PASS] Real libpd native DSP, .pd import, pinned submodule and combined video contracts")
 
 print("[PASS] Vongon-inspired 4-mode DSP / supplied-video / DOT contracts verified")
 print("[PASS] CHORD/Dreamy noise-hardening contracts verified")
