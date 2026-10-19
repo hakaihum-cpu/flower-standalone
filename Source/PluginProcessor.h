@@ -10,6 +10,7 @@
 #include "HazeProcessor.h"
 #include "EffectsCloudsEngine.h"
 #include "VongonInspiredProcessor.h"
+#include "EffectsPureDataEngine.h"
 
 class RealtimeChordFxAudioProcessor final : public juce::AudioProcessor
 {
@@ -91,6 +92,9 @@ public:
     bool saveUserPreset (int slot);
     bool loadUserPreset (int slot);
     bool hasUserPreset (int slot) const;
+    bool importPureDataPatch (const juce::File&, juce::String& error);
+    juce::String getPureDataPatchName() const { return pdEngine.activeName(); }
+    bool pureDataPatchReady() const { return pdEngine.isReady(); }
     void toggleMotionRecord() noexcept { motionCommand.store (1, std::memory_order_release); }
     void clearMotion() noexcept { motionCommand.store (2, std::memory_order_release); }
     int getMotionState() const noexcept { return motionState.load (std::memory_order_relaxed); }
@@ -141,6 +145,8 @@ private:
     void processDreamy (juce::AudioBuffer<float>&);
     chordfx::HazeProcessor::Params hazeParamsFromState() const noexcept;
     void resetModeAudioState (int mode);
+    void restorePureDataPatchFromState();
+    static juce::File pureDataPatchFolder();
 
     juce::AudioProcessorValueTreeState apvts;
     chordfx::YinPitchDetector pitchDetector;
@@ -161,6 +167,7 @@ private:
     std::atomic<bool> cloudsTouch { false };
 
     VongonInspiredProcessor vongonProcessor;
+    EffectsPureDataEngine pdEngine;
     std::atomic<float> vongonX { 0.5f };
     std::atomic<float> vongonY { 0.5f };
     std::atomic<bool> vongonTouch { false };
