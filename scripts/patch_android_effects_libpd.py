@@ -39,4 +39,20 @@ target_include_directories(${BINARY_NAME} PRIVATE
 """
 cm.write_text(txt)
 assert txt.count(marker) == 1
-print("[PASS] generated JUCE Android JNI target links pinned libpd_static")
+
+# Projucer 9.0.2 writes Android CMake version 3.22.1. Pinned libpd
+# requires 3.25 or newer; set Android Gradle to the exact installed
+# SDK version without modifying upstream libpd source.
+gradle = r / "Builds/Android/app/build.gradle"
+if not gradle.is_file():
+    raise SystemExit("[FAIL] generated Android build.gradle missing")
+gr = gradle.read_text()
+old = 'version = "3.22.1"'
+new = 'version = "3.31.6"'
+if gr.count(old) == 1:
+    gr = gr.replace(old, new)
+elif gr.count(new) != 1:
+    raise SystemExit("[FAIL] unexpected Projucer Android CMake version")
+gradle.write_text(gr)
+assert gr.count(new) == 1
+print("[PASS] generated JUCE Android JNI links pinned libpd_static, CMake 3.31.6")
