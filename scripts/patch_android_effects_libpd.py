@@ -31,7 +31,7 @@ add_subdirectory(
     "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/libpd"
     "${CMAKE_CURRENT_BINARY_DIR}/effects-libpd"
     EXCLUDE_FROM_ALL)
-target_link_libraries(${BINARY_NAME} PRIVATE libpd_static m)
+target_link_libraries(${BINARY_NAME} PRIVATE libpd_static m dl)
 target_include_directories(${BINARY_NAME} PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/libpd/libpd_wrapper"
     "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/libpd/pure-data/src")
