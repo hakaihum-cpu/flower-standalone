@@ -41,9 +41,12 @@ public:
         libpd_add_float (1.0f);
         libpd_finish_message ("pd", "dsp");
         if (selectedFile.existsAsFile())
-            patch = libpd_openfile (
-                selectedFile.getFileName().toRawUTF8(),
-                selectedFile.getParentDirectory().getFullPathName().toRawUTF8());
+        {
+            const juce::String filename = selectedFile.getFileName();
+            const juce::String folder =
+                selectedFile.getParentDirectory().getFullPathName();
+            patch = libpd_openfile (filename.toRawUTF8(), folder.toRawUTF8());
+        }
     }
 
     bool load (const juce::File& file, juce::String& error)
@@ -59,9 +62,13 @@ public:
             error = "libpd DSP is not ready";
             return false;
         }
-        const auto filename = file.getFileName().toRawUTF8();
-        const auto folder = file.getParentDirectory().getFullPathName().toRawUTF8();
-        void* opened = libpd_openfile (filename, folder);
+        // Own both UTF-8 backing strings throughout libpd_openfile().
+        // Capturing toRawUTF8() from temporary juce::String values would
+        // leave dangling pointers before this call.
+        const juce::String filename = file.getFileName();
+        const juce::String folder =
+            file.getParentDirectory().getFullPathName();
+        void* opened = libpd_openfile (filename.toRawUTF8(), folder.toRawUTF8());
         if (opened == nullptr)
         {
             error = "libpd could not open .pd patch";
