@@ -40,8 +40,6 @@ public:
             patch = libpd_openfile (
                 selectedFile.getFileName().toRawUTF8(),
                 selectedFile.getParentDirectory().getFullPathName().toRawUTF8());
-        if (patch == nullptr)
-            prepared = false;
     }
 
     bool load (const juce::File& file, juce::String& error)
@@ -52,13 +50,6 @@ public:
             return false;
         }
         const juce::SpinLock::ScopedLockType guard (engineLock);
-        if (! prepared && libpd_blocksize() == tickFrames)
-        {
-            // prepareToPlay may not have run yet. Defer the actual open.
-            selectedFile = file;
-            error.clear();
-            return true;
-        }
         if (! prepared)
         {
             error = "libpd DSP is not ready";
