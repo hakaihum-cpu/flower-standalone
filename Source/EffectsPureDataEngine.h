@@ -36,6 +36,10 @@ public:
         if (libpd_init_audio (2, 2, juce::roundToInt (rate)) != 0)
             return;
         prepared = true;
+        // libpd_init_audio configures buffers; Pd also requires DSP ON.
+        libpd_start_message (1);
+        libpd_add_float (1.0f);
+        libpd_finish_message ("pd", "dsp");
         if (selectedFile.existsAsFile())
             patch = libpd_openfile (
                 selectedFile.getFileName().toRawUTF8(),
