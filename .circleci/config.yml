@@ -129,7 +129,8 @@ jobs:
             "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
               "platforms;android-35" \
               "build-tools;35.0.0" \
-              "ndk;26.1.10909125"
+              "ndk;26.1.10909125" \
+              "cmake;3.31.6"
 
       - run:
           name: Generate Android Studio project from verified JUCER
@@ -139,6 +140,7 @@ jobs:
             test -d Builds/Android
             python3 scripts/patch_android_effects_libpd.py
             grep -F 'target_link_libraries(${BINARY_NAME} PRIVATE libpd_static m)' Builds/Android/app/CMakeLists.txt
+            grep -F 'version = "3.31.6"' Builds/Android/app/build.gradle
             python3 scripts/patch_android_native_parallelism.py Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOL_COMPILE:STRING=compile' Builds/Android/app/build.gradle
