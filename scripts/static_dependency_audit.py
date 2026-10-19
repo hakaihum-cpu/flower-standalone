@@ -1688,7 +1688,7 @@ for token in [
     "choosePureDataPatchFile()",
     "pdChooser->launchAsync (",
     "importPureDataPatch (file, error)",
-    "paintPureDataPatch",
+    "paintPureDataMode",
     "eurekaFrames.getFrame (pdFrameIndex)",
     "vongonFrames.getFrame (pdFrameIndex)",
     "const int totalClips = euCount + vgCount",
