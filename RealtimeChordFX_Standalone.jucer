@@ -30,6 +30,7 @@
    <FILE id="stl002" name="units.cc" compile="1" resource="0" file="Source/stmlib/dsp/units.cc"/>
    <FILE id="stl003" name="random.cc" compile="1" resource="0" file="Source/stmlib/utils/random.cc"/>
    <FILE id="frmc01" name="FramePack.cpp" compile="1" resource="0" file="Source/FramePack.cpp"/>
+   <FILE id="pdch01" name="EffectsPureDataEngine.h" compile="0" resource="0" file="Source/EffectsPureDataEngine.h"/>
    <FILE id="prch01" name="PluginProcessor.h" compile="0" resource="0" file="Source/PluginProcessor.h"/>
    <FILE id="prcc01" name="PluginProcessor.cpp" compile="1" resource="0" file="Source/PluginProcessor.cpp"/>
    <FILE id="edth01" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
@@ -39,6 +40,7 @@
    <FILE id="pack01" name="classroom_frames.pack" compile="0" resource="1" file="Resources/classroom_frames.pack"/>
    <FILE id="eufr01" name="eureka_frames.pack" compile="0" resource="1" file="Resources/eureka_frames.pack"/>
    <FILE id="vgfr01" name="vongon_frames.pack" compile="0" resource="1" file="Resources/vongon_frames.pack"/>
+    <FILE id="pdpl01" name="Effects_Simple_Stereo_Delay.pd" compile="0" resource="1" file="patches/Effects_Simple_Stereo_Delay.pd"/>
    <FILE id="appic1" name="effects_app_icon.jpg" compile="0" resource="0" file="Resources/effects_app_icon.jpg"/>
   </GROUP>
  </MAINGROUP>
