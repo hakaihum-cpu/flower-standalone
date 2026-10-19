@@ -169,11 +169,16 @@ public:
         }
         if (midiOverflow)
         {
-            // Avoid sustaining a note whose Note Off was dropped from a
-            // MIDI burst: release every note number on every MIDI channel.
+            // A bounded queue overflow discards the burst and releases only
+            // currently active notes, avoiding 2048 Pd calls on audio thread.
+            pendingCount = 0;
             for (int ch = 0; ch < 16; ++ch)
                 for (int note = 0; note < 128; ++note)
-                    libpd_noteon (ch, note, 0);
+                    if (activeNotes[(size_t) ch][(size_t) note])
+                    {
+                        libpd_noteon (ch, note, 0);
+                        activeNotes[(size_t) ch][(size_t) note] = false;
+                    }
             midiOverflow = false;
         }
 
@@ -240,6 +245,8 @@ private:
         {
             case MidiEvent::note:
                 libpd_noteon (event.channel, event.number, event.value);
+                activeNotes[(size_t) event.channel][(size_t) event.number] =
+                    event.value != 0;
                 break;
             case MidiEvent::start:
                 libpd_sysrealtime (0, 0xFA); // [realtimein]
@@ -272,6 +279,8 @@ private:
         pendingCount = 0;
         midiOverflow = false;
         lastX = lastY = lastTouch = -1.0f;
+        for (auto& channel : activeNotes)
+            channel.fill (false);
     }
     void closeUnsafe() noexcept
     {
@@ -285,6 +294,7 @@ private:
     std::array<float, tickFrames * 2> inputFifo {};
     std::array<float, tickFrames * 2> outputFifo {};
     std::array<MidiEvent, 512> pendingMidi {};
+    std::array<std::array<bool, 128>, 16> activeNotes {};
     int pendingCount = 0;
     bool midiOverflow = false;
     float lastX = -1.0f, lastY = -1.0f, lastTouch = -1.0f;
