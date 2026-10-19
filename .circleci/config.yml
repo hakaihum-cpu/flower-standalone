@@ -34,6 +34,26 @@ jobs:
             python3 scripts/static_dependency_audit.py
 
       - run:
+          name: Real Pure Data libpd audio regression (L and R)
+          command: |
+            set -euo pipefail
+            python3 tests/effects_pd_static_check.py
+            cmake -S third_party/libpd -B /tmp/effects-libpd-native-test \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DLIBPD_STATIC=ON -DLIBPD_SHARED=OFF \
+              -DPD_UTILS=OFF -DPD_EXTRA=OFF
+            cmake --build /tmp/effects-libpd-native-test --target libpd_static -j2
+            LIBPD_ARCHIVE="$(find /tmp/effects-libpd-native-test -type f -name libpd.a | head -n 1)"
+            test -s "$LIBPD_ARCHIVE"
+            g++ -std=c++17 -O2 -Wall -Wextra \
+              -Ithird_party/libpd/libpd_wrapper \
+              -Ithird_party/libpd/pure-data/src \
+              tests/effects_pd_audio_regression.cpp \
+              "$LIBPD_ARCHIVE" -ldl -lm -pthread \
+              -o /tmp/effects_pd_audio_regression
+            /tmp/effects_pd_audio_regression
+
+      - run:
           name: Core C++ preflight
           command: |
             set -euo pipefail
