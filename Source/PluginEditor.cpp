@@ -2365,6 +2365,9 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioOutput (int index)
 
     auto& dm = holder->deviceManager;
     const auto option = audioOutputs[(size_t) index];
+    juce::AudioDeviceManager::AudioDeviceSetup previousSetup;
+    dm.getAudioDeviceSetup (previousSetup);
+    const auto previousType = dm.getCurrentAudioDeviceType();
 
     dm.setCurrentAudioDeviceType (option.type, false);
 
@@ -2391,6 +2394,12 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioOutput (int index)
             processor.state().getRawParameterValue (ParamID::audioInputMode)->load()));
         if (! applyAudioInputMode (currentMode))
         {
+            const auto failure = audioDeviceMessage;
+            if (previousType.isNotEmpty())
+                dm.setCurrentAudioDeviceType (previousType, false);
+            dm.setAudioDeviceSetup (previousSetup, true);
+            applyAudioInputMode (currentMode);
+            audioDeviceMessage = failure;
             refreshAudioOutputs();
             return;
         }
@@ -2605,6 +2614,13 @@ bool RealtimeChordFxAudioProcessorEditor::applyAudioInputMode (int mode)
             device->getActiveInputChannels().countNumberOfSetBits();
         const int actualOutputs =
             device->getActiveOutputChannels().countNumberOfSetBits();
+        juce::AudioDeviceManager::AudioDeviceSetup actualSetup;
+        dm.getAudioDeviceSetup (actualSetup);
+        if ((savedSetup.inputDeviceName.isNotEmpty()
+                && actualSetup.inputDeviceName != savedSetup.inputDeviceName)
+            || (savedSetup.outputDeviceName.isNotEmpty()
+                && actualSetup.outputDeviceName != savedSetup.outputDeviceName))
+            return "Requested audio route was not retained";
         if (actualInputs != inputs || actualOutputs != 2)
             return "Requested " + juce::String (inputs)
                 + " IN / 2 OUT, opened " + juce::String (actualInputs)
@@ -2620,7 +2636,11 @@ bool RealtimeChordFxAudioProcessorEditor::applyAudioInputMode (int mode)
         // Attempt to restore the previous working route.
         juce::String rollbackError;
         if (previousInputs == 1 || previousInputs == 2)
+        {
             rollbackError = reopen (previousInputs, previousSetup);
+            if (rollbackError.isEmpty())
+                appliedAudioInputMode = previousInputs == 2 ? 0 : 1;
+        }
         holder->getMuteInputValue().setValue (false);
         holder->startPlaying();
         audioDeviceMessage = (mode == 0
@@ -2702,6 +2722,9 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioInput (int index)
     if (holder == nullptr) return;
     auto& dm = holder->deviceManager;
     const auto option = audioInputs[(size_t) index];
+    juce::AudioDeviceManager::AudioDeviceSetup previousSetup;
+    dm.getAudioDeviceSetup (previousSetup);
+    const auto previousType = dm.getCurrentAudioDeviceType();
     dm.setCurrentAudioDeviceType (option.type, false);
     juce::AudioDeviceManager::AudioDeviceSetup setup; dm.getAudioDeviceSetup (setup);
     setup.inputDeviceName = option.name;
@@ -2721,7 +2744,15 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioInput (int index)
             selectedAudioInput = index;
         }
         else
-            lastAudioRouteError = audioDeviceMessage;
+        {
+            const auto failure = audioDeviceMessage;
+            if (previousType.isNotEmpty())
+                dm.setCurrentAudioDeviceType (previousType, false);
+            dm.setAudioDeviceSetup (previousSetup, true);
+            applyAudioInputMode (requestedMode);
+            lastAudioRouteError = failure;
+            audioDeviceMessage = failure;
+        }
     }
     refreshAudioInputs();
 }
