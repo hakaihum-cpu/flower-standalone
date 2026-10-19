@@ -43,6 +43,16 @@ RealtimeChordFxAudioProcessor::RealtimeChordFxAudioProcessor()
     for (auto& pending : midiInputPending)
         pending.store (-1, std::memory_order_relaxed);
     initialiseChordBotDefaults();
+    const auto folder = pureDataPatchFolder();
+    if (folder.createDirectory())
+    {
+        const auto factory = folder.getChildFile ("Effects_Simple_Stereo_Delay.pd");
+        if (! factory.existsAsFile())
+            factory.replaceWithData (
+                BinaryData::Effects_Simple_Stereo_Delay_pd,
+                (size_t) BinaryData::Effects_Simple_Stereo_Delay_pdSize);
+        apvts.state.setProperty ("pdPatchFile", factory.getFileName(), nullptr);
+    }
 }
 
 bool RealtimeChordFxAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -79,6 +89,8 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     hazeProcessor.prepare (currentSampleRate);
     cloudsEngine.prepare (currentSampleRate);
     vongonProcessor.prepare (currentSampleRate);
+    pdEngine.prepare (currentSampleRate);
+    restorePureDataPatchFromState();
     cloudsTouch.store (false, std::memory_order_relaxed);
     vongonTouch.store (false, std::memory_order_relaxed);
     pendingMidi = -1;
@@ -97,7 +109,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordMidiRefreshRequested = false;
     chordMidiStopRequested = false;
     chordMidiGateOpen = false;
-    lastEffectMode = juce::jlimit (0, 8, juce::roundToInt (
+    lastEffectMode = juce::jlimit (0, 9, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     lastChordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -514,7 +526,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     const bool midiClockMode =
         apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
-    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 9, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -641,7 +653,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             }
             else if (effectMode == 4)
                 setCloudsXY (x, y, false);
-            else if (effectMode >= 5)
+            else if (effectMode >= 5 && effectMode <= 9)
                 setVongonXY (x, y, false);
             // EUREKA uses parameter updates on the message thread below.
         }
@@ -914,6 +926,10 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             vongonX.load (std::memory_order_relaxed),
             vongonY.load (std::memory_order_relaxed),
             vongonTouch.load (std::memory_order_relaxed));
+    }
+    else if (effectMode == 9)
+    {
+        pdEngine.process (buffer);
     }
 
     if (effectMode == 3)
@@ -1937,7 +1953,7 @@ void RealtimeChordFxAudioProcessor::applyPendingMidiInputChanges()
         if (cc == 112)
         {
             setNormalised (ParamID::effectMode,
-                           (float) (value * 9 / 128) / 8.0f);
+                           (float) (value * 9 / 128) / 9.0f);
             continue;
         }
         if (cc == 113)
@@ -2050,6 +2066,70 @@ bool RealtimeChordFxAudioProcessor::hasMidiControllerPreset (int slot) const
         && apvts.state.getProperty ("midiControllerPreset" + juce::String (slot)).toString().isNotEmpty();
 }
 
+juce::File RealtimeChordFxAudioProcessor::pureDataPatchFolder()
+{
+    return juce::File::getSpecialLocation (
+        juce::File::userApplicationDataDirectory)
+        .getChildFile ("EFFECTS").getChildFile ("PdPatches");
+}
+
+bool RealtimeChordFxAudioProcessor::importPureDataPatch (
+    const juce::File& source, juce::String& error)
+{
+    if (! source.existsAsFile() || ! source.hasFileExtension (".pd"))
+    {
+        error = "Select a Pure Data .pd file";
+        return false;
+    }
+    if (source.getSize() <= 0 || source.getSize() > 2 * 1024 * 1024)
+    {
+        error = "Pure Data patch is empty or exceeds 2 MB";
+        return false;
+    }
+    const auto text = source.loadFileAsString();
+    if (! text.startsWith ("#N canvas"))
+    {
+        error = "Not a valid Pure Data canvas";
+        return false;
+    }
+    const auto folder = pureDataPatchFolder();
+    if (! folder.createDirectory())
+    {
+        error = "Cannot create app patch directory";
+        return false;
+    }
+    const auto filename = "import_" + juce::String::toHexString (
+        juce::Time::getCurrentTime().toMilliseconds()) + ".pd";
+    const auto dst = folder.getChildFile (filename);
+    if (! dst.replaceWithText (text))
+    {
+        error = "Cannot copy .pd into private storage";
+        return false;
+    }
+    if (! pdEngine.load (dst, error))
+    {
+        dst.deleteFile();
+        return false;
+    }
+    apvts.state.setProperty ("pdPatchFile", filename, nullptr);
+    return true;
+}
+
+void RealtimeChordFxAudioProcessor::restorePureDataPatchFromState()
+{
+    const auto filename = apvts.state.getProperty (
+        "pdPatchFile", "Effects_Simple_Stereo_Delay.pd").toString();
+    if (filename.isEmpty()
+        || juce::File (filename).getFileName() != filename)
+        return;
+    const auto file = pureDataPatchFolder().getChildFile (filename);
+    if (file.existsAsFile())
+    {
+        juce::String ignoredError;
+        pdEngine.load (file, ignoredError);
+    }
+}
+
 bool RealtimeChordFxAudioProcessor::saveUserPreset (int slot)
 {
     if (slot < 1 || slot > 3)
@@ -2137,6 +2217,7 @@ bool RealtimeChordFxAudioProcessor::loadUserPreset (int slot)
     vongonProcessor.importMidiSnapshot (
         restored.getProperty ("vongonMidiPcBank").toString());
     apvts.replaceState (restored);
+    restorePureDataPatchFromState();
 
     cloudsX.store (
         juce::jlimit (
@@ -2185,7 +2266,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
 {
     juce::AudioProcessorValueTreeState::ParameterLayout p;
     p.add (std::make_unique<juce::AudioParameterChoice> (
-        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES", "SOLARFAZE", "POLYPHRASE" }, 0));
+        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES", "SOLARFAZE", "POLYPHRASE", "PATCH" }, 0));
     p.add (std::make_unique<juce::AudioParameterChoice> (
         ParamID::chordMode, "CHORD ENGINE", juce::StringArray { "A", "B" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::complex, "COMPLEX", 0.0f, 1.0f, 0.25f));
@@ -2264,6 +2345,7 @@ void RealtimeChordFxAudioProcessor::setStateInformation (const void* data, int s
             vongonProcessor.importMidiSnapshot (
                 stateCopy.getProperty ("vongonMidiPcBank").toString());
             apvts.replaceState (stateCopy);
+            restorePureDataPatchFromState();
             loadChordBotLayout();
         }
     }
