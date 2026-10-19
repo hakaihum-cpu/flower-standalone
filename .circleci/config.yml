@@ -88,15 +88,16 @@ jobs:
           name: Real Pure Data libpd audio regression (L and R)
           command: |
             set -euo pipefail
-            python3 tests/effects_pd_static_check.py
+            mkdir -p audio-regression/pure-data
+            python3 tests/effects_pd_static_check.py 2>&1 | tee audio-regression/pure-data/static-check.log
             PD_CMAKE="$ANDROID_HOME/cmake/3.31.6/bin/cmake"
             test -x "$PD_CMAKE"
             "$PD_CMAKE" --version
             "$PD_CMAKE" -S third_party/libpd -B /tmp/effects-libpd-native-test \
               -DCMAKE_BUILD_TYPE=Release \
               -DLIBPD_STATIC=ON -DLIBPD_SHARED=OFF \
-              -DPD_UTILS=OFF -DPD_EXTRA=OFF
-            "$PD_CMAKE" --build /tmp/effects-libpd-native-test --target libpd_static -j2
+              -DPD_UTILS=OFF -DPD_EXTRA=OFF 2>&1 | tee audio-regression/pure-data/configure.log
+            "$PD_CMAKE" --build /tmp/effects-libpd-native-test --target libpd_static -j2 2>&1 | tee audio-regression/pure-data/libpd-build.log
             LIBPD_ARCHIVE="$(find /tmp/effects-libpd-native-test -type f -name libpd.a | head -n 1)"
             test -s "$LIBPD_ARCHIVE"
             g++ -std=c++17 -O2 -Wall -Wextra \
@@ -104,8 +105,12 @@ jobs:
               -Ithird_party/libpd/pure-data/src \
               tests/effects_pd_audio_regression.cpp \
               "$LIBPD_ARCHIVE" -ldl -lm -pthread \
-              -o /tmp/effects_pd_audio_regression
-            /tmp/effects_pd_audio_regression
+              -o /tmp/effects_pd_audio_regression 2>&1 | tee audio-regression/pure-data/test-compile.log
+            /tmp/effects_pd_audio_regression 2>&1 | tee audio-regression/pure-data/audio-test.log
+
+      - store_artifacts:
+          path: audio-regression/pure-data
+          destination: audio-regression/pure-data
 
       - run:
           name: Prepare JUCE 9.0.2 and Projucer
