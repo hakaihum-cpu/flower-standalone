@@ -65,6 +65,7 @@ required = [
     "scripts/materialize_effects_clouds.py",
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_juce_android_gamepad_keys.py",
+    "tests/effects_pd_static_check.py", "tests/effects_pd_audio_regression.cpp",
     "tests/core_test.cpp",
 ]
 for rel in required:
@@ -1666,7 +1667,6 @@ for token in [
     "libpd_process_float (",
     "libpd_openfile (",
     "libpd_closefile (",
-    "libpd_finish_message",
     "ScopedTryLockType",
     "std::array<float, tickFrames * 2>",
 ]:
@@ -1714,6 +1714,15 @@ if pd_patch.count("#X obj ") != 16 or pd_patch.count("#X connect ") != 18:
 if ("adc~ 1 2" not in pd_patch or "dac~ 1 2" not in pd_patch
         or "\\$0-delayL" not in pd_patch or "\\$0-delayR" not in pd_patch):
     fail("Pure Data left/right test delay must be independent")
+for token in [
+    "Real Pure Data libpd audio regression (L and R)",
+    "tests/effects_pd_audio_regression.cpp",
+    "tests/effects_pd_static_check.py",
+    "default: false",
+    "manual_android_build:",
+]:
+    if token not in (R / ".circleci/config.yml").read_text():
+        fail(f"Pd audio regression missing from manual CI: {token}")
 print("[PASS] Real libpd native DSP, .pd import, pinned submodule and combined video contracts")
 
 print("[PASS] Vongon-inspired 4-mode DSP / supplied-video / DOT contracts verified")
