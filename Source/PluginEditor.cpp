@@ -277,26 +277,13 @@ RealtimeChordFxAudioProcessorEditor::RealtimeChordFxAudioProcessorEditor (Realti
     }
 
    #if JUCE_ANDROID
-    if (auto* holder = juce::StandalonePluginHolder::getInstance())
-    {
-        holder->stopPlaying();
-        holder->deviceManager.closeAudioDevice();
-
-        auto audioError = holder->deviceManager.initialise (2, 2, nullptr, true);
-
-        if (audioError.isNotEmpty())
-        {
-            juce::Logger::writeToLog (
-                "RealtimeChordFX stereo input initialise failed; falling back to mono: " + audioError);
-            audioError = holder->deviceManager.initialise (1, 2, nullptr, true);
-        }
-
-        if (audioError.isNotEmpty())
-            juce::Logger::writeToLog ("RealtimeChordFX Android audio initialise failed: " + audioError);
-
-        holder->getMuteInputValue().setValue (false);
-        holder->startPlaying();
-    }
+    // Apply the persisted user choice before the device is used.
+    // Never silently fall back from selected STEREO input to MONO.
+    const int savedInputMode = juce::jlimit (0, 1, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::audioInputMode)->load()));
+    if (! applyAudioInputMode (savedInputMode))
+        juce::Logger::writeToLog (
+            "RealtimeChordFX input mode startup failed: " + audioDeviceMessage);
    #else
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
         holder->getMuteInputValue().setValue (false);
@@ -2384,7 +2371,11 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioOutput (int index)
     juce::AudioDeviceManager::AudioDeviceSetup setup;
     dm.getAudioDeviceSetup (setup);
     setup.outputDeviceName = option.name;
-    setup.useDefaultOutputChannels = true;
+    // Output is always exactly two channels, not a device-default guess.
+    setup.useDefaultOutputChannels = false;
+    setup.outputChannels.clear();
+    setup.outputChannels.setBit (0);
+    setup.outputChannels.setBit (1);
 
     const auto error = dm.setAudioDeviceSetup (setup, true);
     if (error.isNotEmpty())
@@ -2396,6 +2387,13 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioOutput (int index)
         selectedAudioOutput = index;
         audioDeviceMessage = "OUTPUT: " + option.name;
         holder->getMuteInputValue().setValue (false);
+        const int currentMode = juce::jlimit (0, 1, juce::roundToInt (
+            processor.state().getRawParameterValue (ParamID::audioInputMode)->load()));
+        if (! applyAudioInputMode (currentMode))
+        {
+            refreshAudioOutputs();
+            return;
+        }
 
         processor.state().state.setProperty (
             "audioOutputType", option.type, nullptr);
@@ -2550,70 +2548,119 @@ bool RealtimeChordFxAudioProcessorEditor::applyAudioBufferMode (int mode)
 #endif
 }
 
-bool RealtimeChordFxAudioProcessorEditor::resetAudioDevice()
+bool RealtimeChordFxAudioProcessorEditor::applyAudioInputMode (int mode)
 {
 #if JUCE_ANDROID
     auto* holder = juce::StandalonePluginHolder::getInstance();
     if (holder == nullptr)
     {
-        audioDeviceMessage = "RESET FAILED: standalone holder unavailable";
+        audioDeviceMessage = "INPUT MODE FAILED: audio holder unavailable";
         return false;
     }
 
+    // STEREO is the default and requires two *actual* input channels.
+    // MONO deliberately opens only one input. Both always require two
+    // output channels; no output fallback is permitted.
+    mode = juce::jlimit (0, 1, mode);
+    const int requestedInputs = mode == 0 ? 2 : 1;
+    auto& dm = holder->deviceManager;
     juce::AudioDeviceManager::AudioDeviceSetup previousSetup;
-    holder->deviceManager.getAudioDeviceSetup (previousSetup);
-    const auto previousType =
-        holder->deviceManager.getCurrentAudioDeviceType();
+    dm.getAudioDeviceSetup (previousSetup);
+    const auto previousType = dm.getCurrentAudioDeviceType();
+    const auto* previousDevice = dm.getCurrentAudioDevice();
+    const int previousInputs = previousDevice != nullptr
+        ? previousDevice->getActiveInputChannels().countNumberOfSetBits()
+        : 0;
+
+    const auto reopen = [&] (int inputs,
+                            const juce::AudioDeviceManager::AudioDeviceSetup& savedSetup)
+                            -> juce::String
+    {
+        dm.closeAudioDevice();
+        auto error = dm.initialise (inputs, 2, nullptr, true);
+        if (error.isNotEmpty())
+            return error;
+
+        if (previousType.isNotEmpty())
+            dm.setCurrentAudioDeviceType (previousType, false);
+
+        auto setup = savedSetup;
+        setup.useDefaultInputChannels = false;
+        setup.inputChannels.clear();
+        for (int i = 0; i < inputs; ++i)
+            setup.inputChannels.setBit (i);
+        setup.useDefaultOutputChannels = false;
+        setup.outputChannels.clear();
+        setup.outputChannels.setBit (0);
+        setup.outputChannels.setBit (1);
+
+        error = dm.setAudioDeviceSetup (setup, true);
+        if (error.isNotEmpty())
+            return error;
+
+        const auto* device = dm.getCurrentAudioDevice();
+        if (device == nullptr)
+            return "No active audio device";
+        const int actualInputs =
+            device->getActiveInputChannels().countNumberOfSetBits();
+        const int actualOutputs =
+            device->getActiveOutputChannels().countNumberOfSetBits();
+        if (actualInputs != inputs || actualOutputs != 2)
+            return "Requested " + juce::String (inputs)
+                + " IN / 2 OUT, opened " + juce::String (actualInputs)
+                + " IN / " + juce::String (actualOutputs) + " OUT";
+        return {};
+    };
 
     holder->stopPlaying();
-    holder->deviceManager.closeAudioDevice();
-
-    auto error =
-        holder->deviceManager.initialise (2, 2, nullptr, true);
+    const auto error = reopen (requestedInputs, previousSetup);
     if (error.isNotEmpty())
-        error = holder->deviceManager.initialise (1, 2, nullptr, true);
-
-    juce::String restoreError;
-    if (error.isEmpty())
     {
-        if (previousType.isNotEmpty())
-            holder->deviceManager.setCurrentAudioDeviceType (
-                previousType, false);
-
-        restoreError =
-            holder->deviceManager.setAudioDeviceSetup (
-                previousSetup, true);
+        // An unsupported selection never overwrites the saved user choice.
+        // Attempt to restore the previous working route.
+        juce::String rollbackError;
+        if (previousInputs == 1 || previousInputs == 2)
+            rollbackError = reopen (previousInputs, previousSetup);
+        holder->getMuteInputValue().setValue (false);
+        holder->startPlaying();
+        audioDeviceMessage = (mode == 0
+            ? "STEREO INPUT FAILED: " : "MONO INPUT FAILED: ") + error;
+        if (rollbackError.isNotEmpty())
+            audioDeviceMessage += " / RESTORE FAILED: " + rollbackError;
+        refreshAudioInputs();
+        refreshAudioOutputs();
+        refreshAudioBufferStatus();
+        return false;
     }
 
     holder->getMuteInputValue().setValue (false);
     holder->startPlaying();
-
+    appliedAudioInputMode = mode;
+    audioDeviceMessage = mode == 0
+        ? "STEREO INPUT / STEREO OUTPUT (2 IN / 2 OUT)"
+        : "MONO INPUT / STEREO OUTPUT (1 IN / 2 OUT)";
     refreshAudioInputs();
     refreshAudioOutputs();
     refreshAudioBufferStatus();
-
-    if (error.isNotEmpty())
-    {
-        audioDeviceMessage = "RESET FAILED: " + error;
-        return false;
-    }
-
-    if (restoreError.isNotEmpty())
-    {
-        audioDeviceMessage =
-            "RESET OPEN / ROUTE RESTORE FAILED: " + restoreError;
-        return false;
-    }
-
     if (audioBufferMode != 0)
         applyAudioBufferMode (audioBufferMode);
-
-    audioDeviceMessage = "AUDIO RESET OK";
     return true;
 #else
-    audioDeviceMessage = "AUDIO RESET is Android-only";
+    juce::ignoreUnused (mode);
+    audioDeviceMessage = "INPUT MODE: Android only";
     return false;
 #endif
+}
+
+bool RealtimeChordFxAudioProcessorEditor::resetAudioDevice()
+{
+    const int requestedMode = juce::jlimit (0, 1, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::audioInputMode)->load()));
+    if (! applyAudioInputMode (requestedMode))
+        return false;
+    audioDeviceMessage = "AUDIO RESET OK / " + juce::String (
+        requestedMode == 0 ? "STEREO IN" : "MONO IN") + " / STEREO OUT";
+    return true;
 }
 
 void RealtimeChordFxAudioProcessorEditor::refreshAudioInputs()
@@ -2658,13 +2705,23 @@ void RealtimeChordFxAudioProcessorEditor::selectAudioInput (int index)
     dm.setCurrentAudioDeviceType (option.type, false);
     juce::AudioDeviceManager::AudioDeviceSetup setup; dm.getAudioDeviceSetup (setup);
     setup.inputDeviceName = option.name;
-    setup.useDefaultInputChannels = true;
+    const int requestedMode = juce::jlimit (0, 1, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::audioInputMode)->load()));
+    setup.useDefaultInputChannels = false;
+    setup.inputChannels.clear();
+    for (int i = 0; i < (requestedMode == 0 ? 2 : 1); ++i)
+        setup.inputChannels.setBit (i);
     const auto error = dm.setAudioDeviceSetup (setup, true);
     lastAudioRouteError = error;
     if (error.isEmpty())
     {
-        holder->getMuteInputValue().setValue (false);
-        selectedAudioInput = index;
+        if (applyAudioInputMode (requestedMode))
+        {
+            holder->getMuteInputValue().setValue (false);
+            selectedAudioInput = index;
+        }
+        else
+            lastAudioRouteError = audioDeviceMessage;
     }
     refreshAudioInputs();
 }
@@ -2707,7 +2764,10 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
 
     g.setFont (juce::FontOptions (13.0f));
     g.setColour (uiColour (0.62f));
-    g.drawText ("AUDIO INPUT", 54, 94, 180, 24, juce::Justification::centredLeft);
+    const int inputMode = juce::jlimit (0, 1, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::audioInputMode)->load()));
+    g.drawText (inputMode == 0 ? "AUDIO INPUT  STEREO" : "AUDIO INPUT  MONO",
+                54, 94, 180, 24, juce::Justification::centredLeft);
 
     const float inputGainDb = processor.state().getRawParameterValue (
         ParamID::inputGainDb)->load();
@@ -2900,19 +2960,33 @@ void RealtimeChordFxAudioProcessorEditor::paintAudioConfig (juce::Graphics& g)
 
     g.setColour (uiColour (0.62f));
     g.setFont (juce::FontOptions (12.0f));
-    g.drawText ("AUDIO BUFFER / BURST", 54, 216, 220, 24,
+    g.drawText ("INPUT MODE  /  OUTPUT: STEREO FIXED", 54, 188, 550, 24,
+                juce::Justification::centredLeft);
+    const int inputMode = juce::jlimit (0, 1, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::audioInputMode)->load()));
+    g.setColour (uiColour (0.92f));
+    g.setFont (juce::FontOptions (16.0f).withStyle ("Bold"));
+    g.drawText ("<", 54, 214, 44, 42, juce::Justification::centred);
+    g.drawText (inputMode == 0 ? "STEREO IN / STEREO OUT"
+                               : "MONO IN / STEREO OUT",
+                108, 214, 504, 42, juce::Justification::centred);
+    g.drawText (">", 622, 214, 44, 42, juce::Justification::centred);
+
+    g.setColour (uiColour (0.62f));
+    g.setFont (juce::FontOptions (12.0f));
+    g.drawText ("AUDIO BUFFER / BURST", 54, 278, 220, 24,
                 juce::Justification::centredLeft);
 
     g.setColour (uiColour (0.92f));
     g.setFont (juce::FontOptions (17.0f).withStyle ("Bold"));
-    g.drawText ("<", 54, 248, 44, 42, juce::Justification::centred);
+    g.drawText ("<", 54, 306, 44, 42, juce::Justification::centred);
     g.drawText (
         audioBufferNames[juce::jlimit (0, 11, audioBufferMode)],
-        108, 248, 504, 42,
+        108, 306, 504, 42,
         juce::Justification::centred);
-    g.drawText (">", 622, 248, 44, 42, juce::Justification::centred);
+    g.drawText (">", 622, 306, 44, 42, juce::Justification::centred);
 
-    const juce::Rectangle<float> resetBounds (210.0f, 334.0f, 300.0f, 54.0f);
+    const juce::Rectangle<float> resetBounds (210.0f, 392.0f, 300.0f, 54.0f);
     g.setColour (uiColour (0.10f));
     g.fillRoundedRectangle (resetBounds, 6.0f);
     g.setColour (uiColour (0.86f));
@@ -2924,14 +2998,14 @@ void RealtimeChordFxAudioProcessorEditor::paintAudioConfig (juce::Graphics& g)
     g.setFont (juce::FontOptions (12.5f));
     g.drawFittedText (
         "OUTPUT  " + currentOutputName(),
-        54, 430, 612, 28,
+        54, 465, 612, 28,
         juce::Justification::centredLeft, 1);
 
     g.setColour (uiColour (0.62f));
     g.setFont (juce::FontOptions (11.5f));
     g.drawFittedText (
         makeAudioBufferStatus(),
-        54, 466, 612, 72,
+        54, 500, 612, 60,
         juce::Justification::topLeft, 3);
 
     if (audioDeviceMessage.isNotEmpty())
@@ -2939,7 +3013,7 @@ void RealtimeChordFxAudioProcessorEditor::paintAudioConfig (juce::Graphics& g)
         g.setColour (uiColour (0.82f));
         g.drawFittedText (
             audioDeviceMessage,
-            54, 548, 612, 48,
+            54, 570, 612, 48,
             juce::Justification::centredLeft, 2);
     }
 
@@ -2947,7 +3021,7 @@ void RealtimeChordFxAudioProcessorEditor::paintAudioConfig (juce::Graphics& g)
     g.setFont (juce::FontOptions (10.5f));
     g.drawFittedText (
         "If EUREKA crackles, try 2–4 BURSTS. RESET reopens the audio device while keeping the current parameter settings.",
-        54, 620, 612, 52,
+        54, 641, 612, 55,
         juce::Justification::centredLeft, 3);
 }
 
@@ -3153,7 +3227,22 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             return;
         }
 
-        if (p.y >= 238.0f && p.y < 300.0f)
+        if (p.y >= 202.0f && p.y < 268.0f)
+        {
+            const int previousMode = juce::jlimit (0, 1, juce::roundToInt (
+                processor.state().getRawParameterValue (ParamID::audioInputMode)->load()));
+            const int nextMode = 1 - previousMode;
+            if (applyAudioInputMode (nextMode))
+            {
+                if (auto* parameter = processor.state().getParameter (ParamID::audioInputMode))
+                    parameter->setValueNotifyingHost (
+                        parameter->convertTo0to1 ((float) nextMode));
+            }
+            repaint();
+            return;
+        }
+
+        if (p.y >= 296.0f && p.y < 356.0f)
         {
             const int direction = p.x < 360.0f ? -1 : 1;
             const int next = juce::jlimit (
@@ -3183,7 +3272,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         }
 
         if (juce::Rectangle<float> (
-                190.0f, 320.0f, 340.0f, 82.0f).contains (p))
+                190.0f, 381.0f, 340.0f, 80.0f).contains (p))
         {
             resetAudioDevice();
             repaint();
@@ -3332,6 +3421,18 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
                     processor.state().getRawParameterValue (
                         ParamID::audioBufferMode)->load()));
                 applyAudioBufferMode (audioBufferMode);
+                const int loadedInputMode = juce::jlimit (0, 1, juce::roundToInt (
+                    processor.state().getRawParameterValue (ParamID::audioInputMode)->load()));
+                if (loadedInputMode != appliedAudioInputMode
+                    && ! applyAudioInputMode (loadedInputMode))
+                {
+                    if (auto* parameter =
+                            processor.state().getParameter (ParamID::audioInputMode))
+                        parameter->setValueNotifyingHost (
+                            parameter->convertTo0to1 (
+                                (float) juce::jmax (0, appliedAudioInputMode)));
+                    globalPresetMessage = "INPUT MODE RESTORE FAILED";
+                }
             }
 
             repaint();
