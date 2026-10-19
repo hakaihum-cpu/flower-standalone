@@ -148,7 +148,7 @@ jobs:
             "$PROJUCER" --resave RealtimeChordFX_Standalone.jucer
             test -d Builds/Android
             python3 scripts/patch_android_effects_libpd.py
-            grep -F 'target_link_libraries(${BINARY_NAME} PRIVATE libpd_static m)' Builds/Android/app/CMakeLists.txt
+            grep -F 'target_link_libraries(${BINARY_NAME} PRIVATE libpd_static m dl)' Builds/Android/app/CMakeLists.txt
             grep -F 'version = "3.31.6"' Builds/Android/app/build.gradle
             python3 scripts/patch_android_native_parallelism.py Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
