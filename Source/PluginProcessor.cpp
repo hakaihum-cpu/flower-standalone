@@ -2093,7 +2093,7 @@ bool RealtimeChordFxAudioProcessor::importPureDataPatch (
         return false;
     }
     const auto folder = pureDataPatchFolder();
-    if (! folder.createDirectory())
+    if (folder.createDirectory().failed())
     {
         error = "Cannot create app patch directory";
         return false;
