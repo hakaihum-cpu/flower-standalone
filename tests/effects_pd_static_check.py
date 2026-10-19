@@ -26,7 +26,7 @@ for required in ("libpd_init_audio (2, 2", "libpd_openfile",
  "setSample (\n                0, n", "setSample (\n                1, n"):
     assert required in src, required
 for required in ("pdEngine.prepare (currentSampleRate)",
- "pdEngine.process (buffer)", "importPureDataPatch",
+ "pdEngine.process (buffer,", "importPureDataPatch",
  '"pdPatchFile"', '"POLYPHRASE", "PATCH"'):
     assert required in cpp, required
 for required in ("choosePureDataPatchFile", '"*.pd"', 
