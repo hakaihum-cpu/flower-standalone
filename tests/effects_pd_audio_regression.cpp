@@ -72,6 +72,11 @@ int main()
                  "Unexpected libpd tick size");
         require (libpd_init_audio (2, 2, rate) == 0,
                  "libpd_init_audio failed");
+        // Pd needs [; pd dsp 1( after libpd_init_audio.
+        libpd_start_message (1);
+        libpd_add_float (1.0f);
+        require (libpd_finish_message ("pd", "dsp") == 0,
+                 "Could not turn Pure Data DSP on");
         for (int ch = 0; ch < 2; ++ch)
         {
             const auto r = run (ch);
