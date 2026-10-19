@@ -50,6 +50,7 @@ required = [
     "Source/VongonInspiredProcessor.h", "Source/EffectsPureDataEngine.h",
     "scripts/materialize_effects_libpd.sh", "scripts/patch_android_effects_libpd.py",
     "patches/Effects_Simple_Stereo_Delay.pd",
+    "patches/Effects_MIDI_XY_Transport_Test_Synth.pd",
     "Source/TheoryEngine.cpp", "Source/YinPitchDetector.cpp",
     "Source/VideoInteraction.h",
     "Source/GranularPitchBank.cpp", "Source/PsolaHarmonyBank.h", "Source/FramePack.cpp",
@@ -66,6 +67,7 @@ required = [
     "scripts/patch_android_native_parallelism.py",
     "scripts/patch_juce_android_gamepad_keys.py",
     "tests/effects_pd_static_check.py", "tests/effects_pd_audio_regression.cpp",
+    "tests/effects_pd_midi_xy_regression.cpp",
     "tests/core_test.cpp",
 ]
 for rel in required:
@@ -1687,13 +1689,48 @@ for unsafe in [
 ]:
     if unsafe in pd_header:
         fail(f"Pd filepath has dangling UTF-8 pointer: {unsafe}")
+# PATCH MIDI: notes remain 0-based at the libpd API boundary and MIDI
+# START/STOP/CONTINUE/CLOCK reach [realtimein]; XY reaches Vanilla [r].
+for token in [
+    "void captureMidi (const juce::MidiBuffer& midi)",
+    "message.isNoteOnOrOff()", "message.isMidiStart()",
+    "message.isMidiStop()", "message.isMidiContinue()",
+    "message.isMidiClock()",
+    "libpd_noteon (event.channel, event.number, event.value)",
+    "libpd_sysrealtime (0, 0xFA)", "libpd_sysrealtime (0, 0xFC)",
+    "libpd_sysrealtime (0, 0xFB)", "libpd_sysrealtime (0, 0xF8)",
+    'libpd_float ("effects-x", x)', 'libpd_float ("effects-y", y)',
+    'libpd_float ("effects-touch", touch)',
+    'libpd_float ("effects-transport", 1.0f)',
+    'libpd_float ("effects-transport", 0.0f)',
+    "std::array<MidiEvent, 512> pendingMidi",
+    "std::array<std::array<bool, 128>, 16> activeNotes",
+]:
+    if token not in pd_header:
+        fail(f"Pure Data MIDI/XY bridge missing: {token}")
+if ("if (effectMode == 9)\n        pdEngine.captureMidi (midi);" not in processor_visual
+        or processor_visual.index("pdEngine.captureMidi (midi);") >
+           processor_visual.index("midi.clear();")):
+    fail("PATCH input MIDI must be captured before EFFECTS clears MIDI IN")
+if "pdEngine.process (buffer," not in processor_visual:
+    fail("PATCH XY must be passed to libpd render")
+pd_synth_fixture = (R / "patches/Effects_MIDI_XY_Transport_Test_Synth.pd").read_text()
+if pd_synth_fixture.count("#X obj ") != 20 or pd_synth_fixture.count("#X connect ") != 17:
+    fail("MIDI/XY test synth fixture graph corrupted")
+for token in ("notein;", "r effects-x;", "r effects-y;", "r effects-transport;",
+              "r effects-start;", "r effects-stop;", "r effects-continue;",
+              "r effects-clock;", "dac~ 1 2;"):
+    if token not in pd_synth_fixture:
+        fail(f"MIDI/XY test synth lacks Vanilla object: {token}")
+if "tests/effects_pd_midi_xy_regression.cpp" not in (R / ".circleci/config.yml").read_text():
+    fail("Missing real libpd MIDI/XY host audio regression")
 if "EFFECTS_PATCH_V1" in editor_visual or "importPatchJson" in processor_visual:
     fail("Rejected custom JSON patch DSL leaked into Pd implementation")
 for token in [
     "importPureDataPatch (",
     "restorePureDataPatchFromState()",
     "pdEngine.prepare (currentSampleRate)",
-    "pdEngine.process (buffer)",
+    "pdEngine.process (buffer,",
     "Effects_Simple_Stereo_Delay_pd",
     "pdPatchFile",
 ]:
