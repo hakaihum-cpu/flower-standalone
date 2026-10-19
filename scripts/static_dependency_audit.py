@@ -643,8 +643,10 @@ for need in [
     "getProductName",
     "GET_DEVICES_INPUTS",
     "setResizable (true, false)",
-    "initialise (2, 2, nullptr, true)",
-    "initialise (1, 2, nullptr, true)",
+    "applyAudioInputMode (",
+    "dm.initialise (inputs, 2, nullptr, true)",
+    "getActiveOutputChannels",
+    "requestedInputs",
     "closeAudioDevice",
     "startPlaying",
     "setWantsKeyboardFocus (true)",
@@ -1298,6 +1300,36 @@ for need in [
         fail(f"CHORD-B existing FX MIDI selector missing: {need}")
 if "run_build: true" in (R / ".circleci/config.yml").read_text():
     fail("CI must stay manual run_build=false by default")
+
+# INPUT MODE must be a persisted choice, default STEREO, and a real device
+# reconfiguration. No automatic stereo-to-mono fallback or mono output.
+for need in [
+    'audioInputMode = "audioInputMode"',
+]:
+    if need not in parameter_ids:
+        fail(f"INPUT MODE parameter ID missing: {need}")
+for need in [
+    'ParamID::audioInputMode, "INPUT MODE"',
+    'juce::StringArray { "STEREO", "MONO" }, 0',
+    '.withInput ("Input", juce::AudioChannelSet::stereo(), true)',
+    '.withOutput ("Output", juce::AudioChannelSet::stereo(), true)',
+]:
+    if need not in processor_controls:
+        fail(f"INPUT MODE processor/default contract missing: {need}")
+for need in [
+    "getActiveInputChannels().countNumberOfSetBits()",
+    "getActiveOutputChannels().countNumberOfSetBits()",
+    "setup.useDefaultInputChannels = false",
+    "setup.useDefaultOutputChannels = false",
+    'audioDeviceMessage = (mode == 0',
+    'INPUT MODE  /  OUTPUT: STEREO FIXED',
+    'applyAudioInputMode (nextMode)',
+    'applyAudioInputMode (requestedMode)',
+]:
+    if need not in editor:
+        fail(f"INPUT MODE UI/device contract missing: {need}")
+if "falling back to mono" in editor:
+    fail("Unexpected automatic stereo-to-mono fallback remains")
 
 # New controls must be usable and input gain must reach the real audio path.
 for need in [
