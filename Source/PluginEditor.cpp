@@ -776,7 +776,7 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
     if (! hasKeyboardFocus (true))
         grabKeyboardFocus();
 
-    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 9, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     const bool eurekaEntered = effectMode == 2 && ! eurekaWasActive;
     eurekaWasActive = effectMode == 2;
@@ -1054,6 +1054,86 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         vongonVisualPreviousActivity =
             0.60f * vongonVisualPreviousActivity + 0.40f * activity;
     }
+
+    // PATCH: share the entire EUREKA and Vongon supplied video pool.
+    // Input onsets, sustained activity and player gestures can switch clips
+    // during playback. No mandatory clip-end slideshow cuts.
+    if (effectMode == 9)
+    {
+        const int euFramesPerClip = 36;
+        const int euCount = eurekaFrames.getFrameCount() / euFramesPerClip;
+        const int vgTotal = vongonFrames.getFrameCount();
+        const int vgFramesPerClip =
+            (vgTotal == 9 * 192 || vgTotal == 6 * 192) ? 192 : 36;
+        const int vgCount = vgTotal / vgFramesPerClip;
+        const int totalClips = euCount + vgCount;
+        const float x = processor.getVongonX();
+        const float y = processor.getVongonY();
+        const float gestureDistance = std::abs (x - pdPreviousX)
+                                    + std::abs (y - pdPreviousY);
+        pdPreviousX = x;
+        pdPreviousY = y;
+        const bool attack = activity > 0.006f
+            && activity > pdPreviousActivity * 1.28f + 0.0015f;
+        const bool gesture = gestureDistance > 0.12f;
+        if (pdClipCooldown > 0)
+            --pdClipCooldown;
+        const bool sustainCut = activity > 0.006f
+            && pdClipCooldown == 0 && nextVisualFrame (72, -1) == 0;
+        const bool shouldChoose = totalClips > 0
+            && (! pdWasActive || pdClip < 0
+                || (pdClipCooldown == 0
+                    && (attack || gesture || sustainCut)));
+        if (shouldChoose)
+        {
+            pdClip = nextVisualFrame (totalClips, pdClip);
+            pdSource = pdClip < euCount ? 0 : 1;
+            const int local = pdSource == 0 ? pdClip : pdClip - euCount;
+            const int framesPerClip =
+                pdSource == 0 ? euFramesPerClip : vgFramesPerClip;
+            pdFrameIndex = local * framesPerClip
+                + nextVisualFrame (framesPerClip, -1);
+            pdFramePhase = 0.0f;
+            pdClipCooldown = attack ? 18 : gesture ? 28 : 65;
+        }
+        if (pdSource >= 0)
+        {
+            const int framesPerClip =
+                pdSource == 0 ? euFramesPerClip : vgFramesPerClip;
+            const int clip = pdFrameIndex / framesPerClip;
+            const float energy = juce::jlimit (
+                0.0f, 1.0f, (activity - 0.003f) * 14.0f);
+            const float drive = juce::jmax (
+                energy, juce::jlimit (0.0f, 1.0f, gestureDistance * 5.0f));
+            const float targetFps = pdSource == 0
+                ? effects_video::eurekaReactiveFrameRate (activity)
+                : (drive < 0.018f ? 0.0f
+                    : juce::jmin (24.0f,
+                        (2.0f + 24.0f * drive)
+                        * (0.48f + 0.52f * x)));
+            pdVideoSpeed += 0.23f * (targetFps - pdVideoSpeed);
+            if (targetFps == 0.0f && pdVideoSpeed < 0.13f)
+                pdVideoSpeed = 0.0f;
+            pdFramePhase += pdVideoSpeed / 30.0f;
+            while (pdFramePhase >= 1.0f)
+            {
+                pdFramePhase -= 1.0f;
+                pdFrameIndex = clip * framesPerClip
+                    + (pdFrameIndex % framesPerClip + 1) % framesPerClip;
+            }
+            if (shouldChoose || pdFrameIndex != pdLoadedFrame)
+            {
+                currentPdFrame = pdSource == 0
+                    ? eurekaFrames.getFrame (pdFrameIndex)
+                    : vongonFrames.getFrame (pdFrameIndex);
+                pdLoadedFrame = pdFrameIndex;
+                ++pdVisualRevision;
+            }
+        }
+        pdPreviousActivity =
+            0.60f * pdPreviousActivity + 0.40f * activity;
+    }
+    pdWasActive = effectMode == 9;
     dotActivity = juce::jlimit (0.0f, 1.0f, activity * 18.0f);
     if (dotModeEnabled() && ++dotTimerDivider >= 2)
     {
@@ -1091,7 +1171,7 @@ void RealtimeChordFxAudioProcessorEditor::paint (juce::Graphics& g)
 
 void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g)
 {
-    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 9, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     if (effectMode == 3)
         return;
@@ -1129,7 +1209,7 @@ void RealtimeChordFxAudioProcessorEditor::paintGlobalControls (juce::Graphics& g
 
 void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
 {
-    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 9, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::chordMode)->load()));
@@ -1143,6 +1223,11 @@ void RealtimeChordFxAudioProcessorEditor::paintMain (juce::Graphics& g)
     if (effectMode == 4)
     {
         paintClouds (g);
+        return;
+    }
+    if (effectMode == 9)
+    {
+        paintPureDataMode (g);
         return;
     }
 
@@ -1456,14 +1541,14 @@ void RealtimeChordFxAudioProcessorEditor::paintEffectsMenu (juce::Graphics& g)
     static constexpr const char* names[] = {
         "CHORD-A", "CHORD-B", "DREAMY", "EUREKA",
         "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES",
-        "SOLARFAZE", "POLYPHRASE", "MULTI"
+        "SOLARFAZE", "POLYPHRASE", "MULTI", "PATCH"
     };
     const int mode = juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load());
     const int chord = juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::chordMode)->load());
     const int selected = multiModeEnabled ? 10
-        : mode == 0 ? chord : mode + 1;
+        : mode == 9 ? 11 : mode == 0 ? chord : mode + 1;
 
     g.setColour (uiColour (0.96f));
     g.setFont (juce::FontOptions (22.0f).withStyle ("Bold"));
@@ -1477,7 +1562,7 @@ void RealtimeChordFxAudioProcessorEditor::paintEffectsMenu (juce::Graphics& g)
     g.drawText ("SELECT MODE", 30, 78, 350, 30,
                 juce::Justification::centredLeft);
 
-    for (int i = 0; i < 11; ++i)
+    for (int i = 0; i < 12; ++i)
     {
         const int col = i % 2, row = i / 2;
         const juce::Rectangle<float> bounds (
@@ -1496,7 +1581,7 @@ void RealtimeChordFxAudioProcessorEditor::paintEffectsMenu (juce::Graphics& g)
 
 void RealtimeChordFxAudioProcessorEditor::chooseEffectFromMenu (int index)
 {
-    if (index < 0 || index > 10)
+    if (index < 0 || index > 11)
         return;
 
     multiPointerDown = false;
@@ -1519,6 +1604,10 @@ void RealtimeChordFxAudioProcessorEditor::chooseEffectFromMenu (int index)
     else if (index < 10)
     {
         setChoiceActual (ParamID::effectMode, index - 1);
+    }
+    else if (index == 11)
+    {
+        setChoiceActual (ParamID::effectMode, 9);
     }
     else
     {
@@ -2816,7 +2905,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
         }
     }
 
-    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 9, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::chordMode)->load()));
@@ -2831,6 +2920,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.drawText ("MODE", 54, 510, 220, 30, juce::Justification::centredLeft);
     const juce::String modeText =
         multiModeEnabled ? "MULTI"
+        : effectMode == 9 ? "PATCH"
         : effectMode == 8 ? "POLYPHRASE"
         : effectMode == 7 ? "SOLARFAZE"
         : effectMode == 6 ? "ROSETONES"
@@ -3359,7 +3449,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
         if (p.y >= 508 && p.y < 540)
         {
-            const int effect = juce::jlimit (0, 8, juce::roundToInt (
+            const int effect = juce::jlimit (0, 9, juce::roundToInt (
                 processor.state().getRawParameterValue (ParamID::effectMode)->load()));
             const int chord = juce::jlimit (0, 1, juce::roundToInt (
                 processor.state().getRawParameterValue (ParamID::chordMode)->load()));
@@ -3367,8 +3457,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             if (multiModeEnabled)
             {
                 multiModeEnabled = false;
-                setChoiceActual (ParamID::chordMode, 0);       // MULTI -> A
-                setChoiceActual (ParamID::effectMode, 0);
+                setChoiceActual (ParamID::effectMode, 9);      // MULTI -> PATCH
             }
             else if (effect == 0 && chord == 0)
                 setChoiceActual (ParamID::chordMode, 1);       // A -> B
@@ -3388,6 +3477,8 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
                 setChoiceActual (ParamID::effectMode, 7);      // ROSETONES -> SOLARFAZE
             else if (effect == 7)
                 setChoiceActual (ParamID::effectMode, 8);      // SOLARFAZE -> POLYPHRASE
+            else if (effect == 9)
+                setChoiceActual (ParamID::effectMode, 0);      // PATCH -> A
             else
             {
                 // POLYPHRASE -> MULTI; the next MODE click returns to A.
@@ -3463,14 +3554,14 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             const juce::Rectangle<float> target (
                 28.0f + 344.0f * (float) column,
                 126.0f + 91.0f * (float) row, 319.0f, 71.0f);
-            if (item < 11 && target.contains (p))
+            if (item < 12 && target.contains (p))
                 chooseEffectFromMenu (item);
         }
         repaint();
         return;
     }
 
-    const int currentEffectMode = juce::jlimit (0, 8, juce::roundToInt (
+    const int currentEffectMode = juce::jlimit (0, 9, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
     if (p.y <= 70.0f && p.x >= 438.0f && p.x < 495.0f)
@@ -3525,7 +3616,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         return;
     }
 
-    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 9, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
     if (multiModeEnabled && effectMode >= 5 && effectMode <= 8
@@ -3589,6 +3680,17 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             repaint();
             return;
         }
+        if (p.y > 70.0f)
+        {
+            vongonXYTouchDown = true;
+            updateVongonXYPoint (p, true);
+        }
+        repaint();
+        return;
+    }
+
+    if (effectMode == 9)
+    {
         if (p.y > 70.0f)
         {
             vongonXYTouchDown = true;
@@ -3883,7 +3985,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
         return;
     }
 
-    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 9, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
     if (effectMode >= 5 && effectMode <= 8
@@ -3894,8 +3996,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
         repaint();
         return;
     }
-    if (effectMode >= 5
-        && effectMode <= 8
+    if (((effectMode >= 5 && effectMode <= 8) || effectMode == 9)
         && vongonXYTouchDown)
     {
         updateVongonXYPoint (toDesign (e.position), true);
@@ -4000,7 +4101,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 
 bool RealtimeChordFxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 {
-    const int effectMode = juce::jlimit (0, 8, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 9, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
 
     if (effectMode == 3)
