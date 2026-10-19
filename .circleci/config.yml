@@ -24,6 +24,11 @@ jobs:
             python3 scripts/materialize_effects_clouds.py
 
       - run:
+          name: Materialize pinned libpd and Pure Data
+          command: |
+            bash scripts/materialize_effects_libpd.sh
+
+      - run:
           name: Static dependency audit
           command: |
             python3 scripts/static_dependency_audit.py
@@ -112,6 +117,8 @@ jobs:
             set -euo pipefail
             "$PROJUCER" --resave RealtimeChordFX_Standalone.jucer
             test -d Builds/Android
+            python3 scripts/patch_android_effects_libpd.py
+            grep -F 'target_link_libraries(${BINARY_NAME} PRIVATE libpd_static m)' Builds/Android/app/CMakeLists.txt
             python3 scripts/patch_android_native_parallelism.py Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOL_COMPILE:STRING=compile' Builds/Android/app/build.gradle
