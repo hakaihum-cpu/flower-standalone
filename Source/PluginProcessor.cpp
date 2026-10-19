@@ -44,7 +44,7 @@ RealtimeChordFxAudioProcessor::RealtimeChordFxAudioProcessor()
         pending.store (-1, std::memory_order_relaxed);
     initialiseChordBotDefaults();
     const auto folder = pureDataPatchFolder();
-    if (folder.createDirectory())
+    if (folder.createDirectory().wasOk())
     {
         const auto factory = folder.getChildFile ("Effects_Simple_Stereo_Delay.pd");
         if (! factory.existsAsFile())
