@@ -1723,6 +1723,34 @@ for token in [
 ]:
     if token not in (R / ".circleci/config.yml").read_text():
         fail(f"Pd audio regression missing from manual CI: {token}")
+# Regression: past CMake version mismatch must not be hidden by editing
+# upstream libpd's minimum version. Android SDK Gradle and native Pd
+# regression must use exactly the explicitly installed supported CMake.
+ci_config = (R / ".circleci/config.yml").read_text()
+if 'cmake_minimum_required (VERSION 3.22)' in pd_get:
+    fail("Forbidden libpd CMake requirement downgrade")
+if "grep -Fx 'cmake_minimum_required (VERSION 3.25)'" not in pd_get:
+    fail("Pinned libpd upstream CMake requirement not verified")
+if 'version = \\"3.31.6\\"' not in pd_cmake:
+    fail("Generated Projucer Android CMake version not patched to 3.31.6")
+if '"cmake;3.31.6"' not in ci_config:
+    fail("Android SDK CMake 3.31.6 not installed in CI")
+if ci_config.find("name: Install Android SDK components") > ci_config.find("name: Real Pure Data libpd audio regression"):
+    fail("Android CMake installed after Pd native test")
+if '"$PD_CMAKE" -S third_party/libpd' not in ci_config:
+    fail("Pd native test not using exact CMake binary")
+for signature in [
+    "CMAKE_BUILD_PARALLEL_LEVEL=2",
+    "--max-workers=2",
+    "-DCMAKE_JOB_POOLS:STRING=compile=2;link=1",
+    "no_output_timeout: 30m",
+    "path: audio-regression/pure-data",
+]:
+    if signature not in ci_config:
+        fail(f"Previous CircleCI failure guard lost: {signature}")
+if ci_config.count("workflows:") != 1:
+    fail("AN-12 regression: duplicate workflows block")
+print("[PASS] pinned Android CMake 3.31.6, historic CircleCI safeguards, native DSP logs")
 print("[PASS] Real libpd native DSP, .pd import, pinned submodule and combined video contracts")
 
 print("[PASS] Vongon-inspired 4-mode DSP / supplied-video / DOT contracts verified")
