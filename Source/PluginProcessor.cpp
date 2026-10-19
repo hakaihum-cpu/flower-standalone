@@ -2207,6 +2207,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
         ParamID::displayMode, "DISPLAY",
         juce::StringArray { "MEDIA", "DOT" }, 0));
     p.add (std::make_unique<juce::AudioParameterChoice> (
+        ParamID::audioInputMode, "INPUT MODE",
+        juce::StringArray { "STEREO", "MONO" }, 0));
+    p.add (std::make_unique<juce::AudioParameterChoice> (
         ParamID::audioBufferMode, "AUDIO BUFFER",
         juce::StringArray { "AUTO", "0.5 BURST", "0.75 BURST", "1 BURST",
                             "1.5 BURSTS", "2 BURSTS", "3 BURSTS", "4 BURSTS",
