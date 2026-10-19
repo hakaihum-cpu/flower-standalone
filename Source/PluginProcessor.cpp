@@ -669,6 +669,11 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         }
     }
 
+    // PATCH receives original MIDI input (not EFFECTS-generated MIDI OUT).
+    // Preserve notes, clock, START/CONTINUE/STOP before midi.clear().
+    if (effectMode == 9)
+        pdEngine.captureMidi (midi);
+
     midi.clear();
     processMidiController (midi, n);
 
@@ -929,7 +934,10 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     }
     else if (effectMode == 9)
     {
-        pdEngine.process (buffer);
+        pdEngine.process (buffer,
+                          vongonX.load (std::memory_order_relaxed),
+                          vongonY.load (std::memory_order_relaxed),
+                          vongonTouch.load (std::memory_order_relaxed));
     }
 
     if (effectMode == 3)
