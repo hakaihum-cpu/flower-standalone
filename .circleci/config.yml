@@ -107,6 +107,15 @@ jobs:
               "$LIBPD_ARCHIVE" -ldl -lm -pthread \
               -o /tmp/effects_pd_audio_regression 2>&1 | tee audio-regression/pure-data/test-compile.log
             /tmp/effects_pd_audio_regression 2>&1 | tee audio-regression/pure-data/audio-test.log
+            # Pure Data Vanilla MIDI synth fixture: Note On/Off,
+            # MIDI transport START/STOP/CONTINUE, clock and XY controls.
+            g++ -std=c++17 -O2 -Wall -Wextra \
+              -Ithird_party/libpd/libpd_wrapper \
+              -Ithird_party/libpd/pure-data/src \
+              tests/effects_pd_midi_xy_regression.cpp \
+              "$LIBPD_ARCHIVE" -ldl -lm -pthread \
+              -o /tmp/effects_pd_midi_xy_regression 2>&1 | tee audio-regression/pure-data/midi-xy-compile.log
+            /tmp/effects_pd_midi_xy_regression 2>&1 | tee audio-regression/pure-data/midi-xy-test.log
 
       - store_artifacts:
           path: audio-regression/pure-data
