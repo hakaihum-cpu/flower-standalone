@@ -36,6 +36,10 @@ with tempfile.TemporaryDirectory(prefix="effects-pd-cmake-preflight-") as td:
     hdr = root / "third_party/libpd/libpd_wrapper/z_libpd.h"
     hdr.parent.mkdir(parents=True)
     hdr.write_text("/* deliberately minimal libpd fixture */\n")
+    for rel in ("Source/compat/android_api24_glob.c", "Source/compat/android_api24_glob.h"):
+        fixture = root / rel
+        fixture.parent.mkdir(parents=True, exist_ok=True)
+        fixture.write_text("/* compatibility fixture */\n")
 
     for iteration in (1, 2):
         proc = subprocess.run(
@@ -50,6 +54,10 @@ with tempfile.TemporaryDirectory(prefix="effects-pd-cmake-preflight-") as td:
         g = gradle.read_text()
         assert c.count("# EFFECTS_PINNED_LIBPD_LINK_BEGIN") == 1
         assert c.count("target_link_libraries(${BINARY_NAME} libpd_static m dl)") == 1
+        assert c.count("target_sources(libpd_static PRIVATE") == 1
+        assert c.count("target_compile_options(libpd_static PRIVATE") == 1
+        assert c.count("android_api24_glob.c") == 1
+        assert c.count("android_api24_glob.h") == 1
         assert g.count('version = "3.31.6"') == 1
         assert g.count('ndkVersion "26.1.10909125"') == 1
         assert 'version = "3.22.1"' not in g
