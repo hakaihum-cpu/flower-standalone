@@ -13,6 +13,10 @@ if "project(juce_jni_project)" not in txt:
     raise SystemExit("[FAIL] unexpected Projucer CMake project")
 if "target_link_libraries( ${BINARY_NAME}" not in txt:
     raise SystemExit("[FAIL] native target link anchor absent")
+# Projucer uses the plain CMake target_link_libraries signature.
+# A PRIVATE signature on the same juce_jni target fails CMake (#221).
+if "target_link_libraries( ${BINARY_NAME} PRIVATE" in txt:
+    raise SystemExit("[FAIL] unexpected keyword link signature in generated JUCE CMake")
 if not (r / "third_party/libpd/libpd_wrapper/z_libpd.h").is_file():
     raise SystemExit("[FAIL] libpd sources not materialized")
 
@@ -31,7 +35,7 @@ add_subdirectory(
     "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/libpd"
     "${CMAKE_CURRENT_BINARY_DIR}/effects-libpd"
     EXCLUDE_FROM_ALL)
-target_link_libraries(${BINARY_NAME} PRIVATE libpd_static m dl)
+target_link_libraries(${BINARY_NAME} libpd_static m dl)
 target_include_directories(${BINARY_NAME} PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/libpd/libpd_wrapper"
     "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/libpd/pure-data/src")
