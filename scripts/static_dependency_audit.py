@@ -1689,6 +1689,24 @@ for unsafe in [
 ]:
     if unsafe in pd_header:
         fail(f"Pd filepath has dangling UTF-8 pointer: {unsafe}")
+# Organelle control compatibility uses fixed MIDI/XY input only:
+# no extra UI or permanent mode. Official receivers are notes/knob1..4/aux
+# and enc/encbut for selector. Test the bridge independently of a fake mother.
+for token in [
+    'libpd_finish_list ("notes")',
+    'libpd_float ("knob1", x)', 'libpd_float ("knob2", y)',
+    'event.number >= 21 && event.number <= 24',
+    'libpd_float (knob[event.number - 21],',
+    'libpd_float ("aux", event.value >= 64 ? 1.0f : 0.0f)',
+    'libpd_float ("encbut", pressed)',
+    'libpd_float ("enc", event.value >= 64 ? 1.0f : 0.0f)',
+    'libpd_controlchange (event.channel, event.number, event.value)',
+]:
+    if token not in pd_header:
+        fail(f"Organelle fixed MIDI/XY receiver bridge missing: {token}")
+# PATCH-only scope and stable-mode contract.
+if "if (effectMode == 9)\n        pdEngine.captureMidi (midi);" not in processor_visual:
+    fail("Organelle MIDI bridge must be PATCH-only")
 # PATCH MIDI: notes remain 0-based at the libpd API boundary and MIDI
 # START/STOP/CONTINUE/CLOCK reach [realtimein]; XY reaches Vanilla [r].
 for token in [
