@@ -119,6 +119,13 @@ public:
                 entry.number = message.getNoteNumber();
                 entry.value = message.isNoteOff() ? 0 : (int) message.getVelocity();
             }
+            else if (message.isController())
+            {
+                entry.kind = MidiEvent::controller;
+                entry.channel = message.getChannel() - 1;
+                entry.number = message.getControllerNumber();
+                entry.value = message.getControllerValue();
+            }
             else if (message.isMidiStart())
                 entry.kind = MidiEvent::start;
             else if (message.isMidiContinue())
@@ -166,6 +173,20 @@ public:
         {
             libpd_float ("effects-touch", touch);
             lastTouch = touch;
+        }
+
+        // Simple Organelle mother-like bridge. No new screen or settings:
+        // X -> knob1, Y -> knob2; CC21..24 also set their corresponding knobs.
+        // The most recently changed control takes precedence.
+        if (x != lastOrganelleX)
+        {
+            libpd_float ("knob1", x);
+            lastOrganelleX = x;
+        }
+        if (y != lastOrganelleY)
+        {
+            libpd_float ("knob2", y);
+            lastOrganelleY = y;
         }
         if (midiOverflow)
         {
@@ -231,7 +252,7 @@ public:
 private:
     struct MidiEvent
     {
-        enum Kind : std::uint8_t { note, start, stop, resume, clock };
+        enum Kind : std::uint8_t { note, controller, start, stop, resume, clock };
         Kind kind = note;
         int sample = 0;
         int channel = 0;
@@ -247,6 +268,29 @@ private:
                 libpd_noteon (event.channel, event.number, event.value);
                 activeNotes[(size_t) event.channel][(size_t) event.number] =
                     event.value != 0;
+                // Organelle mother sends a [pitch velocity( list to [r notes].
+                // Keep all raw [notein] channels available to Vanilla patches.
+                libpd_start_message (2);
+                libpd_add_float ((float) event.number);
+                libpd_add_float ((float) event.value);
+                libpd_finish_list ("notes");
+                break;
+            case MidiEvent::controller:
+                libpd_controlchange (event.channel, event.number, event.value);
+                if (event.number >= 21 && event.number <= 24)
+                {
+                    static const char* const knob[] =
+                        { "knob1", "knob2", "knob3", "knob4" };
+                    libpd_float (knob[event.number - 21],
+                                 (float) event.value / 127.0f);
+                }
+                else if (event.number == 25)
+                    libpd_float ("aux", event.value >= 64 ? 1.0f : 0.0f);
+                else if (event.number == 26)
+                    libpd_float ("encoder-button",
+                                 event.value >= 64 ? 1.0f : 0.0f);
+                else if (event.number == 27)
+                    libpd_float ("encoder-turn", (float) event.value);
                 break;
             case MidiEvent::start:
                 libpd_sysrealtime (0, 0xFA); // [realtimein]
@@ -279,6 +323,7 @@ private:
         pendingCount = 0;
         midiOverflow = false;
         lastX = lastY = lastTouch = -1.0f;
+        lastOrganelleX = lastOrganelleY = -1.0f;
         for (auto& channel : activeNotes)
             channel.fill (false);
     }
@@ -298,6 +343,7 @@ private:
     int pendingCount = 0;
     bool midiOverflow = false;
     float lastX = -1.0f, lastY = -1.0f, lastTouch = -1.0f;
+    float lastOrganelleX = -1.0f, lastOrganelleY = -1.0f;
     juce::File selectedFile;
     int inputCursor = 0;
     int outputCursor = tickFrames;
