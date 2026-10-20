@@ -200,6 +200,8 @@ jobs:
               2>&1 | tee android-artifact/android-cmake-configure.log
             test -f /tmp/effects-android-arm64-cmake-preflight/build.ninja
             echo '[PASS] Android arm64 + libpd CMake configuration completed'
+            "$PD_CMAKE" --build /tmp/effects-android-arm64-cmake-preflight --target libpd_static -j2 2>&1 | tee android-artifact/android-libpd-arm64-test.log
+            echo '[PASS] Android API24 arm64 libpd static compilation'
 
       - run:
           name: Create Android debug signing keystore
