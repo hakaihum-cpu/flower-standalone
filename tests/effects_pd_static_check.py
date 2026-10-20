@@ -33,6 +33,27 @@ for required in ("choosePureDataPatchFile", '"*.pd"',
  "const int totalClips = euCount + vgCount", "paintPureDataMode (g)",
  "LOAD .PD"):
     assert required in editor, required
+# Minimal Organelle mother-like input compatibility: no new UI.
+# Real MIDI notes -> [r notes], XY -> knobs 1/2, CC21..24 -> knobs 1..4,
+# CC25 AUX, CC26 selector press, CC28 selector turn.
+for required in (
+    'libpd_finish_list ("notes")',
+    'libpd_float ("knob1", x)',
+    'libpd_float ("knob2", y)',
+    'libpd_float (knob[event.number - 21],',
+    'libpd_float ("aux", event.value >= 64 ? 1.0f : 0.0f)',
+    'libpd_float ("encbut", pressed)',
+    'libpd_float ("enc", event.value >= 64 ? 1.0f : 0.0f)',
+    'libpd_controlchange (event.channel, event.number, event.value)',
+    'event.number >= 21 && event.number <= 24',
+    'event.number == 25', 'event.number == 26', 'event.number == 28',
+):
+    assert required in src, required
+assert "event.number == 27" not in src
+assert "void captureMidi (const juce::MidiBuffer& midi)" in src
+assert "pdEngine.captureMidi (midi)" in cpp
+assert "pdEngine.process (buffer," in cpp
+
 assert "EFFECTS_PATCH_V1" not in src+cpp+editor
 
 # Transport / note / XY bridge remains exclusive to PATCH (index 9).
