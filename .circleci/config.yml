@@ -365,19 +365,7 @@ jobs:
               echo "===== Gradle failure highlights ====="
               grep -niE '(CMake Error|Cannot find source file|No SOURCES given|Configuring incomplete|Generate step failed|error:|fatal error:|FAILURE:|FAILED|Exception|undefined reference|ninja: build stopped|Execution failed for task)' android-artifact/gradle-build.log | head -n 120 || true
               echo "===== First native/CMake diagnostic contexts ====="
-              python3 - <<'PY'
-            import pathlib
-            import re
-            lines = pathlib.Path("android-artifact/gradle-build.log").read_text(errors="replace").splitlines()
-            patterns = re.compile(r"CMake Error|Cannot find source file|No SOURCES given|Could NOT find|Configure step failed|Configuring incomplete|Generate step failed|ninja: error|fatal error:", re.I)
-            hits = [i for i, line in enumerate(lines) if patterns.search(line)]
-            for index in hits[:12]:
-                print(f"----- log lines {max(1,index-3)} through {min(len(lines),index+12)} -----")
-                for k in range(max(0,index-4), min(len(lines),index+12)):
-                    print(f"{k+1}: {lines[k]}")
-            if not hits:
-                print("No explicit CMake diagnostic found; attach android-artifact/gradle-build.log")
-            PY
+              grep -niC 8 -m 12 -E 'CMake Error|Cannot find source file|No SOURCES given|Could NOT find|Configure step failed|Configuring incomplete|Generate step failed|ninja: error|fatal error:' android-artifact/gradle-build.log || true
               echo "===== Gradle failure log tail ====="
               tail -n 300 android-artifact/gradle-build.log || true
             fi
