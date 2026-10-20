@@ -1779,6 +1779,15 @@ for token in ["libpd_static", "add_subdirectory(", "target_link_libraries",
               "JUCE", "EFFECTS_PINNED_LIBPD_LINK_BEGIN"]:
     if token not in pd_cmake:
         fail(f"libpd Android CMake bridge missing: {token}")
+# #221: original Projucer links juce_jni with plain target_link_libraries.
+# Mixing the PRIVATE keyword with that same target prevents CMake generation.
+if 'target_link_libraries(${BINARY_NAME} libpd_static m dl)' not in pd_cmake:
+    fail("libpd link must match generated Projucer plain CMake signature")
+if 'target_link_libraries(${BINARY_NAME} PRIVATE libpd_static m dl)' in pd_cmake:
+    fail("libpd keyword signature conflicts with original Projucer link")
+if "unexpected keyword link signature" not in pd_cmake:
+    fail("Projucer signature drift guard missing")
+
 if pd_patch.count("#X obj ") != 16 or pd_patch.count("#X connect ") != 18:
     fail("Vanilla stereo delay test patch changed without audio regression")
 if ("adc~ 1 2" not in pd_patch or "dac~ 1 2" not in pd_patch
