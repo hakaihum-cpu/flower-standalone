@@ -1797,6 +1797,14 @@ for token in [
 # upstream libpd's minimum version. Android SDK Gradle and native Pd
 # regression must use exactly the explicitly installed supported CMake.
 ci_config = (R / ".circleci/config.yml").read_text()
+# CircleCI v2.1 interprets every literal << as a template expression.
+# #221: the shell form python3 - <<'PY' made the entire workflow invalid.
+# Only the existing manual run_build condition is allowed in this config.
+circleci_templates = [
+    line.strip() for line in ci_config.splitlines() if "<<" in line
+]
+if circleci_templates != ["when: << pipeline.parameters.run_build >>"]:
+    fail("CircleCI 2.1 contains unsupported or unclosed << template tag")
 if 'cmake_minimum_required (VERSION 3.22)' in pd_get:
     fail("Forbidden libpd CMake requirement downgrade")
 if "grep -Fx 'cmake_minimum_required (VERSION 3.25)'" not in pd_get:
