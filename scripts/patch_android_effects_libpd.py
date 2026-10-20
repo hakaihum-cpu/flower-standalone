@@ -54,25 +54,21 @@ if gr.count(old) == 1:
 elif gr.count(new) != 1:
     raise SystemExit("[FAIL] unexpected Projucer Android CMake version")
 # Match the installed NDK, not Gradle's automatic newest-installed NDK
-# selection. #220 was configured with NDK 28 although this CircleCI build
-# installs and exports 26.1.10909125.
-import re
+# selection. #220 was configured with NDK 28 despite this CI pinning 26.
 ndk = 'ndkVersion "26.1.10909125"'
-android_block = re.findall(r'(?m)^(\s*android\s*\{)\s*
-, gr)
-if len(android_block) != 1:
-    raise SystemExit("[FAIL] expected one Android Gradle android block")
-ndk_lines = re.findall(r'(?m)^\s*ndkVersion\s*(?:=\s*)?["\']([^"\']+)["\']\s*
-, gr)
+has_final_newline = gr.endswith("\n")
+gradle_lines = gr.splitlines()
+android_blocks = [i for i, line in enumerate(gradle_lines)
+                  if line.strip() == "android {"]
+ndk_lines = [i for i, line in enumerate(gradle_lines)
+             if line.strip().startswith("ndkVersion")]
+if len(android_blocks) != 1 or len(ndk_lines) > 1:
+    raise SystemExit("[FAIL] unexpected Android/NDK Gradle exporter syntax")
 if ndk_lines:
-    if len(ndk_lines) != 1:
-        raise SystemExit("[FAIL] ambiguous Gradle NDK version settings")
-    gr = re.sub(
-        r'(?m)^\s*ndkVersion\s*(?:=\s*)?["\'][^"\']+["\']\s*
-,
-        '    ' + ndk, gr, count=1)
+    gradle_lines[ndk_lines[0]] = "    " + ndk
 else:
-    gr = gr.replace(android_block[0], android_block[0] + '\n    ' + ndk, 1)
+    gradle_lines.insert(android_blocks[0] + 1, "    " + ndk)
+gr = "\n".join(gradle_lines) + ("\n" if has_final_newline else "")
 if gr.count(ndk) != 1:
     raise SystemExit("[FAIL] generated Gradle NDK pin is missing or duplicated")
 gradle.write_text(gr)
