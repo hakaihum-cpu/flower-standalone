@@ -287,10 +287,17 @@ private:
                 else if (event.number == 25)
                     libpd_float ("aux", event.value >= 64 ? 1.0f : 0.0f);
                 else if (event.number == 26)
-                    libpd_float ("encoder-button",
-                                 event.value >= 64 ? 1.0f : 0.0f);
-                else if (event.number == 27)
-                    libpd_float ("encoder-turn", (float) event.value);
+                {
+                    // Optional external button; official Organelle receiver.
+                    const float pressed = event.value >= 64 ? 1.0f : 0.0f;
+                    libpd_float ("encbut", pressed);
+                }
+                else if (event.number == 28)
+                {
+                    // Relative encoder: 0=counter-clockwise, 1=clockwise.
+                    // CC28 convention used by compatible MIDI controllers.
+                    libpd_float ("enc", event.value >= 64 ? 1.0f : 0.0f);
+                }
                 break;
             case MidiEvent::start:
                 libpd_sysrealtime (0, 0xFA); // [realtimein]
