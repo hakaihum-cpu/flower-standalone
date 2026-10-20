@@ -19,6 +19,9 @@ if "target_link_libraries( ${BINARY_NAME} PRIVATE" in txt:
     raise SystemExit("[FAIL] unexpected keyword link signature in generated JUCE CMake")
 if not (r / "third_party/libpd/libpd_wrapper/z_libpd.h").is_file():
     raise SystemExit("[FAIL] libpd sources not materialized")
+for rel in ("Source/compat/android_api24_glob.c", "Source/compat/android_api24_glob.h"):
+    if not (r / rel).is_file():
+        raise SystemExit(f"[FAIL] missing Android API24 libpd glob compatibility: {rel}")
 
 marker = "# EFFECTS_PINNED_LIBPD_LINK_BEGIN"
 if marker not in txt:
