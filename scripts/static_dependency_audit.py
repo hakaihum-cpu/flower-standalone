@@ -1801,7 +1801,7 @@ if 'cmake_minimum_required (VERSION 3.22)' in pd_get:
     fail("Forbidden libpd CMake requirement downgrade")
 if "grep -Fx 'cmake_minimum_required (VERSION 3.25)'" not in pd_get:
     fail("Pinned libpd upstream CMake requirement not verified")
-if 'version = \\"3.31.6\\"' not in pd_cmake:
+if 'new = \'version = "3.31.6"\'' not in pd_cmake:
     fail("Generated Projucer Android CMake version not patched to 3.31.6")
 if '"cmake;3.31.6"' not in ci_config:
     fail("Android SDK CMake 3.31.6 not installed in CI")
