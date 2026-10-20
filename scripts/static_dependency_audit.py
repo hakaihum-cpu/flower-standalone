@@ -1788,6 +1788,26 @@ if 'target_link_libraries(${BINARY_NAME} PRIVATE libpd_static m dl)' in pd_cmake
 if "unexpected keyword link signature" not in pd_cmake:
     fail("Projucer signature drift guard missing")
 
+# #222: bionic API24-27 cannot provide glob/globfree (API28+). Keep minSdk24.
+glob_src = (R / "Source/compat/android_api24_glob.c").read_text()
+glob_hdr = (R / "Source/compat/android_api24_glob.h").read_text()
+if 'androidMinimumSDK="24"' not in jucer_text:
+    fail("Android minSDK must not be raised to hide API24 libc errors")
+for token in ("__ANDROID_API__ < 28", "int glob(", "void globfree(", "GLOB_NOMATCH", "fnmatch("):
+    if token not in glob_src:
+        fail(f"Android API24-27 Pd glob implementation missing: {token}")
+for token in ("__ANDROID_API__ < 28", "#include <glob.h>", "int glob(", "void globfree("):
+    if token not in glob_hdr:
+        fail(f"Android API24-27 Pd glob declaration missing: {token}")
+for token in ("target_sources(libpd_static PRIVATE", "android_api24_glob.c",
+              "target_compile_options(libpd_static PRIVATE", "android_api24_glob.h"):
+    if token not in pd_cmake:
+        fail(f"libpd Android glob CMake link missing: {token}")
+for token in ("API24 glob compatibility C regression", "effects_android_glob_regression.c",
+              "android-libpd-arm64-test.log", "--target libpd_static -j2"):
+    if token not in (R / ".circleci/config.yml").read_text():
+        fail(f"Real Android API24 libpd test gate missing: {token}")
+
 if pd_patch.count("#X obj ") != 16 or pd_patch.count("#X connect ") != 18:
     fail("Vanilla stereo delay test patch changed without audio regression")
 if ("adc~ 1 2" not in pd_patch or "dac~ 1 2" not in pd_patch
