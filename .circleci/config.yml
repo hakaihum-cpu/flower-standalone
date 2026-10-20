@@ -21,6 +21,17 @@ jobs:
             python3 tests/effects_android_exporter_regression.py
 
       - run:
+          name: API24 glob compatibility C regression
+          command: |
+            set -euo pipefail
+            TEST_DIR="/tmp/effects-pd-glob-regression"
+            mkdir -p "$TEST_DIR/sample"
+            : > "$TEST_DIR/sample/a.pd"
+            : > "$TEST_DIR/sample/b.pd"
+            cc -std=c11 -D_DEFAULT_SOURCE -DEFFECTS_GLOB_COMPAT_TEST -Wall -Wextra -Werror Source/compat/android_api24_glob.c tests/effects_android_glob_regression.c -o "$TEST_DIR/glob-test"
+            "$TEST_DIR/glob-test" "$TEST_DIR/sample/*.pd"
+
+      - run:
           name: Materialize exact supplied frame pack
           command: |
             python3 scripts/materialize_frame_pack.py
