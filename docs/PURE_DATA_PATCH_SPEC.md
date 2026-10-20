@@ -92,6 +92,32 @@ This is a **test fixture only**, not another permanent EFFECTS mode.
 IMPORTANT: Native compilation, CI regression and Android real-device
 verification are still open gates; do not describe these as passed.
 
+## Lightweight Organelle control compatibility (2026-10-20)
+
+Only a small bridge to the official Organelle mother.pd receiver vocabulary.
+**No additional on-screen buttons, keyboards, configuration page or new mode.**
+This is not an Organelle OS emulator and does not guarantee arbitrary patches.
+
+- MIDI Note On/Off -> Pd `[notein]` (standard existing PATCH input)
+  and `[r notes]` as a two-float `pitch velocity` list (0 velocity on release).
+- PATCH XY X -> `[r knob1]`, Y -> `[r knob2]`, values 0..1.
+- MIDI CC21,22,23,24 -> `[r knob1]`..`[r knob4]`, values 0..1.
+  XY movement and CC21/22 can both control the first two knobs; last
+  received change wins. For simple performance, XY + CC23/24 suffices.
+- MIDI CC25 (>=64 pressed, otherwise released) -> `[r aux]`.
+  Organelle patch-defined mode-switch/record actions can use this button.
+- Optional MIDI CC26 -> `[r encbut]` (selector press/release).
+  Optional CC28 -> `[r enc]` (0 left, 1 right), matching common
+  third-party Organelle controller convention, not a native fixed MIDI
+  mapping defined by official mother.pd.
+- Only MIDI events arriving in PATCH mode are bridged; modes 0..8 stay
+  unchanged. Other PATCH receivers effects-x/y/touch, transport and
+  [realtimein] remain available.
+
+This does **not** bundle or load Organelle's mother.pd, patch subfolders,
+sample assets, external Pd objects, Orac or Organelle graphical menus.
+Compatibility is limited to ordinary Vanilla Pd files and these controls.
+
 ## PATCH video
 PATCH-only video selection combines all supplied EUREKA clips AND Vongon clips.
 It uses EUREKA onset/sustained-input random cut opportunities and the Vongon
