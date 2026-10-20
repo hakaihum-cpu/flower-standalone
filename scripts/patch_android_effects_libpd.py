@@ -53,6 +53,28 @@ if gr.count(old) == 1:
     gr = gr.replace(old, new)
 elif gr.count(new) != 1:
     raise SystemExit("[FAIL] unexpected Projucer Android CMake version")
+# Match the installed NDK, not Gradle's automatic newest-installed NDK
+# selection. #220 was configured with NDK 28 although this CircleCI build
+# installs and exports 26.1.10909125.
+import re
+ndk = 'ndkVersion "26.1.10909125"'
+android_block = re.findall(r'(?m)^(\s*android\s*\{)\s*
+, gr)
+if len(android_block) != 1:
+    raise SystemExit("[FAIL] expected one Android Gradle android block")
+ndk_lines = re.findall(r'(?m)^\s*ndkVersion\s*(?:=\s*)?["\']([^"\']+)["\']\s*
+, gr)
+if ndk_lines:
+    if len(ndk_lines) != 1:
+        raise SystemExit("[FAIL] ambiguous Gradle NDK version settings")
+    gr = re.sub(
+        r'(?m)^\s*ndkVersion\s*(?:=\s*)?["\'][^"\']+["\']\s*
+,
+        '    ' + ndk, gr, count=1)
+else:
+    gr = gr.replace(android_block[0], android_block[0] + '\n    ' + ndk, 1)
+if gr.count(ndk) != 1:
+    raise SystemExit("[FAIL] generated Gradle NDK pin is missing or duplicated")
 gradle.write_text(gr)
 assert gr.count(new) == 1
-print("[PASS] generated JUCE Android JNI links pinned libpd_static, CMake 3.31.6")
+print("[PASS] generated JUCE Android JNI links pinned libpd_static, CMake 3.31.6, NDK 26.1.10909125")
