@@ -23,7 +23,7 @@ with tempfile.TemporaryDirectory(prefix="effects-pd-cmake-preflight-") as td:
         "project(juce_jni_project)\n"
         "set(BINARY_NAME juce_jni)\n"
         "add_library(${BINARY_NAME} SHARED dummy.cpp)\n"
-        "target_link_libraries( ${BINARY_NAME} PRIVATE m)\n"
+        "target_link_libraries( ${BINARY_NAME} m)\n"
     )
     gradle.write_text(
         "plugins { id 'com.android.application' }\n"
@@ -49,9 +49,9 @@ with tempfile.TemporaryDirectory(prefix="effects-pd-cmake-preflight-") as td:
         c = cmake.read_text()
         g = gradle.read_text()
         assert c.count("# EFFECTS_PINNED_LIBPD_LINK_BEGIN") == 1
-        assert c.count("target_link_libraries(${BINARY_NAME} PRIVATE libpd_static m dl)") == 1
+        assert c.count("target_link_libraries(${BINARY_NAME} libpd_static m dl)") == 1
         assert g.count('version = "3.31.6"') == 1
         assert g.count('ndkVersion "26.1.10909125"') == 1
         assert 'version = "3.22.1"' not in g
 
-    print("[PASS] #219/#220 Android CMake/NDK exporter regression; second pass idempotent")
+    print("[PASS] #219/#220/#221 Android CMake/NDK/link-signature regression; second pass idempotent")
