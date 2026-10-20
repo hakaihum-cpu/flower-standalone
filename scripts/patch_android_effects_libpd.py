@@ -35,6 +35,13 @@ add_subdirectory(
     "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/libpd"
     "${CMAKE_CURRENT_BINARY_DIR}/effects-libpd"
     EXCLUDE_FROM_ALL)
+# API 24-27 bionic lacks glob()/globfree() used by upstream x_file.c.
+# Preserve pinned source and the existing Android API 24 minimum.
+target_sources(libpd_static PRIVATE
+    "${CMAKE_CURRENT_LIST_DIR}/../../../Source/compat/android_api24_glob.c")
+target_compile_options(libpd_static PRIVATE
+    "-include"
+    "${CMAKE_CURRENT_LIST_DIR}/../../../Source/compat/android_api24_glob.h")
 target_link_libraries(${BINARY_NAME} libpd_static m dl)
 target_include_directories(${BINARY_NAME} PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/libpd/libpd_wrapper"
