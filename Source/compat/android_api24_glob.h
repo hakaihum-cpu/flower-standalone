@@ -4,6 +4,12 @@
  */
 #pragma once
 #if defined(__ANDROID__) && defined(__ANDROID_API__) && __ANDROID_API__ < 28
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 600
+#endif
 #include <glob.h>
 #ifdef __cplusplus
 extern "C" {
