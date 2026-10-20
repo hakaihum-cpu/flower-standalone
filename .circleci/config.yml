@@ -159,11 +159,40 @@ jobs:
             python3 scripts/patch_android_effects_libpd.py
             grep -F 'target_link_libraries(${BINARY_NAME} PRIVATE libpd_static m dl)' Builds/Android/app/CMakeLists.txt
             grep -F 'version = "3.31.6"' Builds/Android/app/build.gradle
+            grep -F 'ndkVersion "26.1.10909125"' Builds/Android/app/build.gradle
+            # Known generated-source regression: CMake cannot configure
+            # a juce_jni target if Projucer omits BinaryData.cpp.
+            test -s JuceLibraryCode/BinaryData.cpp
+            test -s JuceLibraryCode/JuceHeader.h
             python3 scripts/patch_android_native_parallelism.py Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOL_COMPILE:STRING=compile' Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOL_LINK:STRING=link' Builds/Android/app/build.gradle
             printf 'sdk.dir=%s\n' "$ANDROID_HOME" > Builds/Android/local.properties
+
+      - run:
+          name: Configure Android arm64 CMake before Gradle
+          command: |
+            set -euo pipefail
+            mkdir -p android-artifact
+            PD_CMAKE="$ANDROID_HOME/cmake/3.31.6/bin/cmake"
+            NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
+            test -f "$NDK_HOME/build/cmake/android.toolchain.cmake"
+            "$PD_CMAKE" -S Builds/Android/app -B /tmp/effects-android-arm64-cmake-preflight \
+              -G Ninja \
+              -DCMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake" \
+              -DANDROID_NDK="$NDK_HOME" \
+              -DANDROID_ABI=arm64-v8a \
+              -DANDROID_PLATFORM=android-24 \
+              -DANDROID_STL=c++_static \
+              -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DJUCE_BUILD_CONFIGURATION=RELEASE \
+              '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' \
+              -DCMAKE_JOB_POOL_COMPILE:STRING=compile \
+              -DCMAKE_JOB_POOL_LINK:STRING=link \
+              2>&1 | tee android-artifact/android-cmake-configure.log
+            test -f /tmp/effects-android-arm64-cmake-preflight/build.ninja
+            echo '[PASS] Android arm64 + libpd CMake configuration completed'
 
       - run:
           name: Create Android debug signing keystore
@@ -327,7 +356,21 @@ jobs:
 
             if [ "$STATUS" != "0" ] && [ -f android-artifact/gradle-build.log ]; then
               echo "===== Gradle failure highlights ====="
-              grep -nE '(^|[^A-Za-z])(error:|fatal error:|FAILURE:|FAILED|Exception|undefined reference|ninja: build stopped|Execution failed for task)'                 android-artifact/gradle-build.log | tail -n 120 || true
+              grep -niE '(CMake Error|Cannot find source file|No SOURCES given|Configuring incomplete|Generate step failed|error:|fatal error:|FAILURE:|FAILED|Exception|undefined reference|ninja: build stopped|Execution failed for task)' android-artifact/gradle-build.log | head -n 120 || true
+              echo "===== First native/CMake diagnostic contexts ====="
+              python3 - <<'PY'
+import pathlib
+import re
+lines = pathlib.Path("android-artifact/gradle-build.log").read_text(errors="replace").splitlines()
+patterns = re.compile(r"CMake Error|Cannot find source file|No SOURCES given|Could NOT find|Configure step failed|Configuring incomplete|Generate step failed|ninja: error|fatal error:", re.I)
+hits = [i for i, line in enumerate(lines) if patterns.search(line)]
+for index in hits[:12]:
+    print(f"----- log lines {max(1,index-3)} through {min(len(lines),index+12)} -----")
+    for k in range(max(0,index-4), min(len(lines),index+12)):
+        print(f"{k+1}: {lines[k]}")
+if not hits:
+    print("No explicit CMake diagnostic found; attach android-artifact/gradle-build.log")
+PY
               echo "===== Gradle failure log tail ====="
               tail -n 300 android-artifact/gradle-build.log || true
             fi
