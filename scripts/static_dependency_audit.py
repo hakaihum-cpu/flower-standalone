@@ -1814,6 +1814,9 @@ if 'ndkVersion "26.1.10909125"' not in ci_config:
 # #220 had only Java stack-trace highlights. Capture the actual first CMake
 # diagnostic and preflight the same native graph before the Gradle task.
 for required in [
+    "Python syntax and Android exporter regression",
+    "python3 -m py_compile",
+    "python3 tests/effects_android_exporter_regression.py",
     "Configure Android arm64 CMake before Gradle",
     "android-cmake-configure.log",
     "android.toolchain.cmake",
