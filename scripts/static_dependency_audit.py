@@ -1805,6 +1805,24 @@ if 'new = \'version = "3.31.6"\'' not in pd_cmake:
     fail("Generated Projucer Android CMake version not patched to 3.31.6")
 if '"cmake;3.31.6"' not in ci_config:
     fail("Android SDK CMake 3.31.6 not installed in CI")
+# #220: Gradle silently picked installed NDK 28 despite job exporting 26.
+# Always make the generated Gradle project use the installed/pinned toolchain.
+if 'ndk = \'ndkVersion "26.1.10909125"\'' not in pd_cmake:
+    fail("Generated Android Gradle exporter missing exact NDK pin")
+if 'ndkVersion "26.1.10909125"' not in ci_config:
+    fail("CircleCI must assert generated Gradle NDK pin")
+# #220 had only Java stack-trace highlights. Capture the actual first CMake
+# diagnostic and preflight the same native graph before the Gradle task.
+for required in [
+    "Configure Android arm64 CMake before Gradle",
+    "android-cmake-configure.log",
+    "android.toolchain.cmake",
+    "test -s JuceLibraryCode/BinaryData.cpp",
+    "test -s JuceLibraryCode/JuceHeader.h",
+    "CMake Error|Cannot find source file|No SOURCES given",
+]:
+    if required not in ci_config:
+        fail(f"Native CMake / historical BinaryData preflight missing: {required}")
 if ci_config.find("name: Install Android SDK components") > ci_config.find("name: Real Pure Data libpd audio regression"):
     fail("Android CMake installed after Pd native test")
 if '"$PD_CMAKE" -S third_party/libpd' not in ci_config:
