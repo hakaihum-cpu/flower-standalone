@@ -14,30 +14,11 @@ jobs:
       - checkout
 
       - run:
-          name: Static POSE WALK source and 28-sprite audit
+          name: Static preflight before Android SDK or Gradle work
           command: |
             set -euo pipefail
-            python3 - \<<'PY'
-            from pathlib import Path
-            import re, base64
-            root = Path("pose_walk")
-            html = (root / "app/src/main/assets/index.html").read_text(encoding="utf-8")
-            assert "window.POSES" in html and "poseWalkDebug" in html
-            assert "<canvas" in html and "requestAnimationFrame" in html
-            assert "file:///android_asset/index.html" in (root/"app/src/main/java/com/posewalk/studio/MainActivity.java").read_text()
-            assert "com.posewalk.studio" in (root/"app/build.gradle").read_text()
-            assert "android:exported=\"true\"" in (root/"app/src/main/AndroidManifest.xml").read_text()
-            images = re.findall(r"data:image/png;base64,([A-Za-z0-9+/=]+)", html)
-            assert len(images) == 28, f"expected 28 embedded sprites, got {len(images)}"
-            for i, data in enumerate(images):
-                binary = base64.b64decode(data, validate=True)
-                assert binary.startswith(b"\x89PNG\r\n\x1a\n"), f"sprite {i} is not PNG"
-            scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, flags=re.I|re.S)
-            assert len(scripts) == 2, f"expected 2 inline scripts, got {len(scripts)}"
-            for i, script in enumerate(scripts):
-                assert script.strip(), f"empty script {i}"
-            print("[PASS] 28 embedded PNG sprites, offline scripts and Android WebView source")
-            PY
+            python3 -m py_compile pose_walk/scripts/static_preflight.py
+            python3 pose_walk/scripts/static_preflight.py
 
       - restore_cache:
           keys:
@@ -68,8 +49,8 @@ jobs:
             set +e
             "$HOME/gradle-8.9/bin/gradle" -p pose_walk :app:assembleDebug \
               --stacktrace --console=plain --no-daemon --max-workers=2 \
-              > android-artifact/gradle-build.log 2>&1
-            STATUS=$?
+              2>&1 | tee android-artifact/gradle-build.log
+            STATUS=${PIPESTATUS[0]}
             set -e
             if [ "$STATUS" -eq 0 ] && [ ! -s pose_walk/app/build/outputs/apk/debug/app-debug.apk ]; then
               echo "Gradle exited successfully but no debug APK was produced." >> android-artifact/gradle-build.log
