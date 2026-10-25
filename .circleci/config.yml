@@ -14,145 +14,113 @@ jobs:
       - checkout
 
       - run:
-          name: Static EP Sampler source preflight
+          name: Static POSE WALK source and 28-sprite audit
           command: |
             set -euo pipefail
-            test -f EP_Sampler/settings.gradle
-            test -f EP_Sampler/app/build.gradle
-            test -f EP_Sampler/app/src/main/cpp/SampleBank.cpp
-            test -f EP_Sampler/app/src/main/cpp/AudioEngine.cpp
-            test -f EP_Sampler/app/src/main/java/com/example/epsampler/MainActivity.java
-            grep -F "abiFilters 'arm64-v8a', 'armeabi-v7a'" EP_Sampler/app/build.gradle
-            grep -F 'signingConfig signingConfigs.debug' EP_Sampler/app/build.gradle
-            test ! -f EP_Sampler/app/src/main/assets/epbank_24bit_dedup.bin
-
-      - run:
-          name: Install Android SDK components
-          command: |
-            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-              "platforms;android-35" \
-              "build-tools;35.0.0" \
-              "ndk;26.1.10909125" \
-              "cmake;3.22.1"
-
-      - run:
-          name: Prepare Gradle 8.9
-          command: |
-            set -euo pipefail
-            curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle-8.9-bin.zip
-            rm -rf /tmp/gradle-8.9
-            unzip -q /tmp/gradle-8.9-bin.zip -d /tmp
-            echo 'export PATH=/tmp/gradle-8.9/bin:$PATH' >> "$BASH_ENV"
-
-      - run:
-          name: Create Android debug signing keystore
-          command: |
-            set -euo pipefail
-            mkdir -p "$HOME/.android"
-            rm -f "$HOME/.android/debug.keystore"
-            keytool -genkeypair -v \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android -alias androiddebugkey -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US" \
-              -keyalg RSA -keysize 2048 -validity 10000
+            python3 - <<'PY'
+            from pathlib import Path
+            import re, base64
+            root = Path("pose_walk")
+            html = (root / "app/src/main/assets/index.html").read_text(encoding="utf-8")
+            assert "window.POSES" in html and "poseWalkDebug" in html
+            assert "<canvas" in html and "requestAnimationFrame" in html
+            assert "file:///android_asset/index.html" in (root/"app/src/main/java/com/posewalk/studio/MainActivity.java").read_text()
+            assert "com.posewalk.studio" in (root/"app/build.gradle").read_text()
+            assert "android:exported=\"true\"" in (root/"app/src/main/AndroidManifest.xml").read_text()
+            images = re.findall(r"data:image/png;base64,([A-Za-z0-9+/=]+)", html)
+            assert len(images) == 28, f"expected 28 embedded sprites, got {len(images)}"
+            for i, data in enumerate(images):
+                binary = base64.b64decode(data, validate=True)
+                assert binary.startswith(b"\x89PNG\r\n\x1a\n"), f"sprite {i} is not PNG"
+            scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, flags=re.I|re.S)
+            assert len(scripts) == 2, f"expected 2 inline scripts, got {len(scripts)}"
+            for i, script in enumerate(scripts):
+                assert script.strip(), f"empty script {i}"
+            print("[PASS] 28 embedded PNG sprites, offline scripts and Android WebView source")
+            PY
 
       - restore_cache:
           keys:
-            - gradle-ep-sampler-v1-
+            - pose-walk-gradle-8-9-v1-
 
       - run:
-          name: Build EP Sampler APK
+          name: Prepare Android SDK 35 and pinned Gradle 8.9
+          command: |
+            set -euo pipefail
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+              "platforms;android-35" \
+              "build-tools;35.0.0"
+            if [ ! -x "$HOME/gradle-8.9/bin/gradle" ]; then
+              curl -fsSL --retry 3 --connect-timeout 30 \
+                https://services.gradle.org/distributions/gradle-8.9-bin.zip \
+                -o /tmp/pose-walk-gradle-8.9.zip
+              unzip -q /tmp/pose-walk-gradle-8.9.zip -d "$HOME"
+            fi
+            "$HOME/gradle-8.9/bin/gradle" --version
+
+      - run:
+          name: Build POSE WALK debug APK
           no_output_timeout: 30m
           command: |
             set -u
-            export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
-            export CMAKE_BUILD_PARALLEL_LEVEL=2
-            export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=2"
             mkdir -p android-artifact
-            LOG="$PWD/android-artifact/gradle-build.log"
-            EXIT_FILE="$PWD/android-artifact/gradle-exit-code.txt"
-
-            {
-              echo "[diagnostic] start $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              echo "[diagnostic] nproc=$(nproc)"
-              echo "[diagnostic] CMAKE_BUILD_PARALLEL_LEVEL=$CMAKE_BUILD_PARALLEL_LEVEL"
-              java -version 2>&1
-              free -m || true
-              df -h || true
-            } | tee "$LOG"
-
-            cd EP_Sampler
-            printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-
             set +e
-            gradle :app:assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2 >> "$LOG" 2>&1 &
-            GRADLE_PID=$!
-            echo "[diagnostic] gradle_pid=$GRADLE_PID" | tee -a "$LOG"
-
-            while kill -0 "$GRADLE_PID" 2>/dev/null; do
-              {
-                echo "[heartbeat] $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-                free -m || true
-                ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 16 || true
-              } | tee -a "$LOG"
-              sleep 30
-            done
-
-            wait "$GRADLE_PID"
+            "$HOME/gradle-8.9/bin/gradle" -p pose_walk :app:assembleDebug \
+              --stacktrace --console=plain --no-daemon --max-workers=2 \
+              > android-artifact/gradle-build.log 2>&1
             STATUS=$?
             set -e
-            cd ..
-            echo "$STATUS" | tee "$EXIT_FILE"
-            tail -n 250 "$LOG" || true
+            if [ "$STATUS" -eq 0 ] && [ ! -s pose_walk/app/build/outputs/apk/debug/app-debug.apk ]; then
+              echo "Gradle exited successfully but no debug APK was produced." >> android-artifact/gradle-build.log
+              STATUS=41
+            fi
+            echo "$STATUS" > android-artifact/gradle-exit-code.txt
+            tail -n 180 android-artifact/gradle-build.log || true
             exit 0
 
       - save_cache:
-          key: gradle-ep-sampler-v1-{{ epoch }}
+          key: pose-walk-gradle-8-9-v1-{{ epoch }}
           paths:
             - ~/.gradle/caches
-            - ~/.gradle/wrapper
+            - ~/gradle-8.9
 
       - run:
-          name: Collect EP Sampler APK
+          name: Collect POSE WALK APK and build provenance
           when: always
           command: |
             set -euo pipefail
             mkdir -p android-artifact
-            git rev-parse HEAD | tee android-artifact/SOURCE_COMMIT.txt
-            APK="$(find EP_Sampler/app/build/outputs/apk/release -type f -name '*.apk' | head -n 1 || true)"
-            if [ -n "$APK" ]; then
-              cp "$APK" android-artifact/EP-Sampler-Android.apk
-              sha256sum android-artifact/EP-Sampler-Android.apk | tee android-artifact/SHA256.txt
+            git rev-parse HEAD > android-artifact/SOURCE_COMMIT.txt
+            APK=pose_walk/app/build/outputs/apk/debug/app-debug.apk
+            if [ -s "$APK" ]; then
+              cp "$APK" android-artifact/POSE-WALK-debug.apk
+              sha256sum android-artifact/POSE-WALK-debug.apk > android-artifact/SHA256.txt
+              echo "[PASS] POSE-WALK-debug.apk collected"
             else
-              echo "No release APK produced." | tee android-artifact/NO_APK.txt
+              echo "Debug APK not available" > android-artifact/NO_APK.txt
             fi
-
-      - store_artifacts:
-          path: android-artifact/EP-Sampler-Android.apk
-          destination: EP-Sampler-Android.apk
 
       - store_artifacts:
           path: android-artifact
-          destination: diagnostics
+          destination: android-artifact
 
       - run:
-          name: Propagate Gradle build result
+          name: Propagate build result
           when: always
           command: |
             set -euo pipefail
-            if [ ! -f android-artifact/gradle-exit-code.txt ]; then
-              echo "Gradle exit code file is missing."
+            if [ ! -s android-artifact/gradle-exit-code.txt ]; then
+              echo "Build exit status missing"
               exit 97
             fi
             STATUS="$(cat android-artifact/gradle-exit-code.txt)"
-            echo "Gradle exit code: $STATUS"
-            if [ "$STATUS" != "0" ] && [ -f android-artifact/gradle-build.log ]; then
-              grep -nE '(^|[^A-Za-z])(error:|fatal error:|FAILURE:|FAILED|Exception|undefined reference|ninja: build stopped|Execution failed for task)' \
-                android-artifact/gradle-build.log | tail -n 120 || true
-              tail -n 300 android-artifact/gradle-build.log || true
+            if [ "$STATUS" != "0" ]; then
+              echo "Build FAILED, Gradle exit status: $STATUS"
+              exit "$STATUS"
             fi
-            exit "$STATUS"
+            test -s android-artifact/POSE-WALK-debug.apk
+            echo "[PASS] POSE WALK debug APK packaged"
 
 workflows:
   manual_android_build:
