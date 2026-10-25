@@ -46,12 +46,13 @@ assert cycle_match, "Missing pre-rendered WALK_CYCLE frames"
 cycle = json.loads(cycle_match.group(1))
 assert len(cycle) == 12, f"Expected 12 walking frames, got {len(cycle)}"
 for i, pose in enumerate(cycle):
-    assert pose["width"] == 44 and pose["height"] == 96, f"Wrong walking dimensions at {i}"
+    assert pose["footFacing"] == "right", f"Unexpected boot direction at {i}"
+    assert pose["width"] == 48 and pose["height"] == 96, f"Wrong walking dimensions at {i}"
     raw = base64.b64decode(pose["src"].split(",", 1)[1], validate=True)
     assert raw[:8] == b"\x89PNG\r\n\x1a\n", f"Invalid walking PNG at {i}"
     w, h = struct.unpack(">II", raw[16:24])
-    assert (w, h) == (44, 96), f"Walking PNG dimensions incorrect at {i}"
-assert len({p["src"] for p in cycle}) >= 7, "Generated interpolation images are missing"
+    assert (w, h) == (48, 96), f"Walking PNG dimensions incorrect at {i}"
+assert len({p["src"] for p in cycle}) == 12, "All twelve coherent walk images must be present"
 assert "let flip=moving?(state.dir<0)" in html, "Walking images not mirrored only when moving left"
 assert "im=moving?walkFrames[frameIndex]:imgs[poseIndex]" in html, "Walking animation is not using all interpolated images"
 assert "Math.floor(state.walkClock*12)%walkFrames.length" in html
@@ -79,4 +80,4 @@ assert "minSdk 24" in app_gradle
 assert "applicationId 'com.posewalk.studio'" in app_gradle
 assert "include ':app'" in settings
 assert not (root / "app/src/main/cpp").exists(), "Unwanted JNI/C++ source"
-print("[PASS] 28 original poses + 12 interpolated walk frames / directions / Android configuration")
+print("[PASS] 28 original poses + 12 consistent right-facing walking frames / directions / Android configuration")
