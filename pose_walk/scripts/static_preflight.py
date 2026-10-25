@@ -45,6 +45,8 @@ cycle_match = re.search(r"<script>window\.WALK_CYCLE=(\[.*?\]);</script>", html,
 assert cycle_match, "Missing pre-rendered WALK_CYCLE frames"
 cycle = json.loads(cycle_match.group(1))
 assert len(cycle) == 12, f"Expected 12 walking frames, got {len(cycle)}"
+boot_sources = {entry.get("bootSourceSHA256") for entry in cycle}
+assert len(boot_sources) == 1 and all(source and len(source) == 64 for source in boot_sources), "Feet use inconsistent boot sources"
 for i, pose in enumerate(cycle):
     assert pose["footFacing"] == "right", f"Unexpected boot direction at {i}"
     assert pose["width"] == 48 and pose["height"] == 96, f"Wrong walking dimensions at {i}"
@@ -80,4 +82,4 @@ assert "minSdk 24" in app_gradle
 assert "applicationId 'com.posewalk.studio'" in app_gradle
 assert "include ':app'" in settings
 assert not (root / "app/src/main/cpp").exists(), "Unwanted JNI/C++ source"
-print("[PASS] 28 original poses + 12 consistent right-facing walking frames / directions / Android configuration")
+print("[PASS] POSE WALK 28 poses, 12 walking frames, one consistent boot source, direction, Android configuration")
