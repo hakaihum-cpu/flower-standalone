@@ -8,7 +8,7 @@ parameters:
 jobs:
   android_build:
     docker:
-      - image: cimg/android:2026.08.1
+      - image: cimg/android:2026.08.1-node
     resource_class: medium
     steps:
       - checkout
@@ -19,6 +19,8 @@ jobs:
             set -euo pipefail
             python3 -m py_compile pose_walk/scripts/static_preflight.py
             python3 pose_walk/scripts/static_preflight.py
+            node --check pose_walk/tests/smoke_test.js
+            node pose_walk/tests/smoke_test.js
 
       - restore_cache:
           keys:
