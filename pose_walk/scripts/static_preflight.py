@@ -39,8 +39,22 @@ for pose in poses:
     assert w > 0 and h > 0, f"Zero sized PNG: {name}"
 
 script_blocks = re.findall(r"<script[^>]*>(.*?)</script>", html, flags=re.I | re.S)
-assert len(script_blocks) == 2, f"Expected 2 game script blocks, found {len(script_blocks)}"
+assert len(script_blocks) == 3, f"Expected 3 game script blocks, found {len(script_blocks)}"
 assert all(s.strip() for s in script_blocks)
+cycle_match = re.search(r"<script>window\.WALK_CYCLE=(\[.*?\]);</script>", html, flags=re.S)
+assert cycle_match, "Missing pre-rendered WALK_CYCLE frames"
+cycle = json.loads(cycle_match.group(1))
+assert len(cycle) == 12, f"Expected 12 walking frames, got {len(cycle)}"
+for i, pose in enumerate(cycle):
+    assert pose["width"] == 44 and pose["height"] == 96, f"Wrong walking dimensions at {i}"
+    raw = base64.b64decode(pose["src"].split(",", 1)[1], validate=True)
+    assert raw[:8] == b"\x89PNG\r\n\x1a\n", f"Invalid walking PNG at {i}"
+    w, h = struct.unpack(">II", raw[16:24])
+    assert (w, h) == (44, 96), f"Walking PNG dimensions incorrect at {i}"
+assert len({p["src"] for p in cycle}) >= 7, "Generated interpolation images are missing"
+assert "let flip=moving?(state.dir<0)" in html, "Walking images not mirrored only when moving left"
+assert "im=moving?walkFrames[frameIndex]:imgs[poseIndex]" in html, "Walking animation is not using all interpolated images"
+assert "Math.floor(state.walkClock*12)%walkFrames.length" in html
 
 java = (root / "app/src/main/java/com/posewalk/studio/MainActivity.java").read_text()
 assert "package com.posewalk.studio;" in java
@@ -65,4 +79,4 @@ assert "minSdk 24" in app_gradle
 assert "applicationId 'com.posewalk.studio'" in app_gradle
 assert "include ':app'" in settings
 assert not (root / "app/src/main/cpp").exists(), "Unwanted JNI/C++ source"
-print("[PASS] POSE WALK offline 28-image source / controls / Android source / AGP version audit")
+print("[PASS] 28 original poses + 12 interpolated walk frames / directions / Android configuration")
