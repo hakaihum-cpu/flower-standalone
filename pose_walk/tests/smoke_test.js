@@ -1,6 +1,6 @@
 'use strict';
 const vm=require('vm'),fs=require('fs'),path=require('path');
-const root=path.resolve(__dirname);
+const root=path.resolve(__dirname,'..');
 function makeClassList(){const s=new Set();return {add:x=>s.add(x),remove:x=>s.delete(x),toggle:(x,on)=>on?s.add(x):s.delete(x)}}
 class El {
   constructor(id){this.id=id;this.listeners={};this.dataset={};this.classList=makeClassList();this.children=[];this.hidden=false;this.scrollLeft=0;}
@@ -34,7 +34,7 @@ if(scripts.length!==3) throw Error('Expected exactly three game scripts');
 scripts.forEach(s=>new vm.Script(s));scripts.forEach(s=>vm.runInContext(s,env));
 const get=()=>env.window.poseWalkDebug();
 const walk=env.window.WALK_CYCLE;
-if(get().total!==28 || get().walkFrames!==12 || walk.length!==12)throw Error('Missing 28 poses or 12 interpolated frames');
+if(get().total!==28 || get().walkFrames!==12 || walk.length!==12)throw Error('Missing 28 poses or 12 coherent frames');
 if(els['pose-strip'].children.length!==28)throw Error('Wrong pose count');
 let now=0;
 function step(){now+=50;const f=raf;f(now);return render.samples.at(-1)}
@@ -48,15 +48,15 @@ let r=[];for(let t=0;t<35;t++)r.push({...step(), frame:get().walkFrame});
 if(get().x<=xStart||get().moving!==1||get().dir!==1)throw Error('Right walk control failed');
 if(r.some(x=>x.flipped))throw Error('Moving RIGHT must never mirror gait frames');
 if(r.some(x=>!walk.some(p=>p.src===x.src)))throw Error('Unknown RIGHT walking frame');
-if(new Set(r.map(x=>x.frame)).size!==12 || new Set(r.map(x=>x.src)).size!==7)throw Error('12-frame gait timing or 7 unique images missing RIGHT');
+if(new Set(r.map(x=>x.frame)).size!==12 || new Set(r.map(x=>x.src)).size!==12)throw Error('12-frame gait timing or 12 unique images missing RIGHT');
 els['move-right'].dispatch('pointerup');if(get().moving!==0)throw Error('Right walk release failed');
 els['move-left'].dispatch('pointerdown');
 let l=[];for(let t=0;t<35;t++)l.push({...step(), frame:get().walkFrame});
 if(get().moving!==-1||get().dir!==-1)throw Error('Left walk control failed');
 if(l.some(x=>!x.flipped))throw Error('Moving LEFT must mirror every gait frame');
 if(l.some(x=>!walk.some(p=>p.src===x.src)))throw Error('Unknown LEFT walking frame');
-if(new Set(l.map(x=>x.frame)).size!==12 || new Set(l.map(x=>x.src)).size!==7)throw Error('12-frame gait timing or 7 unique images missing LEFT');
+if(new Set(l.map(x=>x.frame)).size!==12 || new Set(l.map(x=>x.src)).size!==12)throw Error('12-frame gait timing or 12 unique images missing LEFT');
 els['move-left'].dispatch('pointerup');if(get().moving!==0)throw Error('Left walk release failed');
 tabs[2].dispatch('click');if(get().pose!==8)throw Error('Sit filter failed');
 els.reset.dispatch('click');if(get().pose!==0||get().x!==192)throw Error('Reset failed');
-console.log('PASS: 28 originals + 12 interpolated frames, right all unflipped, left all mirrored, controls, reset');
+console.log('PASS: 28 originals + 12 coherent frames, right all unflipped, left all mirrored, controls, reset');
