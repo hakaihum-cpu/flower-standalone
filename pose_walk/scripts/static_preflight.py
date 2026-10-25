@@ -45,10 +45,15 @@ cycle_match = re.search(r"<script>window\.WALK_CYCLE=(\[.*?\]);</script>", html,
 assert cycle_match, "Missing pre-rendered WALK_CYCLE frames"
 cycle = json.loads(cycle_match.group(1))
 assert len(cycle) == 12, f"Expected 12 walking frames, got {len(cycle)}"
-boot_sources = {entry.get("bootSourceSHA256") for entry in cycle}
-assert len(boot_sources) == 1 and all(source and len(source) == 64 for source in boot_sources), "Feet use inconsistent boot sources"
 for i, pose in enumerate(cycle):
     assert pose["footFacing"] == "right", f"Unexpected boot direction at {i}"
+    assert pose["derivedFromPose"] == 19, f"Unexpected upper-body source at {i}"
+    feet = pose["feet"]
+    assert len(feet) == 2, f"Expected two distinct legs at {i}"
+    for foot in feet:
+        assert foot["toeX"] == foot["ankleX"] + 6, f"Backwards toe at frame {i}"
+        assert 5 <= foot["ankleX"] <= 36 and 80 <= foot["ankleY"] <= 90, f"Foot out of bounds at {i}"
+    assert any(foot["ankleY"] == 89 for foot in feet), f"No grounded foot in frame {i}"
     assert pose["width"] == 48 and pose["height"] == 96, f"Wrong walking dimensions at {i}"
     raw = base64.b64decode(pose["src"].split(",", 1)[1], validate=True)
     assert raw[:8] == b"\x89PNG\r\n\x1a\n", f"Invalid walking PNG at {i}"
