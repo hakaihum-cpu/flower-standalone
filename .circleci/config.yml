@@ -17,7 +17,7 @@ jobs:
           name: Static POSE WALK source and 28-sprite audit
           command: |
             set -euo pipefail
-            python3 - <<'PY'
+            python3 - \<<'PY'
             from pathlib import Path
             import re, base64
             root = Path("pose_walk")
