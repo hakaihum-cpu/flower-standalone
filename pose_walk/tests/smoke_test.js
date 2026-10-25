@@ -35,7 +35,7 @@ scripts.forEach(s=>new vm.Script(s));scripts.forEach(s=>vm.runInContext(s,env));
 const get=()=>env.window.poseWalkDebug();
 const walk=env.window.WALK_CYCLE;
 if(get().total!==28 || get().walkFrames!==12 || walk.length!==12)throw Error('Missing 28 poses or 12 coherent frames');
-if(new Set(walk.map(frame=>frame.bootSourceSHA256)).size!==1 || !walk[0].bootSourceSHA256) throw Error('Different shoe sources found in walking cycle');
+if(walk.some(f=>f.derivedFromPose!==19 || f.feet.length!==2 || f.feet.some(foot=>foot.toeX!==foot.ankleX+6)))throw Error('Gait source or toe direction changed');
 if(els['pose-strip'].children.length!==28)throw Error('Wrong pose count');
 let now=0;
 function step(){now+=50;const f=raf;f(now);return render.samples.at(-1)}
