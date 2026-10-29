@@ -313,8 +313,8 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     // Keep the standalone editor inside the actual Android display bounds.
     // This mirrors the proven MIYAKO Android startup path rather than keeping
     // the desktop-only fixed 960x720 editor size.
-    juce::Desktop::getInstance().setOrientationsEnabled (
-        juce::Desktop::rotatedClockwise | juce::Desktop::rotatedAntiClockwise);
+    // Do not force orientation during startup. On the target 720x720 Android
+    // device this can tear down the JUCE activity window before it is drawn.
 
     int targetWidth = 900;
     int targetHeight = 405;
