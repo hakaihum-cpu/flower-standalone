@@ -169,6 +169,27 @@ jobs:
 
 
       - run:
+          name: Build pinned Model D circuit bridge for existing arm64 Android target
+          command: |
+            set -euo pipefail
+            # Existing CircleCI job, existing Android NDK pin, no separate workflow.
+            export RUSTUP_HOME="$HOME/.rustup"
+            export CARGO_HOME="$HOME/.cargo"
+            if ! command -v rustup >/dev/null 2>&1; then
+              curl --fail --location --silent --show-error https://sh.rustup.rs \
+                | sh -s -- -y --profile minimal --default-toolchain 1.97.0
+            fi
+            export PATH="$CARGO_HOME/bin:$PATH"
+            rustup toolchain install 1.97.0 --profile minimal
+            rustup target add aarch64-linux-android --toolchain 1.97.0
+            CLANG="$ANDROID_HOME/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
+            test -x "$CLANG"
+            export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CLANG"
+            cargo +1.97.0 build --release \
+              --target aarch64-linux-android \
+              --manifest-path native/moog_model_d/Cargo.toml
+            test -s native/moog_model_d/target/aarch64-linux-android/release/libca72_pd_bridge.a
+      - run:
           name: Generate Android Studio project from verified JUCER
           command: |
             set -euo pipefail
