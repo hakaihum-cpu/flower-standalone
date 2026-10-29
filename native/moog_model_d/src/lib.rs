@@ -39,9 +39,11 @@ impl Engine {
         let mut slots = Vec::with_capacity(count);
         // Build factory-calibrated circuit once; copies preserve the calibration
         // and avoid repeating a multi-second calibration for each MIDI voice.
-        let calibrated = Voice::prototype(sample_rate);
         for i in 0..count {
-            let mut voice = calibrated.clone();
+            // prototype() caches circuit calibration and explicitly reserves the
+            // key vectors. Cloning its returned Voice again would silently
+            // discard Vec capacity, allocating on MIDI note-on in audio thread.
+            let mut voice = Voice::prototype(sample_rate);
             voice.panel = panel;
             voice.start_oscillators_at(i as f64 / count as f64);
             slots.push(Slot { voice, pitch: None, age: 0, release_samples: 0 });
