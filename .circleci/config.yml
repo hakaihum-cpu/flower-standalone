@@ -19,6 +19,7 @@ jobs:
             set -euo pipefail
             python3 -m py_compile scripts/static_dependency_audit.py scripts/patch_android_effects_libpd.py scripts/patch_android_native_parallelism.py tests/effects_pd_static_check.py tests/effects_android_exporter_regression.py
             python3 tests/effects_android_exporter_regression.py
+            python3 tests/effects_moog_pd_static_check.py
 
       - run:
           name: API24 glob compatibility C regression
