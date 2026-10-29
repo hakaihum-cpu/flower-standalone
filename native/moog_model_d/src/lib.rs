@@ -25,7 +25,9 @@ impl Engine {
         let count = polyphony.clamp(1, MAX_POLY);
         let mut panel = Panel::default();
         // One entire modelled instrument per note: no shared voice oscillators.
-        panel.quality = Quality::Potato;
+        // Fidelity first: preserve CA-72's highest-fidelity circuit-derived path.
+        // Realtime CPU use on Android must be measured, not assumed.
+        panel.quality = Quality::NoCompromises;
         panel.priority = Priority::Low;
         panel.retrigger = true;
         panel.osc[0].on = true;
@@ -35,8 +37,12 @@ impl Engine {
         panel.osc[1].volume = 0.55;
         panel.osc[2].volume = 0.50;
         let mut slots = Vec::with_capacity(count);
+        // Build factory-calibrated circuit once; copies preserve the calibration
+        // and avoid repeating a multi-second calibration for each MIDI voice.
+        let calibrated = Voice::prototype(sample_rate);
         for i in 0..count {
-            let mut voice = Voice::new(sample_rate, panel);
+            let mut voice = calibrated.clone();
+            voice.panel = panel;
             voice.start_oscillators_at(i as f64 / count as f64);
             slots.push(Slot { voice, pitch: None, age: 0, release_samples: 0 });
         }
