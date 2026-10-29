@@ -88,3 +88,31 @@ if gr.count(ndk) != 1:
 gradle.write_text(gr)
 assert gr.count(new) == 1
 print("[PASS] generated JUCE Android JNI links pinned libpd_static, CMake 3.31.6, NDK 26.1.10909125")
+
+
+# EFFECTS_MOOG_MODEL_D_NATIVE_BEGIN
+# Add a specifically registered libpd native object. Keep the existing
+# JUCE audio stream and CircleCI workflow; no dynamic Pd externals lookup.
+moog_archive = (r / "native/moog_model_d/target/aarch64-linux-android/release/"
+                "libca72_pd_bridge.a")
+if not moog_archive.is_file():
+    raise SystemExit("[FAIL] Missing pinned CA-72 Android arm64 static library")
+if not (r / "Source/MoogPdExternal.c").is_file():
+    raise SystemExit("[FAIL] Missing Model D Pd native C adapter")
+moog_marker = "# EFFECTS_MOOG_MODEL_D_NATIVE_LINK_BEGIN"
+cmtext = cm.read_text()
+if moog_marker not in cmtext:
+    cmtext += """
+# EFFECTS_MOOG_MODEL_D_NATIVE_LINK_BEGIN
+target_sources(${BINARY_NAME} PRIVATE
+    "${CMAKE_CURRENT_LIST_DIR}/../../../Source/MoogPdExternal.c")
+# JUCE generated CMake uses the plain target_link_libraries signature.
+target_link_libraries(${BINARY_NAME}
+    "${CMAKE_CURRENT_LIST_DIR}/../../../native/moog_model_d/target/aarch64-linux-android/release/libca72_pd_bridge.a"
+    log atomic)
+# EFFECTS_MOOG_MODEL_D_NATIVE_LINK_END
+"""
+    cm.write_text(cmtext)
+assert cmtext.count(moog_marker) == 1
+print("[PASS] Pinned CA-72 Model D external linked into existing JUCE/libpd build")
+# EFFECTS_MOOG_MODEL_D_NATIVE_END
