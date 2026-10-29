@@ -1,0 +1,16 @@
+[package]
+name = "ca72_pd_bridge"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "GPL-3.0-or-later"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+ca72 = { git = "https://github.com/idlefoundry/ca-72", rev = "cfd5859e913b4969e5416abd026cce135c37ffad" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
