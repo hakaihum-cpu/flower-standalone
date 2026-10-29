@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include "z_libpd.h"
+extern "C" void moog_model_d_tilde_setup(void);
 
 // Real Pure Data Vanilla engine. Pd owns no Android audio device: JUCE supplies
 // and receives L/R PCM. libpd's fixed 64-frame ticks are adapted without
@@ -16,6 +17,7 @@ public:
         // There is exactly one Pd engine per EFFECTS standalone process.
         // libpd_init() is idempotent (-1 means already initialized).
         libpd_init();
+        moog_model_d_tilde_setup();
     }
 
     ~EffectsPureDataEngine()
