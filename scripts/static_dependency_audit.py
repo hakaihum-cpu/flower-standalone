@@ -172,4 +172,27 @@ for required_android_startup in [
         fail(f"Android standalone startup safeguard missing: {required_android_startup}")
 
 print("[PASS] Android standalone startup safeguards present")
+for required_startup_trace in [
+    "FLOWER_STARTUP P1 processor_ctor_begin",
+    "FLOWER_STARTUP P4 prepareToPlay_end",
+    "FLOWER_STARTUP E1 editor_ctor_begin",
+    "FLOWER_STARTUP E13 editor_ctor_end",
+    "FLOWER_STARTUP UI paint_",
+    "FLOWER_STARTUP UI resized_",
+    "FLOWER_STARTUP UI timer_",
+]:
+    if required_startup_trace not in source_text:
+        fail(f"Android startup trace marker missing: {required_startup_trace}")
+
+for required_trace_ci in [
+    'timeout 30s adb shell am start -W',
+    'grep -F "FLOWER_STARTUP"',
+    'startup-trace.txt',
+    'dumpsys activity lastanr',
+]:
+    if required_trace_ci not in circle:
+        fail(f"Android startup trace CI capture missing: {required_trace_ci}")
+
+print("[PASS] Android startup trace instrumentation present")
+
 print("[PASS] JUCER standalone Android structure present")

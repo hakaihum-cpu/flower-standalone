@@ -306,6 +306,10 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
       keyboard (processor.getKeyboardState(),
                 juce::MidiKeyboardComponent::horizontalKeyboard)
 {
+   #if JUCE_ANDROID
+    juce::Logger::writeToLog ("FLOWER_STARTUP E1 editor_ctor_begin");
+   #endif
+
     setLookAndFeel (&retroLookAndFeel);
     setOpaque (true);
 
@@ -337,25 +341,43 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     setResizable (true, true);
     setResizeLimits (640, 300, 1400, 700);
 
+    juce::Logger::writeToLog ("FLOWER_STARTUP E2 android_display_ready");
+
     // MIYAKO's proven Android standalone path explicitly discards any device
     // setup chosen by the generic standalone holder and reopens the default
     // Android stereo output as 0-in / 2-out. Keep the sequence identical.
     if (auto* holder = juce::StandalonePluginHolder::getInstance())
     {
+        juce::Logger::writeToLog ("FLOWER_STARTUP E3 audio_reinit_begin");
         holder->stopPlaying();
         holder->deviceManager.closeAudioDevice();
+        juce::Logger::writeToLog ("FLOWER_STARTUP E4 audio_device_closed");
 
         const auto audioError =
             holder->deviceManager.initialise (0, 2, nullptr, true);
+
+        juce::Logger::writeToLog (
+            audioError.isEmpty()
+                ? "FLOWER_STARTUP E5 audio_initialise_returned_ok"
+                : "FLOWER_STARTUP E5 audio_initialise_returned_error");
 
         if (audioError.isNotEmpty())
             juce::Logger::writeToLog (
                 "FLOWER Android audio initialise failed: " + audioError);
 
         holder->startPlaying();
+        juce::Logger::writeToLog ("FLOWER_STARTUP E6 audio_reinit_end");
+    }
+    else
+    {
+        juce::Logger::writeToLog ("FLOWER_STARTUP E3 holder_missing");
     }
    #else
     setSize (960, 720);
+   #endif
+
+   #if JUCE_ANDROID
+    juce::Logger::writeToLog ("FLOWER_STARTUP E7 ui_components_begin");
    #endif
 
     addAndMakeVisible (flowerPanel);
@@ -464,6 +486,10 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
     comboAttachments.push_back (
         std::make_unique<ComboAttachment> (state, ParamIDs::lfoTarget, synthLfoTarget));
 
+   #if JUCE_ANDROID
+    juce::Logger::writeToLog ("FLOWER_STARTUP E8 parameter_attachments_ready");
+   #endif
+
     flowerClear.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff302a22));
     flowerClear.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffd6cba5));
     synthButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff302a22));
@@ -481,19 +507,45 @@ FlowerStandaloneAudioProcessorEditor::FlowerStandaloneAudioProcessorEditor (
             setParameterNormalized (parameter, position);
     };
 
+   #if JUCE_ANDROID
+    juce::Logger::writeToLog ("FLOWER_STARTUP E9 atlas_load_begin");
+   #endif
+
     const bool atlasLoaded = flowerAnimation.loadEmbeddedAtlas (
         BinaryData::flower_embedded_atlas_png,
         static_cast<size_t> (BinaryData::flower_embedded_atlas_pngSize));
 
+   #if JUCE_ANDROID
+    juce::Logger::writeToLog (
+        atlasLoaded
+            ? "FLOWER_STARTUP E10 atlas_load_ok"
+            : "FLOWER_STARTUP E10 atlas_load_failed");
+   #endif
+
     if (atlasLoaded)
     {
-        flowerAnimation.loadHighResWalkStrip (
+        const bool walkLoaded = flowerAnimation.loadHighResWalkStrip (
             BinaryData::flower_actor_v3_walk_student01_png,
             static_cast<size_t> (BinaryData::flower_actor_v3_walk_student01_pngSize),
             0, true);
+
+       #if JUCE_ANDROID
+        juce::Logger::writeToLog (
+            walkLoaded
+                ? "FLOWER_STARTUP E11 walk_strip_ok"
+                : "FLOWER_STARTUP E11 walk_strip_failed");
+       #endif
     }
 
+   #if JUCE_ANDROID
+    juce::Logger::writeToLog ("FLOWER_STARTUP E12 timer_start_begin");
+   #endif
+
     startTimerHz (20);
+
+   #if JUCE_ANDROID
+    juce::Logger::writeToLog ("FLOWER_STARTUP E13 editor_ctor_end");
+   #endif
 }
 
 FlowerStandaloneAudioProcessorEditor::~FlowerStandaloneAudioProcessorEditor()
@@ -504,6 +556,13 @@ FlowerStandaloneAudioProcessorEditor::~FlowerStandaloneAudioProcessorEditor()
 
 void FlowerStandaloneAudioProcessorEditor::paint (juce::Graphics& g)
 {
+   #if JUCE_ANDROID
+    static int paintTraceCount = 0;
+    if (paintTraceCount < 3)
+        juce::Logger::writeToLog (
+            "FLOWER_STARTUP UI paint_" + juce::String (++paintTraceCount));
+   #endif
+
     g.fillAll (juce::Colour (0xff080807));
 }
 
@@ -516,6 +575,14 @@ void FlowerStandaloneAudioProcessorEditor::showSynth (bool shouldShow)
 
 void FlowerStandaloneAudioProcessorEditor::resized()
 {
+   #if JUCE_ANDROID
+    static int resizeTraceCount = 0;
+    if (resizeTraceCount < 12)
+        juce::Logger::writeToLog (
+            "FLOWER_STARTUP UI resized_" + juce::String (++resizeTraceCount)
+            + " " + juce::String (getWidth()) + "x" + juce::String (getHeight()));
+   #endif
+
     flowerPanel.setBounds (getLocalBounds().reduced (28, 22));
 
     auto flower = flowerPanel.getLocalBounds().reduced (14);
@@ -619,6 +686,13 @@ void FlowerStandaloneAudioProcessorEditor::resized()
 
 void FlowerStandaloneAudioProcessorEditor::timerCallback()
 {
+   #if JUCE_ANDROID
+    static int timerTraceCount = 0;
+    if (timerTraceCount < 3)
+        juce::Logger::writeToLog (
+            "FLOWER_STARTUP UI timer_" + juce::String (++timerTraceCount));
+   #endif
+
     std::array<float, FlowerStandaloneAudioProcessor::flowerWaveformBins> waveform {};
     std::array<float, FlowerStandaloneAudioProcessor::flowerGrainCount> grainPositions {};
 

@@ -357,7 +357,7 @@ jobs:
               if ! echo "$COMPONENT" | grep -q '/'; then
                 STATUS=13
               else
-                adb shell am start -W -n "$COMPONENT" \
+                timeout 30s adb shell am start -W -n "$COMPONENT" \
                   > emulator-artifact/activity-start.txt 2>&1 || STATUS=14
               fi
             fi
@@ -365,10 +365,14 @@ jobs:
             if [ "$STATUS" -eq 0 ]; then
               sleep 2
               adb shell pidof "$PACKAGE" | tr -d '\r' > emulator-artifact/pid-initial.txt || true
+              adb shell input tap 100 100 >/dev/null 2>&1 || true
               sleep 20
             fi
 
             adb logcat -d -v threadtime > emulator-artifact/logcat.txt 2>&1 || true
+            grep -F "FLOWER_STARTUP" emulator-artifact/logcat.txt \
+              > emulator-artifact/startup-trace.txt 2>/dev/null || true
+            adb shell dumpsys activity lastanr > emulator-artifact/lastanr.txt 2>&1 || true
             adb shell dumpsys activity activities > emulator-artifact/activities.txt 2>&1 || true
             adb shell dumpsys activity processes > emulator-artifact/processes.txt 2>&1 || true
             adb shell dumpsys window windows > emulator-artifact/windows.txt 2>&1 || true
