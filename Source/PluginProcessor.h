@@ -11,6 +11,7 @@
 #include "EffectsCloudsEngine.h"
 #include "VongonInspiredProcessor.h"
 #include "EffectsPureDataEngine.h"
+#include "EffectsMoodEngine.h"
 
 class RealtimeChordFxAudioProcessor final : public juce::AudioProcessor
 {
@@ -74,6 +75,16 @@ public:
     {
         return vongonProcessor.getDirectCc (mode, cc);
     }
+    void captureMood() noexcept { moodProcessor.requestCapture(); }
+    bool moodHasCapture() const noexcept { return moodProcessor.hasCapture(); }
+    void moodNote (int note, bool down) noexcept { moodProcessor.setUiNote (note, down); }
+    int getMoodNote() const noexcept { return moodProcessor.activeNote(); }
+    void setMoodXY (float x, float y) noexcept { moodProcessor.setXY (x, y); }
+    float getMoodXY (bool axisX) const noexcept { return moodProcessor.getXY (axisX); }
+    void setMoodAxisCc (bool axisX, int cc) noexcept { moodProcessor.setAxis (axisX, cc); }
+    int getMoodAxisCc (bool axisX) const noexcept { return moodProcessor.getAxis (axisX); }
+    void setMoodCc (int cc, int value) noexcept { moodProcessor.setCc (cc, value); }
+    int getMoodCc (int cc) const noexcept { return moodProcessor.getCc (cc); }
     void triggerVongonPolyphrase() noexcept
     {
         vongonProcessor.requestPolyTrigger();
@@ -168,6 +179,7 @@ private:
 
     VongonInspiredProcessor vongonProcessor;
     EffectsPureDataEngine pdEngine;
+    EffectsMoodEngine moodProcessor;
     std::atomic<float> vongonX { 0.5f };
     std::atomic<float> vongonY { 0.5f };
     std::atomic<bool> vongonTouch { false };
