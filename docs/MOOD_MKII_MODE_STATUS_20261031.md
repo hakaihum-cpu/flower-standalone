@@ -9,7 +9,7 @@ Official MIDI manual: https://static1.squarespace.com/static/689b53dbdfec6d3f105
 - The MOOD keyboard starts at C4-C5 (MIDI 60-72). OCT- / OCT+ beside LOAD TILES select C-1 to C9, allowing every standard MIDI note 0..127 across the pages. In the final page, notes above 127 are visibly disabled and do not transmit. Held notes are released before changing pages. Each playable key displays its MIDI note number; external MIDI is passed through when MIDI CONTROL is enabled.
 - X/Y touch movement emits the user-selected MIDI CCs with values 0..127. Labels can be tapped to select among CC14–23, CC58, CC80–84 (existing choices retained). Help is visible beneath the controller.
 - Both MOOD MIDI reception and UI-generated output use the shared MIDI CH setting in CONFIG > MIDI SETTINGS. MIDI CONTROL must be ON and MIDI OUT selected for external commands.
-- The 343 user-provided JPEG frames are bundled into the APK through the existing CircleCI materializer and JUCE resource system. Images change only when the input-onset, MIDI note or XY change conditions are met; there is no fixed frame timer.
+- The 433 user-provided JPEG frames (343 approved, 90 new) are bundled into the APK through the existing CircleCI materializer and JUCE resource system. Images change only when the input-onset, MIDI note or XY change conditions are met; there is no fixed frame timer.
 - All prior effect modes and audio DSP paths remain unchanged.
 
 ## Not implemented / incomplete
@@ -20,20 +20,29 @@ Official MIDI manual: https://static1.squarespace.com/static/689b53dbdfec6d3f105
 - The MIDI output is controlled by the existing device and enable settings; no separate connection mechanism is introduced.
 
 ## Asset format
-`mood_frames.pack` header `CRF1`, little-endian uint32 count(343), 343 entries uint64 offset + uint32 JPEG length, then JPEG bytes, exactly as read by `Source/FramePack.cpp`.
+`mood_frames.pack` header `CRF1`, little-endian uint32 count(433), 433 entries uint64 offset + uint32 JPEG length, then JPEG bytes, exactly as read by `Source/FramePack.cpp`.
 Frame order: source image 1 rows 0..9, columns 0..9, then source image 2, 3, 4. Each tile is a square crop (grid border excluded) resized to 150×150 pixels; photos are user-supplied and remain black and white.
 
 ## Release gate
 1. Verify each CC and actual sound effect; compare native note-on/off and UI keyboard; choose independently from incoming MIDI.
-2. Verify automatic loading of 343 bundled frames, random transitions and DOT mode on Android 12/RG rotate.
+2. Verify automatic loading of 433 bundled frames, random transitions and DOT mode on Android 12/RG rotate.
 3. Confirm no clicks, excessive xrun, feedback runaway, frozen capture glitch, dry/wet multiplication.
 4. Check UI 720×720, menu selection all 13 entries, transparency and no overlap with EFFECTS, DRY, BOOST, CONFIG.
 5. Static check and (only when approved) manual CircleCI run_build=true. Do not merge or build implicitly.
 
 ## MOOD XY recorder, panel and audible-response controls
 - Like MULTI, the MOOD XY recorder runs on the 30 Hz editor timer, stores up to 1800 XY frames (~60 s), loops them after recording and sends the corresponding MIDI CC values to the selected MIDI OUT. No audio is recorded. Tap the XY pad to start recording; tap again to stop and play; hold the pad >=700 ms to clear. Dragging the pad interrupts playback for direct control. Header also has REC, PLAY, CLEAR.
-- MOOD lower panel has a CLOSE button at the upper-right corner; when hidden, the header has PANEL to reopen it. The full-height XY surface remains playable while the panel is hidden. Existing embedded 343 frames, keyboard octave selector and CC buttons are unchanged.
+- MOOD lower panel has a CLOSE button at the upper-right corner; when hidden, the header has PANEL to reopen it. The full-height XY surface remains playable while the panel is hidden. Existing embedded 433 frames, keyboard octave selector and CC buttons are unchanged.
 - MOOD enters without sending the default CC102=0, which previously bypassed the user's physical Micro-Looper. Only a user-triggered CAPTURE/LOOP OFF or explicit incoming CC102 may cause CC102 to be transmitted; incoming channel changes are respected.
 - For CC21 (Wet Mode), CC22 (Routing), CC23 (Micro-Looper mode), the XY 0..127 range is quantized to the 3 real hardware switch values 1/2/3 rather than sending continuous arbitrary numbers; display now shows the current outgoing CC value or LEFT/MID/RIGHT. The pedal's actual audible response still depends on mode, bypass, routing, loop content, audio signal and possible stepped ranges. A one-way MIDI interface cannot query its physical switch positions.
 - MOOD remains MIDI-only: no app audio, no DSP, no INPUT GAIN. No Android build or hardware regression has been run for these changes. Do not change main or trigger CircleCI without permission.
 - MOOD software keyboard sends MIDI Note On to enter the pedal's Synth Mode. After the final software Note Off and when no new key events remain, it sends CC59=2 to exit Synth Mode and restore the previous ordinary wet/micro-looper FX sound without changing CC102/CC103 bypass states. While another key is pending (keyboard slide), this exit is deferred; when leaving MOOD mode, the held note and Synth Mode are released. This is based on the official MIDI manual pp. 9-14; real-pedal validation remains outstanding.
+
+## Additional 9x10 black-and-white sheet (90 frames)
+- Source: user-supplied photo grid, 9 columns by 10 rows; 90 distinct tiles, JPEG 150x150.
+- Approved base: 343 JPEGs, SHA256 035ef6cca6deff441b39ed51a9c3df9cbbe1b67548922bac1db3460a4f2438a4.
+- New payload: 568047 JPEG bytes, SHA256 e22253104437247cb725be42872a75d91dd6b538f8de04332f3b6961047f1de5.
+- Combined pack: 433 frames, 2785693 bytes, SHA256 ab78e1ae79d3b7f812ded6e3f7c0295e617e2742fc22c315a9c80fe5273cdb77.
+- Build materializer requires sixteen committed Base64 chunks in Resources/mood_frame_additions/mood_add_00.b64..mood_add_15.b64 and mood_append_sizes.txt.
+- The original 343 JPEGs are copied without modification. Existing MOOD video behavior, MIDI, audio, patches and UI remain unchanged.
+- This feature branch is not eligible for a CircleCI build until the exact sixteen image chunks are committed and the materializer succeeds; no build should be triggered on an incomplete tree.
