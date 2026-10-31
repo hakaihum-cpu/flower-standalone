@@ -110,7 +110,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     chordMidiRefreshRequested = false;
     chordMidiStopRequested = false;
     chordMidiGateOpen = false;
-    lastEffectMode = juce::jlimit (0, 9, juce::roundToInt (
+    lastEffectMode = juce::jlimit (0, 10, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     lastChordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -527,7 +527,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     const bool midiClockMode =
         apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
-    const int effectMode = juce::jlimit (0, 9, juce::roundToInt (
+    const int effectMode = juce::jlimit (0, 10, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
@@ -694,6 +694,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         chordBRandomFx.reset();
         hazeProcessor.clear();
         vongonProcessor.reset();
+        moodProcessor.reset();
         vongonTouch.store (false, std::memory_order_relaxed);
         chordReverb.reset();
         haveChord = false;
