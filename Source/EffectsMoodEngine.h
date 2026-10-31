@@ -24,7 +24,7 @@ public:
         capturedStart = 0;
         capturedReady.store (false, std::memory_order_relaxed);
         captureFlag.store (false, std::memory_order_relaxed);
-        playHead = 0.0; env = 0.0f;
+        playHead = 0.0; playSpeed = 1.0; rampPhase = 0.0; env = 0.0f;
         lastNote = -1;
         envStage = 0;
         midiNote = -1;
@@ -38,6 +38,8 @@ public:
         setCc (17, 50); // WET MODIFY
         setCc (18, 100); // CLOCK
         setCc (19, 92); // MICRO MODIFY: 1x forward, TAPE mode
+        setCc (20, 0);  // RAMP disabled by default
+        setCc (84, 0);  // no portamento by default
         setCc (21, 1);  // WET CHANNEL: REVERB
         setCc (22, 2);  // ROUTING: LOOP+IN
         setCc (23, 2);  // MICRO LOOPER: TAPE
@@ -61,6 +63,8 @@ public:
         uiNote.store (-1, std::memory_order_relaxed);
         env = 0.0f;
         playHead = 0.0;
+        playSpeed = 1.0;
+        rampPhase = 0.0;
     }
     void requestCapture() noexcept { captureFlag.store (true, std::memory_order_release); }
     bool hasCapture() const noexcept { return capturedReady.load (std::memory_order_acquire); }
@@ -137,6 +141,7 @@ public:
         const float mix = (float) getCc (15) / 127.0f;
         const float modify = (float) getCc (19) / 127.0f;
         const float wetModify = (float) getCc (17) / 127.0f;
+        const float rampDepth = (float) getCc (20) / 127.0f;
         const float clock = (float) getCc (18) / 127.0f;
         const int wetMode = getCc (21) <= 1 ? 0 : (getCc (21) == 2 ? 1 : 2);
         const int loopMode = getCc (23) <= 1 ? 0 : (getCc (23) == 2 ? 1 : 2);
@@ -202,7 +207,12 @@ public:
             else if (speedCc <= 111) microRate = 2.0;
             else if (speedCc <= 126) microRate = 1.5;
         }
-        const double speed = noteRate * clockRate * microRate;
+        const double targetSpeed = noteRate * clockRate * microRate;
+        const double portamento = (double) getCc (84) / 127.0;
+        const double portSeconds = 0.005 + 0.8 * portamento * portamento;
+        const double glide = portamento < 0.0001
+            ? 1.0
+            : 1.0 - std::exp (-1.0 / (rate * portSeconds));
         const int delayTap = juce::jlimit (64, delaySize - 1, (int) ((0.065f + time * 0.68f) * rate));
         for (int i = 0; i < n; ++i)
         {
@@ -214,6 +224,12 @@ public:
                 source[ch] = in;
             }
             historyPos = (historyPos + 1) % histSize;
+            playSpeed += (targetSpeed - playSpeed) * glide;
+            // A simple bipolar ramp modulation for wet feedback.
+            // This is an approximation, not the pedal's ramp waveform engine.
+            rampPhase += (0.05 + 2.2 * clock) / rate;
+            if (rampPhase >= 1.0) rampPhase -= 1.0;
+            const float rampWave = 1.0f - 4.0f * std::abs ((float) rampPhase - 0.5f);
             if (active && capturedLength >= 128 && loopOn)
             {
                 const int a = ((int) playHead) % capturedLength;
@@ -264,7 +280,7 @@ public:
                                   routing == 1 ? 0.35f * source[ch] + 0.65f * voiced * gate
                                                : voiced * gate);
                 }
-                playHead += speed;
+                playHead += playSpeed;
                 while (playHead >= capturedLength) playHead -= capturedLength;
                 while (playHead < 0.0) playHead += capturedLength;
             }
@@ -275,8 +291,10 @@ public:
                     const int tap = (spatialPos + delaySize - delayTap - ch * 23 + delaySize) % delaySize;
                     const float delayed = spatial[(size_t) ch][(size_t) tap];
                     // REVERB smears feedback; DELAY preserves transients; SLIP offsets read phase.
-                    const float feedback = wetMode == 0 ? (0.55f + 0.30f * wetModify)
-                                                        : (0.20f + 0.65f * wetModify);
+                    const float modulatedWet = juce::jlimit (0.0f, 1.0f,
+                        wetModify + rampDepth * rampWave * 0.30f);
+                    const float feedback = wetMode == 0 ? (0.55f + 0.30f * modulatedWet)
+                                                        : (0.20f + 0.65f * modulatedWet);
                     const float smoothed = wetMode == 1 ? delayed : 0.65f * filtered[(size_t) ch] + 0.35f * delayed;
                     filtered[(size_t) ch] = smoothed;
                     const bool frozen = getCc (105) > 0;
@@ -297,7 +315,7 @@ private:
     std::array<std::vector<float>, 2> history, captured, spatial;
     std::array<float, 2> filtered {};
     int historyPos = 0, spatialPos = 0, capturedLength = 0, capturedStart = 0;
-    double playHead = 0.0;
+    double playHead = 0.0, playSpeed = 1.0, rampPhase = 0.0;
     float env = 0.0f, noteVelocity = 1.0f;
     int envStage = 0; // 0 off, 1 attack, 2 decay, 3 sustain, 4 release
     int midiNote = -1, lastNote = -1;
