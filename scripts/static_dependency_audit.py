@@ -608,6 +608,40 @@ if "if (note != moodPreviousNote || onset || xyChange > 0.055f)" not in mood_vis
 
 processor_controls = (R / "Source/PluginProcessor.cpp").read_text()
 processor_header = (R / "Source/PluginProcessor.h").read_text()
+# MOOD controls an external Chase Bliss pedal on the global MIDI OUT channel.
+# Regression guard: no local DSP, no input gain, CC102 capture and real CC/notes.
+for need in [
+    "if (effectMode != 10)",
+    "if (effectMode == 10)\n    {\n        buffer.clear();\n        return;",
+    "processMoodMidi (midi, midiInputChannel, enabled)",
+    "moodLoopEngaged.load (std::memory_order_acquire) ? 127 : 0",
+    "juce::MidiMessage::controllerEvent (channel, cc, value)",
+    "juce::MidiMessage::noteOn (",
+    "juce::MidiMessage::noteOff (",
+]:
+    if need not in processor:
+        fail(f"MOOD MIDI-only/audio-bypass contract missing: {need}")
+if "moodProcessor.process (buffer)" in processor:
+    fail("MOOD local audio DSP must not be called")
+for need in [
+    "MIDI ONLY - INPUT GAIN OFF",
+    "TAP LABEL TO ASSIGN MIDI CC",
+    "CAPTURE: LOOP CC102",
+    "moodMidiEnabled",
+    "processor.moodHasCapture() ? \"LOOP OFF\" : \"CAPTURE\"",
+]:
+    if need not in editor:
+        fail(f"MOOD MIDI UI contract missing: {need}")
+for need in [
+    "moodCaptureDirty",
+    "moodLoopEngaged",
+    "moodUiNote",
+    "moodExternalNote",
+    "void processMoodMidi (juce::MidiBuffer&, int channel, bool enabled);",
+]:
+    if need not in processor_header:
+        fail(f"MOOD external MIDI queue missing: {need}")
+
 parameter_ids = (R / "Source/ParameterIDs.h").read_text()
 for need in [
     "ParamID::wet",

@@ -489,22 +489,28 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 {
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
+    const int effectMode = juce::jlimit (0, 10, juce::roundToInt (
+        apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const int availableInputChannels =
         juce::jmax (1, juce::jmin (getTotalNumInputChannels(), buffer.getNumChannels()));
 
     // INPUT GAIN affects the actual input of every EFFECTS mode, including
     // the monitored dry signal. Smooth changes to prevent gain-step clicks.
-    const float gainTarget = juce::Decibels::decibelsToGain (
-        apvts.getRawParameterValue (ParamID::inputGainDb)->load());
-    const float gainStep = 1.0f - std::exp (
-        -1.0f / juce::jmax (1.0f, (float) currentSampleRate * 0.020f));
-    for (int i = 0; i < n; ++i)
+    // MOOD is an external MIDI-only pedal controller; it never amplifies input.
+    if (effectMode != 10)
     {
-        inputGainLinearSmoothed += gainStep
-            * (gainTarget - inputGainLinearSmoothed);
-        for (int channel = 0; channel < availableInputChannels; ++channel)
-            buffer.setSample (channel, i,
-                buffer.getSample (channel, i) * inputGainLinearSmoothed);
+        const float gainTarget = juce::Decibels::decibelsToGain (
+            apvts.getRawParameterValue (ParamID::inputGainDb)->load());
+        const float gainStep = 1.0f - std::exp (
+            -1.0f / juce::jmax (1.0f, (float) currentSampleRate * 0.020f));
+        for (int i = 0; i < n; ++i)
+        {
+            inputGainLinearSmoothed += gainStep
+                * (gainTarget - inputGainLinearSmoothed);
+            for (int channel = 0; channel < availableInputChannels; ++channel)
+                buffer.setSample (channel, i,
+                    buffer.getSample (channel, i) * inputGainLinearSmoothed);
+        }
     }
 
     // Preserve the original, input-gain-adjusted samples before any effect
@@ -527,8 +533,6 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
 
     const bool midiClockMode =
         apvts.getRawParameterValue (ParamID::clockMode)->load() >= 0.5f;
-    const int effectMode = juce::jlimit (0, 10, juce::roundToInt (
-        apvts.getRawParameterValue (ParamID::effectMode)->load()));
     const int chordMode = juce::jlimit (0, 1, juce::roundToInt (
         apvts.getRawParameterValue (ParamID::chordMode)->load()));
 
@@ -551,6 +555,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     if (effectMode != lastEffectMode)
     {
         lastEffectMode = effectMode;
+        moodExternalNote.store (-1, std::memory_order_relaxed);
         resetModeAudioState (effectMode);
         // Do not reuse stale pitch from another effect; keep the detector
         // and its CPU budget completely separate from CHORD tracking.
@@ -590,8 +595,20 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     for (const auto event : midi)
     {
         const auto& message = event.getMessage();
-        if (effectMode == 10)
+        if (effectMode == 10 && message.isForChannel (midiInputChannel))
+        {
             moodProcessor.handleMidi (message, midiInputChannel);
+            if (message.isNoteOn())
+                moodExternalNote.store (message.getNoteNumber(), std::memory_order_relaxed);
+            else if (message.isNoteOff()
+                     && message.getNoteNumber() == moodExternalNote.load (std::memory_order_relaxed))
+                moodExternalNote.store (-1, std::memory_order_relaxed);
+            else if (message.isController() && message.getControllerNumber() == 102)
+            {
+                moodLoopEngaged.store (message.getControllerValue() > 0, std::memory_order_relaxed);
+                moodCaptureDirty.store (false, std::memory_order_relaxed);
+            }
+        }
         if (effectMode >= 5 && effectMode <= 8)
             vongonProcessor.handleMidi (
                 message, effectMode, midiInputChannel, event.samplePosition);
@@ -677,8 +694,24 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     if (effectMode == 9)
         pdEngine.captureMidi (midi);
 
-    midi.clear();
-    processMidiController (midi, n);
+    if (effectMode == 10)
+    {
+        // Keep hardware MIDI IN for pass-through; only MOOD-specific UI
+        // events are appended. The normal EFFECTS XY mapper is disabled.
+        const bool enabled = apvts.getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
+        if (! enabled) midi.clear();
+        processMoodMidi (midi, midiInputChannel, enabled);
+        // Never leave previously generated CHORD/CHORDBOT notes held
+        // when changing to the external hardware-only MOOD mode.
+        processChordBotMidi (midi);
+        processChordMidi (midi);
+    }
+    else
+    {
+        midi.clear();
+        processMoodMidi (midi, midiInputChannel, false); // release held MOOD note
+        processMidiController (midi, n);
+    }
 
     if (clearRequested.exchange (false, std::memory_order_acq_rel))
     {
@@ -843,6 +876,14 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
                       + 0.18f * blockPeak,
                       std::memory_order_relaxed);
 
+    // MOOD is MIDI-only. Audio is never processed or emitted; raw input
+    // analysis above remains available solely for the event-driven visuals.
+    if (effectMode == 10)
+    {
+        buffer.clear();
+        return;
+    }
+
     // HAZE continuously records the raw input, even when another EFFECTS mode
     // is visible. Output bypass does not stop the record heads; LOCK does.
     hazeProcessor.setParams (hazeParamsFromState());
@@ -935,10 +976,6 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             vongonX.load (std::memory_order_relaxed),
             vongonY.load (std::memory_order_relaxed),
             vongonTouch.load (std::memory_order_relaxed));
-    }
-    else if (effectMode == 10)
-    {
-        moodProcessor.process (buffer);
     }
     else if (effectMode == 9)
     {
@@ -1453,6 +1490,54 @@ int RealtimeChordFxAudioProcessor::quantiseControllerNote (int value) const
     }
     return value;
 }
+
+void RealtimeChordFxAudioProcessor::processMoodMidi (
+    juce::MidiBuffer& out, int channel, bool enabled)
+{
+    channel = juce::jlimit (1, 16, channel);
+    const int note = enabled ? moodUiNote.load (std::memory_order_acquire) : -1;
+    if (moodLastSentNote >= 0
+        && (note != moodLastSentNote || channel != moodLastSentChannel))
+    {
+        out.addEvent (juce::MidiMessage::noteOff (
+            moodLastSentChannel, moodLastSentNote), 0);
+        moodLastSentNote = -1;
+    }
+    if (! enabled)
+    {
+        moodLastCcChannel = -1;
+        return;
+    }
+    if (note >= 0 && moodLastSentNote < 0)
+    {
+        out.addEvent (juce::MidiMessage::noteOn (
+            channel, note, (juce::uint8) 100), 0);
+        moodLastSentNote = note;
+        moodLastSentChannel = channel;
+    }
+
+    // A channel change must synchronize MOOD's present controls.
+    const bool changedChannel = moodLastCcChannel != channel;
+    if (changedChannel || moodCaptureDirty.exchange (false, std::memory_order_acq_rel))
+        out.addEvent (juce::MidiMessage::controllerEvent (
+            channel, 102,
+            moodLoopEngaged.load (std::memory_order_acquire) ? 127 : 0), 0);
+
+    for (int axis = 0; axis < 2; ++axis)
+    {
+        const bool xAxis = axis == 0;
+        auto& dirty = xAxis ? moodXDirty : moodYDirty;
+        if (changedChannel || dirty.exchange (false, std::memory_order_acq_rel))
+        {
+            const int cc = moodProcessor.getAxis (xAxis);
+            const int value = juce::jlimit (0, 127,
+                juce::roundToInt (moodProcessor.getXY (xAxis) * 127.0f));
+            out.addEvent (juce::MidiMessage::controllerEvent (channel, cc, value), 0);
+        }
+    }
+    moodLastCcChannel = channel;
+}
+
 
 void RealtimeChordFxAudioProcessor::processMidiController (juce::MidiBuffer& out, int numSamples)
 {

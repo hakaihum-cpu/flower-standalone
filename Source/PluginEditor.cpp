@@ -2825,6 +2825,17 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.setColour (uiColour (0.62f));
     g.drawText ("AUDIO INPUT", 54, 94, 180, 24, juce::Justification::centredLeft);
 
+    const bool moodMidiOnly = juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::effectMode)->load()) == 10;
+    if (moodMidiOnly)
+    {
+        g.setColour (uiColour (0.80f));
+        g.setFont (juce::FontOptions (11.0f).withStyle ("Bold"));
+        g.drawText ("MIDI ONLY - INPUT GAIN OFF", 235, 87, 193, 30,
+                    juce::Justification::centred);
+    }
+    else
+    {
     const float inputGainDb = processor.state().getRawParameterValue (
         ParamID::inputGainDb)->load();
     const float gainNorm = juce::jlimit (
@@ -2839,6 +2850,7 @@ void RealtimeChordFxAudioProcessorEditor::paintConfig (juce::Graphics& g)
     g.fillRect (238.0f, 112.0f, 178.0f * gainNorm, 4.0f);
     g.fillRect (238.0f + gainNorm * 178.0f - 3.0f,
                 109.0f, 6.0f, 10.0f);
+    }
     g.setColour (uiColour (0.82f));
     g.setFont (juce::FontOptions (13.0f));
     g.drawText ("AUDIO SETTINGS  >", 438, 94, 202, 24,
@@ -3491,7 +3503,9 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
             choosePureDataPatchFile();
             return;
         }
-        if (juce::Rectangle<float> (235.0f, 86.0f, 185.0f, 38.0f).contains (p))
+        if (juce::roundToInt (
+                processor.state().getRawParameterValue (ParamID::effectMode)->load()) != 10
+            && juce::Rectangle<float> (235.0f, 86.0f, 185.0f, 38.0f).contains (p))
         {
             inputGainDragging = true;
             updateInputGainFromX (p.x);
@@ -4459,7 +4473,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMoodMode (juce::Graphics& g)
     };
     struct Button { float x,w; juce::String label; bool selected; };
     const Button buttons[] = {
-        {26.0f, 136.0f, processor.moodHasCapture() ? "RECAPTURE" : "CAPTURE", processor.moodHasCapture()},
+        {26.0f, 136.0f, processor.moodHasCapture() ? "LOOP OFF" : "CAPTURE", processor.moodHasCapture()},
         {174.0f, 144.0f, axisLabel (true), false},
         {328.0f, 146.0f, axisLabel (false), false},
         {485.0f, 123.0f, "LOAD TILES", false}
@@ -4477,8 +4491,16 @@ void RealtimeChordFxAudioProcessorEditor::paintMoodMode (juce::Graphics& g)
     }
     g.setColour (uiColour (0.65f));
     g.setFont (juce::FontOptions (11.0f));
-    g.drawText ("X/Y: TAP CC TO CHANGE     TOUCH: TEXTURE     C4-C5: PLAY CAPTURE",
-        35, 579, 654, 24, juce::Justification::centredLeft);
+    g.drawText ("X/Y: TAP LABEL TO ASSIGN MIDI CC; DRAG PAD TO SEND 0-127",
+        35, 573, 654, 23, juce::Justification::centredLeft);
+    const int moodCh = juce::jlimit (1, 16, juce::roundToInt (
+        processor.state().getRawParameterValue (ParamID::midiChannel)->load()));
+    const bool moodMidiEnabled =
+        processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
+    g.drawText ("MIDI OUT " + juce::String (moodMidiEnabled ? "ON" : "OFF")
+                + " CH " + juce::String (moodCh)
+                + " | CAPTURE: LOOP CC102 | C4-C5: MIDI NOTES",
+        35, 595, 660, 23, juce::Justification::centredLeft);
 
     // Low-opacity performance keyboard, placed above the very bottom edge.
     constexpr int white[8] = {0,2,4,5,7,9,11,12};

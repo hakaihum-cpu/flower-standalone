@@ -75,13 +75,38 @@ public:
     {
         return vongonProcessor.getDirectCc (mode, cc);
     }
-    void captureMood() noexcept { moodProcessor.requestCapture(); }
-    bool moodHasCapture() const noexcept { return moodProcessor.hasCapture(); }
-    void moodNote (int note, bool down) noexcept { moodProcessor.setUiNote (note, down); }
-    int getMoodNote() const noexcept { return moodProcessor.activeNote(); }
-    void setMoodXY (float x, float y) noexcept { moodProcessor.setXY (x, y); }
+    // The physical MOOD records continuously while its Micro-Looper is bypassed.
+    // CAPTURE engages the pedal by sending CC102 (not a local audio recorder).
+    void captureMood() noexcept
+    {
+        moodLoopEngaged.store (! moodLoopEngaged.load (std::memory_order_relaxed),
+                               std::memory_order_release);
+        moodCaptureDirty.store (true, std::memory_order_release);
+    }
+    bool moodHasCapture() const noexcept { return moodLoopEngaged.load (std::memory_order_acquire); }
+    void moodNote (int note, bool down) noexcept
+    {
+        if (down) moodUiNote.store (juce::jlimit (0, 127, note), std::memory_order_release);
+        else if (moodUiNote.load (std::memory_order_relaxed) == note)
+            moodUiNote.store (-1, std::memory_order_release);
+    }
+    int getMoodNote() const noexcept
+    {
+        const int ui = moodUiNote.load (std::memory_order_relaxed);
+        return ui >= 0 ? ui : moodExternalNote.load (std::memory_order_relaxed);
+    }
+    void setMoodXY (float x, float y) noexcept
+    {
+        moodProcessor.setXY (x, y);
+        moodXDirty.store (true, std::memory_order_release);
+        moodYDirty.store (true, std::memory_order_release);
+    }
     float getMoodXY (bool axisX) const noexcept { return moodProcessor.getXY (axisX); }
-    void setMoodAxisCc (bool axisX, int cc) noexcept { moodProcessor.setAxis (axisX, cc); }
+    void setMoodAxisCc (bool axisX, int cc) noexcept
+    {
+        moodProcessor.setAxis (axisX, cc);
+        (axisX ? moodXDirty : moodYDirty).store (true, std::memory_order_release);
+    }
     int getMoodAxisCc (bool axisX) const noexcept { return moodProcessor.getAxis (axisX); }
     void setMoodCc (int cc, int value) noexcept { moodProcessor.setCc (cc, value); }
     int getMoodCc (int cc) const noexcept { return moodProcessor.getCc (cc); }
@@ -135,6 +160,7 @@ private:
     void handleMidiClock (const juce::MidiBuffer& midi);
     void advanceProgression();
     void processMidiController (juce::MidiBuffer&, int numSamples);
+    void processMoodMidi (juce::MidiBuffer&, int channel, bool enabled);
     int quantiseControllerNote (int value) const;
     int controllerFrameForXY (int x, int y) const noexcept;
     void setParameterActual (const char* id, float actual);
@@ -180,6 +206,10 @@ private:
     VongonInspiredProcessor vongonProcessor;
     EffectsPureDataEngine pdEngine;
     EffectsMoodEngine moodProcessor;
+    std::atomic<bool> moodLoopEngaged { false }, moodCaptureDirty { false };
+    std::atomic<bool> moodXDirty { false }, moodYDirty { false };
+    std::atomic<int> moodUiNote { -1 }, moodExternalNote { -1 };
+    int moodLastSentNote = -1, moodLastSentChannel = 2, moodLastCcChannel = -1;
     std::atomic<float> vongonX { 0.5f };
     std::atomic<float> vongonY { 0.5f };
     std::atomic<bool> vongonTouch { false };

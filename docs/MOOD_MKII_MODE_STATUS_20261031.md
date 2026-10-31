@@ -4,20 +4,19 @@ Feature branch created from approved `baseline/effects-golden-20261020-libpd-pat
 Official MIDI manual: https://static1.squarespace.com/static/689b53dbdfec6d3f10536eae/t/68ccf358f11808289539219e/1758262104480/Chase-Bliss-MOODMKII_MIDIManual_JP.pdf
 
 ## Implemented
-- Always-listening stereo input ring, CAPTURE swaps two preallocated stereo rings in O(1) time to hold recent audio (loop time follows CC14 and CC16).
-- Mono note performance on captured audio using 12-TET resampling; touchscreen C4–C5 or external MIDI notes; note velocity, attack/decay/sustain/release envelope. Wet processing remains stereo.
-- X/Y assignable CC selection: CC14 TIME, 15 MIX, 16 LENGTH, 17 WET MODIFY, 18 CLOCK, 19 LOOP MODIFY, 20 RAMP, 21 WET MODE, 22 ROUTING, 23 LOOP MODE, 58 OUTPUT, 80-84 envelope/portamento. By default X=14, Y=19. External controller CC input enters the engine, not MIDI output.
-- Two channels: micro-loop output plus simplified wet reverb/delay/slip-type processing. No guaranteed equivalence to actual hardware.
-- Keyboard overlay with translucent white/black keys, touch-drag note reassignment. CAPTURE, CC selectors, LOAD TILES.
-- Visual bank uses only the supplied images. The four sheets contain 9×9, 9×9, 9×9 and 10×10 tiles = **343 JPEG frames**. The existing CRF1 pack is reconstructed by CircleCI, compiled into JUCE BinaryData and available immediately from the APK. Optional prior private-file import remains for compatibility; no first-time import is required. Animation behavior is unchanged.
+- MOOD mode 10 is an **external MIDI-only controller**. It produces no local audio, no DSP, no DRY monitor and applies no INPUT GAIN. These changes affect only MOOD mode.
+- CAPTURE toggles the hardware Micro-Looper bypass on the selected MIDI OUT port using CC102 (value 127/0). The pedal records continuously when bypassed; there is no separate MIDI capture command. Button shows CAPTURE / LOOP OFF.
+- The MOOD on-screen C4-C5 keyboard emits MIDI Note On/Off. External incoming MIDI passes through when MIDI CONTROL is enabled.
+- X/Y touch movement emits the user-selected MIDI CCs with values 0..127. Labels can be tapped to select among CC14–23, CC58, CC80–84 (existing choices retained). Help is visible beneath the controller.
+- Both MOOD MIDI reception and UI-generated output use the shared MIDI CH setting in CONFIG > MIDI SETTINGS. MIDI CONTROL must be ON and MIDI OUT selected for external commands.
+- The 343 user-provided JPEG frames are bundled into the APK through the existing CircleCI materializer and JUCE resource system. Images change only when the input-onset, MIDI note or XY change conditions are met; there is no fixed frame timer.
+- All prior effect modes and audio DSP paths remain unchanged.
 
 ## Not implemented / incomplete
-- Android packaging uses 34 committed base64 chunks, validated by SHA-256 and CRF1 entry boundaries before Projucer resource generation. Runtime bundled-resource loading depends on a successful Android build; no APK or device verification has yet been performed.
-- This is **not a MOOD MKII audio algorithm reproduction**: TAPE/STRETCH/ENV and WET DELAY/REVERB/SLIP are approximations, with basic reverse/stall, freeze (CC105), overdub (CC106) and no DSP parity verification. Original stereo width, hidden settings, presets, precise sync, ramp waveforms and the full CC map remain unimplemented.
-- Basic ADSR attack/decay/sustain/release is wired to captured-note level, but its curves and timing are approximations. CC84 pitch glide and CC20 triangle-ramp wet modulation are wired as limited approximations, not pedal-identical curves. Some advanced CC mappings remain unimplemented.
-- Manual inconsistency: official JP MIDI document labels Output Type CC58 (page 9-10) but later captions mention CC59; separate third-party MIDI list reports CC87. Current UI maps 58 per official main table. Hardware verification needed.
-- No APK build, no hardware smoke test, no latency/stereo/CPU audio measurements. APK resource integration is implemented but cannot be marked confirmed until CircleCI succeeds.
-- Previous failures to inspect before build: CircleCI config v2.1 unclosed `<<`, JUCE resource dependencies, config scroll UI, MIDI port and effect mode range, audio callback allocations, older CHORD-A/Haze golden regressions.
+- The MOOD MIDI mode does **not** emulate the hardware signal path. No locally recorded loop is created. It cannot infer the pedal's LED color, MIDI-port connection or physical state from one-way MIDI OUT.
+- MIDI CC58 (Output Type) follows the official main MIDI table; its conflict with a later CC59 caption remains subject to hardware verification.
+- Android APK build, hardware/LED test, and end-to-end MIDI OUT verification have not been performed. The branch must pass the existing manual CircleCI pipeline before an APK is usable.
+- The MIDI output is controlled by the existing device and enable settings; no separate connection mechanism is introduced.
 
 ## Asset format
 `mood_frames.pack` header `CRF1`, little-endian uint32 count(343), 343 entries uint64 offset + uint32 JPEG length, then JPEG bytes, exactly as read by `Source/FramePack.cpp`.
