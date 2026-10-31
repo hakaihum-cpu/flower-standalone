@@ -2136,3 +2136,32 @@ if "moodLastSentChannel, 102" in mood_cc59:
 if mood_cc59.index("moodUiSynthSessionActive && moodLastSentNote < 0") > mood_cc59.index("const bool changedChannel = moodLastCcChannel != channel;"):
     fail("MOOD Synth Mode exit happens after unrelated CC updates")
 print("[PASS] MOOD final-key Note Off exits Synth Mode via CC59=2 without pedal bypass")
+
+# MOOD MKII extra 90-user-photo frames: preserve the Golden Baseline's 343
+# JPEG payloads, reconstruct all 433 only from committed source assets.
+materializer = (R / "scripts/materialize_frame_pack.py").read_text()
+for required in (
+    "MOOD_COUNT = 343",
+    "MOOD_ADDED_PARTS = 16",
+    "MOOD_ADDED_COUNT = 90",
+    "MOOD_FINAL_COUNT = MOOD_COUNT + MOOD_ADDED_COUNT",
+    "MOOD_ADDED_BYTES = 568047",
+    "MOOD_FINAL_SIZE = 2785693",
+    "MOOD_FINAL_SHA256 = 'ab78e1ae79d3b7f812ded6e3f7c0295e617e2742fc22c315a9c80fe5273cdb77'",
+    "mood[old_header_size:] + added",
+    "MOOD_OUT.write_bytes(mood_combined)",
+):
+    if required not in materializer:
+        fail(f"MOOD 433-frame integration contract drift: {required}")
+mood_added_dir = R / "Resources/mood_frame_additions"
+expected_assets = [mood_added_dir / f"mood_add_{n:02}.b64" for n in range(16)]
+for asset in expected_assets:
+    if not asset.is_file():
+        fail(f"MOOD 433-frame source asset not committed: {asset.relative_to(R)}")
+sizefile = mood_added_dir / "mood_append_sizes.txt"
+if not sizefile.is_file():
+    fail("MOOD appended size manifest missing")
+mood_sizes = [int(v) for v in sizefile.read_text(encoding="ascii").split()]
+if len(mood_sizes) != 90 or sum(mood_sizes) != 568047:
+    fail("MOOD 90-frame appended sizes manifest mismatch")
+print("[PASS] MOOD 433-frame immutable source assets and 90 JPEG size entries")
