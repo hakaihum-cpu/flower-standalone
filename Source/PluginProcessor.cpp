@@ -90,6 +90,7 @@ void RealtimeChordFxAudioProcessor::prepareToPlay (double sr, int block)
     cloudsEngine.prepare (currentSampleRate);
     vongonProcessor.prepare (currentSampleRate);
     pdEngine.prepare (currentSampleRate);
+    moodProcessor.prepare (currentSampleRate);
     restorePureDataPatchFromState();
     cloudsTouch.store (false, std::memory_order_relaxed);
     vongonTouch.store (false, std::memory_order_relaxed);
@@ -589,6 +590,8 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
     for (const auto event : midi)
     {
         const auto& message = event.getMessage();
+        if (effectMode == 10)
+            moodProcessor.handleMidi (message, midiInputChannel);
         if (effectMode >= 5 && effectMode <= 8)
             vongonProcessor.handleMidi (
                 message, effectMode, midiInputChannel, event.samplePosition);
@@ -931,6 +934,10 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             vongonX.load (std::memory_order_relaxed),
             vongonY.load (std::memory_order_relaxed),
             vongonTouch.load (std::memory_order_relaxed));
+    }
+    else if (effectMode == 10)
+    {
+        moodProcessor.process (buffer);
     }
     else if (effectMode == 9)
     {
@@ -2274,7 +2281,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RealtimeChordFxAudioProcesso
 {
     juce::AudioProcessorValueTreeState::ParameterLayout p;
     p.add (std::make_unique<juce::AudioParameterChoice> (
-        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES", "SOLARFAZE", "POLYPHRASE", "PATCH" }, 0));
+        ParamID::effectMode, "MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES", "SOLARFAZE", "POLYPHRASE", "PATCH", "MOOD MKII" }, 0));
     p.add (std::make_unique<juce::AudioParameterChoice> (
         ParamID::chordMode, "CHORD ENGINE", juce::StringArray { "A", "B" }, 0));
     p.add (std::make_unique<juce::AudioParameterFloat> (ParamID::complex, "COMPLEX", 0.0f, 1.0f, 0.25f));
