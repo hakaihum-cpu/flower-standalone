@@ -257,8 +257,8 @@ public:
                                       : env) * noteGain;
                     // Routing follows hardware options IN / LOOP+IN / LOOP.
                     if (getCc (106) > 0)
-                        captured[(size_t) ch][(size_t) a] =
-                            0.7f * captured[(size_t) ch][(size_t) a]
+                        captured[(size_t) ch][(size_t) readA] =
+                            0.7f * captured[(size_t) ch][(size_t) readA]
                             + 0.3f * source[ch]; // overdub, no allocation
                     source[ch] = (routing == 0 ? source[ch] :
                                   routing == 1 ? 0.35f * source[ch] + 0.65f * voiced * gate
