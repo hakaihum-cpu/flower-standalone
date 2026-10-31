@@ -60,6 +60,10 @@ private:
     void paintConfig (juce::Graphics&);
     void paintAudioConfig (juce::Graphics&);
     void paintPureDataMode (juce::Graphics&);
+    void paintMoodMode (juce::Graphics&);
+    int moodKeyAtPoint (juce::Point<float>) const;
+    void importMoodFrames();
+    void reloadMoodFrames();
     void choosePureDataPatchFile();
     void paintMidiControlConfig (juce::Graphics&);
     void paintBar (juce::Graphics&, juce::Rectangle<float>, const juce::String&, float, const juce::String&);
@@ -96,6 +100,15 @@ private:
     FramePack frames;
     FramePack eurekaFrames;
     FramePack vongonFrames;
+    FramePack moodFrames;
+    juce::MemoryBlock moodPackStorage;
+    juce::Image currentMoodFrame;
+    int moodLoadedFrame = -1, moodVisualRevision = 1, moodTick = 0;
+    int moodPreviousNote = -1;
+    float moodPreviousActivity = 0.0f, moodPreviousX = 0.5f, moodPreviousY = 0.5f;
+    bool moodPointerDown = false;
+    int moodKeyboardNote = -1;
+    std::unique_ptr<juce::FileChooser> moodChooser;
     juce::Image currentPdFrame;
     juce::Image currentFrame;
     juce::Image currentEurekaFrame;
