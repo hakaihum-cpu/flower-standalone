@@ -4324,3 +4324,182 @@ bool RealtimeChordFxAudioProcessorEditor::keyStateChanged (bool isKeyDown)
     }
     return false;
 }
+
+
+// MOOD MKII: supplied picture grids are split into 400 individual 150px
+// user-owned frames in a CRF1 pack. Frames are decoded only on the UI timer.
+void RealtimeChordFxAudioProcessorEditor::reloadMoodFrames()
+{
+    moodFrames = FramePack();
+    moodPackStorage.reset();
+    const auto folder = juce::File::getSpecialLocation (
+        juce::File::userApplicationDataDirectory)
+        .getChildFile ("EFFECTS").getChildFile ("Mood");
+    const auto file = folder.getChildFile ("mood_frames.pack");
+    if (file.existsAsFile() && file.loadFileAsData (moodPackStorage)
+        && moodFrames.load (moodPackStorage.getData(), moodPackStorage.getSize()))
+    {
+        moodLoadedFrame = 0;
+        currentMoodFrame = moodFrames.getFrame (0);
+        ++moodVisualRevision;
+        return;
+    }
+
+    // The resource is optional so that historical builds remain compatible.
+    int resourceSize = 0;
+    const char* resource = BinaryData::getNamedResource ("mood_frames_pack", resourceSize);
+    if (resource != nullptr && resourceSize > 0
+        && moodFrames.load (resource, (size_t) resourceSize))
+    {
+        moodLoadedFrame = 0;
+        currentMoodFrame = moodFrames.getFrame (0);
+        ++moodVisualRevision;
+    }
+}
+
+void RealtimeChordFxAudioProcessorEditor::importMoodFrames()
+{
+    moodChooser = std::make_unique<juce::FileChooser> (
+        "Import the 400-frame MOOD pack", juce::File(), "*.pack", true);
+    juce::Component::SafePointer<RealtimeChordFxAudioProcessorEditor> safe (this);
+    moodChooser->launchAsync (
+        juce::FileBrowserComponent::openMode
+            | juce::FileBrowserComponent::canSelectFiles,
+        [safe] (const juce::FileChooser& chooser)
+        {
+            if (auto* e = safe.getComponent())
+            {
+                const auto source = chooser.getResult();
+                if (! source.existsAsFile()) return;
+                juce::MemoryBlock data;
+                if (! source.loadFileAsData (data)) return;
+                FramePack verify;
+                if (! verify.load (data.getData(), data.getSize())
+                    || verify.getFrameCount() != 400)
+                    return;
+                const auto folder = juce::File::getSpecialLocation (
+                    juce::File::userApplicationDataDirectory)
+                    .getChildFile ("EFFECTS").getChildFile ("Mood");
+                if (! folder.createDirectory().wasOk()) return;
+                if (! folder.getChildFile ("mood_frames.pack")
+                        .replaceWithData (data.getData(), data.getSize())) return;
+                e->reloadMoodFrames();
+                e->repaint();
+            }
+        });
+}
+
+int RealtimeChordFxAudioProcessorEditor::moodKeyAtPoint (
+    juce::Point<float> p) const
+{
+    if (p.x < 36.0f || p.x >= 684.0f
+        || p.y < 619.0f || p.y >= 704.0f)
+        return -1;
+    const float w = 648.0f / 8.0f;
+    // White C D E F G A B C; black C# D# F# G# A#.
+    constexpr int white[8] = {0, 2, 4, 5, 7, 9, 11, 12};
+    constexpr int black[5] = {1, 3, 6, 8, 10};
+    constexpr int after[5] = {0, 1, 3, 4, 5};
+    if (p.y < 674.0f)
+        for (int i = 0; i < 5; ++i)
+        {
+            const float centre = 36.0f + (float) (after[i] + 1) * w;
+            if (p.x >= centre - 18.0f && p.x < centre + 18.0f)
+                return 60 + black[i];
+        }
+    const int index = juce::jlimit (0, 7, (int) ((p.x - 36.0f) / w));
+    return 60 + white[index];
+}
+
+void RealtimeChordFxAudioProcessorEditor::paintMoodMode (juce::Graphics& g)
+{
+    if (currentMoodFrame.isValid())
+        paintMediaFrame (g, currentMoodFrame,
+            juce::Rectangle<float> (0.0f, 0.0f, design, design),
+            3, moodVisualRevision);
+
+    // The transparent overlays deliberately leave the source image visible.
+    g.setColour (juce::Colours::black.withAlpha (0.58f));
+    g.fillRect (0.0f, 0.0f, 720.0f, 78.0f);
+    g.setColour (uiColour (0.96f));
+    g.setFont (juce::FontOptions (23.0f).withStyle ("Bold"));
+    g.drawText ("MOOD MKII", 26, 15, 270, 34, juce::Justification::centredLeft);
+    g.setFont (juce::FontOptions (10.5f));
+    g.drawText ("MICRO-LOOP / WET CHANNEL / MIDI SYNTH", 26, 50, 330, 18,
+                juce::Justification::centredLeft);
+    g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
+
+    const float xx = processor.getMoodXY (true);
+    const float yy = processor.getMoodXY (false);
+    const float px = 20.0f + 680.0f * xx;
+    const float py = 70.0f + 440.0f * (1.0f - yy);
+    g.setColour (uiColour (0.32f));
+    g.drawLine (px, 78.0f, px, 508.0f, 1.0f);
+    g.drawLine (0.0f, py, 720.0f, py, 1.0f);
+    g.setColour (uiColour (0.86f));
+    g.drawEllipse (px - 14.0f, py - 14.0f, 28.0f, 28.0f, 1.5f);
+
+    g.setColour (juce::Colours::black.withAlpha (0.73f));
+    g.fillRect (0.0f, 501.0f, 720.0f, 219.0f);
+    static constexpr int ccChoices[] = {14,15,16,17,18,19,20,21,22,23,58,80,81,82,83,84};
+    static constexpr const char* ccNames[] = {
+        "TIME", "MIX", "LENGTH", "WET MOD", "CLOCK", "LOOP MOD",
+        "RAMP", "WET MODE", "ROUTING", "LOOP MODE", "OUTPUT",
+        "ATTACK", "DECAY", "SUSTAIN", "RELEASE", "PORTAMENTO"
+    };
+    const auto axisLabel = [&] (bool xAxis) -> juce::String
+    {
+        const int cc = processor.getMoodAxisCc (xAxis);
+        for (int k = 0; k < 16; ++k)
+            if (ccChoices[k] == cc)
+                return juce::String (xAxis ? "X " : "Y ")
+                     + ccNames[k] + " CC" + juce::String (cc);
+        return xAxis ? "X" : "Y";
+    };
+    struct Button { float x,w; juce::String label; bool selected; };
+    const Button buttons[] = {
+        {26.0f, 136.0f, processor.moodHasCapture() ? "RECAPTURE" : "CAPTURE", processor.moodHasCapture()},
+        {174.0f, 144.0f, axisLabel (true), false},
+        {328.0f, 146.0f, axisLabel (false), false},
+        {485.0f, 123.0f, "LOAD TILES", false}
+    };
+    for (const auto& bt : buttons)
+    {
+        const juce::Rectangle<float> area (bt.x, 515.0f, bt.w, 50.0f);
+        g.setColour (juce::Colours::black.withAlpha (0.36f));
+        g.fillRoundedRectangle (area, 3.0f);
+        g.setColour (uiColour (bt.selected ? 1.0f : 0.66f));
+        g.drawRoundedRectangle (area, 3.0f, bt.selected ? 2.0f : 1.0f);
+        g.setFont (juce::FontOptions (bt.selected ? 13.0f : 11.0f).withStyle ("Bold"));
+        g.drawFittedText (bt.label, area.toNearestInt(),
+            juce::Justification::centred, 2);
+    }
+    g.setColour (uiColour (0.65f));
+    g.setFont (juce::FontOptions (11.0f));
+    g.drawText ("X/Y: TAP CC TO CHANGE     TOUCH: TEXTURE     C4-C5: PLAY CAPTURE",
+        35, 579, 654, 24, juce::Justification::centredLeft);
+
+    // Low-opacity performance keyboard, placed above the very bottom edge.
+    constexpr int white[8] = {0,2,4,5,7,9,11,12};
+    constexpr int black[5] = {1,3,6,8,10};
+    constexpr int after[5] = {0,1,3,4,5};
+    const float w = 648.0f / 8.0f;
+    const int active = processor.getMoodNote();
+    for (int i = 0; i < 8; ++i)
+    {
+        const juce::Rectangle<float> rect (36.0f + (float) i * w, 619.0f, w - 2.0f, 85.0f);
+        g.setColour (juce::Colours::white.withAlpha (active == 60 + white[i] ? 0.71f : 0.29f));
+        g.fillRoundedRectangle (rect, 2.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.52f));
+        g.drawRoundedRectangle (rect, 2.0f, 1.0f);
+    }
+    for (int i = 0; i < 5; ++i)
+    {
+        const float left = 36.0f + (float) (after[i] + 1) * w - 18.0f;
+        const juce::Rectangle<float> rect (left, 619.0f, 36.0f, 55.0f);
+        g.setColour (juce::Colours::black.withAlpha (active == 60 + black[i] ? 0.24f : 0.82f));
+        g.fillRoundedRectangle (rect, 3.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.50f));
+        g.drawRoundedRectangle (rect, 3.0f, 1.0f);
+    }
+}
