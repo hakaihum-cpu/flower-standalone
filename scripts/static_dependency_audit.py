@@ -586,6 +586,26 @@ for removed in [
 if "isKeyCurrentlyDown" in editor:
     fail("Android Motion REC must not rely on JUCE Android isKeyCurrentlyDown()")
 
+# MOOD visual events are driven by input onsets, MIDI notes or XY movement;
+# reject unconditional timer-driven image changes (7.5 Hz regression).
+mood_visual_begin = editor.find("if (effectMode == 10 && moodFrames.getFrameCount() > 0)")
+mood_visual_end = editor.find("const bool eurekaEntered", mood_visual_begin)
+if mood_visual_begin < 0 or mood_visual_end <= mood_visual_begin:
+    fail("MOOD visual timer boundaries missing")
+mood_visual = editor[mood_visual_begin:mood_visual_end]
+for required_event in (
+    "note != moodPreviousNote",
+    "const bool onset = level > 0.09f && moodPreviousActivity < 0.04f;",
+    "xyChange > 0.055f",
+    "currentMoodFrame = moodFrames.getFrame (moodLoadedFrame);",
+):
+    if required_event not in mood_visual:
+        fail(f"MOOD audio/MIDI/XY-driven frame switching missing: {required_event}")
+if "moodTick" in mood_visual or "moodTick" in editor_header:
+    fail("MOOD unconditional periodic frame switching reintroduced")
+if "if (note != moodPreviousNote || onset || xyChange > 0.055f)" not in mood_visual:
+    fail("MOOD frame switching is no longer exclusively event-driven")
+
 processor_controls = (R / "Source/PluginProcessor.cpp").read_text()
 processor_header = (R / "Source/PluginProcessor.h").read_text()
 parameter_ids = (R / "Source/ParameterIDs.h").read_text()

@@ -103,7 +103,7 @@ private:
     FramePack moodFrames;
     juce::MemoryBlock moodPackStorage;
     juce::Image currentMoodFrame;
-    int moodLoadedFrame = -1, moodVisualRevision = 1, moodTick = 0;
+    int moodLoadedFrame = -1, moodVisualRevision = 1;
     int moodPreviousNote = -1;
     float moodPreviousActivity = 0.0f, moodPreviousX = 0.5f, moodPreviousY = 0.5f;
     bool moodPointerDown = false;

@@ -786,7 +786,8 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
         const float xyChange = std::abs (x - moodPreviousX) + std::abs (y - moodPreviousY);
         const float level = processor.getInputPeakRaw();
         const bool onset = level > 0.09f && moodPreviousActivity < 0.04f;
-        if (note != moodPreviousNote || onset || xyChange > 0.055f || (++moodTick % 4) == 0)
+        // Advance only for input onset, MIDI note or XY movement; never on a fixed timer.
+        if (note != moodPreviousNote || onset || xyChange > 0.055f)
         {
             moodLoadedFrame = nextVisualFrame (moodFrames.getFrameCount(), moodLoadedFrame);
             currentMoodFrame = moodFrames.getFrame (moodLoadedFrame);
