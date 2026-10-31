@@ -4701,7 +4701,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMoodMode (juce::Graphics& g)
         processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
     const int baseNote = moodKeyboardBaseNote();
     g.drawFittedText ("OCT " + juce::String (moodKeyboardOctave)
-                + " MIDI " + juce::String (baseNote) + "-"
+                + " CC57:5  MIDI " + juce::String (baseNote) + "-"
                 + juce::String (juce::jmin (127, baseNote + 12))
                 + " | OUT " + juce::String (moodMidiEnabled ? "ON" : "OFF")
                 + " CH" + juce::String (moodCh)

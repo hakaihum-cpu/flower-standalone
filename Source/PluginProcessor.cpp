@@ -1547,6 +1547,17 @@ void RealtimeChordFxAudioProcessor::processMoodMidi (
             }
             if (moodLastSentNote != key)
             {
+                // MOOD Synth Mode has a global octave transpose (CC57).
+                // Factory/reset value 3 = 36 semitones. Explicitly send
+                // CC57=5 (60 semitones) before notes from the C4-based
+                // touchscreen keyboard. Actual audible range depends on
+                // source sound and the hardware Clock range.
+                // OPEN output (CC58=0) preserves the normal FX audio while
+                // a key is held, instead of gating it unexpectedly.
+                out.addEvent (juce::MidiMessage::controllerEvent (
+                    channel, 57, 5), 0);
+                out.addEvent (juce::MidiMessage::controllerEvent (
+                    channel, 58, 0), 0);
                 out.addEvent (juce::MidiMessage::noteOn (
                     channel, key, (juce::uint8) 100), 0);
                 moodLastSentNote = key;
@@ -1574,6 +1585,12 @@ void RealtimeChordFxAudioProcessor::processMoodMidi (
         }
         if (held >= 0 && moodLastSentNote < 0)
         {
+            // Also enforce the same pitch reference after channel
+            // changes and queue-overflow recovery.
+            out.addEvent (juce::MidiMessage::controllerEvent (
+                channel, 57, 5), 0);
+            out.addEvent (juce::MidiMessage::controllerEvent (
+                channel, 58, 0), 0);
             out.addEvent (juce::MidiMessage::noteOn (
                 channel, held, (juce::uint8) 100), 0);
             moodLastSentNote = held;

@@ -2136,3 +2136,40 @@ if "moodLastSentChannel, 102" in mood_cc59:
 if mood_cc59.index("moodUiSynthSessionActive && moodLastSentNote < 0") > mood_cc59.index("const bool changedChannel = moodLastCcChannel != channel;"):
     fail("MOOD Synth Mode exit happens after unrelated CC updates")
 print("[PASS] MOOD final-key Note Off exits Synth Mode via CC59=2 without pedal bypass")
+
+# The accepted master had octave pages but did not set MOOD's actual
+# MIDI Synth Mode reference (CC57); this made high notes saturate the Clock
+# range and affected perceived pitch. Verify both MIDI note-on paths send
+# the reference and OPEN output type first, in event order.
+synth_begin = processor.find("void RealtimeChordFxAudioProcessor::processMoodMidi (")
+synth_end = processor.find("void RealtimeChordFxAudioProcessor::processMidiController (", synth_begin)
+if synth_begin < 0 or synth_end <= synth_begin:
+    fail("MOOD keyboard MIDI dispatch missing for pitch baseline audit")
+synth_code = processor[synth_begin:synth_end]
+for note_var in ("key", "held"):
+    note_on_marker = ("juce::MidiMessage::noteOn (\n"
+                      + " " * (20 if note_var == "key" else 16)
+                      + "channel, " + note_var + ", (juce::uint8) 100")
+    if note_on_marker not in synth_code:
+        fail(f"MOOD Synth Mode missing Note On path for {note_var}")
+for marker in (
+    "channel, 57, 5), 0);",
+    "channel, 58, 0), 0);",
+    "moodLastSentChannel, 59, 2",
+):
+    if marker not in synth_code:
+        fail(f"MOOD calibrated synth MIDI missing: {marker}")
+if synth_code.count("channel, 57, 5), 0);") != 2 or synth_code.count("channel, 58, 0), 0);") != 2:
+    fail("MOOD Synth Mode pitch/output setup must be present before both Note On paths")
+for note_var in ("key", "held"):
+    note_at = synth_code.find(f"channel, {note_var}, (juce::uint8) 100")
+    if note_at < 0:
+        fail(f"MOOD no Note On ({note_var})")
+    segment = synth_code[max(0, note_at - 900):note_at]
+    if segment.rfind("channel, 57, 5), 0);") < 0 or segment.rfind("channel, 58, 0), 0);") < 0:
+        fail(f"MOOD reference/output CC must precede Note On ({note_var})")
+if 'CC57:5' not in editor or '"OCT+"' not in editor or '"OCT-"' not in editor:
+    fail("MOOD keyboard pitch reference / octave UI contract missing")
+if "channel, 103" in synth_code:
+    fail("MOOD synth keyboard must not toggle Wet bypass")
+print("[PASS] MOOD keyboard C4 reference CC57=5 + OPEN CC58=0 precedes MIDI notes")
