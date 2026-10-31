@@ -77,6 +77,17 @@ MOOD_COUNT = 343
 MOOD_PARTS = 34
 MOOD_SIZE = 2216566
 MOOD_SHA256 = '035ef6cca6deff441b39ed51a9c3df9cbbe1b67548922bac1db3460a4f2438a4'
+# The previously approved 343 frames stay byte-for-byte unchanged.
+# Append the 9 x 10 user-supplied tile sheet as 90 JPEG frames.
+MOOD_ADDED_DIR = ROOT / 'Resources' / 'mood_frame_additions'
+MOOD_ADDED_SIZES = MOOD_ADDED_DIR / 'mood_append_sizes.txt'
+MOOD_ADDED_PARTS = 16
+MOOD_ADDED_COUNT = 90
+MOOD_ADDED_BYTES = 568047
+MOOD_ADDED_SHA256 = 'e22253104437247cb725be42872a75d91dd6b538f8de04332f3b6961047f1de5'
+MOOD_FINAL_COUNT = MOOD_COUNT + MOOD_ADDED_COUNT
+MOOD_FINAL_SIZE = 2785693
+MOOD_FINAL_SHA256 = 'ab78e1ae79d3b7f812ded6e3f7c0295e617e2742fc22c315a9c80fe5273cdb77'
 
 
 
@@ -349,7 +360,58 @@ for frame_index in range(MOOD_COUNT):
     frame = mood[frame_offset:frame_offset + frame_size]
     if frame[:2] != bytes((0xff, 0xd8)) or frame[-2:] != bytes((0xff, 0xd9)):
         raise SystemExit(f'[FAIL] MOOD JPEG frame invalid at {frame_index}')
-MOOD_OUT.write_bytes(mood)
+# Deterministically append the new JPEG frames, preserving all original
+# JPEG data and correcting only the original CRF1 offset table.
+added_paths = sorted(MOOD_ADDED_DIR.glob('mood_add_*.b64'))
+expected_names = [f'mood_add_{index:02}.b64' for index in range(MOOD_ADDED_PARTS)]
+if [p.name for p in added_paths] != expected_names:
+    raise SystemExit('[FAIL] MOOD 433-frame asset chunks are missing or misordered')
+added = decode_chunks(added_paths)
+if len(added) != MOOD_ADDED_BYTES:
+    raise SystemExit('[FAIL] MOOD appended JPEG data length mismatch')
+if hashlib.sha256(added).hexdigest() != MOOD_ADDED_SHA256:
+    raise SystemExit('[FAIL] MOOD appended JPEG data sha256 mismatch')
+sizes = [int(x) for x in MOOD_ADDED_SIZES.read_text(encoding='ascii').split()]
+if len(sizes) != MOOD_ADDED_COUNT or sum(sizes) != len(added):
+    raise SystemExit('[FAIL] MOOD appended 90 JPEG sizes mismatch')
+offset = 0
+for index, size in enumerate(sizes):
+    frame = added[offset:offset + size]
+    if size < 64 or frame[:2] != bytes((255, 216)) or frame[-2:] != bytes((255, 217)):
+        raise SystemExit(f'[FAIL] MOOD appended JPEG invalid at {index}')
+    offset += size
+old_header_size = 8 + MOOD_COUNT * 12
+new_header_size = 8 + MOOD_FINAL_COUNT * 12
+delta = new_header_size - old_header_size
+entries = bytearray()
+for index in range(MOOD_COUNT):
+    old_offset, flags, size = struct.unpack_from('<III', mood, 8 + index * 12)
+    if old_offset < old_header_size or old_offset + size > len(mood):
+        raise SystemExit(f'[FAIL] original MOOD JPEG invalid at {index}')
+    entries.extend(struct.pack('<III', old_offset + delta, flags, size))
+cursor = len(mood) + delta
+for size in sizes:
+    entries.extend(struct.pack('<III', cursor, 0, size))
+    cursor += size
+mood_combined = (
+    b'CRF1' + struct.pack('<I', MOOD_FINAL_COUNT)
+    + entries + mood[old_header_size:] + added
+)
+if cursor != len(mood_combined) or len(mood_combined) != MOOD_FINAL_SIZE:
+    raise SystemExit('[FAIL] MOOD 433-frame pack length mismatch')
+combined_sha = hashlib.sha256(mood_combined).hexdigest()
+if combined_sha != MOOD_FINAL_SHA256:
+    raise SystemExit('[FAIL] MOOD 433-frame pack sha256 mismatch')
+validate_crf1(mood_combined, MOOD_FINAL_COUNT, 'MOOD 433-frame pack')
+for frame_index in range(MOOD_FINAL_COUNT):
+    frame_offset, flags, frame_size = struct.unpack_from(
+        '<III', mood_combined, 8 + frame_index * 12)
+    if flags != 0 or frame_offset < new_header_size or frame_offset + frame_size > len(mood_combined):
+        raise SystemExit(f'[FAIL] MOOD combined frame bounds invalid at {frame_index}')
+    frame = mood_combined[frame_offset:frame_offset + frame_size]
+    if frame[:2] != bytes((255, 216)) or frame[-2:] != bytes((255, 217)):
+        raise SystemExit(f'[FAIL] MOOD combined JPEG invalid at {frame_index}')
+MOOD_OUT.write_bytes(mood_combined)
 
 icon_encoded = ''.join(ICON_B64.read_text(encoding='ascii').split())
 icon = base64.b64decode(icon_encoded, validate=True)
@@ -372,4 +434,4 @@ print(
     f'[PASS] launcher icon: {len(icon)} bytes sha256={icon_sha}')
 print(
     f'[PASS] Vongon pack: {len(vongon)} bytes / {VONGON_COUNT} frames sha256={vongon_sha}')
-print(f'[PASS] MOOD pack: {len(mood)} bytes / {MOOD_COUNT} frames sha256={mood_sha}')
+print(f'[PASS] MOOD pack: {len(mood_combined)} bytes / {MOOD_FINAL_COUNT} frames sha256={combined_sha}')
