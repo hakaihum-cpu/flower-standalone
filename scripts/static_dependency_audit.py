@@ -4,7 +4,7 @@ import base64, csv, hashlib, re, sys, xml.etree.ElementTree as ET
 
 R = Path(__file__).resolve().parents[1]
 JUCER = R / "RealtimeChordFX_Standalone.jucer"
-MODE_CHOICE_TOKEN = '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES", "SOLARFAZE", "POLYPHRASE", "PATCH" }, 0'
+MODE_CHOICE_TOKEN = '"MODE", juce::StringArray { "CHORD", "DREAMY", "EUREKA", "CHORDBOT", "CLOUDS", "ULTRASHEER", "ROSETONES", "SOLARFAZE", "POLYPHRASE", "PATCH", "MOOD MKII" }, 0'
 
 EXPECTED_MODULES = {
     "juce_audio_basics",
