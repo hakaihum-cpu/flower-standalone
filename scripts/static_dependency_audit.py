@@ -2105,3 +2105,34 @@ if editor.count("void RealtimeChordFxAudioProcessorEditor::applyMoodXY (") != 1:
 if "processChordMidi (midi);\n        processChordBotMidi (midi);" not in processor:
     fail("CHORDBOT entry ordering regression")
 print("[PASS] MOOD XY recording/playback, CLOSE/PANEL, conditional CC102 and 3-position toggles")
+
+# MOOD MIDI Note input enters hardware Synth Mode. A released software key
+# must exit with CC59 value 2, not leave the physical pedal muted in Synth Mode.
+for marker in (
+    "bool moodUiSynthSessionActive = false;",
+):
+    if marker not in processor_header:
+        fail(f"MOOD synth session state missing: {marker}")
+mood_cc59_start = processor.find("void RealtimeChordFxAudioProcessor::processMoodMidi (")
+mood_cc59_end = processor.find("void RealtimeChordFxAudioProcessor::processMidiController (", mood_cc59_start)
+if mood_cc59_start < 0 or mood_cc59_end <= mood_cc59_start:
+    fail("MOOD MIDI synth exit function boundaries missing")
+mood_cc59 = processor[mood_cc59_start:mood_cc59_end]
+for marker in (
+    "moodUiSynthSessionActive = true;",
+    "moodUiSynthSessionActive && moodLastSentNote < 0",
+    "moodUiNote.load (std::memory_order_acquire) < 0",
+    "moodNoteRead.load (std::memory_order_relaxed)",
+    "== moodNoteWrite.load (std::memory_order_acquire)",
+    "moodLastSentChannel, 59, 2",
+    "moodUiSynthSessionActive = false;",
+):
+    if marker not in mood_cc59:
+        fail(f"MOOD software keyboard must exit Synth Mode after final note: {marker}")
+if "moodLastSentChannel, 103" in mood_cc59:
+    fail("MOOD keyboard must never toggle WET bypass")
+if "moodLastSentChannel, 102" in mood_cc59:
+    fail("MOOD keyboard must never toggle MICRO-LOOPER bypass")
+if mood_cc59.index("moodUiSynthSessionActive && moodLastSentNote < 0") > mood_cc59.index("const bool changedChannel = moodLastCcChannel != channel;"):
+    fail("MOOD Synth Mode exit happens after unrelated CC updates")
+print("[PASS] MOOD final-key Note Off exits Synth Mode via CC59=2 without pedal bypass")

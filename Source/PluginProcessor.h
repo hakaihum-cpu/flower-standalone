@@ -247,6 +247,7 @@ private:
     std::atomic<unsigned int> moodNoteWrite { 0 }, moodNoteRead { 0 };
     std::atomic<bool> moodNoteQueueOverflow { false };
     int moodLastSentNote = -1, moodLastSentChannel = 2, moodLastCcChannel = -1;
+    bool moodUiSynthSessionActive = false; // audio-thread only: exit after last UI note release
     std::atomic<float> vongonX { 0.5f };
     std::atomic<float> vongonY { 0.5f };
     std::atomic<bool> vongonTouch { false };

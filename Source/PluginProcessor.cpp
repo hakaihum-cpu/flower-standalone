@@ -1493,13 +1493,27 @@ void RealtimeChordFxAudioProcessor::processMoodMidi (
 {
     channel = juce::jlimit (1, 16, channel);
 
-    // Do not leave a held note on the previous MIDI channel.
+    // A MIDI Note enters MOOD MKII Synth Mode automatically.
+    // Leaving Synth Mode requires CC59 (>1), not merely Note Off.
+    // Keep CC102/CC103 bypass state untouched at all times.
     if (moodLastSentNote >= 0
         && (! enabled || channel != moodLastSentChannel))
     {
         out.addEvent (juce::MidiMessage::noteOff (
             moodLastSentChannel, moodLastSentNote), 0);
+        if (moodUiSynthSessionActive)
+        {
+            out.addEvent (juce::MidiMessage::controllerEvent (
+                moodLastSentChannel, 59, 2), 0);
+            moodUiSynthSessionActive = false;
+        }
         moodLastSentNote = -1;
+    }
+    else if (! enabled && moodUiSynthSessionActive)
+    {
+        out.addEvent (juce::MidiMessage::controllerEvent (
+            moodLastSentChannel, 59, 2), 0);
+        moodUiSynthSessionActive = false;
     }
     if (! enabled)
     {
@@ -1537,6 +1551,7 @@ void RealtimeChordFxAudioProcessor::processMoodMidi (
                     channel, key, (juce::uint8) 100), 0);
                 moodLastSentNote = key;
                 moodLastSentChannel = channel;
+                moodUiSynthSessionActive = true;
             }
         }
         else if (moodLastSentNote == key)
@@ -1563,8 +1578,22 @@ void RealtimeChordFxAudioProcessor::processMoodMidi (
                 channel, held, (juce::uint8) 100), 0);
             moodLastSentNote = held;
             moodLastSentChannel = channel;
+            moodUiSynthSessionActive = true;
         }
         moodNoteQueueOverflow.store (false, std::memory_order_release);
+    }
+
+    // Exit only after the final UI Note Off; do not interrupt a slide
+    // while another key event is queued. Restores normal pedal FX immediately
+    // without changing either pedal bypass footswitch.
+    if (moodUiSynthSessionActive && moodLastSentNote < 0
+        && moodUiNote.load (std::memory_order_acquire) < 0
+        && moodNoteRead.load (std::memory_order_relaxed)
+            == moodNoteWrite.load (std::memory_order_acquire))
+    {
+        out.addEvent (juce::MidiMessage::controllerEvent (
+            moodLastSentChannel, 59, 2), 0);
+        moodUiSynthSessionActive = false;
     }
 
     const bool changedChannel = moodLastCcChannel != channel;
