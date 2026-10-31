@@ -4326,7 +4326,7 @@ bool RealtimeChordFxAudioProcessorEditor::keyStateChanged (bool isKeyDown)
 }
 
 
-// MOOD MKII: supplied picture grids are split into 400 individual 150px
+// MOOD MKII: supplied picture grids are split into 343 individual 150px
 // user-owned frames in a CRF1 pack. Frames are decoded only on the UI timer.
 void RealtimeChordFxAudioProcessorEditor::reloadMoodFrames()
 {
@@ -4360,7 +4360,7 @@ void RealtimeChordFxAudioProcessorEditor::reloadMoodFrames()
 void RealtimeChordFxAudioProcessorEditor::importMoodFrames()
 {
     moodChooser = std::make_unique<juce::FileChooser> (
-        "Import the 400-frame MOOD pack", juce::File(), "*.pack", true);
+        "Import the 343-frame MOOD pack", juce::File(), "*.pack", true);
     juce::Component::SafePointer<RealtimeChordFxAudioProcessorEditor> safe (this);
     moodChooser->launchAsync (
         juce::FileBrowserComponent::openMode
@@ -4375,7 +4375,7 @@ void RealtimeChordFxAudioProcessorEditor::importMoodFrames()
                 if (! source.loadFileAsData (data)) return;
                 FramePack verify;
                 if (! verify.load (data.getData(), data.getSize())
-                    || verify.getFrameCount() != 400)
+                    || verify.getFrameCount() != 343)
                     return;
                 const auto folder = juce::File::getSpecialLocation (
                     juce::File::userApplicationDataDirectory)
