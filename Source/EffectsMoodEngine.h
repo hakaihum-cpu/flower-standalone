@@ -21,6 +21,7 @@ public:
         for (auto& c : spatial) c.assign ((size_t) delay, 0.0f);
         historyPos = spatialPos = 0;
         capturedLength = 0;
+        capturedStart = 0;
         capturedReady.store (false, std::memory_order_relaxed);
         captureFlag.store (false, std::memory_order_relaxed);
         playHead = 0.0; env = 0.0f;
@@ -54,6 +55,7 @@ public:
         captureFlag.store (false, std::memory_order_relaxed);
         capturedReady.store (false, std::memory_order_relaxed);
         capturedLength = 0;
+        capturedStart = 0;
         midiNote = lastNote = -1;
         envStage = 0;
         uiNote.store (-1, std::memory_order_relaxed);
@@ -156,12 +158,11 @@ public:
         if (captureFlag.exchange (false, std::memory_order_acq_rel))
         {
             capturedLength = loopSamples;
-            for (int i = 0; i < capturedLength; ++i)
-            {
-                const int from = (historyPos + histSize - capturedLength + i) % histSize;
-                for (int ch = 0; ch < 2; ++ch)
-                    captured[(size_t) ch][(size_t) i] = history[(size_t) ch][(size_t) from];
-            }
+            // O(1) capture: swap two *preallocated* 8-second stereo rings.
+            // Never copy megabytes of audio in one realtime callback.
+            capturedStart = (historyPos + histSize - capturedLength) % histSize;
+            history.swap (captured);
+            historyPos = 0;
             playHead = 0.0;
             capturedReady.store (true, std::memory_order_release);
         }
@@ -217,11 +218,13 @@ public:
             {
                 const int a = ((int) playHead) % capturedLength;
                 const int b = (a + 1) % capturedLength;
+                const int readA = (capturedStart + a) % histSize;
+                const int readB = (capturedStart + b) % histSize;
                 const float frac = (float) (playHead - std::floor (playHead));
                 for (int ch = 0; ch < 2; ++ch)
                 {
-                    const float c0 = captured[(size_t) ch][(size_t) a];
-                    const float c1 = captured[(size_t) ch][(size_t) b];
+                    const float c0 = captured[(size_t) ch][(size_t) readA];
+                    const float c1 = captured[(size_t) ch][(size_t) readB];
                     const float loop = c0 + (c1 - c0) * frac;
                     const float glide = (float) (juce::jmin (a, capturedLength - a) + 1) / (float) juce::jmax (1, capturedLength / 24);
                     const float edge = juce::jlimit (0.0f, 1.0f, glide);
@@ -293,7 +296,7 @@ private:
     double rate = 48000.0;
     std::array<std::vector<float>, 2> history, captured, spatial;
     std::array<float, 2> filtered {};
-    int historyPos = 0, spatialPos = 0, capturedLength = 0;
+    int historyPos = 0, spatialPos = 0, capturedLength = 0, capturedStart = 0;
     double playHead = 0.0;
     float env = 0.0f, noteVelocity = 1.0f;
     int envStage = 0; // 0 off, 1 attack, 2 decay, 3 sustain, 4 release
