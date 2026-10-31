@@ -4,8 +4,8 @@ Feature branch created from approved `baseline/effects-golden-20261020-libpd-pat
 Official MIDI manual: https://static1.squarespace.com/static/689b53dbdfec6d3f10536eae/t/68ccf358f11808289539219e/1758262104480/Chase-Bliss-MOODMKII_MIDIManual_JP.pdf
 
 ## Implemented
-- Always-listening stereo input ring, CAPTURE snapshots the recent audio (loop time follows CC14 and CC16).
-- Mono note performance on captured audio using 12-TET resampling; touchscreen C4–C5 or external MIDI notes; note velocity, attack/release envelope. Wet processing remains stereo.
+- Always-listening stereo input ring, CAPTURE swaps two preallocated stereo rings in O(1) time to hold recent audio (loop time follows CC14 and CC16).
+- Mono note performance on captured audio using 12-TET resampling; touchscreen C4–C5 or external MIDI notes; note velocity, attack/decay/sustain/release envelope. Wet processing remains stereo.
 - X/Y assignable CC selection: CC14 TIME, 15 MIX, 16 LENGTH, 17 WET MODIFY, 18 CLOCK, 19 LOOP MODIFY, 20 RAMP, 21 WET MODE, 22 ROUTING, 23 LOOP MODE, 58 OUTPUT, 80-84 envelope/portamento. By default X=14, Y=19. External controller CC input enters the engine, not MIDI output.
 - Two channels: micro-loop output plus simplified wet reverb/delay/slip-type processing. No guaranteed equivalence to actual hardware.
 - Keyboard overlay with translucent white/black keys, touch-drag note reassignment. CAPTURE, CC selectors, LOAD TILES.
@@ -13,10 +13,10 @@ Official MIDI manual: https://static1.squarespace.com/static/689b53dbdfec6d3f105
 
 ## Not implemented / incomplete
 - 400-frame pack is separately provided as a downloadable artifact, **not yet committed as a bundled binary resource**. The app UI requires a first-time LOAD TILES import until this asset is embedded in release. The code falls back to a `BinaryData::getNamedResource("mood_frames_pack")` resource if the pack is bundled later.
-- This is **not a MOOD MKII audio algorithm reproduction**: TAPE/STRETCH/ENV, WET DELAY/REVERB/SLIP algorithms are a basic simulation; no DSP parity verification. No official Freeze, Overdub, stereo width, hidden settings, presets, sync, ramp waveforms, or full CC map functional implementation.
-- MIDI synth mode's detailed ADSR is partial (attack/release); decay/sustain/portamento parameters are not wired to DSP despite CC storage. Do not call those fully implemented.
+- This is **not a MOOD MKII audio algorithm reproduction**: TAPE/STRETCH/ENV and WET DELAY/REVERB/SLIP are approximations, with basic reverse/stall, freeze (CC105), overdub (CC106) and no DSP parity verification. Original stereo width, hidden settings, presets, precise sync, ramp waveforms and the full CC map remain unimplemented.
+- Basic ADSR attack/decay/sustain/release is wired to captured-note level, but its curves and timing are approximations. CC84 portamento and CC20 ramp are selectable yet **not wired to audio**; the controls must not be described as functional.
 - Manual inconsistency: official JP MIDI document labels Output Type CC58 (page 9-10) but later captions mention CC59; separate third-party MIDI list reports CC87. Current UI maps 58 per official main table. Hardware verification needed.
-- No APK build, no hardware smoke test, no latency/stereo/CPU audio measurements.
+- No APK build, no hardware smoke test, no latency/stereo/CPU audio measurements. The generated media pack is available separately and requires first-time user import, so this branch is not yet a fully self-contained distributable app.
 - Previous failures to inspect before build: CircleCI config v2.1 unclosed `<<`, JUCE resource dependencies, config scroll UI, MIDI port and effect mode range, audio callback allocations, older CHORD-A/Haze golden regressions.
 
 ## Asset format
