@@ -181,6 +181,8 @@ jobs:
             # Known generated-source regression: CMake cannot configure
             # a juce_jni target if Projucer omits BinaryData.cpp.
             test -s JuceLibraryCode/BinaryData.cpp
+            # Confirm the bundled MOOD tiles were emitted by Projucer.
+            grep -F 'mood_frames_pack' JuceLibraryCode/BinaryData.h
             test -s JuceLibraryCode/JuceHeader.h
             python3 scripts/patch_android_native_parallelism.py Builds/Android/app/build.gradle
             grep -F -- '-DCMAKE_JOB_POOLS:STRING=compile=2;link=1' Builds/Android/app/build.gradle

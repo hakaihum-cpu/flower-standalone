@@ -69,6 +69,15 @@ ICON_B64 = ROOT / 'Resources' / 'effects_app_icon.b64'
 ICON_OUT = ROOT / 'Resources' / 'effects_app_icon.jpg'
 ICON_SHA256 = 'f4d9d841e5f4789588c53c8babcc849663911583907b259436e683c8268ee703'
 ICON_SIZE = 27540
+# MOOD MKII user-provided 343 JPEG frames. Reconstructed before Projucer
+# generates BinaryData.cpp, using the same pinned frame-pack workflow.
+MOOD_CHUNK_DIR = ROOT / 'Resources' / 'mood_frame_chunks'
+MOOD_OUT = ROOT / 'Resources' / 'mood_frames.pack'
+MOOD_COUNT = 343
+MOOD_PARTS = 34
+MOOD_SIZE = 2216566
+MOOD_SHA256 = '035ef6cca6deff441b39ed51a9c3df9cbbe1b67548922bac1db3460a4f2438a4'
+
 
 
 def decode_chunks(paths):
@@ -319,6 +328,29 @@ if vongon_sha != VONGON_SHA256:
 validate_crf1(vongon, VONGON_COUNT, 'Vongon frame pack')
 VONGON_OUT.write_bytes(vongon)
 
+
+# Bundle MOOD source frames into the APK at build time.
+mood_parts = sorted(MOOD_CHUNK_DIR.glob('mood_*.b64'))
+if len(mood_parts) != MOOD_PARTS:
+    raise SystemExit(f'[FAIL] expected {MOOD_PARTS} MOOD chunks, got {len(mood_parts)}')
+mood = decode_chunks(mood_parts)
+if len(mood) != MOOD_SIZE:
+    raise SystemExit(f'[FAIL] MOOD pack size {len(mood)} != {MOOD_SIZE}')
+mood_sha = hashlib.sha256(mood).hexdigest()
+if mood_sha != MOOD_SHA256:
+    raise SystemExit(f'[FAIL] MOOD pack sha256 mismatch: {mood_sha}')
+validate_crf1(mood, MOOD_COUNT, 'MOOD frame pack')
+# Verify the actual on-disk CRF1 table and the JPEG boundaries.
+for frame_index in range(MOOD_COUNT):
+    frame_offset, frame_flags, frame_size = struct.unpack_from(
+        '<III', mood, 8 + frame_index * 12)
+    if frame_offset < 8 + MOOD_COUNT * 12 or frame_offset + frame_size > len(mood):
+        raise SystemExit(f'[FAIL] MOOD frame bounds invalid at {frame_index}')
+    frame = mood[frame_offset:frame_offset + frame_size]
+    if frame[:2] != bytes((0xff, 0xd8)) or frame[-2:] != bytes((0xff, 0xd9)):
+        raise SystemExit(f'[FAIL] MOOD JPEG frame invalid at {frame_index}')
+MOOD_OUT.write_bytes(mood)
+
 icon_encoded = ''.join(ICON_B64.read_text(encoding='ascii').split())
 icon = base64.b64decode(icon_encoded, validate=True)
 if len(icon) != ICON_SIZE:
@@ -340,3 +372,4 @@ print(
     f'[PASS] launcher icon: {len(icon)} bytes sha256={icon_sha}')
 print(
     f'[PASS] Vongon pack: {len(vongon)} bytes / {VONGON_COUNT} frames sha256={vongon_sha}')
+print(f'[PASS] MOOD pack: {len(mood)} bytes / {MOOD_COUNT} frames sha256={mood_sha}')
