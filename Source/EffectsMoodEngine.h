@@ -25,6 +25,7 @@ public:
         captureFlag.store (false, std::memory_order_relaxed);
         playHead = 0.0; env = 0.0f;
         lastNote = -1;
+        envStage = 0;
         midiNote = -1;
         uiNote.store (-1, std::memory_order_relaxed);
         noteVelocity = 1.0f;
@@ -35,13 +36,14 @@ public:
         setCc (16, 64); // LENGTH
         setCc (17, 50); // WET MODIFY
         setCc (18, 100); // CLOCK
-        setCc (19, 100); // MICRO MODIFY: positive direction in tape
+        setCc (19, 92); // MICRO MODIFY: 1x forward, TAPE mode
         setCc (21, 1);  // WET CHANNEL: REVERB
         setCc (22, 2);  // ROUTING: LOOP+IN
         setCc (23, 2);  // MICRO LOOPER: TAPE
         setCc (58, 2);  // SYNTH: ADSR
         setCc (80, 8); setCc (81, 32); setCc (82, 108); setCc (83, 48);
         setCc (102, 127); setCc (103, 127);
+        setCc (105, 0); setCc (106, 0); // no freeze / overdub by default
         axisX.store (14, std::memory_order_relaxed);
         axisY.store (19, std::memory_order_relaxed);
         x.store (0.5f, std::memory_order_relaxed);
@@ -53,6 +55,7 @@ public:
         capturedReady.store (false, std::memory_order_relaxed);
         capturedLength = 0;
         midiNote = lastNote = -1;
+        envStage = 0;
         uiNote.store (-1, std::memory_order_relaxed);
         env = 0.0f;
         playHead = 0.0;
@@ -143,6 +146,8 @@ public:
         playingNote.store (note, std::memory_order_relaxed);
         const bool noteGate = note >= 0;
         const float attack = 0.003f + 1.5f * std::pow ((float) getCc (80) / 127.0f, 2.0f);
+        const float decay = 0.005f + 2.5f * std::pow ((float) getCc (81) / 127.0f, 2.0f);
+        const float sustain = (float) getCc (82) / 127.0f;
         const float release = 0.008f + 3.5f * std::pow ((float) getCc (83) / 127.0f, 2.0f);
         const int outputType = getCc (58);
         const bool hasLoop = capturedReady.load (std::memory_order_acquire);
@@ -161,12 +166,42 @@ public:
             capturedReady.store (true, std::memory_order_release);
         }
         const bool active = hasLoop || capturedReady.load (std::memory_order_relaxed);
-        if (note != lastNote) { playHead = 0.0; lastNote = note; }
+        if (note != lastNote)
+        {
+            playHead = 0.0;
+            envStage = note >= 0 ? 1 : 4;
+            lastNote = note;
+        }
         const double noteRate = noteGate ? std::pow (2.0, ((double) note - 60.0) / 12.0) : 1.0;
         // TAPE/STRETCH are approximate. CLK ratio changes both channels as on hardware.
         const double clockRate = std::pow (2.0, (double) (clock - 0.8f) * 2.0);
-        const double tapeRate = (loopMode == 0 ? 1.0 : (0.5 + 1.5 * modify));
-        const double speed = noteRate * clockRate * tapeRate;
+        // Preserve the pedal's documented *stepped* TAPE/STRETCH speed
+        // ranges, including Reverse and Stall. ENV micro-loop uses 1x.
+        double microRate = 1.0;
+        const int speedCc = getCc (19);
+        if (loopMode == 1)
+        {
+            if (speedCc <= 4) microRate = -4.0;
+            else if (speedCc <= 23) microRate = -2.0;
+            else if (speedCc <= 42) microRate = -1.0;
+            else if (speedCc <= 61) microRate = -0.5;
+            else if (speedCc <= 84) microRate = 0.5;
+            else if (speedCc <= 97) microRate = 1.0;
+            else if (speedCc <= 119) microRate = 2.0;
+            else microRate = 4.0;
+        }
+        else if (loopMode == 2)
+        {
+            if (speedCc <= 15) microRate = -1.0;
+            else if (speedCc <= 30) microRate = -1.5;
+            else if (speedCc <= 46) microRate = -2.0;
+            else if (speedCc <= 60) microRate = -4.0;
+            else if (speedCc <= 80) microRate = 0.0;
+            else if (speedCc <= 96) microRate = 4.0;
+            else if (speedCc <= 111) microRate = 2.0;
+            else if (speedCc <= 126) microRate = 1.5;
+        }
+        const double speed = noteRate * clockRate * microRate;
         const int delayTap = juce::jlimit (64, delaySize - 1, (int) ((0.065f + time * 0.68f) * rate));
         for (int i = 0; i < n; ++i)
         {
@@ -191,12 +226,37 @@ public:
                     const float glide = (float) (juce::jmin (a, capturedLength - a) + 1) / (float) juce::jmax (1, capturedLength / 24);
                     const float edge = juce::jlimit (0.0f, 1.0f, glide);
                     const float voiced = loop * edge;
-                    const float target = (outputType == 0 || noteGate) ? 1.0f : 0.0f;
-                    const float sec = target > env ? attack : release;
-                    const float coeff = 1.0f - std::exp (-1.0f / ((float) rate * sec));
-                    if (ch == 0) env += (target - env) * coeff;
-                    const float gate = (outputType == 0 ? 1.0f : env) * (noteGate ? noteVelocity : 1.0f);
+                    if (ch == 0)
+                    {
+                        const float a = 1.0f - std::exp (-1.0f / ((float) rate * attack));
+                        const float d = 1.0f - std::exp (-1.0f / ((float) rate * decay));
+                        const float r = 1.0f - std::exp (-1.0f / ((float) rate * release));
+                        if (envStage == 1)
+                        {
+                            env += (1.0f - env) * a;
+                            if (env > 0.995f) envStage = 2;
+                        }
+                        else if (envStage == 2)
+                        {
+                            env += (sustain - env) * d;
+                            if (std::abs (env - sustain) < 0.003f) envStage = 3;
+                        }
+                        else if (envStage == 3) env = sustain;
+                        else if (envStage == 4)
+                        {
+                            env += (0.0f - env) * r;
+                            if (env < 0.0001f) { env = 0.0f; envStage = 0; }
+                        }
+                    }
+                    const float noteGain = noteGate ? noteVelocity : 1.0f;
+                    const float gate = (outputType == 0 ? 1.0f
+                                      : outputType == 1 ? (noteGate ? 1.0f : 0.0f)
+                                      : env) * noteGain;
                     // Routing follows hardware options IN / LOOP+IN / LOOP.
+                    if (getCc (106) > 0)
+                        captured[(size_t) ch][(size_t) a] =
+                            0.7f * captured[(size_t) ch][(size_t) a]
+                            + 0.3f * source[ch]; // overdub, no allocation
                     source[ch] = (routing == 0 ? source[ch] :
                                   routing == 1 ? 0.35f * source[ch] + 0.65f * voiced * gate
                                                : voiced * gate);
@@ -216,8 +276,11 @@ public:
                                                         : (0.20f + 0.65f * wetModify);
                     const float smoothed = wetMode == 1 ? delayed : 0.65f * filtered[(size_t) ch] + 0.35f * delayed;
                     filtered[(size_t) ch] = smoothed;
+                    const bool frozen = getCc (105) > 0;
                     spatial[(size_t) ch][(size_t) spatialPos] =
-                        juce::jlimit (-0.9f, 0.9f, source[ch] + feedback * smoothed);
+                        juce::jlimit (-0.9f, 0.9f,
+                                     (frozen ? 0.0f : source[ch])
+                                     + (frozen ? 0.996f : feedback) * smoothed);
                     source[ch] = source[ch] * (1.0f - mix) + smoothed * mix;
                 }
             }
@@ -233,6 +296,7 @@ private:
     int historyPos = 0, spatialPos = 0, capturedLength = 0;
     double playHead = 0.0;
     float env = 0.0f, noteVelocity = 1.0f;
+    int envStage = 0; // 0 off, 1 attack, 2 decay, 3 sustain, 4 release
     int midiNote = -1, lastNote = -1;
     std::atomic<int> uiNote { -1 }, playingNote { -1 };
     std::array<std::atomic<int>, 128> cc {};
