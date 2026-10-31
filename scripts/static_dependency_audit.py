@@ -623,10 +623,14 @@ for need in [
         fail(f"MOOD MIDI-only/audio-bypass contract missing: {need}")
 if "moodProcessor.process (buffer)" in processor:
     fail("MOOD local audio DSP must not be called")
+# Validate the current functional UI contract, not obsolete help copy.
 for need in [
     "MIDI ONLY - INPUT GAIN OFF",
-    "TAP LABEL TO ASSIGN MIDI CC",
-    "CAPTURE: LOOP CC102",
+    "processor.getMoodAxisCc (true)",
+    "processor.getMoodAxisCc (false)",
+    "processor.getMoodAxisValue (true)",
+    "processor.getMoodAxisValue (false)",
+    "TAP PAD: REC/PLAY  HOLD: CLEAR  DRAG: XY",
     "moodMidiEnabled",
     "processor.moodHasCapture() ? \"LOOP OFF\" : \"CAPTURE\"",
 ]:
