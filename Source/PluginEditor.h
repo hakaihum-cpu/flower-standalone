@@ -64,6 +64,10 @@ private:
     int moodKeyAtPoint (juce::Point<float>) const;
     void importMoodFrames();
     void reloadMoodFrames();
+    void startMoodRecording();
+    void stopMoodRecordingAndPlay();
+    void clearMoodRecording();
+    void applyMoodXY (float x, float y, bool fromPlayback = false);
     void choosePureDataPatchFile();
     void paintMidiControlConfig (juce::Graphics&);
     void paintBar (juce::Graphics&, juce::Rectangle<float>, const juce::String&, float, const juce::String&);
@@ -107,6 +111,15 @@ private:
     int moodPreviousNote = -1;
     float moodPreviousActivity = 0.0f, moodPreviousX = 0.5f, moodPreviousY = 0.5f;
     bool moodPointerDown = false;
+    bool moodPointerMoved = false;
+    juce::Point<float> moodPointerStart;
+    double moodPointerDownMs = 0.0;
+    bool moodPanelVisible = true;
+    int moodTransport = 0; // 0=idle, 1=REC, 2=PLAY
+    static constexpr int moodRecordCapacity = 1800; // 60 seconds at 30Hz, like MULTI
+    std::array<juce::Point<float>, moodRecordCapacity> moodRecordedXY {};
+    int moodRecordCount = 0;
+    int moodPlaybackIndex = 0;
     int moodKeyboardNote = -1;
     // 13-key C-based keyboard; MIDI C-1=0 through C9=120.
     int moodKeyboardOctave = 4;

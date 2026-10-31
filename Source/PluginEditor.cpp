@@ -779,6 +779,25 @@ void RealtimeChordFxAudioProcessorEditor::timerCallback()
 
     const int effectMode = juce::jlimit (0, 10, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::effectMode)->load()));
+    if (effectMode != 10 && moodTransport == 1)
+        stopMoodRecordingAndPlay();
+    if (effectMode == 10)
+    {
+        if (moodTransport == 1)
+        {
+            if (moodRecordCount < moodRecordCapacity)
+                moodRecordedXY[(size_t) moodRecordCount++] = {
+                    processor.getMoodXY (true), processor.getMoodXY (false) };
+            if (moodRecordCount == moodRecordCapacity)
+                stopMoodRecordingAndPlay();
+        }
+        else if (moodTransport == 2 && moodRecordCount > 0 && ! moodPointerDown)
+        {
+            const auto xy = moodRecordedXY[(size_t) moodPlaybackIndex];
+            moodPlaybackIndex = (moodPlaybackIndex + 1) % moodRecordCount;
+            applyMoodXY (xy.x, xy.y, true);
+        }
+    }
     if (effectMode == 10 && moodFrames.getFrameCount() > 0)
     {
         const int note = processor.getMoodNote();
@@ -1746,6 +1765,43 @@ void RealtimeChordFxAudioProcessorEditor::applyMultiXY (float x, float y)
     processor.setVongonXY (
         effects_video::localX (multiX),
         effects_video::localY (multiY), false);
+}
+
+void RealtimeChordFxAudioProcessorEditor::applyMoodXY (
+    float x, float y, bool fromPlayback)
+{
+    x = juce::jlimit (0.0f, 1.0f, x);
+    y = juce::jlimit (0.0f, 1.0f, y);
+    if (! fromPlayback && moodTransport == 2)
+        moodTransport = 0;
+    // Suppress repeated identical MIDI CC values during loop playback.
+    if (std::abs (x - processor.getMoodXY (true)) >= 0.003f
+        || std::abs (y - processor.getMoodXY (false)) >= 0.003f)
+        processor.setMoodXY (x, y);
+}
+
+void RealtimeChordFxAudioProcessorEditor::startMoodRecording()
+{
+    moodRecordCount = 0;
+    moodPlaybackIndex = 0;
+    moodTransport = 1;
+    moodRecordedXY[(size_t) moodRecordCount++] = {
+        processor.getMoodXY (true), processor.getMoodXY (false) };
+}
+
+void RealtimeChordFxAudioProcessorEditor::stopMoodRecordingAndPlay()
+{
+    moodPlaybackIndex = 0;
+    moodTransport = moodRecordCount > 0 ? 2 : 0;
+}
+
+void RealtimeChordFxAudioProcessorEditor::clearMoodRecording()
+{
+    moodTransport = 0;
+    moodRecordCount = 0;
+    moodPlaybackIndex = 0;
+    moodPointerDown = false;
+    moodPointerMoved = false;
 }
 
 void RealtimeChordFxAudioProcessorEditor::startMultiRecording()
@@ -3821,13 +3877,49 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
     if (effectMode == 10)
     {
-        if (p.y >= 616.0f)
+        // PANEL is visible in the top bar only when the keyboard/CC panel is closed.
+        if (! moodPanelVisible && p.x >= 372.0f && p.x < 475.0f
+            && p.y >= 12.0f && p.y < 67.0f)
+        {
+            moodPanelVisible = true;
+            repaint();
+            return;
+        }
+        if (moodPanelVisible && p.y >= 501.0f && p.y < 537.0f)
+        {
+            if (p.x >= 378.0f && p.x < 442.0f)
+            {
+                if (moodTransport == 1)
+                    stopMoodRecordingAndPlay();
+                else
+                    startMoodRecording();
+            }
+            else if (p.x >= 450.0f && p.x < 511.0f)
+            {
+                if (moodTransport == 2)
+                    moodTransport = 0;
+                else if (moodTransport == 1)
+                    stopMoodRecordingAndPlay();
+                else if (moodRecordCount > 0)
+                {
+                    moodPlaybackIndex = 0;
+                    moodTransport = 2;
+                }
+            }
+            else if (p.x >= 519.0f && p.x < 607.0f)
+                clearMoodRecording();
+            else if (p.x >= 615.0f && p.x < 705.0f)
+                moodPanelVisible = false;
+            repaint();
+            return;
+        }
+        if (moodPanelVisible && p.y >= 616.0f)
         {
             moodKeyboardNote = moodKeyAtPoint (p);
             if (moodKeyboardNote >= 0)
                 processor.moodNote (moodKeyboardNote, true);
         }
-        else if (p.y >= 510.0f && p.y < 570.0f)
+        else if (moodPanelVisible && p.y >= 538.0f && p.y < 574.0f)
         {
             if (p.x >= 26.0f && p.x < 162.0f)
                 processor.captureMood();
@@ -3866,11 +3958,13 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
                 moodKeyboardOctave = juce::jmin (9, moodKeyboardOctave + 1);
             }
         }
-        else if (p.y > 70.0f && p.y < 510.0f)
+        else if (p.y > 70.0f && p.y < (moodPanelVisible ? 501.0f : 704.0f))
         {
+            // MULTI-style: tap REC/PLAY, hold CLEAR; drag controls XY.
             moodPointerDown = true;
-            processor.setMoodXY (juce::jlimit (0.0f,1.0f,p.x/720.0f),
-                juce::jlimit (0.0f,1.0f,1.0f-(p.y-70.0f)/440.0f));
+            moodPointerMoved = false;
+            moodPointerStart = p;
+            moodPointerDownMs = juce::Time::getMillisecondCounterHiRes();
         }
         repaint();
         return;
@@ -4188,8 +4282,14 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
             }
         }
         else if (moodPointerDown)
-            processor.setMoodXY (juce::jlimit (0.0f,1.0f,p.x/720.0f),
-                juce::jlimit (0.0f,1.0f,1.0f-(p.y-70.0f)/440.0f));
+        {
+            if (p.getDistanceFrom (moodPointerStart) > 10.0f)
+                moodPointerMoved = true;
+            if (moodPointerMoved)
+                applyMoodXY (p.x / design,
+                    1.0f - (p.y - 70.0f)
+                        / (moodPanelVisible ? 431.0f : 634.0f));
+        }
         repaint();
         return;
     }
@@ -4241,7 +4341,24 @@ void RealtimeChordFxAudioProcessorEditor::mouseDrag (const juce::MouseEvent& e)
 
 void RealtimeChordFxAudioProcessorEditor::mouseUp (const juce::MouseEvent&)
 {
-    moodPointerDown = false;
+    if (moodPointerDown)
+    {
+        const double heldMs = juce::Time::getMillisecondCounterHiRes()
+                            - moodPointerDownMs;
+        moodPointerDown = false;
+        if (! moodPointerMoved)
+        {
+            if (heldMs >= 700.0)
+                clearMoodRecording();
+            else if (moodTransport == 1)
+                stopMoodRecordingAndPlay();
+            else
+                startMoodRecording();
+        }
+        moodPointerMoved = false;
+        repaint();
+        return;
+    }
     if (moodKeyboardNote >= 0)
     {
         processor.moodNote (moodKeyboardNote, false);
@@ -4466,19 +4583,66 @@ void RealtimeChordFxAudioProcessorEditor::paintMoodMode (juce::Graphics& g)
     g.drawText ("MICRO-LOOP / WET CHANNEL / MIDI SYNTH", 26, 50, 330, 18,
                 juce::Justification::centredLeft);
     g.drawText ("CONFIG", 604, 22, 88, 24, juce::Justification::centredRight);
+    if (! moodPanelVisible)
+    {
+        g.setColour (uiColour (0.92f));
+        g.setFont (juce::FontOptions (14.0f).withStyle ("Bold"));
+        g.drawText ("PANEL", 372, 22, 103, 30, juce::Justification::centred);
+    }
+    if (moodTransport == 1)
+    {
+        g.setColour (juce::Colour (0xffef4540));
+        g.drawRect (juce::Rectangle<float> (7.0f, 7.0f, 706.0f, 706.0f), 3.0f);
+        g.setFont (juce::FontOptions (12.0f).withStyle ("Bold"));
+        g.drawText ("XY REC", 277, 22, 100, 30, juce::Justification::centred);
+    }
+    else if (moodTransport == 2)
+    {
+        g.setColour (uiColour (0.93f));
+        g.setFont (juce::FontOptions (11.0f).withStyle ("Bold"));
+        g.drawText ("XY PLAY", 276, 22, 100, 30, juce::Justification::centred);
+    }
 
     const float xx = processor.getMoodXY (true);
     const float yy = processor.getMoodXY (false);
     const float px = 20.0f + 680.0f * xx;
-    const float py = 70.0f + 440.0f * (1.0f - yy);
+    const float padBottom = moodPanelVisible ? 501.0f : 704.0f;
+    const float py = 70.0f + (padBottom - 70.0f) * (1.0f - yy);
     g.setColour (uiColour (0.32f));
-    g.drawLine (px, 78.0f, px, 508.0f, 1.0f);
+    g.drawLine (px, 78.0f, px, padBottom, 1.0f);
     g.drawLine (0.0f, py, 720.0f, py, 1.0f);
     g.setColour (uiColour (0.86f));
     g.drawEllipse (px - 14.0f, py - 14.0f, 28.0f, 28.0f, 1.5f);
 
+    if (! moodPanelVisible)
+        return; // PANEL in the title bar always restores the keyboard/CC controls.
+
     g.setColour (juce::Colours::black.withAlpha (0.73f));
     g.fillRect (0.0f, 501.0f, 720.0f, 219.0f);
+    g.setFont (juce::FontOptions (12.0f).withStyle ("Bold"));
+    g.setColour (uiColour (0.93f));
+    g.drawText (moodTransport == 1
+                   ? "XY REC " + juce::String (moodRecordCount / 30) + "s"
+                   : moodTransport == 2 ? "XY PLAY"
+                   : moodRecordCount > 0 ? "XY STOP" : "XY IDLE",
+               24, 504, 235, 28, juce::Justification::centredLeft);
+    struct Action { float x, w; const char* label; bool selected; };
+    const Action actions[] = {
+        {378.0f, 64.0f, moodTransport == 1 ? "STOP" : "REC", moodTransport == 1},
+        {450.0f, 61.0f, moodTransport == 2 ? "STOP" : "PLAY", moodTransport == 2},
+        {519.0f, 88.0f, "CLEAR", false},
+        {615.0f, 90.0f, "CLOSE", false}
+    };
+    for (const auto& action : actions)
+    {
+        const juce::Rectangle<float> r (action.x, 502.0f, action.w, 33.0f);
+        g.setColour (uiColour (action.selected ? 0.18f : 0.07f));
+        g.fillRoundedRectangle (r, 3.0f);
+        g.setColour (uiColour (action.selected ? 1.0f : 0.70f));
+        g.drawRoundedRectangle (r, 3.0f, action.selected ? 2.0f : 1.0f);
+        g.setFont (juce::FontOptions (12.0f).withStyle ("Bold"));
+        g.drawText (action.label, r, juce::Justification::centred);
+    }
     static constexpr int ccChoices[] = {14,15,16,17,18,19,20,21,22,23,58,80,81,82,83,84};
     static constexpr const char* ccNames[] = {
         "TIME", "MIX", "LENGTH", "WET MOD", "CLOCK", "LOOP MOD",
@@ -4505,7 +4669,7 @@ void RealtimeChordFxAudioProcessorEditor::paintMoodMode (juce::Graphics& g)
     };
     for (const auto& bt : buttons)
     {
-        const juce::Rectangle<float> area (bt.x, 515.0f, bt.w, 50.0f);
+        const juce::Rectangle<float> area (bt.x, 539.0f, bt.w, 35.0f);
         g.setColour (juce::Colours::black.withAlpha (0.36f));
         g.fillRoundedRectangle (area, 3.0f);
         g.setColour (uiColour (bt.selected ? 1.0f : 0.66f));
@@ -4516,19 +4680,35 @@ void RealtimeChordFxAudioProcessorEditor::paintMoodMode (juce::Graphics& g)
     }
     g.setColour (uiColour (0.65f));
     g.setFont (juce::FontOptions (11.0f));
-    g.drawText ("X/Y: TAP LABEL TO ASSIGN MIDI CC; DRAG PAD TO SEND 0-127",
-        35, 573, 654, 23, juce::Justification::centredLeft);
+    const int xCc = processor.getMoodAxisCc (true);
+    const int yCc = processor.getMoodAxisCc (false);
+    const int xSent = processor.getMoodAxisValue (true);
+    const int ySent = processor.getMoodAxisValue (false);
+    const juce::String xValue = xCc >= 21 && xCc <= 23
+        ? xSent == 1 ? "LEFT" : xSent == 2 ? "MID" : "RIGHT"
+        : juce::String (xSent);
+    const juce::String yValue = yCc >= 21 && yCc <= 23
+        ? ySent == 1 ? "LEFT" : ySent == 2 ? "MID" : "RIGHT"
+        : juce::String (ySent);
+    g.drawFittedText ("X CC" + juce::String (xCc) + "=" + xValue
+            + "    Y CC" + juce::String (yCc) + "=" + yValue
+            + "   |   TAP PAD: REC/PLAY  HOLD: CLEAR  DRAG: XY",
+        juce::Rectangle<int> (35, 576, 660, 19),
+        juce::Justification::centredLeft, 1);
     const int moodCh = juce::jlimit (1, 16, juce::roundToInt (
         processor.state().getRawParameterValue (ParamID::midiChannel)->load()));
     const bool moodMidiEnabled =
         processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
     const int baseNote = moodKeyboardBaseNote();
     g.drawFittedText ("OCT " + juce::String (moodKeyboardOctave)
-                + " (MIDI " + juce::String (baseNote) + "-"
+                + " MIDI " + juce::String (baseNote) + "-"
                 + juce::String (juce::jmin (127, baseNote + 12))
-                + ") | MIDI OUT " + juce::String (moodMidiEnabled ? "ON" : "OFF")
-                + " CH " + juce::String (moodCh) + " | CAPTURE CC102",
-        juce::Rectangle<int> (35, 595, 660, 23),
+                + " | OUT " + juce::String (moodMidiEnabled ? "ON" : "OFF")
+                + " CH" + juce::String (moodCh)
+                + (processor.moodCaptureWasRequested()
+                   ? (processor.moodHasCapture() ? " | LOOP ON" : " | LOOP OFF")
+                   : " | LOOP: PEDAL STATE UNKNOWN"),
+        juce::Rectangle<int> (35, 596, 660, 20),
         juce::Justification::centredLeft, 1);
 
     // Low-opacity performance keyboard, placed above the very bottom edge.

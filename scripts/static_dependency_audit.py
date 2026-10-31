@@ -2041,3 +2041,63 @@ for marker in (
 if "const int note = enabled ? moodUiNote.load" in note_handler:
     fail("MOOD may not collapse fast key down/up into a single state")
 print("[PASS] MOOD key transitions queued across audio callbacks without missing short taps")
+
+# MOOD 2026-10-31: MULTI-style XY recorder, panel navigation and hardware CC mapping.
+for required in (
+    "int moodTransport = 0;",
+    "static constexpr int moodRecordCapacity = 1800;",
+    "std::array<juce::Point<float>, moodRecordCapacity> moodRecordedXY",
+    "int moodRecordCount = 0;",
+    "bool moodPanelVisible = true;",
+    "void startMoodRecording();",
+    "void stopMoodRecordingAndPlay();",
+    "void clearMoodRecording();",
+    "void applyMoodXY (float x, float y, bool fromPlayback = false);",
+):
+    if required not in editor_header:
+        fail(f"MOOD MULTI-style recorder/panel state missing: {required}")
+for required in (
+    "if (moodTransport == 1)",
+    "moodRecordedXY[(size_t) moodRecordCount++]",
+    "moodRecordCount == moodRecordCapacity",
+    "moodPlaybackIndex = (moodPlaybackIndex + 1) % moodRecordCount;",
+    "applyMoodXY (xy.x, xy.y, true);",
+    "moodPointerDownMs = juce::Time::getMillisecondCounterHiRes();",
+    "if (heldMs >= 700.0)",
+    "clearMoodRecording();",
+    "startMoodRecording();",
+    "stopMoodRecordingAndPlay();",
+    "moodPanelVisible = false;",
+    "moodPanelVisible = true;",
+    "if (! moodPanelVisible)",
+    '"CLOSE", false',
+    '"PANEL"',
+    '"OCT+", false',
+    '"OCT-", false',
+):
+    if required not in editor:
+        fail(f"MOOD XY REC/PLAY, panel CLOSE or octave regression: {required}")
+for required in (
+    "moodCaptureSetByUser.store (true",
+    "static int moodMappedCc (int cc, int value) noexcept",
+    "value < 43 ? 1 : value < 85 ? 2 : 3",
+    "int getMoodAxisValue (bool xAxis) const noexcept",
+):
+    if required not in processor_header:
+        fail(f"MOOD hardware MIDI CC mapping contract missing: {required}")
+for required in (
+    "changedChannel && moodCaptureSetByUser.load",
+    "const bool captureChanged = moodCaptureDirty.exchange",
+    "const int value = moodMappedCc (cc, juce::roundToInt (",
+):
+    if required not in processor:
+        fail(f"MOOD pedal bypass or three-step CC regression: {required}")
+if "if (changedChannel || moodCaptureDirty.exchange" in processor:
+    fail("MOOD must not auto-send CC102=0 just by entering the mode")
+if "moodProcessor.process (buffer);" in processor:
+    fail("MOOD must remain external MIDI only")
+if editor.count("void RealtimeChordFxAudioProcessorEditor::applyMoodXY (") != 1:
+    fail("MOOD XY playback method duplication")
+if "processChordMidi (midi);\n        processChordBotMidi (midi);" not in processor:
+    fail("CHORDBOT entry ordering regression")
+print("[PASS] MOOD XY recording/playback, CLOSE/PANEL, conditional CC102 and 3-position toggles")

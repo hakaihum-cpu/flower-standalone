@@ -606,6 +606,7 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
             else if (message.isController() && message.getControllerNumber() == 102)
             {
                 moodLoopEngaged.store (message.getControllerValue() > 0, std::memory_order_relaxed);
+                moodCaptureSetByUser.store (true, std::memory_order_relaxed);
                 moodCaptureDirty.store (false, std::memory_order_relaxed);
             }
         }
@@ -1567,7 +1568,12 @@ void RealtimeChordFxAudioProcessor::processMoodMidi (
     }
 
     const bool changedChannel = moodLastCcChannel != channel;
-    if (changedChannel || moodCaptureDirty.exchange (false, std::memory_order_acq_rel))
+    // Never bypass the user's hardware merely on entering MOOD mode.
+    // Only send CC102 after the user (or incoming MIDI) deliberately set it.
+    const bool captureChanged = moodCaptureDirty.exchange (
+        false, std::memory_order_acq_rel);
+    if ((changedChannel && moodCaptureSetByUser.load (std::memory_order_acquire))
+        || captureChanged)
         out.addEvent (juce::MidiMessage::controllerEvent (
             channel, 102,
             moodLoopEngaged.load (std::memory_order_acquire) ? 127 : 0), 0);
@@ -1578,8 +1584,8 @@ void RealtimeChordFxAudioProcessor::processMoodMidi (
         if (changedChannel || dirty.exchange (false, std::memory_order_acq_rel))
         {
             const int cc = moodProcessor.getAxis (xAxis);
-            const int value = juce::jlimit (0, 127,
-                juce::roundToInt (moodProcessor.getXY (xAxis) * 127.0f));
+            const int value = moodMappedCc (cc, juce::roundToInt (
+                moodProcessor.getXY (xAxis) * 127.0f));
             out.addEvent (juce::MidiMessage::controllerEvent (channel, cc, value), 0);
         }
     }

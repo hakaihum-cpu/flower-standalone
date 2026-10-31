@@ -81,6 +81,7 @@ public:
     {
         moodLoopEngaged.store (! moodLoopEngaged.load (std::memory_order_relaxed),
                                std::memory_order_release);
+        moodCaptureSetByUser.store (true, std::memory_order_release);
         moodCaptureDirty.store (true, std::memory_order_release);
     }
     bool moodHasCapture() const noexcept { return moodLoopEngaged.load (std::memory_order_acquire); }
@@ -125,6 +126,22 @@ public:
     int getMoodAxisCc (bool axisX) const noexcept { return moodProcessor.getAxis (axisX); }
     void setMoodCc (int cc, int value) noexcept { moodProcessor.setCc (cc, value); }
     int getMoodCc (int cc) const noexcept { return moodProcessor.getCc (cc); }
+    static int moodMappedCc (int cc, int value) noexcept
+    {
+        value = juce::jlimit (0, 127, value);
+        // MOOD hardware selectors are 3-position switches, not 0..127 knobs.
+        return cc >= 21 && cc <= 23
+            ? (value < 43 ? 1 : value < 85 ? 2 : 3) : value;
+    }
+    int getMoodAxisValue (bool xAxis) const noexcept
+    {
+        return moodMappedCc (getMoodAxisCc (xAxis),
+            juce::roundToInt (getMoodXY (xAxis) * 127.0f));
+    }
+    bool moodCaptureWasRequested() const noexcept
+    {
+        return moodCaptureSetByUser.load (std::memory_order_acquire);
+    }
     void triggerVongonPolyphrase() noexcept
     {
         vongonProcessor.requestPolyTrigger();
@@ -222,6 +239,7 @@ private:
     EffectsPureDataEngine pdEngine;
     EffectsMoodEngine moodProcessor;
     std::atomic<bool> moodLoopEngaged { false }, moodCaptureDirty { false };
+    std::atomic<bool> moodCaptureSetByUser { false };
     std::atomic<bool> moodXDirty { false }, moodYDirty { false };
     std::atomic<int> moodUiNote { -1 }, moodExternalNote { -1 };
     static constexpr unsigned int moodNoteQueueSize = 64;

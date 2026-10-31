@@ -29,3 +29,10 @@ Frame order: source image 1 rows 0..9, columns 0..9, then source image 2, 3, 4. 
 3. Confirm no clicks, excessive xrun, feedback runaway, frozen capture glitch, dry/wet multiplication.
 4. Check UI 720×720, menu selection all 13 entries, transparency and no overlap with EFFECTS, DRY, BOOST, CONFIG.
 5. Static check and (only when approved) manual CircleCI run_build=true. Do not merge or build implicitly.
+
+## MOOD XY recorder, panel and audible-response controls
+- Like MULTI, the MOOD XY recorder runs on the 30 Hz editor timer, stores up to 1800 XY frames (~60 s), loops them after recording and sends the corresponding MIDI CC values to the selected MIDI OUT. No audio is recorded. Tap the XY pad to start recording; tap again to stop and play; hold the pad >=700 ms to clear. Dragging the pad interrupts playback for direct control. Header also has REC, PLAY, CLEAR.
+- MOOD lower panel has a CLOSE button at the upper-right corner; when hidden, the header has PANEL to reopen it. The full-height XY surface remains playable while the panel is hidden. Existing embedded 343 frames, keyboard octave selector and CC buttons are unchanged.
+- MOOD enters without sending the default CC102=0, which previously bypassed the user's physical Micro-Looper. Only a user-triggered CAPTURE/LOOP OFF or explicit incoming CC102 may cause CC102 to be transmitted; incoming channel changes are respected.
+- For CC21 (Wet Mode), CC22 (Routing), CC23 (Micro-Looper mode), the XY 0..127 range is quantized to the 3 real hardware switch values 1/2/3 rather than sending continuous arbitrary numbers; display now shows the current outgoing CC value or LEFT/MID/RIGHT. The pedal's actual audible response still depends on mode, bypass, routing, loop content, audio signal and possible stepped ranges. A one-way MIDI interface cannot query its physical switch positions.
+- MOOD remains MIDI-only: no app audio, no DSP, no INPUT GAIN. No Android build or hardware regression has been run for these changes. Do not change main or trigger CircleCI without permission.
