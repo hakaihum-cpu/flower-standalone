@@ -30,7 +30,8 @@
    <FILE id="stl002" name="units.cc" compile="1" resource="0" file="Source/stmlib/dsp/units.cc"/>
    <FILE id="stl003" name="random.cc" compile="1" resource="0" file="Source/stmlib/utils/random.cc"/>
    <FILE id="frmc01" name="FramePack.cpp" compile="1" resource="0" file="Source/FramePack.cpp"/>
-   <FILE id="pdch01" name="EffectsPureDataEngine.h" compile="0" resource="0" file="Source/EffectsPureDataEngine.h"/>
+   <FILE id="moodh1" name="EffectsMoodEngine.h" compile="0" resource="0" file="Source/EffectsMoodEngine.h"/>
+    <FILE id="pdch01" name="EffectsPureDataEngine.h" compile="0" resource="0" file="Source/EffectsPureDataEngine.h"/>
    <FILE id="prch01" name="PluginProcessor.h" compile="0" resource="0" file="Source/PluginProcessor.h"/>
    <FILE id="prcc01" name="PluginProcessor.cpp" compile="1" resource="0" file="Source/PluginProcessor.cpp"/>
    <FILE id="edth01" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
