@@ -1938,24 +1938,66 @@ print("[PASS] Real libpd native DSP, .pd import, pinned submodule and combined v
 print("[PASS] Vongon-inspired 4-mode DSP / supplied-video / DOT contracts verified")
 print("[PASS] CHORD/Dreamy noise-hardening contracts verified")
 
-# MOOD key-to-note and common MIDI-channel wrap regression.
-# The visible C4..C5 keyboard must map to all 13 distinct MIDI notes 60..72.
+# MOOD 13-key chromatic keyboard can select C-1..C9 (full MIDI 0..127).
 mood_keyboard_begin = editor.find("int RealtimeChordFxAudioProcessorEditor::moodKeyAtPoint (")
 mood_keyboard_end = editor.find("void RealtimeChordFxAudioProcessorEditor::paintMoodMode (", mood_keyboard_begin)
 if mood_keyboard_begin < 0 or mood_keyboard_end <= mood_keyboard_begin:
     fail("MOOD keyboard hit-test definition missing")
 mood_keyboard = editor[mood_keyboard_begin:mood_keyboard_end]
-for required in [
+for required in (
     "constexpr int white[8] = {0, 2, 4, 5, 7, 9, 11, 12};",
     "constexpr int black[5] = {1, 3, 6, 8, 10};",
-    "return 60 + black[i];",
-    "return 60 + white[index];",
-]:
+    "const int baseNote = moodKeyboardBaseNote();",
+    "const int note = baseNote + black[i];",
+    "const int note = baseNote + white[index];",
+    "return juce::isPositiveAndBelow (note, 128) ? note : -1;",
+):
     if required not in mood_keyboard:
-        fail(f"MOOD C4-C5 distinct-note keyboard mapping lost: {required}")
-mood_notes = [60 + n for n in (0, 2, 4, 5, 7, 9, 11, 12, 1, 3, 6, 8, 10)]
-if set(mood_notes) != set(range(60, 73)):
-    fail("MOOD keyboard no longer covers all 13 chromatic MIDI notes")
+        fail(f"MOOD octave keyboard mapping contract missing: {required}")
+keyboard_header = (R / "Source/PluginEditor.h").read_text()
+for required in (
+    "int moodKeyboardOctave = 4;",
+    "return 12 * (moodKeyboardOctave + 1);",
+):
+    if required not in keyboard_header:
+        fail(f"MOOD octave selector state missing: {required}")
+for required in (
+    '"OCT-", false',
+    '"OCT+", false',
+    "moodKeyboardOctave = juce::jmax (-1, moodKeyboardOctave - 1);",
+    "moodKeyboardOctave = juce::jmin (9, moodKeyboardOctave + 1);",
+    "juce::isPositiveAndBelow (note, 128)",
+    '"OCT " + juce::String (moodKeyboardOctave)',
+    "processor.moodNote (moodKeyboardNote, false);",
+):
+    if required not in editor:
+        fail(f"MOOD octave selector touch/draw contract missing: {required}")
+intervals = (0, 2, 4, 5, 7, 9, 11, 12, 1, 3, 6, 8, 10)
+all_mood_notes = set()
+for octave in range(-1, 10):
+    base_note = 12 * (octave + 1)
+    notes = [base_note + n for n in intervals if base_note + n <= 127]
+    if len(notes) != len(set(notes)):
+        fail(f"MOOD duplicate note in octave {octave}")
+    if not notes or min(notes) < 0 or max(notes) > 127:
+        fail(f"MOOD octave out of MIDI range: {octave}")
+    all_mood_notes.update(notes)
+if all_mood_notes != set(range(128)):
+    fail("MOOD octave switch does not cover all MIDI notes 0..127")
+if [60 + n for n in intervals[:8]] != [60, 62, 64, 65, 67, 69, 71, 72]:
+    fail("MOOD default C4-C5 keyboard changed")
+# Same 720x720 touch/paint bounds; never overlay LOAD TILES, CC labels or keypad.
+button_ranges = ((26, 162), (174, 318), (328, 474), (478, 571), (578, 636), (643, 701))
+if any(button_ranges[i][1] > button_ranges[i + 1][0] for i in range(5)):
+    fail("MOOD OCT buttons collide with previous button")
+for required in (
+    "p.x >= 478.0f && p.x < 571.0f",
+    "p.x >= 578.0f && p.x < 636.0f",
+    "p.x >= 643.0f && p.x < 701.0f",
+):
+    if required not in editor:
+        fail(f"MOOD OCT hitbox missing: {required}")
+print("[PASS] MOOD OCT +/-: all MIDI notes 0..127, C4 default, safe hitboxes and note-off")
 for midi_parameter in ("midiChannel", "chordMidiChannel"):
     expected_wrap = (
         "setChoiceActual (ParamID::" + midi_parameter

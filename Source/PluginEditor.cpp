@@ -3845,8 +3845,26 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
                 for (; i < 16; ++i) if (choices[i] == processor.getMoodAxisCc (false)) break;
                 processor.setMoodAxisCc (false, choices[(i+1)%16]);
             }
-            else if (p.x >= 485.0f && p.x < 608.0f)
+            else if (p.x >= 478.0f && p.x < 571.0f)
                 importMoodFrames();
+            else if (p.x >= 578.0f && p.x < 636.0f)
+            {
+                if (moodKeyboardNote >= 0)
+                {
+                    processor.moodNote (moodKeyboardNote, false);
+                    moodKeyboardNote = -1;
+                }
+                moodKeyboardOctave = juce::jmax (-1, moodKeyboardOctave - 1);
+            }
+            else if (p.x >= 643.0f && p.x < 701.0f)
+            {
+                if (moodKeyboardNote >= 0)
+                {
+                    processor.moodNote (moodKeyboardNote, false);
+                    moodKeyboardNote = -1;
+                }
+                moodKeyboardOctave = juce::jmin (9, moodKeyboardOctave + 1);
+            }
         }
         else if (p.y > 70.0f && p.y < 510.0f)
         {
@@ -4415,15 +4433,20 @@ int RealtimeChordFxAudioProcessorEditor::moodKeyAtPoint (
     constexpr int white[8] = {0, 2, 4, 5, 7, 9, 11, 12};
     constexpr int black[5] = {1, 3, 6, 8, 10};
     constexpr int after[5] = {0, 1, 3, 4, 5};
+    const int baseNote = moodKeyboardBaseNote();
     if (p.y < 674.0f)
         for (int i = 0; i < 5; ++i)
         {
             const float centre = 36.0f + (float) (after[i] + 1) * w;
             if (p.x >= centre - 18.0f && p.x < centre + 18.0f)
-                return 60 + black[i];
+            {
+                const int note = baseNote + black[i];
+                return juce::isPositiveAndBelow (note, 128) ? note : -1;
+            }
         }
     const int index = juce::jlimit (0, 7, (int) ((p.x - 36.0f) / w));
-    return 60 + white[index];
+    const int note = baseNote + white[index];
+    return juce::isPositiveAndBelow (note, 128) ? note : -1;
 }
 
 void RealtimeChordFxAudioProcessorEditor::paintMoodMode (juce::Graphics& g)
@@ -4476,7 +4499,9 @@ void RealtimeChordFxAudioProcessorEditor::paintMoodMode (juce::Graphics& g)
         {26.0f, 136.0f, processor.moodHasCapture() ? "LOOP OFF" : "CAPTURE", processor.moodHasCapture()},
         {174.0f, 144.0f, axisLabel (true), false},
         {328.0f, 146.0f, axisLabel (false), false},
-        {485.0f, 123.0f, "LOAD TILES", false}
+        {478.0f, 93.0f, "LOAD TILES", false},
+        {578.0f, 58.0f, "OCT-", false},
+        {643.0f, 58.0f, "OCT+", false}
     };
     for (const auto& bt : buttons)
     {
@@ -4497,10 +4522,14 @@ void RealtimeChordFxAudioProcessorEditor::paintMoodMode (juce::Graphics& g)
         processor.state().getRawParameterValue (ParamID::midiChannel)->load()));
     const bool moodMidiEnabled =
         processor.state().getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
-    g.drawText ("MIDI OUT " + juce::String (moodMidiEnabled ? "ON" : "OFF")
-                + " CH " + juce::String (moodCh)
-                + " | CAPTURE: LOOP CC102 | C4-C5: MIDI NOTES",
-        35, 595, 660, 23, juce::Justification::centredLeft);
+    const int baseNote = moodKeyboardBaseNote();
+    g.drawFittedText ("OCT " + juce::String (moodKeyboardOctave)
+                + " (MIDI " + juce::String (baseNote) + "-"
+                + juce::String (juce::jmin (127, baseNote + 12))
+                + ") | MIDI OUT " + juce::String (moodMidiEnabled ? "ON" : "OFF")
+                + " CH " + juce::String (moodCh) + " | CAPTURE CC102",
+        juce::Rectangle<int> (35, 595, 660, 23),
+        juce::Justification::centredLeft, 1);
 
     // Low-opacity performance keyboard, placed above the very bottom edge.
     constexpr int white[8] = {0,2,4,5,7,9,11,12};
@@ -4510,19 +4539,43 @@ void RealtimeChordFxAudioProcessorEditor::paintMoodMode (juce::Graphics& g)
     const int active = processor.getMoodNote();
     for (int i = 0; i < 8; ++i)
     {
+        const int note = baseNote + white[i];
+        const bool playable = juce::isPositiveAndBelow (note, 128);
         const juce::Rectangle<float> rect (36.0f + (float) i * w, 619.0f, w - 2.0f, 85.0f);
-        g.setColour (juce::Colours::white.withAlpha (active == 60 + white[i] ? 0.71f : 0.29f));
+        g.setColour (juce::Colours::white.withAlpha (
+            ! playable ? 0.08f : active == note ? 0.71f : 0.29f));
         g.fillRoundedRectangle (rect, 2.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.52f));
+        g.setColour (juce::Colours::white.withAlpha (playable ? 0.52f : 0.14f));
         g.drawRoundedRectangle (rect, 2.0f, 1.0f);
+        if (playable)
+        {
+            g.setColour (uiColour (0.85f));
+            g.setFont (juce::FontOptions (11.0f).withStyle ("Bold"));
+            g.drawText (juce::String (note),
+                        juce::Rectangle<int> (juce::roundToInt (rect.getX()),
+                                              678, juce::roundToInt (rect.getWidth()), 22),
+                        juce::Justification::centred);
+        }
     }
     for (int i = 0; i < 5; ++i)
     {
+        const int note = baseNote + black[i];
+        const bool playable = juce::isPositiveAndBelow (note, 128);
         const float left = 36.0f + (float) (after[i] + 1) * w - 18.0f;
         const juce::Rectangle<float> rect (left, 619.0f, 36.0f, 55.0f);
-        g.setColour (juce::Colours::black.withAlpha (active == 60 + black[i] ? 0.24f : 0.82f));
+        g.setColour (juce::Colours::black.withAlpha (
+            ! playable ? 0.17f : active == note ? 0.24f : 0.82f));
         g.fillRoundedRectangle (rect, 3.0f);
-        g.setColour (juce::Colours::white.withAlpha (0.50f));
+        g.setColour (juce::Colours::white.withAlpha (playable ? 0.50f : 0.14f));
         g.drawRoundedRectangle (rect, 3.0f, 1.0f);
+        if (playable)
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.84f));
+            g.setFont (juce::FontOptions (10.0f).withStyle ("Bold"));
+            g.drawText (juce::String (note),
+                        juce::Rectangle<int> (juce::roundToInt (rect.getX()),
+                                              647, juce::roundToInt (rect.getWidth()), 21),
+                        juce::Justification::centred);
+        }
     }
 }

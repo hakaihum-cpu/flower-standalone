@@ -108,6 +108,12 @@ private:
     float moodPreviousActivity = 0.0f, moodPreviousX = 0.5f, moodPreviousY = 0.5f;
     bool moodPointerDown = false;
     int moodKeyboardNote = -1;
+    // 13-key C-based keyboard; MIDI C-1=0 through C9=120.
+    int moodKeyboardOctave = 4;
+    int moodKeyboardBaseNote() const noexcept
+    {
+        return 12 * (moodKeyboardOctave + 1);
+    }
     std::unique_ptr<juce::FileChooser> moodChooser;
     juce::Image currentPdFrame;
     juce::Image currentFrame;
