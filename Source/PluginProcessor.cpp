@@ -1491,9 +1491,10 @@ void RealtimeChordFxAudioProcessor::processMoodMidi (
     juce::MidiBuffer& out, int channel, bool enabled)
 {
     channel = juce::jlimit (1, 16, channel);
-    const int note = enabled ? moodUiNote.load (std::memory_order_acquire) : -1;
+
+    // Do not leave a held note on the previous MIDI channel.
     if (moodLastSentNote >= 0
-        && (note != moodLastSentNote || channel != moodLastSentChannel))
+        && (! enabled || channel != moodLastSentChannel))
     {
         out.addEvent (juce::MidiMessage::noteOff (
             moodLastSentChannel, moodLastSentNote), 0);
@@ -1501,24 +1502,75 @@ void RealtimeChordFxAudioProcessor::processMoodMidi (
     }
     if (! enabled)
     {
+        moodNoteRead.store (
+            moodNoteWrite.load (std::memory_order_acquire),
+            std::memory_order_release);
+        moodNoteQueueOverflow.store (false, std::memory_order_release);
         moodLastCcChannel = -1;
         return;
     }
-    if (note >= 0 && moodLastSentNote < 0)
+
+    // Consume a key event per audio callback. A quick press-and-release
+    // must produce Note On in one block and Note Off in the next, rather
+    // than collapsing both into a single negative UI-note value.
+    const unsigned int read = moodNoteRead.load (std::memory_order_relaxed);
+    const unsigned int write = moodNoteWrite.load (std::memory_order_acquire);
+    if (read != write)
     {
-        out.addEvent (juce::MidiMessage::noteOn (
-            channel, note, (juce::uint8) 100), 0);
-        moodLastSentNote = note;
-        moodLastSentChannel = channel;
+        const int event = moodNoteQueue[(size_t) (read % moodNoteQueueSize)].load (
+            std::memory_order_relaxed);
+        moodNoteRead.store (read + 1, std::memory_order_release);
+        const int key = event & 127;
+        const bool keyDown = (event & 0x100) != 0;
+        if (keyDown)
+        {
+            if (moodLastSentNote >= 0 && moodLastSentNote != key)
+            {
+                out.addEvent (juce::MidiMessage::noteOff (
+                    moodLastSentChannel, moodLastSentNote), 0);
+                moodLastSentNote = -1;
+            }
+            if (moodLastSentNote != key)
+            {
+                out.addEvent (juce::MidiMessage::noteOn (
+                    channel, key, (juce::uint8) 100), 0);
+                moodLastSentNote = key;
+                moodLastSentChannel = channel;
+            }
+        }
+        else if (moodLastSentNote == key)
+        {
+            out.addEvent (juce::MidiMessage::noteOff (
+                moodLastSentChannel, moodLastSentNote), 0);
+            moodLastSentNote = -1;
+        }
+    }
+    else
+    {
+        // Reconcile after an overflow or MIDI channel change. Do not
+        // invent a new event while another key event is still queued.
+        const int held = moodUiNote.load (std::memory_order_acquire);
+        if (moodLastSentNote >= 0 && moodLastSentNote != held)
+        {
+            out.addEvent (juce::MidiMessage::noteOff (
+                moodLastSentChannel, moodLastSentNote), 0);
+            moodLastSentNote = -1;
+        }
+        if (held >= 0 && moodLastSentNote < 0)
+        {
+            out.addEvent (juce::MidiMessage::noteOn (
+                channel, held, (juce::uint8) 100), 0);
+            moodLastSentNote = held;
+            moodLastSentChannel = channel;
+        }
+        moodNoteQueueOverflow.store (false, std::memory_order_release);
     }
 
-    // A channel change must synchronize MOOD's present controls.
     const bool changedChannel = moodLastCcChannel != channel;
     if (changedChannel || moodCaptureDirty.exchange (false, std::memory_order_acq_rel))
         out.addEvent (juce::MidiMessage::controllerEvent (
             channel, 102,
             moodLoopEngaged.load (std::memory_order_acquire) ? 127 : 0), 0);
-
     for (int axis = 0; axis < 2; ++axis)
     {
         const bool xAxis = axis == 0;

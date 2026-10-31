@@ -3421,7 +3421,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         else if (p.y >= 136 && p.y < 168)
         {
             const int v = juce::roundToInt (processor.state().getRawParameterValue (ParamID::midiChannel)->load());
-            setChoiceActual (ParamID::midiChannel, juce::jlimit (1, 16, v + dir));
+            setChoiceActual (ParamID::midiChannel, ((v - 1 + dir + 16) % 16) + 1);
         }
         else if (p.y >= 168 && p.y < 200)
         {
@@ -3431,7 +3431,7 @@ void RealtimeChordFxAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
         else if (p.y >= 200 && p.y < 232)
         {
             const int v = juce::roundToInt (processor.state().getRawParameterValue (ParamID::chordMidiChannel)->load());
-            setChoiceActual (ParamID::chordMidiChannel, juce::jlimit (1, 16, v + dir));
+            setChoiceActual (ParamID::chordMidiChannel, ((v - 1 + dir + 16) % 16) + 1);
         }
         else if (p.y >= 232 && p.y < 264)
         {

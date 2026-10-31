@@ -1937,3 +1937,65 @@ print("[PASS] Real libpd native DSP, .pd import, pinned submodule and combined v
 
 print("[PASS] Vongon-inspired 4-mode DSP / supplied-video / DOT contracts verified")
 print("[PASS] CHORD/Dreamy noise-hardening contracts verified")
+
+# MOOD key-to-note and common MIDI-channel wrap regression.
+# The visible C4..C5 keyboard must map to all 13 distinct MIDI notes 60..72.
+mood_keyboard_begin = editor.find("int RealtimeChordFxAudioProcessorEditor::moodKeyAtPoint (")
+mood_keyboard_end = editor.find("void RealtimeChordFxAudioProcessorEditor::paintMoodMode (", mood_keyboard_begin)
+if mood_keyboard_begin < 0 or mood_keyboard_end <= mood_keyboard_begin:
+    fail("MOOD keyboard hit-test definition missing")
+mood_keyboard = editor[mood_keyboard_begin:mood_keyboard_end]
+for required in [
+    "constexpr int white[8] = {0, 2, 4, 5, 7, 9, 11, 12};",
+    "constexpr int black[5] = {1, 3, 6, 8, 10};",
+    "return 60 + black[i];",
+    "return 60 + white[index];",
+]:
+    if required not in mood_keyboard:
+        fail(f"MOOD C4-C5 distinct-note keyboard mapping lost: {required}")
+mood_notes = [60 + n for n in (0, 2, 4, 5, 7, 9, 11, 12, 1, 3, 6, 8, 10)]
+if set(mood_notes) != set(range(60, 73)):
+    fail("MOOD keyboard no longer covers all 13 chromatic MIDI notes")
+for midi_parameter in ("midiChannel", "chordMidiChannel"):
+    expected_wrap = (
+        "setChoiceActual (ParamID::" + midi_parameter
+        + ", ((v - 1 + dir + 16) % 16) + 1);")
+    if expected_wrap not in editor:
+        fail(f"{midi_parameter} must wrap 16->1 and 1->16")
+for channel in range(1, 17):
+    if ((channel - 1 + 1 + 16) % 16) + 1 != (channel % 16) + 1:
+        fail("MIDI channel increment regression")
+    if ((channel - 1 - 1 + 16) % 16) + 1 != (channel + 14) % 16 + 1:
+        fail("MIDI channel decrement regression")
+print("[PASS] MOOD 13 distinct MIDI notes and both MIDI channels wrap 1..16")
+
+# MOOD touchscreen notes must survive taps faster than a single audio buffer.
+for marker in (
+    "static constexpr unsigned int moodNoteQueueSize = 64;",
+    "std::array<std::atomic<int>, moodNoteQueueSize> moodNoteQueue",
+    "moodNoteQueue[(size_t) (write % moodNoteQueueSize)].store",
+    "moodNoteWrite.store (write + 1, std::memory_order_release);",
+    "note | (down ? 0x100 : 0)",
+):
+    if marker not in processor_header:
+        fail(f"MOOD note queue source missing: {marker}")
+note_handler_begin = processor.find("void RealtimeChordFxAudioProcessor::processMoodMidi (")
+note_handler_end = processor.find("void RealtimeChordFxAudioProcessor::processMidiController (", note_handler_begin)
+if note_handler_begin < 0 or note_handler_end <= note_handler_begin:
+    fail("MOOD MIDI note dispatch function missing")
+note_handler = processor[note_handler_begin:note_handler_end]
+for marker in (
+    "const unsigned int read = moodNoteRead.load",
+    "const unsigned int write = moodNoteWrite.load",
+    "moodNoteRead.store (read + 1, std::memory_order_release);",
+    "const int key = event & 127;",
+    "const bool keyDown = (event & 0x100) != 0;",
+    "channel, key, (juce::uint8) 100",
+    "else if (moodLastSentNote == key)",
+    "moodLastSentChannel, moodLastSentNote",
+):
+    if marker not in note_handler:
+        fail(f"MOOD separate MIDI Note On/Off queue contract missing: {marker}")
+if "const int note = enabled ? moodUiNote.load" in note_handler:
+    fail("MOOD may not collapse fast key down/up into a single state")
+print("[PASS] MOOD key transitions queued across audio callbacks without missing short taps")

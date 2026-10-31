@@ -86,9 +86,24 @@ public:
     bool moodHasCapture() const noexcept { return moodLoopEngaged.load (std::memory_order_acquire); }
     void moodNote (int note, bool down) noexcept
     {
-        if (down) moodUiNote.store (juce::jlimit (0, 127, note), std::memory_order_release);
-        else if (moodUiNote.load (std::memory_order_relaxed) == note)
-            moodUiNote.store (-1, std::memory_order_release);
+        note = juce::jlimit (0, 127, note);
+        const int old = moodUiNote.load (std::memory_order_relaxed);
+        if ((down && old == note) || (! down && old != note))
+            return;
+        moodUiNote.store (down ? note : -1, std::memory_order_release);
+
+        // Preserve each key down/up even if the touch begins and ends
+        // between two audio callbacks. GUI -> audio, fixed-size SPSC queue.
+        const unsigned int write = moodNoteWrite.load (std::memory_order_relaxed);
+        const unsigned int read = moodNoteRead.load (std::memory_order_acquire);
+        if (write - read < moodNoteQueueSize)
+        {
+            moodNoteQueue[(size_t) (write % moodNoteQueueSize)].store (
+                note | (down ? 0x100 : 0), std::memory_order_relaxed);
+            moodNoteWrite.store (write + 1, std::memory_order_release);
+        }
+        else
+            moodNoteQueueOverflow.store (true, std::memory_order_release);
     }
     int getMoodNote() const noexcept
     {
@@ -209,6 +224,10 @@ private:
     std::atomic<bool> moodLoopEngaged { false }, moodCaptureDirty { false };
     std::atomic<bool> moodXDirty { false }, moodYDirty { false };
     std::atomic<int> moodUiNote { -1 }, moodExternalNote { -1 };
+    static constexpr unsigned int moodNoteQueueSize = 64;
+    std::array<std::atomic<int>, moodNoteQueueSize> moodNoteQueue {};
+    std::atomic<unsigned int> moodNoteWrite { 0 }, moodNoteRead { 0 };
+    std::atomic<bool> moodNoteQueueOverflow { false };
     int moodLastSentNote = -1, moodLastSentChannel = 2, moodLastCcChannel = -1;
     std::atomic<float> vongonX { 0.5f };
     std::atomic<float> vongonY { 0.5f };
