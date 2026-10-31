@@ -701,10 +701,6 @@ void RealtimeChordFxAudioProcessor::processBlock (juce::AudioBuffer<float>& buff
         const bool enabled = apvts.getRawParameterValue (ParamID::midiControl)->load() >= 0.5f;
         if (! enabled) midi.clear();
         processMoodMidi (midi, midiInputChannel, enabled);
-        // Never leave previously generated CHORD/CHORDBOT notes held
-        // when changing to the external hardware-only MOOD mode.
-        processChordBotMidi (midi);
-        processChordMidi (midi);
     }
     else
     {
