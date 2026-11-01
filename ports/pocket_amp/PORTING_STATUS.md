@@ -49,13 +49,13 @@ Source relative to the named baseline:
 | H3 DAC | POCKET AMP headphone/line output codec, output DMA and clocks | FM-1 output board not transferable without validation | BLOCKED |
 | H4 display | LCD controller, SPI/pins, working pixel blit, decoder, effective fps while DSP runs | Screen exists; driver not known | BLOCKED |
 | H5 flash | POCKET AMP *current hardware revision* boot partition map and safe independent animation storage | Single V07 1 MiB NOR report; V105 package available but **not locally parsed here** | BLOCKED |
-| H6 recovery | Verified full backup, protected bootsector, demonstrated re-entry on a failed app | Single V07 sector recovery report only | BLOCKED |
+| H6 recovery | User explicitly waived preservation of original functionality on 2026-11-02 | Factory firmware kept for research; no guarantee of restoration | NON-BLOCKING BY USER CHOICE |
 
 ## Safe implementation gate order
 
 1. Obtain/parse official unmodified POCKET AMP V105 `.fwsc` **offline** without flashing and identify its file entries/partitions and image size. The download location is confirmed, but automated binary retrieval was unavailable in this environment on 2026-11-02. **Do not invent parser output.**
 2. Obtain PCB evidence or an on-device *read-only* information dump to identify SDRAM (if present), codec and LCD; compare hardware revision. No automatic USB writes.
-3. Define a recovery procedure: two independently matching full flash reads, retention of unique config/calibration, checksum; validate ROM recovery on this exact board before risking custom images.
+3. Recovery is NOT a gating condition: user explicitly accepts loss of the original firmware on 2026-11-02. Keep the provided factory image unchanged for reference, but do not postpone firmware research while trying to guarantee restoration. Read-only device inspection is still preferred whenever it provides missing hardware information.
 4. Port bare-metal input -> dry output loop **first**, then assert no xrun/clipping/audio silence on target. No I/O code is present/validated for POCKET AMP.
 5. Preserve the existing algorithm and selected-mode buffers. Move Clouds to target runtime and test against offline reference; then Dreamy and Eureka. Never silently shorten time buffers.
 6. Convert user-owned animation assets to an explicitly verified 240x240 pack *without generating substitute images*; keep input-driven event logic, deterministic test clips, random-cut distribution and playback/rewind semantics. Only proceed after flash/storage and LCD gates.
@@ -63,7 +63,7 @@ Source relative to the named baseline:
 
 ## Assessed status
 
-The **target hardware compatibility is not yet demonstrated**. User-approved 3-second EUREKA recording is now a PORT-ONLY scope change. The main memory arrays alone still need 2,116,800 bytes at 44.1 kHz, exceeding the AC79 family 578 KiB on-chip SRAM. The FM-1 SDK and an update tool do not establish an executable POCKET AMP effects image. No firmware binary, image assets, executable or custom firmware has been produced on this branch. The deliverables so far are a verified source inventory, documented platform blockers, repeatable memory accounting, and a no-JUCE/no-MIDI EUREKA **frame-event scheduler** (not image decoding, audio DSP or target display driver) in `eureka_visual_clock.h`. The scheduler is validated by `eureka_visual_clock_test.cpp`: deterministic replay, silence stays still, cut trigger, frame bounds and speed, compiled and executed three times with host g++ `-std=c++17 -Wall -Wextra -Werror -O2`, all passed on 2026-11-02. The target hardware gates remain blocking. Any future work must maintain fidelity, never present a diagnostic or incomplete binary as a finished product.
+The **target hardware compatibility is not yet demonstrated**. Loss of original firmware operation is explicitly acceptable to the user (2026-11-02), so restoration is NOT a project completion or prototype gating requirement. Do not suggest recovery is guaranteed; retain all safety measures unrelated to preserving stock firmware. User-approved 3-second EUREKA recording is now a PORT-ONLY scope change. The main memory arrays alone still need 2,116,800 bytes at 44.1 kHz, exceeding the AC79 family 578 KiB on-chip SRAM. The FM-1 SDK and an update tool do not establish an executable POCKET AMP effects image. No firmware binary, image assets, executable or custom firmware has been produced on this branch. The deliverables so far are a verified source inventory, documented platform blockers, repeatable memory accounting, and a no-JUCE/no-MIDI EUREKA **frame-event scheduler** (not image decoding, audio DSP or target display driver) in `eureka_visual_clock.h`. The scheduler is validated by `eureka_visual_clock_test.cpp`: deterministic replay, silence stays still, cut trigger, frame bounds and speed, compiled and executed three times with host g++ `-std=c++17 -Wall -Wextra -Werror -O2`, all passed on 2026-11-02. The target hardware gates remain blocking. Any future work must maintain fidelity, never present a diagnostic or incomplete binary as a finished product.
 
 
 ## User-provided official POCKET AMP V1.05 firmware: offline evidence (2026-11-02)
@@ -77,4 +77,11 @@ Files supplied: `Pocket AMP.fwsc`, `POCKET AMP.zip`, `M-UPGRADE.zip`. Archive EX
 - Read-only JLFS top-level entries verified with CRC: `uboot.boot` (offset 0xA0, 14,488 bytes); `isd_config.ini` (0x3938, 755 bytes); `app_dir_head` (0x4000); protected `key_mac` allocation (0xFF000, size 4096). No device-specific secret contents were published.
 - Read-only `isd_config.ini` byte inspection: `ENABLE_SDRAM=0`, `SDRAM_SIZE=0`, `SDRAM_MODE=0`, `SDRAM_CONFIG_VAL=0`. This proves the **supplied V1.05 firmware configuration** has external SDRAM disabled, **not** that every POCKET AMP board lacks a RAM chip.
 - Flash image header reports nominal flash size `0xFF000` (1044480 bytes usable image area in that header) and cannot be treated as available image storage. Full physical flash capacity still requires per-device identification.
-- None of this proves execution of arbitrary firmware, runtime free SRAM, audio ADC registers or LCD blitting; hard gates H1-H6 remain blocked.
+- None of this proves execution of arbitrary firmware, runtime free SRAM, audio ADC registers or LCD blitting; hardware discovery gates H1-H5 remain unresolved. H6 recovery is now non-blocking by explicit user decision.
+
+
+## Recovery waiver and audio-memory engineering (2026-11-02)
+
+The user explicitly permits a POCKET AMP that no longer boots its original factory firmware. Do NOT block the port while seeking a guaranteed stock restore. This does NOT imply the new EUREKA/DREAMY/CLOUDS firmware may be silent, missing features or falsely reported as operational. CPU/RAM/ADC/DAC/LCD discoveries remain prerequisites for a working device.
+
+EUREKA 3.0-second, 44.1 kHz / two-lane ring storage arithmetic (raw histories only): float32 samples plus uint32 per-sample generation = 2,116,800 B; uint16 PCM samples plus one packed validity bit per physical sample = 562,276 B (about 549.1 KiB), leaving only 29,596 B of the 578 KiB family SRAM figure **even before software/UI/stack/DSP**. So this is NOT an approved runnable target memory layout. Quantization changes have not been approved for sound quality. A safe storage test can check ring semantics, invalidation on CLEAR, TIME-dependent loop sizes, echo feedback and numerical error before selecting any compact DSP representation.
