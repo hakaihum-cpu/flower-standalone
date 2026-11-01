@@ -85,3 +85,11 @@ Files supplied: `Pocket AMP.fwsc`, `POCKET AMP.zip`, `M-UPGRADE.zip`. Archive EX
 The user explicitly permits a POCKET AMP that no longer boots its original factory firmware. Do NOT block the port while seeking a guaranteed stock restore. This does NOT imply the new EUREKA/DREAMY/CLOUDS firmware may be silent, missing features or falsely reported as operational. CPU/RAM/ADC/DAC/LCD discoveries remain prerequisites for a working device.
 
 EUREKA 3.0-second, 44.1 kHz / two-lane ring storage arithmetic (raw histories only): float32 samples plus uint32 per-sample generation = 2,116,800 B; uint16 PCM samples plus one packed validity bit per physical sample = 562,276 B (about 549.1 KiB), leaving only 29,596 B of the 578 KiB family SRAM figure **even before software/UI/stack/DSP**. So this is NOT an approved runnable target memory layout. Quantization changes have not been approved for sound quality. A safe storage test can check ring semantics, invalidation on CLEAR, TIME-dependent loop sizes, echo feedback and numerical error before selecting any compact DSP representation.
+
+
+## Tested storage primitive after 3-second change (2026-11-02)
+
+- New **non-firmware** `eureka_history_3s.h` contains two independent 3-second PCM16 circular histories and a compact per-sample validity bitmap, retaining echo-on-write, dynamic loop lengths and interpolation/clear semantics. `eureka_history_3s_test.cpp` verifies 3-second end access, stale data suppression after CLEAR, independent lanes, echo, interpolation, repeated loop-length changes and wrap. Compiled and executed 3 times with host `g++ -std=c++17 -O2 -Wall -Wextra -Werror` and 3/3 passes.
+- The prototype's static storage at 44.1 kHz is **562,276 bytes**; excludes stack, run-time DSP, reverb, graphics, OS, DMA, etc. This is a working data-structure TEST, not an established memory-fit of the full device.
+- PCM16 introduces quantization versus original float histories and must pass comparative audio regression before being accepted as the output implementation; this optimization is exploratory and has not been silently substituted into source EFFECTS.
+- Factory firmware recovery was waived explicitly; new target firmware must still be produced and run on the actual Pocket AMP. No device flash or target firmware generation has occurred.
