@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Static lower bounds for approved EFFECTS -> POCKET AMP audio/visual buffers.
 
+POCKET AMP-specific EUREKA capture length: user-approved 3.0 seconds on 2026-11-02.
+Original approved Android EUREKA remains 10.2 seconds and is unchanged.
+
 This is NOT a firmware builder and does NOT establish device SDRAM availability.
 """
 import argparse
@@ -11,11 +14,12 @@ import math
 def budget(rate: int) -> dict:
     if not 8000 <= rate <= 192000:
         raise ValueError("sample rate must be in 8000..192000 Hz")
-    eureka_frames = max(4096, math.ceil(rate * 10.2))
+    eureka_frames = max(4096, math.ceil(rate * 3.0))
     dreamy_loop_frames = max(4096, round(rate * 2.5))
     dreamy_delay_frames = max(4096, round(rate * 2.0))
     return {
         "sample_rate_hz": rate,
+        "eureka_capture_seconds": 3.0,
         "eureka_main_buffers_bytes": eureka_frames * 2 * (4 + 4),
         "dreamy_main_buffers_bytes": (dreamy_loop_frames + dreamy_delay_frames) * 2 * 4,
         "clouds_large_small_bytes": 118784 + 65408,
@@ -45,7 +49,7 @@ def main() -> None:
 
     if args.self_test:
         b = budget(44100)
-        assert b["eureka_main_buffers_bytes"] == 7197120, b
+        assert b["eureka_main_buffers_bytes"] == 2116800, b
         assert b["dreamy_main_buffers_bytes"] == 1587600, b
         assert b["clouds_large_small_bytes"] == 184192, b
         assert b["eureka_visual_raw_240_rgb565_bytes"] == 45619200, b
