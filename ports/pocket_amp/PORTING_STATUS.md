@@ -5,6 +5,7 @@
 - Source baseline: `baseline/effects-mood-mkii-master-20261031` (read-only).
 - Target: M-VAVE POCKET AMP, **not** FM-1 or TANK-G.
 - Only three audio modes: EUREKA, DREAMY, CLOUDS, plus the EFFECTS user-supplied animations for these modes.
+- User explicitly authorized **EUREKA 3.0 seconds maximum recording buffer** on 2026-11-02. DREAMY and CLOUDS are not shortened. Retain all other algorithm settings, including 2-channel processing where possible. This is a POCKET AMP port-only change, not an alteration to Android EFFECTS Golden Baseline.
 - **No MIDI features** and no CHORD, MOOD, VONGON, Pure Data or MULTI port.
 - This branch is an independent **investigation/porting branch**, not a firmware build or approved master.
 - Do not alter main, approved baseline, CI files, audio routes or generate/flash a `.fwsc` until the hardware gates below are met.
@@ -30,7 +31,7 @@ Source relative to the named baseline:
 
 ## Exact first-pass audio buffer sizes (44,100 Hz, float32 unless noted)
 
-- EUREKA: `ceil(44100*10.2)*2*(4+4)` = **7,197,120 bytes** for sample and generation arrays alone; excludes warble, reverbs and firmware.
+- EUREKA **port target**: `ceil(44100*3.0)*2*(4+4)` = **2,116,800 bytes** for sample and generation arrays alone; excludes warble, reverbs and firmware. Prior approved Android reference: `ceil(44100*10.2)*2*(4+4)` = **7,197,120 bytes**. Reduction is 5,080,320 bytes (70.59%).
 - DREAMY: `(ceil(44100*2.5)+ceil(44100*2.0))*2*4` = **1,587,600 bytes**, excluding reverb state.
 - CLOUDS: `118784+65408=184192 bytes` = **179.9 KiB** just for the two fixed DSP arrays; excludes the ring and other engine allocations.
 - EUREKA and DREAMY allocations need **not** coexist if the implementation safely allocates only the selected mode, but simply sharing the current allocations does *not* make 578 KiB SRAM sufficient.
@@ -62,4 +63,18 @@ Source relative to the named baseline:
 
 ## Assessed status
 
-The **target hardware compatibility is not yet demonstrated**. The FM-1 SDK and an update tool do not establish an executable POCKET AMP effects image. No firmware binary, image assets, executable or custom firmware has been produced on this branch. The deliverables so far are a verified source inventory, documented platform blockers, repeatable memory accounting, and a no-JUCE/no-MIDI EUREKA **frame-event scheduler** (not image decoding, audio DSP or target display driver) in `eureka_visual_clock.h`. The scheduler is validated by `eureka_visual_clock_test.cpp`: deterministic replay, silence stays still, cut trigger, frame bounds and speed, compiled and executed three times with host g++ `-std=c++17 -Wall -Wextra -Werror -O2`, all passed on 2026-11-02. The target hardware gates remain blocking. Any future work must maintain fidelity, never present a diagnostic or incomplete binary as a finished product.
+The **target hardware compatibility is not yet demonstrated**. User-approved 3-second EUREKA recording is now a PORT-ONLY scope change. The main memory arrays alone still need 2,116,800 bytes at 44.1 kHz, exceeding the AC79 family 578 KiB on-chip SRAM. The FM-1 SDK and an update tool do not establish an executable POCKET AMP effects image. No firmware binary, image assets, executable or custom firmware has been produced on this branch. The deliverables so far are a verified source inventory, documented platform blockers, repeatable memory accounting, and a no-JUCE/no-MIDI EUREKA **frame-event scheduler** (not image decoding, audio DSP or target display driver) in `eureka_visual_clock.h`. The scheduler is validated by `eureka_visual_clock_test.cpp`: deterministic replay, silence stays still, cut trigger, frame bounds and speed, compiled and executed three times with host g++ `-std=c++17 -Wall -Wextra -Werror -O2`, all passed on 2026-11-02. The target hardware gates remain blocking. Any future work must maintain fidelity, never present a diagnostic or incomplete binary as a finished product.
+
+
+## User-provided official POCKET AMP V1.05 firmware: offline evidence (2026-11-02)
+
+Files supplied: `Pocket AMP.fwsc`, `POCKET AMP.zip`, `M-UPGRADE.zip`. Archive EXEs/DLLs were **not executed**. Offline packet inspection on the supplied firmware established:
+
+- `.fwsc` is **767,028 bytes**, SHA-256 `9584e81da98215e8e70ddffc28311423ceaa1a5a8a12a478dc68f4679e10902b`.
+- Product ID `Pocket AMP_105`, chip `AC791N`; header and directory CRCs valid.
+- Unpacked `flash.bin` **741,376 bytes**, SHA-256 `f9da501931c053d0bec0c21fa8da770c0c18d82536cf8bbf7698c62b3c1721c0`.
+- `ota.bin` **19,969 bytes**, SHA-256 `ef1f2db89b011fa53e71df363f0122de0ea896618c53fb53e8da676322004541` (matches public updater pin).
+- Read-only JLFS top-level entries verified with CRC: `uboot.boot` (offset 0xA0, 14,488 bytes); `isd_config.ini` (0x3938, 755 bytes); `app_dir_head` (0x4000); protected `key_mac` allocation (0xFF000, size 4096). No device-specific secret contents were published.
+- Read-only `isd_config.ini` byte inspection: `ENABLE_SDRAM=0`, `SDRAM_SIZE=0`, `SDRAM_MODE=0`, `SDRAM_CONFIG_VAL=0`. This proves the **supplied V1.05 firmware configuration** has external SDRAM disabled, **not** that every POCKET AMP board lacks a RAM chip.
+- Flash image header reports nominal flash size `0xFF000` (1044480 bytes usable image area in that header) and cannot be treated as available image storage. Full physical flash capacity still requires per-device identification.
+- None of this proves execution of arbitrary firmware, runtime free SRAM, audio ADC registers or LCD blitting; hard gates H1-H6 remain blocked.
