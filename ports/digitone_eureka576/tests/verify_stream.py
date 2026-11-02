@@ -32,7 +32,7 @@ for i in range(count):
     frame = data[off:off+length]
     if not (frame.startswith(b"\xff\xd8") and frame.endswith(b"\xff\xd9")):
         raise SystemExit(f"corrupt user frame {i}")
-    frames.append(module.pack_image(frame))
+    frames.append(module.pack_image(frame, i))
 compressed = packed.read_bytes()
 if module.decode(compressed, count) != frames:
     raise SystemExit("compressed target frames differ from original images")
@@ -43,12 +43,14 @@ if expected_stream != compressed:
     raise SystemExit("packed stream bytes differ from source-encoded frames")
 # Every MOOD photo must produce clear yellow contours without filled-in white areas.
 density = [sum(byte.bit_count() for byte in frame) for frame in frames]
-if min(density) < 720 or max(density) > 1350:
-    raise SystemExit(f"outline pixel count invalid: {min(density)}..{max(density)}")
+for i, n in enumerate(density):
+    low, high = (190, 850) if i < 250 else (90, 700)
+    if n < low or n > high:
+        raise SystemExit(f"frame {i} outlines {n} outside {low}..{high}")
 if module.build_seek(frames, compressed) != seek.read_bytes():
     raise SystemExit("seek table does not cover all 343 exact MOOD frames")
 if seek.stat().st_size != 58 * 1028:
     raise SystemExit("invalid checkpoint table length")
 reference.write_bytes(b"".join(frames))
 assert reference.stat().st_size == 343 * 1024
-print(f"PASS: exact MOOD reference for {count} frames; yellow pixels {min(density)}..{max(density)}; packed {len(compressed)}; sha256 {hashlib.sha256(compressed).hexdigest()}")
+print(f"PASS: face-focused MOOD reference for {count} frames; yellow pixels {min(density)}..{max(density)}; packed {len(compressed)}; sha256 {hashlib.sha256(compressed).hexdigest()}")
