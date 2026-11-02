@@ -1,0 +1,2 @@
+One-time approval from user: 2026-11-02. All changes static checked. Do not reuse this marker for further builds.
+Prior depacker failure: gap -66539. New lossless XOR/RLE with 130k minimum size reduction preflight.
