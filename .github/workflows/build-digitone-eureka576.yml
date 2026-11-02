@@ -28,7 +28,8 @@ jobs:
         run: |
           python3 scripts/materialize_frame_pack.py
           python3 ports/digitone_eureka576/prepare.py Resources/eureka_frames.pack ports/digitone_eureka576/frames.bin
-          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -eq 589824
+          echo 'ed3f236f843dc30407b757beefc62424152b17d3ce63215e87b3e1a9e23c3016  ports/digitone_eureka576/frames.bin' | sha256sum -c -
+          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -eq 145430
       - name: Obtain pinned elekloader and core
         run: |
           git clone --depth 1 --branch v0.9.0 https://github.com/elekloader/elekloader.git _elekloader
