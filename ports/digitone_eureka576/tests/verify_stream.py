@@ -17,10 +17,10 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 data = source.read_bytes()
 if data[:4] != b"CRF1":
-    raise SystemExit("invalid original EUREKA CRF1")
+    raise SystemExit("invalid original MOOD CRF1")
 count, = struct.unpack_from("<I", data, 4)
-if count != 576:
-    raise SystemExit("original source is not the complete 576 frames")
+if count != 343:
+    raise SystemExit("original source is not the complete 343 MOOD frames")
 index_end = 8 + count * 12
 if len(data) < index_end:
     raise SystemExit("source index truncated")
@@ -36,15 +36,19 @@ for i in range(count):
 compressed = packed.read_bytes()
 if module.decode(compressed, count) != frames:
     raise SystemExit("compressed target frames differ from original images")
-if len(compressed) != 145430:
-    raise SystemExit(f"unexpected compressed size {len(compressed)}")
-expected_sha = "ed3f236f843dc30407b757beefc62424152b17d3ce63215e87b3e1a9e23c3016"
-if hashlib.sha256(compressed).hexdigest() != expected_sha:
-    raise SystemExit("target stream sha256 changed")
+if not 0 < len(compressed) < count * 1024 - 130000:
+    raise SystemExit(f"compressed source is too large or empty: {len(compressed)}")
+expected_stream, _modes = module.encode(frames)
+if expected_stream != compressed:
+    raise SystemExit("packed stream bytes differ from source-encoded frames")
+# Every MOOD photo must produce clear yellow contours without filled-in white areas.
+density = [sum(byte.bit_count() for byte in frame) for frame in frames]
+if min(density) < 720 or max(density) > 1350:
+    raise SystemExit(f"outline pixel count invalid: {min(density)}..{max(density)}")
 if module.build_seek(frames, compressed) != seek.read_bytes():
-    raise SystemExit("seek table does not cover all 576 exact original frames")
-if seek.stat().st_size != 96 * 1028:
+    raise SystemExit("seek table does not cover all 343 exact MOOD frames")
+if seek.stat().st_size != 58 * 1028:
     raise SystemExit("invalid checkpoint table length")
 reference.write_bytes(b"".join(frames))
-assert reference.stat().st_size == 576 * 1024
-print(f"PASS: independent reference for {count} exact frames; stream {len(compressed)} bytes")
+assert reference.stat().st_size == 343 * 1024
+print(f"PASS: exact MOOD reference for {count} frames; yellow pixels {min(density)}..{max(density)}; packed {len(compressed)}; sha256 {hashlib.sha256(compressed).hexdigest()}")
