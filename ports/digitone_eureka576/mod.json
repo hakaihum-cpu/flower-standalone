@@ -1,0 +1,38 @@
+{
+  "id": "eureka576",
+  "version": "1.0",
+  "title": "EUREKA 576",
+  "category": "Display",
+  "author": "analoglav",
+  "license": "GPL-2.0-or-later",
+  "description": "16 user video clips, all 576 source frames, monochrome full-screen animation. MIDI+YES toggles. Stock audio untouched.",
+  "device": "digitone-mk1",
+  "os": "1.44",
+  "sources": [
+    "eureka576.c",
+    "frames.s"
+  ],
+  "subscribe": [
+    {
+      "event": "ev_tick",
+      "fn": "eureka576_tick",
+      "order": 70
+    },
+    {
+      "event": "ev_draw",
+      "fn": "eureka576_draw",
+      "order": 70
+    },
+    {
+      "event": "ev_key",
+      "fn": "eureka576_key",
+      "order": 70
+    }
+  ],
+  "requires": [
+    "core"
+  ],
+  "resources": {
+    "core": "4.1"
+  }
+}
