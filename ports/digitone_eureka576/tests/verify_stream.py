@@ -25,6 +25,7 @@ index_end = 8 + count * 12
 if len(data) < index_end:
     raise SystemExit("source index truncated")
 frames = []
+jpegs = []
 for i in range(count):
     off, _flags, length = struct.unpack_from("<III", data, 8 + i * 12)
     if off < index_end or off + length > len(data):
@@ -32,7 +33,10 @@ for i in range(count):
     frame = data[off:off+length]
     if not (frame.startswith(b"\xff\xd8") and frame.endswith(b"\xff\xd9")):
         raise SystemExit(f"corrupt user frame {i}")
-    frames.append(module.pack_image(frame, i))
+    jpegs.append(frame)
+regions = module.choose_clip_crops(jpegs)
+for i, jpeg in enumerate(jpegs):
+    frames.append(module.pack_image(jpeg, i, regions[i // 36]))
 compressed = packed.read_bytes()
 if module.decode(compressed, count) != frames:
     raise SystemExit("compressed target frames differ from original images")
@@ -41,7 +45,7 @@ if not 0 < len(compressed) < count * 1024:
 if module.encode(frames)[0] != compressed:
     raise SystemExit("encoded contour stream does not match exact source conversion")
 density = [sum(int(byte).bit_count() for byte in frame) for frame in frames]
-if not all(60 <= pixels <= 900 for pixels in density):
+if not all(60 <= pixels <= 850 for pixels in density):
     raise SystemExit(f"unexpected contour pixel density {min(density)}..{max(density)}")
 if module.build_seek(frames, compressed) != seek.read_bytes():
     raise SystemExit("seek table does not cover all 576 exact original frames")
