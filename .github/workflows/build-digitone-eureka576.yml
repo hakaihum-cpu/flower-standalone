@@ -1,6 +1,9 @@
 name: Digitone MOOD MkII outline random 343
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/digitone-mood-outline-343-20261102]
+    paths: ['.github/approved_runs/mood-outline343-20261102-once.trigger']
 permissions:
   contents: read
 jobs:
