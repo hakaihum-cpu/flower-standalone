@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Losslessly pack all 576 user-provided EUREKA frames for Digitone 128x64 LCD.
+"""Losslessly pack all 343 user-provided MOOD MkII photos as yellow-outline/black LCD frames.
 2-byte LE record size; mode 0 raw frame, mode 1 XOR-delta zero/literal RLE.
 All outputs and decoding are checked. No image/frame is omitted.
 """
@@ -8,27 +8,67 @@ from io import BytesIO
 import argparse
 import hashlib
 import struct
-from PIL import Image
+from PIL import Image, ImageOps, ImageFilter
 
-W, H, EXPECTED = 128, 64, 576
+W, H, EXPECTED = 128, 64, 343
 FRAME_BYTES = 1024
 
 def pack_image(jpeg):
+    """Black=off, edges=yellow/on. Never fill a white/light area with yellow."""
     with Image.open(BytesIO(jpeg)) as source:
         source.load()
         gray = source.convert("L")
-    scale = min(W / gray.width, H / gray.height)
-    nw, nh = max(1, round(gray.width*scale)), max(1, round(gray.height*scale))
-    resized = gray.resize((nw, nh), Image.Resampling.LANCZOS)
-    canvas = Image.new("L", (W, H), 0)
-    canvas.paste(resized, ((W-nw)//2, (H-nh)//2))
-    pixels = canvas.point(lambda v: 255 if v > 127 else 0).convert("1").load()
+    # Full-width LCD composition: crop a 2:1 portrait slice rather than
+    # letterboxing the 150x150 MOOD photographs into a 64-pixel-wide square.
+    crop_height = min(gray.height, max(1, round(gray.width * H / W)))
+    crop_width = min(gray.width, max(1, round(gray.height * W / H)))
+    if crop_height < gray.height:
+        top = round((gray.height - crop_height) * 0.20)
+        region = gray.crop((0, top, gray.width, top + crop_height))
+    elif crop_width < gray.width:
+        left = (gray.width - crop_width) // 2
+        region = gray.crop((left, 0, left + crop_width, gray.height))
+    else:
+        region = gray
+    frame = ImageOps.autocontrast(region.resize((W, H), Image.Resampling.LANCZOS), cutoff=1)
+    # Blur source texture before FIND_EDGES: bright shirts and backgrounds
+    # remain black; only contrast *boundaries* light LCD pixels.
+    edges = frame.filter(ImageFilter.GaussianBlur(0.7)).filter(ImageFilter.FIND_EDGES)
+    strengths = list(edges.getdata())
+    candidates = []
+    for y in range(1, H - 1):
+        for x in range(1, W - 1):
+            i = y * W + x
+            # Prefer meaningful edges near the face/body on equal-strength ties.
+            candidates.append((strengths[i], -abs(x - W // 2), i))
+    candidates.sort(reverse=True)
+    strong = sum(1 for strength, _centre, _i in candidates if strength >= 38)
+    target = min(1350, max(720, strong))
+    chosen = {i for _strength, _centre, i in candidates[:target]}
     out = bytearray(FRAME_BYTES)
-    for x in range(W):
-        for y in range(H):
-            if pixels[x, y]:
-                out[7-(y >> 3)+8*x] |= 1 << (y & 7)
+    for i in chosen:
+        x, y = i % W, i // W
+        out[7 - (y >> 3) + 8 * x] |= 1 << (y & 7)
+    if not 0.08 <= len(chosen) / (W * H) <= 0.18:
+        raise ValueError("outline density out of bounds")
     return bytes(out)
+
+
+def save_preview(frames, path):
+    """Contact sheet displaying the actual 1-bit firmware output in LCD yellow."""
+    sheet = Image.new("RGB", (4 * W, 4 * H), (0, 0, 0))
+    for idx in range(16):
+        frame = frames[round(idx * (len(frames) - 1) / 15)]
+        tile = Image.new("RGB", (W, H), (0, 0, 0))
+        pix = tile.load()
+        for x in range(W):
+            for y in range(H):
+                if frame[7 - (y >> 3) + 8 * x] & (1 << (y & 7)):
+                    pix[x, y] = (245, 187, 17)
+        sheet.paste(tile, ((idx % 4) * W, (idx // 4) * H))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(path)
+
 
 def delta_rle(delta):
     encoded = bytearray()
@@ -113,7 +153,7 @@ def decode(data, n):
 
 
 def build_seek(frames, encoded):
-    """96 exact decoded keyframes plus LE offsets to the next compressed record."""
+    """58 exact decoded keyframes plus LE offsets to the next compressed record."""
     if len(frames) != EXPECTED:
         raise ValueError("invalid seek frame count")
     pos = 0
@@ -128,7 +168,7 @@ def build_seek(frames, encoded):
         if i % 6 == 0:
             output.extend(struct.pack("<I", pos))
             output.extend(frame)
-    if pos != len(encoded) or len(output) != 96 * 1028:
+    if pos != len(encoded) or len(output) != ((EXPECTED + 5) // 6) * 1028:
         raise ValueError("seek table malformed")
     for i in range(EXPECTED):
         slot = (i // 6) * 1028
@@ -170,7 +210,7 @@ def build_seek(frames, encoded):
             raise ValueError(f"checkpoint seek mismatch at frame {i}")
     return bytes(output)
 
-def convert(source, out, seek_out=None):
+def convert(source, out, seek_out=None, preview_out=None):
     data = source.read_bytes()
     if len(data) < 8 or data[:4] != b"CRF1":
         raise ValueError("CRF1 header invalid")
@@ -199,11 +239,14 @@ def convert(source, out, seek_out=None):
         raise ValueError(f"insufficient compression gain: packed {len(encoded)}")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(encoded)
+    if preview_out is not None:
+        save_preview(frames, preview_out)
+        print(f'PASS LCD yellow-outline preview: {preview_out}')
     if seek_out is not None:
         seek_data = build_seek(frames, encoded)
         seek_out.parent.mkdir(parents=True, exist_ok=True)
         seek_out.write_bytes(seek_data)
-        print(f"PASS checkpoints=96 bytes={len(seek_data)} sha256={hashlib.sha256(seek_data).hexdigest()}")
+        print(f"PASS checkpoints=58 bytes={len(seek_data)} sha256={hashlib.sha256(seek_data).hexdigest()}")
     print(f"PASS frames={count} raw={count*FRAME_BYTES} packed={len(encoded)} "
           f"mode_raw={modes[0]} mode_delta={modes[1]} sha256={hashlib.sha256(encoded).hexdigest()}")
 
@@ -212,5 +255,6 @@ if __name__ == "__main__":
     ap.add_argument("source", type=Path)
     ap.add_argument("out", type=Path)
     ap.add_argument("--seek", type=Path, default=None)
+    ap.add_argument("--preview", type=Path, default=None)
     a = ap.parse_args()
-    convert(a.source, a.out, a.seek)
+    convert(a.source, a.out, a.seek, a.preview)
