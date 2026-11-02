@@ -1,6 +1,9 @@
 name: Digitone EUREKA RANDOM SEQUENCE 576
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/digitone-eureka-random-sequence-20261102]
+    paths: ['.github/approved_runs/eureka-random576-20261102-once.trigger']
 permissions:
   contents: read
 jobs:
