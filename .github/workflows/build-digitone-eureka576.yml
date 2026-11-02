@@ -1,14 +1,11 @@
 name: Digitone EUREKA face-outline random 576
 on:
   workflow_dispatch:
-  push:
-    branches: [feature/digitone-eureka-facefocus-576-20261102]
-    paths: ['.github/approved_runs/eureka-facezoom-preview2-once.trigger']
 permissions:
   contents: read
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/digitone-eureka-facefocus-576-20261102'
+    if: github.ref == 'refs/heads/feature/digitone-eureka-facefocus-576-20261102'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -94,30 +91,3 @@ jobs:
 
 
 
-  preview_only:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/digitone-eureka-facefocus-576-20261102'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install image-analysis dependencies (no firmware toolchain)
-        run: |
-          set -euo pipefail
-          python3 -m pip install --user --break-system-packages 'Pillow==11.3.0' 'opencv-python-headless==4.13.0.92'
-      - name: Compute EUREKA's 16 stable facial crops and all 576 exact LCD frames
-        run: |
-          set -euo pipefail
-          python3 scripts/materialize_frame_pack.py
-          mkdir -p _preview
-          python3 ports/digitone_eureka576/prepare.py Resources/eureka_frames.pack _preview/frames.bin --seek _preview/seek.bin --preview _preview/eureka_focus_16.png
-          python3 ports/digitone_eureka576/tests/verify_stream.py Resources/eureka_frames.pack _preview/frames.bin _preview/reference.bin _preview/seek.bin
-          python3 ports/digitone_eureka576/tests/render_face_preview.py _preview/reference.bin _preview/eureka_focus_8.png
-      - name: Upload real LCD preview, no firmware build
-        uses: actions/upload-artifact@v4
-        with:
-          name: EUREKA-FACE-FOCUS-2-IMAGES-ONLY
-          path: |
-            _preview/eureka_focus_8.png
-            _preview/eureka_focus_16.png
-          if-no-files-found: error
-          retention-days: 7
