@@ -1,11 +1,14 @@
 name: Digitone MOOD MkII FACE FOCUS random 343
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/digitone-mood-facefocus-20261102]
+    paths: ['.github/approved_runs/mood-face-sample-only-once.trigger']
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-mood-facefocus-20261102'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/digitone-mood-facefocus-20261102'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -85,3 +88,31 @@ jobs:
           path: _release/
           if-no-files-found: error
           retention-days: 30
+
+  sample_only:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/digitone-mood-facefocus-20261102'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install image tool only (no firmware compiler)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user --break-system-packages 'Pillow==11.3.0'
+      - name: Restore original MOOD imagery and render actual LCD samples
+        run: |
+          set -euo pipefail
+          python3 scripts/materialize_frame_pack.py
+          mkdir -p _face_preview
+          python3 ports/digitone_eureka576/prepare.py Resources/mood_frames.pack _face_preview/frames.bin --seek _face_preview/seek.bin --preview _face_preview/all_16_frames.png
+          python3 ports/digitone_eureka576/tests/verify_stream.py Resources/mood_frames.pack _face_preview/frames.bin _face_preview/reference.bin _face_preview/seek.bin
+          python3 ports/digitone_eureka576/tests/render_face_preview.py _face_preview/reference.bin _face_preview/mood_face_samples.png
+      - name: Upload images only
+        uses: actions/upload-artifact@v4
+        with:
+          name: MOOD-FACE-SAMPLES-NO-FIRMWARE
+          path: |
+            _face_preview/mood_face_samples.png
+            _face_preview/all_16_frames.png
+          if-no-files-found: error
+          retention-days: 7
