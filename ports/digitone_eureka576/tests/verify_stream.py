@@ -8,9 +8,9 @@ import importlib.util
 import struct
 import sys
 
-if len(sys.argv) != 4:
-    raise SystemExit("usage: verify_stream.py original.crf1 frames.bin reference.bin")
-source, packed, reference = map(Path, sys.argv[1:])
+if len(sys.argv) != 5:
+    raise SystemExit("usage: verify_stream.py original.crf1 frames.bin reference.bin seek.bin")
+source, packed, reference, seek = map(Path, sys.argv[1:])
 root = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("eureka_packer", root / "prepare.py")
 module = importlib.util.module_from_spec(spec)
@@ -41,6 +41,10 @@ if len(compressed) != 145430:
 expected_sha = "ed3f236f843dc30407b757beefc62424152b17d3ce63215e87b3e1a9e23c3016"
 if hashlib.sha256(compressed).hexdigest() != expected_sha:
     raise SystemExit("target stream sha256 changed")
+if module.build_seek(frames, compressed) != seek.read_bytes():
+    raise SystemExit("seek table does not cover all 576 exact original frames")
+if seek.stat().st_size != 96 * 1028:
+    raise SystemExit("invalid checkpoint table length")
 reference.write_bytes(b"".join(frames))
 assert reference.stat().st_size == 576 * 1024
 print(f"PASS: independent reference for {count} exact frames; stream {len(compressed)} bytes")
