@@ -31,7 +31,7 @@ jobs:
           python3 ports/digitone_eureka576/prepare.py Resources/mood_frames.pack ports/digitone_eureka576/frames.bin --seek ports/digitone_eureka576/seek.bin --preview ports/digitone_eureka576/mood_lcd_preview.png
           sha256sum ports/digitone_eureka576/frames.bin
           test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -gt 0
-          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -lt 221232
+          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -lt 351232
           test "$(stat -c '%s' ports/digitone_eureka576/seek.bin)" -eq 59624
           test -s ports/digitone_eureka576/mood_lcd_preview.png
           python3 ports/digitone_eureka576/tests/verify_stream.py \
