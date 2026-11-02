@@ -134,7 +134,7 @@ static void eureka576_trigger(uint32_t time)
     if(action<45u) {
         /* 45%: jump to a different one of 16 consecutive MOOD frame banks.
          * The 343 originals are partitioned without repeating/dropping any. */
-        clip=((eureka576_index*16u/E576_COUNT)+1u+eureka576_random()%15u)%16u;
+        clip=((((eureka576_index+1u)*16u-1u)/E576_COUNT)+1u+eureka576_random()%15u)%16u;
         first=clip*E576_COUNT/16u;
         last=(clip+1u)*E576_COUNT/16u;
         inside=eureka576_random()%(last-first);
@@ -148,7 +148,7 @@ static void eureka576_trigger(uint32_t time)
     } else {
         /* 20%: 2-3 adjacent frames, bounded inside their MOOD bank. */
         eureka576_effect=2u;
-        clip=eureka576_index*16u/E576_COUNT;
+        clip=((eureka576_index+1u)*16u-1u)/E576_COUNT;
         first=clip*E576_COUNT/16u;
         last=(clip+1u)*E576_COUNT/16u;
         eureka576_stutter_span=2u+eureka576_random()%2u;
