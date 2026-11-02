@@ -7,8 +7,8 @@ import sys
 if len(sys.argv) != 3:
     raise SystemExit("usage: render_face_preview.py reference.bin sample.png")
 frames = Path(sys.argv[1]).read_bytes()
-assert len(frames) == 343 * 1024
-selected = [0, 23, 46, 68, 91, 114, 160, 228]
+assert len(frames) == 576 * 1024
+selected = [0, 35, 72, 143, 216, 323, 432, 575]
 scale = 4
 margin = 12
 header = 26
@@ -26,7 +26,7 @@ for pos, index in enumerate(selected):
                 pix[x, y] = (245, 187, 17)
     x0 = margin + (pos % 4) * (tile_w + margin)
     y0 = margin + (pos // 4) * (tile_h + header + margin)
-    draw.text((x0, y0 + 4), f"MOOD source frame #{index:03d}", fill=(208, 208, 208))
+    draw.text((x0, y0 + 4), f"EUREKA source frame #{index:03d}", fill=(208, 208, 208))
     sheet.paste(lcd.resize((tile_w, tile_h), Image.Resampling.NEAREST), (x0, y0 + header))
 out = Path(sys.argv[2])
 out.parent.mkdir(parents=True, exist_ok=True)
