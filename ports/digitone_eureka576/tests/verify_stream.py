@@ -17,10 +17,10 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 data = source.read_bytes()
 if data[:4] != b"CRF1":
-    raise SystemExit("invalid original MOOD CRF1")
+    raise SystemExit("invalid original EUREKA CRF1 (face-outline conversion)")
 count, = struct.unpack_from("<I", data, 4)
-if count != 343:
-    raise SystemExit("original source is not the complete 343 MOOD frames")
+if count != 576:
+    raise SystemExit("original source is not the complete 576 EUREKA frames")
 index_end = 8 + count * 12
 if len(data) < index_end:
     raise SystemExit("source index truncated")
@@ -37,20 +37,16 @@ compressed = packed.read_bytes()
 if module.decode(compressed, count) != frames:
     raise SystemExit("compressed target frames differ from original images")
 if not 0 < len(compressed) < count * 1024:
-    raise SystemExit(f"compressed source is too large or empty: {len(compressed)}")
-expected_stream, _modes = module.encode(frames)
-if expected_stream != compressed:
-    raise SystemExit("packed stream bytes differ from source-encoded frames")
-# Every MOOD photo must produce clear yellow contours without filled-in white areas.
-density = [sum(byte.bit_count() for byte in frame) for frame in frames]
-for i, n in enumerate(density):
-    low, high = (190, 850) if i < 250 else (90, 700)
-    if n < low or n > high:
-        raise SystemExit(f"frame {i} outlines {n} outside {low}..{high}")
+    raise SystemExit(f"unexpected packed EUREKA contour size {len(compressed)}")
+if module.encode(frames)[0] != compressed:
+    raise SystemExit("encoded contour stream does not match exact source conversion")
+density = [sum(int(byte).bit_count() for byte in frame) for frame in frames]
+if not all(60 <= pixels <= 900 for pixels in density):
+    raise SystemExit(f"unexpected contour pixel density {min(density)}..{max(density)}")
 if module.build_seek(frames, compressed) != seek.read_bytes():
-    raise SystemExit("seek table does not cover all 343 exact MOOD frames")
-if seek.stat().st_size != 58 * 1028:
+    raise SystemExit("seek table does not cover all 576 exact original frames")
+if seek.stat().st_size != 96 * 1028:
     raise SystemExit("invalid checkpoint table length")
 reference.write_bytes(b"".join(frames))
-assert reference.stat().st_size == 343 * 1024
-print(f"PASS: face-focused MOOD reference for {count} frames; yellow pixels {min(density)}..{max(density)}; packed {len(compressed)}; sha256 {hashlib.sha256(compressed).hexdigest()}")
+assert reference.stat().st_size == 576 * 1024
+print(f"PASS: 576 exact EUREKA contour reference frames; packed {len(compressed)}; pixels {min(density)}..{max(density)}")
