@@ -1,11 +1,11 @@
-name: Digitone EUREKA RANDOM SEQUENCE 576
+name: Digitone MOOD MkII outline random 343
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-eureka-random-sequence-20261102'
+    if: github.ref == 'refs/heads/feature/digitone-mood-outline-343-20261102'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -24,16 +24,18 @@ jobs:
           curl -fL --retry 3 -o _firmware/stock.zip 'https://www.elektron.se/wp-content/uploads/2026/10/Digitone_and_Digitone_Keys_OS1.44_dist.zip'
           unzip -p _firmware/stock.zip Digitone_and_Digitone_Keys_OS1.44.syx > _firmware/stock.syx
           echo 'd4f200d04484333d82822db7744e6484d0def8f2db8ddf55ee2b780cc13c9659  _firmware/stock.syx' | sha256sum -c -
-      - name: Reconstruct original footage and convert 576 frames
+      - name: Reconstruct original MOOD footage and convert 343 yellow-outline frames
         run: |
           set -euo pipefail
           python3 scripts/materialize_frame_pack.py
-          python3 ports/digitone_eureka576/prepare.py Resources/eureka_frames.pack ports/digitone_eureka576/frames.bin --seek ports/digitone_eureka576/seek.bin
-          echo 'ed3f236f843dc30407b757beefc62424152b17d3ce63215e87b3e1a9e23c3016  ports/digitone_eureka576/frames.bin' | sha256sum -c -
-          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -eq 145430
-          test "$(stat -c '%s' ports/digitone_eureka576/seek.bin)" -eq 98688
+          python3 ports/digitone_eureka576/prepare.py Resources/mood_frames.pack ports/digitone_eureka576/frames.bin --seek ports/digitone_eureka576/seek.bin --preview ports/digitone_eureka576/mood_lcd_preview.png
+          sha256sum ports/digitone_eureka576/frames.bin
+          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -gt 0
+          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -lt 221232
+          test "$(stat -c '%s' ports/digitone_eureka576/seek.bin)" -eq 59624
+          test -s ports/digitone_eureka576/mood_lcd_preview.png
           python3 ports/digitone_eureka576/tests/verify_stream.py \
-            Resources/eureka_frames.pack \
+            Resources/mood_frames.pack \
             ports/digitone_eureka576/frames.bin \
             ports/digitone_eureka576/reference.bin \
             ports/digitone_eureka576/seek.bin
@@ -67,18 +69,19 @@ jobs:
           python3 -m elekloader.lint "$MOD" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --with "$GITHUB_WORKSPACE/_firmware/core.elemod"
           python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --check
           mkdir -p "$GITHUB_WORKSPACE/_release"
-          python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_RANDOM576.syx" --version E57R
+          python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_MOOD_OUTLINE343.syx" --version M343
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_EUREKA_RANDOM576.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_MOOD_OUTLINE343.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$MOD" "$GITHUB_WORKSPACE/_release/"
+          cp "$GITHUB_WORKSPACE/ports/digitone_eureka576/mood_lcd_preview.png" "$GITHUB_WORKSPACE/_release/"
       - name: Upload build files
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-RANDOM576
+          name: Digitone-OS1.44-MOOD-OUTLINE343
           path: _release/
           if-no-files-found: error
           retention-days: 30
