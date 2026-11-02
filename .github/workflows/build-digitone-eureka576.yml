@@ -1,6 +1,9 @@
 name: Digitone EUREKA RG DOT + DREAMY trial
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/digitone-eureka-rgdot-dreamy-insert-20261103]
+    paths: ['.github/approved_runs/digitone-rgdot-dreamy-once-20261103-retry.trigger']
 permissions:
   contents: read
 jobs:
@@ -89,6 +92,7 @@ jobs:
           STOCK="$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.lint "$VISUAL_MOD" --stock "$STOCK" --with "$CORE"
           python3 -m elekloader.lint "$DREAMY_MOD" --stock "$STOCK" --with "$CORE"
+          python3 -m elekloader.lint "$VISUAL_MOD" "$DREAMY_MOD" --stock "$STOCK" --with "$CORE"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$DREAMY_MOD" --check
           mkdir -p "$GITHUB_WORKSPACE/_release"
