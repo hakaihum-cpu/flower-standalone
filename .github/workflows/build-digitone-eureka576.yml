@@ -1,9 +1,6 @@
 name: Digitone EUREKA 576 custom firmware
 on:
   workflow_dispatch:
-  push:
-    branches: [feature/digitone-eureka-576-20261102]
-    paths: ['ports/digitone_eureka576/.one_build_approved_20261102']
 permissions:
   contents: read
 jobs:
