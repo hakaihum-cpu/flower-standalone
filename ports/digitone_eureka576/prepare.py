@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Losslessly pack all 343 user-provided MOOD MkII photos as yellow-outline/black LCD frames.
+"""Losslessly pack all 576 user-provided EUREKA video images as yellow-outline/black LCD frames.
 2-byte LE record size; mode 0 raw frame, mode 1 XOR-delta zero/literal RLE.
 All outputs and decoding are checked. No image/frame is omitted.
 """
@@ -10,91 +10,56 @@ import hashlib
 import struct
 from PIL import Image, ImageOps, ImageFilter
 
-W, H, EXPECTED = 128, 64, 343
+W, H, EXPECTED = 128, 64, 576
 FRAME_BYTES = 1024
 
 def pack_image(jpeg, frame_index):
-    """128x64 LCD contour: face first, black interiors, one-bit yellow edges.
+    """Convert an original EUREKA frame to sparse yellow contour lines on black.
 
-    Source bank SHA is pinned by materialize_frame_pack.py. Its three visual
-    groups are 0-84 small portraits, 85-249 close-up B/W portraits, and
-    250-342 details/scenes. Different crops preserve different subjects.
+    576 originals are 16 clips of 36 images. Keep the viewing region stable
+    across each clip: no content-dependent crop changes on consecutive frames.
     """
     with Image.open(BytesIO(jpeg)) as source:
         source.load()
         gray = source.convert("L")
 
-    if frame_index < 85:
-        # The small photographic face sits in the upper part of a 150x150
-        # portrait. Estimate the black hair position rather than always
-        # cutting at the top; a bowed head can be much lower.
-        pix = gray.load()
-        w, h = gray.size
-        total = sx = sy = 0
-        for y in range(3, min(75, h), 2):
-            for x in range(max(2, w // 5), min(w - 2, w * 4 // 5), 2):
-                darkness = max(0, 113 - pix[x, y])
-                if y > 54:
-                    darkness //= 4  # de-emphasise dark skirt/sleeves
-                total += darkness
-                sx += darkness * x
-                sy += darkness * y
-        cx = round(sx / total) if total else w // 2
-        cy = round(sy / total) if total else h // 4
-        crop_w = max(2, min(w, round(w * 0.80)))
-        crop_h = max(1, min(h, crop_w // 2))
-        left = max(0, min(w - crop_w, cx - crop_w // 2))
-        top = max(0, min(h - crop_h, cy - round(crop_h * 0.42)))
-        region = gray.crop((left, top, left + crop_w, top + crop_h))
-        face_mode = 1
-    elif frame_index < 250:
-        # The monochrome portraits show eyes near y~80 and mouth y~110:
-        # the old y=15..90 crop removed nose/chin. Keep eyes AND mouth.
-        w, h = gray.size
-        crop_h = max(1, min(h, round(w * H / W)))
-        top = max(0, min(h - crop_h, round(h * 0.36)))
-        region = gray.crop((0, top, w, top + crop_h))
-        face_mode = 2
-    else:
-        # The remainder contains shoes, streets, electronics, hands and
-        # occasional eye close-ups. Preserve the whole square composition.
-        region = ImageOps.contain(gray, (W, H), Image.Resampling.LANCZOS)
-        face_mode = 0
+    iw, ih = gray.size
+    # Slight centre/upward crop prioritises faces in wide video, while still
+    # preserving most of the setting. Square videos receive a restrained 2:1
+    # cut for the physical 128x64 LCD (not a central 64x64 postage stamp).
+    zoom = 0.92 if iw >= ih * 1.4 else 0.94
+    crop_w = min(iw, max(2, round(iw * zoom)))
+    crop_h = min(ih, max(1, round(crop_w * H / W)))
+    left = (iw - crop_w) // 2
+    top = max(0, min(ih - crop_h, round((ih - crop_h) * 0.42)))
+    region = gray.crop((left, top, left + crop_w, top + crop_h))
+    frame = ImageOps.autocontrast(region.resize((W, H), Image.Resampling.LANCZOS), cutoff=2)
 
-    if face_mode:
-        canvas = region.resize((W, H), Image.Resampling.LANCZOS)
-    else:
-        canvas = Image.new("L", (W, H), 0)
-        canvas.paste(region, ((W - region.width) // 2, (H - region.height) // 2))
-
-    canvas = ImageOps.autocontrast(canvas, cutoff=1)
-    blur = 0.45 if face_mode else 0.65
-    edge = canvas.filter(ImageFilter.GaussianBlur(blur)).filter(ImageFilter.FIND_EDGES)
+    # Render *edges*, not brightness/white areas. The LCD has only yellow/on
+    # and black/off; flat white fabric or walls must not become yellow blobs.
+    edge = frame.filter(ImageFilter.GaussianBlur(0.6)).filter(ImageFilter.FIND_EDGES)
     e = edge.load()
     candidates = []
     for y in range(1, H - 1):
         for x in range(1, W - 1):
             raw = int(e[x, y])
-            if raw < 15:  # never turn flat white areas into yellow fill
+            if raw < 14:
                 continue
-            # Preserve facial features ahead of clothing/background texture.
-            inside_face = (24 <= x <= 105 and 14 <= y <= 57)
-            weight = 1.38 if face_mode and inside_face else 1.0
-            candidates.append((raw * weight, x, y))
-
+            # Face-oriented priority in the central upper display. No drawn
+            # facial features, generated pixels or artificial outlines.
+            region_weight = 1.30 if 26 <= x <= 101 and 8 <= y <= 49 else 1.0
+            candidates.append((raw * region_weight, x, y))
     candidates.sort(reverse=True)
-    minimum = 190 if face_mode else 90
-    maximum = 850 if face_mode else 700
-    threshold = 47 if face_mode == 2 else (36 if face_mode else 43)
-    chosen = [(x, y) for strength, x, y in candidates if strength >= threshold]
-    if len(chosen) < minimum:
-        chosen = [(x, y) for _strength, x, y in candidates[:minimum]]
-    chosen = chosen[:maximum]
+    # Permit restrained linework (unlike the old fixed 720-1350 pixel fill).
+    selected = [(x, y) for weight, x, y in candidates if weight >= 42]
+    if len(selected) < 210:
+        selected = [(x, y) for _weight, x, y in candidates[:210]]
+    selected = selected[:900]
     out = bytearray(FRAME_BYTES)
-    for x, y in chosen:
+    for x, y in selected:
         out[7 - (y >> 3) + 8 * x] |= 1 << (y & 7)
-    if not 60 <= len(chosen) <= maximum:
-        raise ValueError(f"frame {frame_index}: outline pixel count {len(chosen)}")
+    if not 60 <= len(selected) <= 900:
+        raise ValueError(f"EUREKA frame {frame_index}: too few/many yellow pixels ({len(selected)})")
     return bytes(out)
 
 
@@ -276,7 +241,7 @@ def convert(source, out, seek_out=None, preview_out=None):
     encoded, modes = encode(frames)
     if decode(encoded, count) != frames:
         raise ValueError("lossless decode mismatch")
-    # New MOOD source and 58 checkpoints differ from EUREKA's earlier budget.
+    # EUREKA outline conversion needs to pass the final in-place depack budget.
     # Only the final elekloader in-place depack/flash verification is definitive.
     if len(encoded) >= count * FRAME_BYTES:
         raise ValueError(f"no meaningful compression: packed {len(encoded)}")
@@ -289,7 +254,7 @@ def convert(source, out, seek_out=None, preview_out=None):
         seek_data = build_seek(frames, encoded)
         seek_out.parent.mkdir(parents=True, exist_ok=True)
         seek_out.write_bytes(seek_data)
-        print(f"PASS checkpoints=58 bytes={len(seek_data)} sha256={hashlib.sha256(seek_data).hexdigest()}")
+        print(f"PASS checkpoints=96 bytes={len(seek_data)} sha256={hashlib.sha256(seek_data).hexdigest()}")
     print(f"PASS frames={count} raw={count*FRAME_BYTES} packed={len(encoded)} "
           f"mode_raw={modes[0]} mode_delta={modes[1]} sha256={hashlib.sha256(encoded).hexdigest()}")
 
