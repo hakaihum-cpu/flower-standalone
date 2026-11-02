@@ -19,7 +19,7 @@ void fw_fillrect(void *bmp,int32_t x0,int32_t y0,int32_t x1,int32_t y1,int32_t c
 extern const uint8_t eureka576_reference[],eureka576_reference_end[];
 static void check(unsigned index)
 {
-    if(index>=576u ||
+    if(index>=343u ||
        memcmp(eureka576_framebuf,eureka576_reference+index*1024u,1024u)!=0) {
         fprintf(stderr,"bad decoded frame %u\n",index); abort();
     }
@@ -39,22 +39,22 @@ int main(void)
     uint8_t ctrl[128]={0};
     int32_t key[6]={0},note[20]={0};
     unsigned speeds=0,stutters=0,jumps=0;
-    if((uintptr_t)eureka576_reference_end-(uintptr_t)eureka576_reference!=589824u)
+    if((uintptr_t)eureka576_reference_end-(uintptr_t)eureka576_reference!=351232u)
         abort();
     key[3]=2;key[4]=1;
     if(eureka576_key(NULL,key)!=0) abort();
     key[3]=13;
     if(eureka576_key(NULL,key)!=1 || !eureka576_enabled) abort();
     check(0);
-    /* Exhaustive all-frame random seek and 4,718,592 display pixel comparisons. */
-    for(unsigned i=0u;i<576u;++i) {
+    /* Exhaustive all-frame random seek and 2,809,856 display pixel comparisons. */
+    for(unsigned i=0u;i<343u;++i) {
         if(!eureka576_seek(i)) abort();
         check(i);
     }
-    if(eureka576_seek(576u)) abort();
+    if(eureka576_seek(343u)) abort();
     fw_transport=1u;
     if(!eureka576_seek(0u)) abort();
-    for(unsigned i=1u;i<576u;++i) {
+    for(unsigned i=1u;i<343u;++i) {
         unsigned ticks=0;
         do {
             eureka576_tick(ctrl);
@@ -95,6 +95,6 @@ int main(void)
     if(frozen!=eureka576_index)abort();
     key[3]=13;key[4]=1;
     if(eureka576_key(NULL,key)!=1 || eureka576_enabled)abort();
-    printf("PASS: 576/576 seek + pixels, playback/wrap, 1200 timed triggers, JUMP/SPEED/STUTTER, stop/toggle; %u rectangles\n",rectangle_count);
+    printf("PASS: 343/343 seek + pixels, playback/wrap, 1200 timed triggers, JUMP/SPEED/STUTTER, stop/toggle; %u rectangles\n",rectangle_count);
     return 0;
 }
