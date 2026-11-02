@@ -30,6 +30,19 @@ jobs:
           python3 ports/digitone_eureka576/prepare.py Resources/eureka_frames.pack ports/digitone_eureka576/frames.bin
           echo 'ed3f236f843dc30407b757beefc62424152b17d3ce63215e87b3e1a9e23c3016  ports/digitone_eureka576/frames.bin' | sha256sum -c -
           test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -eq 145430
+          python3 ports/digitone_eureka576/tests/verify_stream.py \
+            Resources/eureka_frames.pack \
+            ports/digitone_eureka576/frames.bin \
+            ports/digitone_eureka576/reference.bin
+          (
+            cd ports/digitone_eureka576
+            gcc -std=c11 -Wall -Wextra -Werror -Wconversion -O1 -g \
+              -fsanitize=undefined -fno-sanitize-recover=all \
+              -I tests/include tests/test_native.c tests/native_embed.s \
+              -o _host_check
+            ./_host_check
+            rm _host_check reference.bin
+          )
       - name: Obtain pinned elekloader and core
         run: |
           git clone --depth 1 --branch v0.9.0 https://github.com/elekloader/elekloader.git _elekloader
