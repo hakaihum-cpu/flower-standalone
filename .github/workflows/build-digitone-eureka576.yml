@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-eureka-rgdot-1bit-20261103'
+    if: github.ref == 'refs/heads/feature/digitone-eureka-rgdot-dreamy-insert-20261103'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
