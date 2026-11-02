@@ -232,11 +232,10 @@ def convert(source, out, seek_out=None, preview_out=None):
     encoded, modes = encode(frames)
     if decode(encoded, count) != frames:
         raise ValueError("lossless decode mismatch")
-    # The prior failed OS depacker verification was short by 66,539 bytes.
-    # Demand >130k byte raw saving (and still let elekloader's final in-place
-    # depack verifier be authoritative; this is a preflight fail-fast only).
-    if len(encoded) >= count*FRAME_BYTES-130000:
-        raise ValueError(f"insufficient compression gain: packed {len(encoded)}")
+    # New MOOD source and 58 checkpoints differ from EUREKA's earlier budget.
+    # Only the final elekloader in-place depack/flash verification is definitive.
+    if len(encoded) >= count * FRAME_BYTES:
+        raise ValueError(f"no meaningful compression: packed {len(encoded)}")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(encoded)
     if preview_out is not None:
