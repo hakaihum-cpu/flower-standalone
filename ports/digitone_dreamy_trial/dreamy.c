@@ -193,7 +193,7 @@ void dreamy_tick(void *ctrl)
 int dreamy_cc(int track, int cc, int value, int flags)
 {
     (void)track;
-    if(!dreamy_owner.on || !(flags & CORE_MIDI_CC_AUTO) ||
+    if(!dreamy_owner.on || (((uint32_t)flags & CORE_MIDI_CC_AUTO)==0u) ||
        value<0 || value>127) return 0;
     if(cc==60) { mix_cc=(uint8_t)value; return 1; }
     if(cc==61) { time_cc=(uint8_t)value; return 1; }
