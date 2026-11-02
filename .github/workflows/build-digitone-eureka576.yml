@@ -1,14 +1,11 @@
 name: Digitone EUREKA face-outline random 576
 on:
   workflow_dispatch:
-  push:
-    branches: [feature/digitone-eureka-facefocus-576-20261102]
-    paths: ['.github/approved_runs/eureka-outline-preview-only-once.trigger']
 permissions:
   contents: read
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/digitone-eureka-facefocus-576-20261102'
+    if: github.ref == 'refs/heads/feature/digitone-eureka-facefocus-576-20261102'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -93,30 +90,3 @@ jobs:
           retention-days: 30
 
 
-  preview_only:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/digitone-eureka-facefocus-576-20261102'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install image tools only
-        run: |
-          set -euo pipefail
-          python3 -m pip install --user --break-system-packages 'Pillow==11.3.0'
-      - name: Restore EUREKA and generate/verifiy real yellow-on-black LCD images
-        run: |
-          set -euo pipefail
-          python3 scripts/materialize_frame_pack.py
-          mkdir -p _preview
-          python3 ports/digitone_eureka576/prepare.py Resources/eureka_frames.pack _preview/frames.bin --seek _preview/seek.bin --preview _preview/eureka_lcd_16.png
-          python3 ports/digitone_eureka576/tests/verify_stream.py Resources/eureka_frames.pack _preview/frames.bin _preview/reference.bin _preview/seek.bin
-          python3 ports/digitone_eureka576/tests/render_face_preview.py _preview/reference.bin _preview/eureka_lcd_8.png
-      - name: Upload preview images only
-        uses: actions/upload-artifact@v4
-        with:
-          name: EUREKA-CONTOUR-PREVIEW-ONLY-NO-SYX
-          path: |
-            _preview/eureka_lcd_8.png
-            _preview/eureka_lcd_16.png
-          if-no-files-found: error
-          retention-days: 7
