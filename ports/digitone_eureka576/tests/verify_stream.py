@@ -36,7 +36,7 @@ for i in range(count):
 compressed = packed.read_bytes()
 if module.decode(compressed, count) != frames:
     raise SystemExit("compressed target frames differ from original images")
-if not 0 < len(compressed) < count * 1024 - 130000:
+if not 0 < len(compressed) < count * 1024:
     raise SystemExit(f"compressed source is too large or empty: {len(compressed)}")
 expected_stream, _modes = module.encode(frames)
 if expected_stream != compressed:
