@@ -11,18 +11,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install m68k toolchain
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu
           python3 -m pip install --user --break-system-packages 'Pillow==11.3.0'
           m68k-linux-gnu-gcc --version
       - name: Obtain and verify official OS 1.44
         run: |
+          set -euo pipefail
           mkdir -p _firmware
           curl -fL --retry 3 -o _firmware/stock.zip 'https://www.elektron.se/wp-content/uploads/2026/10/Digitone_and_Digitone_Keys_OS1.44_dist.zip'
           unzip -p _firmware/stock.zip Digitone_and_Digitone_Keys_OS1.44.syx > _firmware/stock.syx
           echo 'd4f200d04484333d82822db7744e6484d0def8f2db8ddf55ee2b780cc13c9659  _firmware/stock.syx' | sha256sum -c -
       - name: Reconstruct original footage and convert 576 frames
         run: |
+          set -euo pipefail
           python3 scripts/materialize_frame_pack.py
           python3 ports/digitone_eureka576/prepare.py Resources/eureka_frames.pack ports/digitone_eureka576/frames.bin
           echo 'ed3f236f843dc30407b757beefc62424152b17d3ce63215e87b3e1a9e23c3016  ports/digitone_eureka576/frames.bin' | sha256sum -c -
@@ -42,7 +45,9 @@ jobs:
           )
       - name: Obtain pinned elekloader and core
         run: |
+          set -euo pipefail
           git clone --depth 1 --branch v0.9.0 https://github.com/elekloader/elekloader.git _elekloader
+          test "$(git -C _elekloader rev-parse HEAD)" = 'dc6ac1fd6792eeb3ab217b6ab2d6b73aa7aa30f6'
           curl -fL --retry 3 -o _firmware/core.elemod 'https://github.com/elekloader/elekloader/releases/download/v0.9.0/core-dn1-4.1.1-os1.44.elemod'
           echo '2b474537c4b9772ef79bd6dfc7218866146ec4ac02c55e77b1bb6078803befdf  _firmware/core.elemod' | sha256sum -c -
       - name: Build, lint, patch, verify
