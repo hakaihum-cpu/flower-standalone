@@ -1,11 +1,11 @@
-name: Digitone MOOD MkII FACE FOCUS random 343
+name: Digitone EUREKA face-outline random 576
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-mood-facefocus-20261102'
+    if: github.ref == 'refs/heads/feature/digitone-eureka-facefocus-576-20261102'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -24,18 +24,18 @@ jobs:
           curl -fL --retry 3 -o _firmware/stock.zip 'https://www.elektron.se/wp-content/uploads/2026/10/Digitone_and_Digitone_Keys_OS1.44_dist.zip'
           unzip -p _firmware/stock.zip Digitone_and_Digitone_Keys_OS1.44.syx > _firmware/stock.syx
           echo 'd4f200d04484333d82822db7744e6484d0def8f2db8ddf55ee2b780cc13c9659  _firmware/stock.syx' | sha256sum -c -
-      - name: Reconstruct original MOOD footage and convert 343 yellow-outline frames
+      - name: Reconstruct original EUREKA footage and convert 576 yellow-outline frames
         run: |
           set -euo pipefail
           python3 scripts/materialize_frame_pack.py
-          python3 ports/digitone_eureka576/prepare.py Resources/mood_frames.pack ports/digitone_eureka576/frames.bin --seek ports/digitone_eureka576/seek.bin --preview ports/digitone_eureka576/mood_lcd_preview.png
+          python3 ports/digitone_eureka576/prepare.py Resources/eureka_frames.pack ports/digitone_eureka576/frames.bin --seek ports/digitone_eureka576/seek.bin --preview ports/digitone_eureka576/eureka_lcd_preview.png
           sha256sum ports/digitone_eureka576/frames.bin
           test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -gt 0
-          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -lt 351232
-          test "$(stat -c '%s' ports/digitone_eureka576/seek.bin)" -eq 59624
-          test -s ports/digitone_eureka576/mood_lcd_preview.png
+          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -lt 589824
+          test "$(stat -c '%s' ports/digitone_eureka576/seek.bin)" -eq 98688
+          test -s ports/digitone_eureka576/eureka_lcd_preview.png
           python3 ports/digitone_eureka576/tests/verify_stream.py \
-            Resources/mood_frames.pack \
+            Resources/eureka_frames.pack \
             ports/digitone_eureka576/frames.bin \
             ports/digitone_eureka576/reference.bin \
             ports/digitone_eureka576/seek.bin
@@ -46,7 +46,7 @@ jobs:
               -I tests/include tests/test_random.c tests/native_embed.s \
               -o _host_check
             ./_host_check
-            rm _host_check reference.bin
+            rm _host_check
           )
       - name: Obtain pinned elekloader and core
         run: |
@@ -69,19 +69,22 @@ jobs:
           python3 -m elekloader.lint "$MOD" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --with "$GITHUB_WORKSPACE/_firmware/core.elemod"
           python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --check
           mkdir -p "$GITHUB_WORKSPACE/_release"
-          python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_MOOD_FACE343.syx" --version MF43
+          python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_FACE576.syx" --version EF76
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_MOOD_FACE343.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_EUREKA_FACE576.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$MOD" "$GITHUB_WORKSPACE/_release/"
-          cp "$GITHUB_WORKSPACE/ports/digitone_eureka576/mood_lcd_preview.png" "$GITHUB_WORKSPACE/_release/"
+          cp "$GITHUB_WORKSPACE/ports/digitone_eureka576/eureka_lcd_preview.png" "$GITHUB_WORKSPACE/_release/"
+          python3 "$GITHUB_WORKSPACE/ports/digitone_eureka576/tests/render_face_preview.py" \
+            "$GITHUB_WORKSPACE/ports/digitone_eureka576/reference.bin" \
+            "$GITHUB_WORKSPACE/_release/eureka_samples_8.png"
       - name: Upload build files
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-MOOD-FACE343
+          name: Digitone-OS1.44-EUREKA-FACE576
           path: _release/
           if-no-files-found: error
           retention-days: 30
