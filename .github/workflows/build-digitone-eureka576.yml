@@ -50,13 +50,21 @@ jobs:
           set -euo pipefail
           cd _elekloader
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
-          MOD="$(find "$GITHUB_WORKSPACE/ports/digitone_eureka576/out" -maxdepth 1 -name '*.elemod' -type f -print -quit)"
-          test -n "$MOD"
+          mapfile -t MODS < <(find "$GITHUB_WORKSPACE/ports/digitone_eureka576/out" -maxdepth 1 -name '*.elemod' -type f | sort)
+          if [[ "${#MODS[@]}" -ne 1 ]]; then
+            printf 'ERROR: expected exactly one .elemod, found %s\n' "${#MODS[@]}" >&2
+            exit 1
+          fi
+          MOD="${MODS[0]}"
           python3 -m elekloader.lint "$MOD" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --with "$GITHUB_WORKSPACE/_firmware/core.elemod"
           python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --check
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA576.syx" --version E576
-          sha256sum "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA576.syx" > "$GITHUB_WORKSPACE/_release/SHA256SUMS.txt"
+          (
+            cd "$GITHUB_WORKSPACE/_release"
+            sha256sum Digitone_OS1.44_EUREKA576.syx > SHA256SUMS.txt
+            sha256sum --check SHA256SUMS.txt
+          )
           cp "$MOD" "$GITHUB_WORKSPACE/_release/"
       - name: Upload build files
         if: success()
