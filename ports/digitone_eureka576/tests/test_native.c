@@ -46,7 +46,7 @@ int main(void)
 {
     uint8_t ctrl[128]={0};
     int32_t event[6]={0};
-    if((size_t)(eureka576_reference_end-eureka576_reference)!=576u*1024u)
+    if((size_t)((uintptr_t)eureka576_reference_end-(uintptr_t)eureka576_reference)!=576u*1024u)
         abort();
     event[3]=2; event[4]=1; /* MIDI key press */
     if(eureka576_key(NULL,event)!=0)abort();
@@ -69,6 +69,8 @@ int main(void)
         eureka576_tick(ctrl);
     if(eureka576_index!=0 || !eureka576_enabled)abort();
     check_frame(0);
+    if(eureka576_readpos==0u ||
+       eureka576_readpos>(uint32_t)((uintptr_t)eureka576_frames_end-(uintptr_t)eureka576_frames)) abort();
     event[3]=13; event[4]=1;
     if(eureka576_key(NULL,event)!=1 || eureka576_enabled)abort();
     ctrl[0x20]=0; eureka576_tick(ctrl);
