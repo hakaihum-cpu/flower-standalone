@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * MOOD MkII 343-frame Digitone mk1 / Keys OS 1.44 display-only mod.
- * User-supplied MOOD MkII photographs converted to yellow outlines; stock audio unchanged.
+ * EUREKA 576-frame Digitone mk1 / Keys OS 1.44 display-only mod.
+ * EUREKA video user imagery reprocessed into black/yellow face-priority contours.
+ * Stock audio untouched.
  */
 #include <stdint.h>
 #include "digitone-mk1/core3.h"
-#define E576_COUNT 343u
+#define E576_COUNT 576u
 #define E576_FRAME_BYTES 1024u
 #define E576_KEY_MIDI 2
 #define E576_KEY_YES 13
@@ -18,7 +19,7 @@ static uint32_t eureka576_midi_held, eureka576_enabled, eureka576_dirty;
 /* Video-only random sequence state; no changes to audio or sound parameters. */
 #define E576_SEEK_ENTRY 1028u
 #define E576_SEEK_EVERY 6u
-#define E576_SEEK_COUNT 58u
+#define E576_SEEK_COUNT 96u
 #define E576_STEP_TIME 5400000u
 #define E576_QUEUE_SIZE 32u
 static uint32_t eureka576_rng=0x534a5531u;
@@ -72,8 +73,8 @@ static int eureka576_next(void)
     eureka576_readpos=end;
     return 1;
 }
-/* Checkpoints are 58 snapshots at frame 0,6,...342.
- * Restore any of 343 frames by decoding no more than five XOR deltas. */
+/* Checkpoints are 96 snapshots at frame 0,6,...570.
+ * Restore any of 576 frames by decoding no more than five XOR deltas. */
 static int eureka576_seek(uint32_t frame)
 {
     const uint8_t *s=eureka576_seek_table;
@@ -122,7 +123,7 @@ void eureka576_note_queue(void *event, uint32_t time)
 }
 static void eureka576_trigger(uint32_t time)
 {
-    uint32_t action, clip, inside, duration, first, last;
+    uint32_t action, clip, inside, duration;
     if(eureka576_have_change &&
        (uint32_t)(time-eureka576_last_change)<2u*E576_STEP_TIME) return;
     if(eureka576_random()%100u>=30u) return;
@@ -132,13 +133,10 @@ static void eureka576_trigger(uint32_t time)
     eureka576_effect=0u;
     eureka576_speed=0u;
     if(action<45u) {
-        /* 45%: jump to a different one of 16 consecutive MOOD frame banks.
-         * The 343 originals are partitioned without repeating/dropping any. */
-        clip=((((eureka576_index+1u)*16u-1u)/E576_COUNT)+1u+eureka576_random()%15u)%16u;
-        first=clip*E576_COUNT/16u;
-        last=(clip+1u)*E576_COUNT/16u;
-        inside=eureka576_random()%(last-first);
-        if(!eureka576_seek(first+inside)) eureka576_enabled=0u;
+        /* 45%: jump to another of 16 clips at a random frame. */
+        clip=((eureka576_index/36u)+1u+eureka576_random()%15u)%16u;
+        inside=eureka576_random()%36u;
+        if(!eureka576_seek(clip*36u+inside)) eureka576_enabled=0u;
     } else if(action<80u) {
         /* 35%: half-speed, double-speed, or hold for 4-8 steps. */
         eureka576_effect=1u;
@@ -146,15 +144,11 @@ static void eureka576_trigger(uint32_t time)
         duration=4u+eureka576_random()%5u;
         eureka576_until=time+duration*E576_STEP_TIME;
     } else {
-        /* 20%: 2-3 adjacent frames, bounded inside their MOOD bank. */
+        /* 20%: 2-3 adjacent frames repeated for 2-4 steps. */
         eureka576_effect=2u;
-        clip=((eureka576_index+1u)*16u-1u)/E576_COUNT;
-        first=clip*E576_COUNT/16u;
-        last=(clip+1u)*E576_COUNT/16u;
+        inside=eureka576_index%36u;
+        eureka576_stutter_start=eureka576_index-inside+(inside>33u?33u:inside);
         eureka576_stutter_span=2u+eureka576_random()%2u;
-        eureka576_stutter_start=eureka576_index;
-        if(eureka576_stutter_start+eureka576_stutter_span>last)
-            eureka576_stutter_start=last-eureka576_stutter_span;
         eureka576_stutter_step=0u;
         duration=2u+eureka576_random()%3u;
         eureka576_until=time+duration*E576_STEP_TIME;
