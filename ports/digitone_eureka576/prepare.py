@@ -13,44 +13,88 @@ from PIL import Image, ImageOps, ImageFilter
 W, H, EXPECTED = 128, 64, 343
 FRAME_BYTES = 1024
 
-def pack_image(jpeg):
-    """Black=off, edges=yellow/on. Never fill a white/light area with yellow."""
+def pack_image(jpeg, frame_index):
+    """128x64 LCD contour: face first, black interiors, one-bit yellow edges.
+
+    Source bank SHA is pinned by materialize_frame_pack.py. Its three visual
+    groups are 0-84 small portraits, 85-249 close-up B/W portraits, and
+    250-342 details/scenes. Different crops preserve different subjects.
+    """
     with Image.open(BytesIO(jpeg)) as source:
         source.load()
         gray = source.convert("L")
-    # Full-width LCD composition: crop a 2:1 portrait slice rather than
-    # letterboxing the 150x150 MOOD photographs into a 64-pixel-wide square.
-    crop_height = min(gray.height, max(1, round(gray.width * H / W)))
-    crop_width = min(gray.width, max(1, round(gray.height * W / H)))
-    if crop_height < gray.height:
-        top = round((gray.height - crop_height) * 0.20)
-        region = gray.crop((0, top, gray.width, top + crop_height))
-    elif crop_width < gray.width:
-        left = (gray.width - crop_width) // 2
-        region = gray.crop((left, 0, left + crop_width, gray.height))
+
+    if frame_index < 85:
+        # The small photographic face sits in the upper part of a 150x150
+        # portrait. Estimate the black hair position rather than always
+        # cutting at the top; a bowed head can be much lower.
+        pix = gray.load()
+        w, h = gray.size
+        total = sx = sy = 0
+        for y in range(3, min(75, h), 2):
+            for x in range(max(2, w // 5), min(w - 2, w * 4 // 5), 2):
+                darkness = max(0, 113 - pix[x, y])
+                if y > 54:
+                    darkness //= 4  # de-emphasise dark skirt/sleeves
+                total += darkness
+                sx += darkness * x
+                sy += darkness * y
+        cx = round(sx / total) if total else w // 2
+        cy = round(sy / total) if total else h // 4
+        crop_w = max(2, min(w, round(w * 0.80)))
+        crop_h = max(1, min(h, crop_w // 2))
+        left = max(0, min(w - crop_w, cx - crop_w // 2))
+        top = max(0, min(h - crop_h, cy - round(crop_h * 0.42)))
+        region = gray.crop((left, top, left + crop_w, top + crop_h))
+        face_mode = 1
+    elif frame_index < 250:
+        # The monochrome portraits show eyes near y~80 and mouth y~110:
+        # the old y=15..90 crop removed nose/chin. Keep eyes AND mouth.
+        w, h = gray.size
+        crop_h = max(1, min(h, round(w * H / W)))
+        top = max(0, min(h - crop_h, round(h * 0.36)))
+        region = gray.crop((0, top, w, top + crop_h))
+        face_mode = 2
     else:
-        region = gray
-    frame = ImageOps.autocontrast(region.resize((W, H), Image.Resampling.LANCZOS), cutoff=1)
-    # Blur source texture before FIND_EDGES: bright shirts and backgrounds
-    # remain black; only contrast *boundaries* light LCD pixels.
-    edges = frame.filter(ImageFilter.GaussianBlur(0.7)).filter(ImageFilter.FIND_EDGES)
-    strengths = list(edges.getdata())
+        # The remainder contains shoes, streets, electronics, hands and
+        # occasional eye close-ups. Preserve the whole square composition.
+        region = ImageOps.contain(gray, (W, H), Image.Resampling.LANCZOS)
+        face_mode = 0
+
+    if face_mode:
+        canvas = region.resize((W, H), Image.Resampling.LANCZOS)
+    else:
+        canvas = Image.new("L", (W, H), 0)
+        canvas.paste(region, ((W - region.width) // 2, (H - region.height) // 2))
+
+    canvas = ImageOps.autocontrast(canvas, cutoff=1)
+    blur = 0.45 if face_mode else 0.65
+    edge = canvas.filter(ImageFilter.GaussianBlur(blur)).filter(ImageFilter.FIND_EDGES)
+    e = edge.load()
     candidates = []
     for y in range(1, H - 1):
         for x in range(1, W - 1):
-            i = y * W + x
-            # Prefer meaningful edges near the face/body on equal-strength ties.
-            candidates.append((strengths[i], -abs(x - W // 2), i))
+            raw = int(e[x, y])
+            if raw < 15:  # never turn flat white areas into yellow fill
+                continue
+            # Preserve facial features ahead of clothing/background texture.
+            inside_face = (24 <= x <= 105 and 14 <= y <= 57)
+            weight = 1.38 if face_mode and inside_face else 1.0
+            candidates.append((raw * weight, x, y))
+
     candidates.sort(reverse=True)
-    strong = sum(1 for strength, _centre, _i in candidates if strength >= 38)
-    target = min(1350, max(720, strong))
-    chosen = {i for _strength, _centre, i in candidates[:target]}
+    minimum = 190 if face_mode else 90
+    maximum = 850 if face_mode else 700
+    threshold = 47 if face_mode == 2 else (36 if face_mode else 43)
+    chosen = [(x, y) for strength, x, y in candidates if strength >= threshold]
+    if len(chosen) < minimum:
+        chosen = [(x, y) for _strength, x, y in candidates[:minimum]]
+    chosen = chosen[:maximum]
     out = bytearray(FRAME_BYTES)
-    for i in chosen:
-        x, y = i % W, i // W
+    for x, y in chosen:
         out[7 - (y >> 3) + 8 * x] |= 1 << (y & 7)
-    if not 0.08 <= len(chosen) / (W * H) <= 0.18:
-        raise ValueError("outline density out of bounds")
+    if not 60 <= len(chosen) <= maximum:
+        raise ValueError(f"frame {frame_index}: outline pixel count {len(chosen)}")
     return bytes(out)
 
 
@@ -228,7 +272,7 @@ def convert(source, out, seek_out=None, preview_out=None):
         jpeg = data[off:off+size]
         if jpeg[:2] != b"\xff\xd8" or jpeg[-2:] != b"\xff\xd9":
             raise ValueError(f"invalid JPEG {i}")
-        frames.append(pack_image(jpeg))
+        frames.append(pack_image(jpeg, i))
     encoded, modes = encode(frames)
     if decode(encoded, count) != frames:
         raise ValueError("lossless decode mismatch")
