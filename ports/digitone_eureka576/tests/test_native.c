@@ -24,7 +24,7 @@ static void check_display(unsigned index)
     eureka576_draw(NULL,NULL);
     for(unsigned y=0;y<64;y++)
         for(unsigned x=0;x<128;x++) {
-            unsigned bit=(eureka576_reference[index*1024+
+            unsigned bit=((unsigned)eureka576_reference[index*1024+
                          (7u-(y>>3))+8u*x]>>(y&7u))&1u;
             if(canvas[63-y][x]!=bit) {
                 fprintf(stderr,"pixel mismatch: frame=%u x=%u y=%u\n",index,x,y);
