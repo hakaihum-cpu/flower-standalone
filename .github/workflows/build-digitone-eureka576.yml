@@ -1,11 +1,11 @@
-name: Digitone MOOD MkII outline random 343
+name: Digitone MOOD MkII FACE FOCUS random 343
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-mood-outline-343-20261102'
+    if: github.ref == 'refs/heads/feature/digitone-mood-facefocus-20261102'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -69,10 +69,10 @@ jobs:
           python3 -m elekloader.lint "$MOD" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --with "$GITHUB_WORKSPACE/_firmware/core.elemod"
           python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --check
           mkdir -p "$GITHUB_WORKSPACE/_release"
-          python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_MOOD_OUTLINE343.syx" --version M343
+          python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_MOOD_FACE343.syx" --version MF43
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_MOOD_OUTLINE343.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_MOOD_FACE343.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$MOD" "$GITHUB_WORKSPACE/_release/"
@@ -81,7 +81,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-MOOD-OUTLINE343
+          name: Digitone-OS1.44-MOOD-FACE343
           path: _release/
           if-no-files-found: error
           retention-days: 30
