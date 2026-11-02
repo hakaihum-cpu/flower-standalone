@@ -111,7 +111,66 @@ def decode(data, n):
         raise ValueError("trailing bytes")
     return frames
 
-def convert(source, out):
+
+def build_seek(frames, encoded):
+    """96 exact decoded keyframes plus LE offsets to the next compressed record."""
+    if len(frames) != EXPECTED:
+        raise ValueError("invalid seek frame count")
+    pos = 0
+    output = bytearray()
+    for i, frame in enumerate(frames):
+        if pos + 2 > len(encoded):
+            raise ValueError("seek record header missing")
+        length, = struct.unpack_from("<H", encoded, pos)
+        pos += 2 + length
+        if pos > len(encoded):
+            raise ValueError("seek record exceeds stream")
+        if i % 6 == 0:
+            output.extend(struct.pack("<I", pos))
+            output.extend(frame)
+    if pos != len(encoded) or len(output) != 96 * 1028:
+        raise ValueError("seek table malformed")
+    for i in range(EXPECTED):
+        slot = (i // 6) * 1028
+        cursor, = struct.unpack_from("<I", output, slot)
+        previous = bytearray(output[slot + 4:slot + 1028])
+        for _ in range(i % 6):
+            if cursor + 3 > len(encoded):
+                raise ValueError("seek points past stream")
+            length, = struct.unpack_from("<H", encoded, cursor)
+            payload = encoded[cursor + 2:cursor + 2 + length]
+            if len(payload) != length:
+                raise ValueError("truncated seek payload")
+            if payload[0] == 0:
+                if len(payload) != 1025:
+                    raise ValueError("invalid raw seek record")
+                previous[:] = payload[1:]
+                cursor += 2 + length
+                continue
+            if payload[0] != 1:
+                raise ValueError("invalid seek record mode")
+            used, p = 0, 1
+            while p < len(payload):
+                tag = payload[p]
+                p += 1
+                count = (tag & 127) + 1
+                if used + count > 1024:
+                    raise ValueError("seek RLE overflow")
+                if tag & 128:
+                    if p + count > len(payload):
+                        raise ValueError("truncated seek literal")
+                    for j in range(count):
+                        previous[used + j] ^= payload[p + j]
+                    p += count
+                used += count
+            if used != 1024 or p != len(payload):
+                raise ValueError("seek RLE incomplete")
+            cursor += 2 + length
+        if bytes(previous) != frames[i]:
+            raise ValueError(f"checkpoint seek mismatch at frame {i}")
+    return bytes(output)
+
+def convert(source, out, seek_out=None):
     data = source.read_bytes()
     if len(data) < 8 or data[:4] != b"CRF1":
         raise ValueError("CRF1 header invalid")
@@ -140,6 +199,11 @@ def convert(source, out):
         raise ValueError(f"insufficient compression gain: packed {len(encoded)}")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(encoded)
+    if seek_out is not None:
+        seek_data = build_seek(frames, encoded)
+        seek_out.parent.mkdir(parents=True, exist_ok=True)
+        seek_out.write_bytes(seek_data)
+        print(f"PASS checkpoints=96 bytes={len(seek_data)} sha256={hashlib.sha256(seek_data).hexdigest()}")
     print(f"PASS frames={count} raw={count*FRAME_BYTES} packed={len(encoded)} "
           f"mode_raw={modes[0]} mode_delta={modes[1]} sha256={hashlib.sha256(encoded).hexdigest()}")
 
@@ -147,5 +211,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("source", type=Path)
     ap.add_argument("out", type=Path)
+    ap.add_argument("--seek", type=Path, default=None)
     a = ap.parse_args()
-    convert(a.source, a.out)
+    convert(a.source, a.out, a.seek)
