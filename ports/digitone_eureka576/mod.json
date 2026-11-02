@@ -1,11 +1,11 @@
 {
   "id": "eureka576",
-  "version": "1.0",
-  "title": "EUREKA 576",
+  "version": "1.1",
+  "title": "EUREKA RANDOM 576",
   "category": "Display",
   "author": "analoglav",
   "license": "GPL-2.0-or-later",
-  "description": "16 user video clips, all 576 source frames, monochrome full-screen animation. MIDI+YES toggles. Stock audio untouched.",
+  "description": "All 576 original user frames; video jumps, BPM speed and stutter on 30% of synth-track note trigs; MIDI+YES toggles; audio untouched.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
@@ -26,6 +26,11 @@
     {
       "event": "ev_key",
       "fn": "eureka576_key",
+      "order": 70
+    },
+    {
+      "event": "ev_note_queue",
+      "fn": "eureka576_note_queue",
       "order": 70
     }
   ],
