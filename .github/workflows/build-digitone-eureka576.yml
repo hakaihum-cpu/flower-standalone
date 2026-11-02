@@ -1,9 +1,6 @@
 name: Digitone EUREKA RG DOT + DREAMY trial
 on:
   workflow_dispatch:
-  push:
-    branches: [feature/digitone-eureka-rgdot-dreamy-insert-20261103]
-    paths: ['.github/approved_runs/digitone-rgdot-dreamy-once-20261103.trigger']
 permissions:
   contents: read
 jobs:
