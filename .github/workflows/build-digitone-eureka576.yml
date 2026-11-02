@@ -48,6 +48,26 @@ jobs:
             ./_host_check
             rm _host_check
           )
+      - name: Preflight DREAMY native DSP with UBSan
+        run: |
+          set -euo pipefail
+          cd ports/digitone_dreamy_trial
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -Wconversion \
+            -fsanitize=undefined -fno-sanitize-recover=all \
+            -I tests/include tests/test_dreamy.c -o _dreamy_host_test
+          ./_dreamy_host_test
+          rm _dreamy_host_test
+          python3 - <<'PY'
+          from pathlib import Path
+          a=Path('../digitone_eureka576/eureka576.c').read_text()
+          d=Path('dreamy.c').read_text()
+          assert 'core_audio_owner' not in a
+          assert 'CORE_AUDIO_INSERT' in d
+          assert 'CORE_AUDIO_MUTE_VOICES' not in d
+          assert 'CORE_MIDI_CC_AUTO' in d
+          assert 'requested_on' in d
+          print('PASS: audio insert isolated from EUREKA display')
+          PY
       - name: Obtain pinned elekloader and core
         run: |
           set -euo pipefail
