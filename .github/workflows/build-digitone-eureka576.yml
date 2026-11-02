@@ -1,4 +1,4 @@
-name: Digitone EUREKA RG DOT 1-bit 576
+name: Digitone EUREKA RG DOT + DREAMY trial
 on:
   workflow_dispatch:
 permissions:
@@ -60,22 +60,28 @@ jobs:
           set -euo pipefail
           cd _elekloader
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
-          mapfile -t MODS < <(find "$GITHUB_WORKSPACE/ports/digitone_eureka576/out" -maxdepth 1 -name '*.elemod' -type f | sort)
-          if [[ "${#MODS[@]}" -ne 1 ]]; then
-            printf 'ERROR: expected exactly one .elemod, found %s\n' "${#MODS[@]}" >&2
-            exit 1
-          fi
-          MOD="${MODS[0]}"
-          python3 -m elekloader.lint "$MOD" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --with "$GITHUB_WORKSPACE/_firmware/core.elemod"
-          python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --check
+          python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_dreamy_trial" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
+          VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.5.elemod"
+          DREAMY_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/dreamytrial-0.1.elemod"
+          test -s "$VISUAL_MOD"
+          test -s "$DREAMY_MOD"
+          CORE="$GITHUB_WORKSPACE/_firmware/core.elemod"
+          STOCK="$GITHUB_WORKSPACE/_firmware/stock.syx"
+          python3 -m elekloader.lint "$VISUAL_MOD" --stock "$STOCK" --with "$CORE"
+          python3 -m elekloader.lint "$DREAMY_MOD" --stock "$STOCK" --with "$CORE"
+          python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
+            --mod "$VISUAL_MOD" --mod "$DREAMY_MOD" --check
           mkdir -p "$GITHUB_WORKSPACE/_release"
-          python3 -m elekloader.patch --stock "$GITHUB_WORKSPACE/_firmware/stock.syx" --mod "$GITHUB_WORKSPACE/_firmware/core.elemod" --mod "$MOD" --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_RGDOT576.syx" --version RD76
+          python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
+            --mod "$VISUAL_MOD" --mod "$DREAMY_MOD" \
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_RGDOT_DREAMY_TRIAL.syx" \
+            --version DM76
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_EUREKA_RGDOT576.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_EUREKA_RGDOT_DREAMY_TRIAL.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
-          cp "$MOD" "$GITHUB_WORKSPACE/_release/"
+          cp "$VISUAL_MOD" "$DREAMY_MOD" "$GITHUB_WORKSPACE/_release/"
           cp "$GITHUB_WORKSPACE/ports/digitone_eureka576/eureka_lcd_preview.png" "$GITHUB_WORKSPACE/_release/"
           python3 "$GITHUB_WORKSPACE/ports/digitone_eureka576/tests/render_face_preview.py" \
             "$GITHUB_WORKSPACE/ports/digitone_eureka576/reference.bin" \
@@ -84,7 +90,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-RGDOT576
+          name: Digitone-OS1.44-EUREKA-RGDOT-DREAMY-TRIAL
           path: _release/
           if-no-files-found: error
           retention-days: 30
