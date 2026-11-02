@@ -1,9 +1,6 @@
 name: Digitone EUREKA face-outline random 576
 on:
   workflow_dispatch:
-  push:
-    branches: [feature/digitone-eureka-facefocus-576-20261102]
-    paths: ['.github/approved_runs/eureka-face576-approved-final-once.trigger']
 permissions:
   contents: read
 jobs:
