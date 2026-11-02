@@ -38,9 +38,7 @@ static void check_frame(unsigned index)
         fprintf(stderr,"decoder mismatch at frame %u\n",index);
         abort();
     }
-    if(index==0 || index==35 || index==36 || index==143 ||
-       index==144 || index==395 || index==396 || index==575)
-        check_display(index);
+    check_display(index); /* verify every pixel of all 576 source frames */
 }
 int main(void)
 {
