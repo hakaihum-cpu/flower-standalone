@@ -1,102 +1,50 @@
 #!/usr/bin/env python3
-"""Losslessly pack all 576 user-provided EUREKA video images as yellow-outline/black LCD frames.
+"""Convert all 576 original EUREKA frames using the approved RG DOT 1-bit display.
 2-byte LE record size; mode 0 raw frame, mode 1 XOR-delta zero/literal RLE.
-All outputs and decoding are checked. No image/frame is omitted.
+The resulting 1-bit frames are compressed losslessly and verified. No frame is omitted.
 """
 from pathlib import Path
 from io import BytesIO
 import argparse
 import hashlib
 import struct
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image, ImageOps
 
 W, H, EXPECTED = 128, 64, 576
 FRAME_BYTES = 1024
 
-def choose_clip_crops(jpegs):
-    """One unchanging 2:1 crop per 36-frame clip, using real detected faces.
+# Match the approved RG Rotate DOT presentation, reduced to a 1-bit LCD:
+# preserve the source composition, do not detect/crop faces, do not draw or
+# substitute features. Fit the entire image with black letterboxing.
+BAYER4 = (
+     0,  8,  2, 10,
+    12,  4, 14,  6,
+     3, 11,  1,  9,
+    15,  7, 13,  5,
+)
 
-    Uses Haar contrast features, not generated imagery. If a clip has no
-    detected face, its deterministic centre crop is still continuous.
-    """
-    import cv2
-    import numpy as np
-    classifier = cv2.CascadeClassifier(
-        cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    if classifier.empty():
-        raise ValueError("face detector data unavailable")
-    crops = []
-    detections = 0
-    for clip in range(16):
-        faces_found = []
-        sample = Image.open(BytesIO(jpegs[clip * 36]))
-        iw, ih = sample.size
-        for frame_id in (0, 6, 12, 18, 24, 30):
-            with Image.open(BytesIO(jpegs[clip * 36 + frame_id])) as im:
-                gray = np.array(im.convert("L"))
-            clahe = cv2.createCLAHE(clipLimit=2.8, tileGridSize=(8, 8))
-            boosted = clahe.apply(gray)
-            faces = classifier.detectMultiScale(
-                boosted, scaleFactor=1.10, minNeighbors=3,
-                minSize=(max(22, iw // 35), max(22, ih // 35)))
-            if len(faces):
-                x, y, fw, fh = max(faces, key=lambda a: int(a[2]) * int(a[3]))
-                faces_found.append((int(x + fw // 2), int(y + fh // 2), int(max(fw, fh))))
-        if faces_found:
-            detections += 1
-            med = lambda values: sorted(values)[len(values) // 2]
-            cx = med([x for x, y, w in faces_found])
-            cy = med([y for x, y, w in faces_found])
-            face_size = med([w for x, y, w in faces_found])
-            # Cover hair, full face and neck; 2:1 screen aspect ratio.
-            cw = min(iw, max(round(iw * 0.32), round(3.6 * face_size)))
-            cy = min(ih, cy + round(face_size * 0.16))
-        else:
-            cx, cy = iw // 2, round(ih * 0.43)
-            cw = round(iw * (0.60 if iw > ih * 1.4 else 0.76))
-        cw = min(iw, max(2, cw))
-        ch = min(ih, max(1, round(cw * H / W)))
-        left = max(0, min(iw - cw, round(cx - cw / 2)))
-        top = max(0, min(ih - ch, round(cy - ch * 0.46)))
-        crops.append((left, top, left + cw, top + ch))
-        print(f"FOCUS clip={clip:02d} face_samples={len(faces_found)} crop={crops[-1]}")
-    print(f"FOCUS clips_with_face_detection={detections}/16")
-    return crops
-
-
-def pack_image(jpeg, frame_index, clip_crop):
-    """Outline dark EUREKA sources while favoring face/eyes/mouth, not scenery."""
-    import cv2
-    import numpy as np
+def pack_image(jpeg, frame_index):
+    """Convert exactly one original JPEG to a 128x64 RG-DOT 1-bit LCD frame."""
     with Image.open(BytesIO(jpeg)) as source:
         source.load()
-        gray = source.convert("L")
-    frame = gray.crop(clip_crop).resize((W, H), Image.Resampling.LANCZOS)
-    boosted = cv2.createCLAHE(clipLimit=2.3, tileGridSize=(8, 4)).apply(
-        np.asarray(frame, dtype=np.uint8))
-    frame = Image.fromarray(boosted)
-    edges = frame.filter(ImageFilter.GaussianBlur(0.45)).filter(ImageFilter.FIND_EDGES)
-    e = edges.load()
-    candidates = []
-    for y in range(1, H - 1):
-        for x in range(1, W - 1):
-            raw = int(e[x, y])
-            if raw < 16:
-                continue
-            # Facial features are usually inside this central zone
-            # after face-focused crop. Exterior scenery gets lower priority.
-            focus = 2.0 if 27 <= x <= 101 and 7 <= y <= 55 else 0.65
-            candidates.append((raw * focus, x, y))
-    candidates.sort(reverse=True)
-    selected = [(x, y) for weight, x, y in candidates if weight >= 50]
-    if len(selected) < 260:
-        selected = [(x, y) for _weight, x, y in candidates[:260]]
-    selected = selected[:850]
+        original = source.convert("RGB")
+
+    fitted = ImageOps.contain(
+        original, (W, H), method=Image.Resampling.LANCZOS)
+    frame = Image.new("RGB", (W, H), (0, 0, 0))
+    frame.paste(
+        fitted,
+        ((W - fitted.width) // 2, (H - fitted.height) // 2))
+
+    pixels = frame.load()
     out = bytearray(FRAME_BYTES)
-    for x, y in selected:
-        out[7 - (y >> 3) + 8 * x] |= 1 << (y & 7)
-    if not 60 <= len(selected) <= 850:
-        raise ValueError(f"EUREKA frame {frame_index}: yellow pixel count {len(selected)}")
+    for y in range(H):
+        for x in range(W):
+            r, g, b = pixels[x, y]
+            luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
+            threshold = 0.13 + 0.63 * BAYER4[(x & 3) + ((y & 3) << 2)] / 16.0
+            if luminance >= threshold:
+                out[7 - (y >> 3) + 8 * x] |= 1 << (y & 7)
     return bytes(out)
 
 
@@ -276,13 +224,12 @@ def convert(source, out, seek_out=None, preview_out=None):
         if jpeg[:2] != b"\xff\xd8" or jpeg[-2:] != b"\xff\xd9":
             raise ValueError(f"invalid JPEG {i}")
         jpegs.append(jpeg)
-    regions = choose_clip_crops(jpegs)
     for i, jpeg in enumerate(jpegs):
-        frames.append(pack_image(jpeg, i, regions[i // 36]))
+        frames.append(pack_image(jpeg, i))
     encoded, modes = encode(frames)
     if decode(encoded, count) != frames:
         raise ValueError("lossless decode mismatch")
-    # EUREKA outline conversion needs to pass the final in-place depack budget.
+    # EUREKA RG DOT conversion needs to pass the final in-place depack budget.
     # Only the final elekloader in-place depack/flash verification is definitive.
     if len(encoded) >= count * FRAME_BYTES:
         raise ValueError(f"no meaningful compression: packed {len(encoded)}")
@@ -290,7 +237,7 @@ def convert(source, out, seek_out=None, preview_out=None):
     out.write_bytes(encoded)
     if preview_out is not None:
         save_preview(frames, preview_out)
-        print(f'PASS LCD yellow-outline preview: {preview_out}')
+        print(f'PASS LCD original-composition RG DOT preview: {preview_out}')
     if seek_out is not None:
         seek_data = build_seek(frames, encoded)
         seek_out.parent.mkdir(parents=True, exist_ok=True)
