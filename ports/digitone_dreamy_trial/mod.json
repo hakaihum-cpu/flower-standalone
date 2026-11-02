@@ -1,0 +1,60 @@
+{
+  "id": "dreamytrial",
+  "version": "0.1",
+  "license": "GPL-2.0-or-later",
+  "title": "DREAMY TRIAL (Digitone insert)",
+  "category": "Effect",
+  "author": "analoglav",
+  "description": "Experimental insert on Digitone master output. FM voices, stock chorus/delay/reverb and EUREKA video retained. Two grain pitch voices (+5/+12), stereo filtered feedback delay and damped reverb. Mod Menu DREAMY toggles. AUTO MIDI CC60 mix, 61 time, 62 room. Fixed-point, 32 stereo samples/block. Needs core-dn1 4.1.",
+  "device": "digitone-mk1",
+  "os": "1.44",
+  "sources": [
+    "dreamy.c"
+  ],
+  "subscribe": [
+    {
+      "event": "ev_tick",
+      "fn": "dreamy_tick",
+      "order": 66
+    },
+    {
+      "event": "ev_midi_cc",
+      "fn": "dreamy_cc",
+      "order": 60
+    }
+  ],
+  "contribute": [
+    {
+      "to": "core_menu",
+      "order": 46,
+      "data": "00000000",
+      "relocs": [
+        [
+          0,
+          "abs32",
+          "sym:dreamy_menu",
+          0
+        ]
+      ]
+    },
+    {
+      "to": "core_audio",
+      "order": 80,
+      "data": "00000000",
+      "relocs": [
+        [
+          0,
+          "abs32",
+          "sym:dreamy_owner",
+          0
+        ]
+      ]
+    }
+  ],
+  "resources": {
+    "core": "4.1"
+  },
+  "requires": [
+    "core"
+  ]
+}
