@@ -160,7 +160,6 @@ const struct core_menu_item dreamy_menu={"DREAMY",dreamy_open,0,0};
 void dreamy_tick(void *ctrl)
 {
     unsigned i, limit;
-    int16_t *base;
     (void)ctrl;
     if(!requested_on || dreamy_owner.on) return;
     limit=clear_pos+CLEAR_PER_TICK;
