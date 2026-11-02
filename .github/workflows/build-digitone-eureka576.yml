@@ -1,6 +1,9 @@
 name: Digitone EUREKA 576 custom firmware
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/digitone-eureka-576-20261102]
+    paths: ['.github/approved_runs/eureka576-approved-retry-once-20261102.trigger']
 permissions:
   contents: read
 jobs:
