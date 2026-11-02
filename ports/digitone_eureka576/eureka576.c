@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * EUREKA 576-frame Digitone mk1 / Keys OS 1.44 display-only mod.
- * EUREKA video user imagery reprocessed into black/yellow face-priority contours.
+ * EUREKA user frames preserve their original composition in black/yellow RG DOT.
  * Stock audio untouched.
  */
 #include <stdint.h>
@@ -207,7 +207,7 @@ void eureka576_tick(void *ctrl)
         eureka576_dirty=0u;
     }
 }
-/* Draw black frame, then horizontal white runs on the portable Bitmap.
+/* Draw black frame, then horizontal yellow runs on the portable Bitmap.
  * y=0 is bottom in the firmware; y=0 is top in the source image.
  */
 void eureka576_draw(void *bmp, void *ctrl)
