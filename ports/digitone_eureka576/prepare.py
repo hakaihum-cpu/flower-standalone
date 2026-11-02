@@ -13,53 +13,90 @@ from PIL import Image, ImageOps, ImageFilter
 W, H, EXPECTED = 128, 64, 576
 FRAME_BYTES = 1024
 
-def pack_image(jpeg, frame_index):
-    """Convert an original EUREKA frame to sparse yellow contour lines on black.
+def choose_clip_crops(jpegs):
+    """One unchanging 2:1 crop per 36-frame clip, using real detected faces.
 
-    576 originals are 16 clips of 36 images. Keep the viewing region stable
-    across each clip: no content-dependent crop changes on consecutive frames.
+    Uses Haar contrast features, not generated imagery. If a clip has no
+    detected face, its deterministic centre crop is still continuous.
     """
+    import cv2
+    import numpy as np
+    classifier = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    if classifier.empty():
+        raise ValueError("face detector data unavailable")
+    crops = []
+    detections = 0
+    for clip in range(16):
+        faces_found = []
+        sample = Image.open(BytesIO(jpegs[clip * 36]))
+        iw, ih = sample.size
+        for frame_id in (0, 6, 12, 18, 24, 30):
+            with Image.open(BytesIO(jpegs[clip * 36 + frame_id])) as im:
+                gray = np.array(im.convert("L"))
+            clahe = cv2.createCLAHE(clipLimit=2.8, tileGridSize=(8, 8))
+            boosted = clahe.apply(gray)
+            faces = classifier.detectMultiScale(
+                boosted, scaleFactor=1.10, minNeighbors=3,
+                minSize=(max(22, iw // 35), max(22, ih // 35)))
+            if len(faces):
+                x, y, fw, fh = max(faces, key=lambda a: int(a[2]) * int(a[3]))
+                faces_found.append((int(x + fw // 2), int(y + fh // 2), int(max(fw, fh))))
+        if faces_found:
+            detections += 1
+            med = lambda values: sorted(values)[len(values) // 2]
+            cx = med([x for x, y, w in faces_found])
+            cy = med([y for x, y, w in faces_found])
+            face_size = med([w for x, y, w in faces_found])
+            # Cover hair, full face and neck; 2:1 screen aspect ratio.
+            cw = min(iw, max(round(iw * 0.32), round(3.6 * face_size)))
+            cy = min(ih, cy + round(face_size * 0.16))
+        else:
+            cx, cy = iw // 2, round(ih * 0.43)
+            cw = round(iw * (0.60 if iw > ih * 1.4 else 0.76))
+        cw = min(iw, max(2, cw))
+        ch = min(ih, max(1, round(cw * H / W)))
+        left = max(0, min(iw - cw, round(cx - cw / 2)))
+        top = max(0, min(ih - ch, round(cy - ch * 0.46)))
+        crops.append((left, top, left + cw, top + ch))
+        print(f"FOCUS clip={clip:02d} face_samples={len(faces_found)} crop={crops[-1]}")
+    print(f"FOCUS clips_with_face_detection={detections}/16")
+    return crops
+
+
+def pack_image(jpeg, frame_index, clip_crop):
+    """Outline dark EUREKA sources while favoring face/eyes/mouth, not scenery."""
+    import cv2
+    import numpy as np
     with Image.open(BytesIO(jpeg)) as source:
         source.load()
         gray = source.convert("L")
-
-    iw, ih = gray.size
-    # Slight centre/upward crop prioritises faces in wide video, while still
-    # preserving most of the setting. Square videos receive a restrained 2:1
-    # cut for the physical 128x64 LCD (not a central 64x64 postage stamp).
-    zoom = 0.92 if iw >= ih * 1.4 else 0.94
-    crop_w = min(iw, max(2, round(iw * zoom)))
-    crop_h = min(ih, max(1, round(crop_w * H / W)))
-    left = (iw - crop_w) // 2
-    top = max(0, min(ih - crop_h, round((ih - crop_h) * 0.42)))
-    region = gray.crop((left, top, left + crop_w, top + crop_h))
-    frame = ImageOps.autocontrast(region.resize((W, H), Image.Resampling.LANCZOS), cutoff=2)
-
-    # Render *edges*, not brightness/white areas. The LCD has only yellow/on
-    # and black/off; flat white fabric or walls must not become yellow blobs.
-    edge = frame.filter(ImageFilter.GaussianBlur(0.6)).filter(ImageFilter.FIND_EDGES)
-    e = edge.load()
+    frame = gray.crop(clip_crop).resize((W, H), Image.Resampling.LANCZOS)
+    boosted = cv2.createCLAHE(clipLimit=2.3, tileGridSize=(8, 4)).apply(
+        np.asarray(frame, dtype=np.uint8))
+    frame = Image.fromarray(boosted)
+    edges = frame.filter(ImageFilter.GaussianBlur(0.45)).filter(ImageFilter.FIND_EDGES)
+    e = edges.load()
     candidates = []
     for y in range(1, H - 1):
         for x in range(1, W - 1):
             raw = int(e[x, y])
-            if raw < 14:
+            if raw < 16:
                 continue
-            # Face-oriented priority in the central upper display. No drawn
-            # facial features, generated pixels or artificial outlines.
-            region_weight = 1.30 if 26 <= x <= 101 and 8 <= y <= 49 else 1.0
-            candidates.append((raw * region_weight, x, y))
+            # Facial features are usually inside this central zone
+            # after face-focused crop. Exterior scenery gets lower priority.
+            focus = 2.0 if 27 <= x <= 101 and 7 <= y <= 55 else 0.65
+            candidates.append((raw * focus, x, y))
     candidates.sort(reverse=True)
-    # Permit restrained linework (unlike the old fixed 720-1350 pixel fill).
-    selected = [(x, y) for weight, x, y in candidates if weight >= 42]
-    if len(selected) < 210:
-        selected = [(x, y) for _weight, x, y in candidates[:210]]
-    selected = selected[:900]
+    selected = [(x, y) for weight, x, y in candidates if weight >= 50]
+    if len(selected) < 260:
+        selected = [(x, y) for _weight, x, y in candidates[:260]]
+    selected = selected[:850]
     out = bytearray(FRAME_BYTES)
     for x, y in selected:
         out[7 - (y >> 3) + 8 * x] |= 1 << (y & 7)
-    if not 60 <= len(selected) <= 900:
-        raise ValueError(f"EUREKA frame {frame_index}: too few/many yellow pixels ({len(selected)})")
+    if not 60 <= len(selected) <= 850:
+        raise ValueError(f"EUREKA frame {frame_index}: yellow pixel count {len(selected)}")
     return bytes(out)
 
 
@@ -230,6 +267,7 @@ def convert(source, out, seek_out=None, preview_out=None):
     if head > len(data):
         raise ValueError("truncated index")
     frames = []
+    jpegs = []
     for i in range(count):
         off, flags, size = struct.unpack_from("<III", data, 8+12*i)
         if off < head or off+size > len(data) or size < 32:
@@ -237,7 +275,10 @@ def convert(source, out, seek_out=None, preview_out=None):
         jpeg = data[off:off+size]
         if jpeg[:2] != b"\xff\xd8" or jpeg[-2:] != b"\xff\xd9":
             raise ValueError(f"invalid JPEG {i}")
-        frames.append(pack_image(jpeg, i))
+        jpegs.append(jpeg)
+    regions = choose_clip_crops(jpegs)
+    for i, jpeg in enumerate(jpegs):
+        frames.append(pack_image(jpeg, i, regions[i // 36]))
     encoded, modes = encode(frames)
     if decode(encoded, count) != frames:
         raise ValueError("lossless decode mismatch")
