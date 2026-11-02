@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render authentic 128x64 yellow-on-black LCD samples from the exact reference.bin."""
+"""Render actual 128x64 RG DOT LCD samples from the exact 1-bit reference.bin."""
 from pathlib import Path
 from PIL import Image, ImageDraw
 import sys
