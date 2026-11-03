@@ -1,11 +1,11 @@
 {
-  "id": "dreamytrial",
-  "version": "0.1",
+  "id": "granulartrial",
+  "version": "0.2",
   "license": "GPL-2.0-or-later",
-  "title": "DREAMY TRIAL (Digitone insert)",
+  "title": "GRANULAR (Digitone insert)",
   "category": "Effect",
   "author": "analoglav",
-  "description": "Experimental insert on Digitone master output. FM voices, stock chorus/delay/reverb and EUREKA video retained. Two grain pitch voices (+5/+12), stereo filtered feedback delay and damped reverb. Mod Menu DREAMY toggles. AUTO MIDI CC60 mix, 61 time, 62 room. Fixed-point, 32 stereo samples/block. Needs core-dn1 4.1.",
+  "description": "Experimental stereo 2-pitch granular insert only (+5 and +12 semitones, two overlapping grains per pitch). No custom delay or reverb: original Digitone FM, Delay and Reverb remain functional before the insert. Mod Menu GRANULAR toggles. AUTO-channel MIDI CC60 controls dry/wet MIX. Fixed point, 32 stereo frames/block, ~128 KiB ring buffer. Core-dn1 >= 4.1 required.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
