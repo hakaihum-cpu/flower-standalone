@@ -140,3 +140,52 @@ keeps the mute working; GRANULAR OFF and ON both tested. Confirm that
 MIDI+YES still toggles video reliably, and no phantom YES actions
 occur in stock UI. If MUTE audio still fails, diagnose exact stock
 state before making further guesses.
+
+## 4 — GH76 user A/B: MUTE LED/real sound mismatch, and EUREKA v1.9 random scenes
+
+**GH76 hardware failure confirmed.** In stock-visible mode before MIDI+YES,
+audio-track GLOBAL MUTE works. With the synth tracks already muted,
+pressing MIDI+YES to enable EUREKA leaves the sound muted but all TRACK
+LEDs turn green. Inside EUREKA, TRACK presses change LED brightness,
+but do not change the audible synth mute; a video-off return makes
+stock audio MUTE work again.
+
+These observations are **not proof of separate firmware mute storage**.
+Digitone mk1 OS1.41+ official user manual section 8.5.2 says:
+GLOBAL MUTE's unmuted audio tracks are green, muted ones unlit, and
+[MIDI] in MUTE mode accesses MIDI tracks. In EUREKA v1.8,
+`eureka576_key` records the MIDI DOWN but returns 0, letting stock
+`KEYDISP` see the MIDI key press BEFORE YES is intercepted as the
+video shortcut. The all-green LEDs with previously muted synths are
+consistent with the stock MUTE view switching to unmuted MIDI tracks.
+This hypothesis is stronger than the now-disproven orphan YES-UP
+hypothesis, but the OS1.44 view state has not been instrumented.
+**Do not claim the mute bug fixed by v1.9.**
+
+A robust future fix must preserve MIDI+YES as a chord while avoiding
+accidental stock MUTE bank changes; other MIDI-only and MIDI+TRACK
+interactions must continue to work. Do not simply discard all MIDI
+key events or fabricate a parallel per-track MUTE database. Real
+synth-track MUTE in GLOBAL and PATTERN modes must be tested both before,
+during and after EUREKA video, including pre-muted tracks.
+
+**User visual finding:** GH76 video appeared sequential, with no
+perceivable random scene cuts. The v1.8 code normally advanced through
+frames 0..575 in order; random jumps were only 35% of actual
+`ev_voice_on` reactions, with no guaranteed cuts in quiet bars.
+EUREKA **v1.9 trial** makes the 16 original 36-frame groups separate
+local-loop scenes; forward/reverse wrap within the selected group.
+When PLAY runs, the UI chooses a **different random group every 8,
+12 or 16 sixteenth-note steps** (2/3/4 quarter-note beats) independent
+of voice events, and 55% of actual voice events jump to a distinct
+random scene. Random scene selection is suppressed while CC68 SCRUB
+is active, and playback freeze CC67 remains respected. The original
+576 source frames and image pixels, 5 video CCs, MIDI+YES toggling,
+Granular v0.5, and stock FM audio paths are unchanged. No new
+SYX was built or authorized.
+
+**Testing limitations:** `tests/test_random.c` now checks local
+scene loops and independent cuts without voice callbacks, but only
+an on-device test can judge whether each 36-frame group looks distinct
+and that scene cuts do not disturb the stock UI and timing. No
+event handler in v1.9 writes or patches stock MUTE.
