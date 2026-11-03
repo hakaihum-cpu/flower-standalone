@@ -1,6 +1,9 @@
 name: Digitone EUREKA VIDEO CC + GRANULAR MIDI + MUTE test
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/digitone-eureka-mute-granular-video-cc-20261103]
+    paths: ['.github/approved_runs/digitone-eureka-video-granular-mute-once-20261103.trigger']
 permissions:
   contents: read
 jobs:
