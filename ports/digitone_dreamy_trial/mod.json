@@ -1,11 +1,11 @@
 {
   "id": "granulartrial",
-  "version": "0.2",
+  "version": "0.3",
   "license": "GPL-2.0-or-later",
   "title": "GRANULAR (Digitone insert)",
   "category": "Effect",
   "author": "analoglav",
-  "description": "Experimental stereo 2-pitch granular insert only (+5 and +12 semitones, two overlapping grains per pitch). No custom delay or reverb: original Digitone FM, Delay and Reverb remain functional before the insert. Mod Menu GRANULAR toggles. AUTO-channel MIDI CC60 controls dry/wet MIX. Fixed point, 32 stereo frames/block, ~128 KiB ring buffer. Core-dn1 >= 4.1 required.",
+  "description": "Stereo granular insert, two overlapping grains for each of two independently MIDI-selectable pitch voices. Pitch A CC33 / Pitch B CC34: eight equal 16-CC bands (-12,-7,-5,0,+5,+7,+12,+24 semitones); defaults +5/+12. Grain size CC36: 40-140ms in 2ms steps, 100ms default (CC value 76). CC60 dry/wet. All CC on AUTO channel while GRANULAR enabled. Parameter changes latch on the next grain boundary. No custom delay/reverb. Original Digitone synth/FX are preserved upstream; fixed-point DSP with a 128KiB history ring.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
