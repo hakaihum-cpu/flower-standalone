@@ -45,6 +45,15 @@ int main(void)
     if(eureka576_key(NULL,key)!=0) abort();
     key[3]=13;
     if(eureka576_key(NULL,key)!=1 || !eureka576_enabled) abort();
+    if(!eureka576_yes_owned) abort();
+    /* VM76 only intercepted YES DOWN and forwarded its unmatched UP.
+     * Both halves of a consumed MIDI+YES gesture must stay out of stock.
+     */
+    key[3]=E576_KEY_YES;key[4]=0x10;
+    if(eureka576_key(NULL,key)!=1 || eureka576_yes_owned) abort();
+    /* A second, unowned YES key-up stays in the stock dispatcher. */
+    key[4]=0;
+    if(eureka576_key(NULL,key)!=0) abort();
     check(0);
     /* Exhaustive all-frame random seek and 4,718,592 display pixel comparisons. */
     for(unsigned i=0u;i<576u;++i) {
@@ -120,10 +129,10 @@ int main(void)
     eureka576_tick(ctrl);
     if(eureka576_index==before_live) abort();
     check(eureka576_index);
-    /* MUTE integration: never consume any FUNC combination (including
-     * FUNC+BANK, FUNC+T1..4, and FUNC+YES while MIDI remains down).
-     * PTN+TRACK and TRACK keys also go to the untouched stock OS;
-     * EUREKA stays visible and does not claim LEDs. */
+    /* MUTE key passthrough only: no audio MUTE is simulated by this test.
+     * Never consume any FUNC combination (including FUNC+BANK,
+     * FUNC+T1..4, FUNC+YES while MIDI remains down).
+     * PTN+TRACK and TRACK keys go to stock OS; EUREKA claims no LEDs. */
     for(int keycode=0;keycode<64;++keycode) {
         key[3]=keycode; key[4]=3; /* down + FUNC */
         if(eureka576_key(NULL,key)!=0 || !eureka576_enabled) abort();
@@ -231,6 +240,19 @@ int main(void)
     if(eureka576_key(NULL,key)!=0)abort();
     key[3]=13;key[4]=1;
     if(eureka576_key(NULL,key)!=1 || eureka576_enabled)abort();
-    printf("PASS: 576/576 seek + pixels, playback/wrap, 1200 note-on reactions, JUMP/REVERSE/SPEED/STUTTER, video MIDI+MUTE passthrough; %u rectangles\n",rectangle_count);
+    if(!eureka576_yes_owned)abort();
+    /* MIDI released before YES: its pending UP must still be consumed. */
+    key[3]=E576_KEY_MIDI;key[4]=0;
+    if(eureka576_key(NULL,key)!=0)abort();
+    key[3]=E576_KEY_YES;key[4]=0x10;
+    if(eureka576_key(NULL,key)!=1 || eureka576_yes_owned)abort();
+    /* FUNC+YES and free YES presses are left with the stock OS. */
+    key[3]=E576_KEY_YES;key[4]=3;
+    if(eureka576_key(NULL,key)!=0 || eureka576_enabled)abort();
+    key[4]=1;
+    if(eureka576_key(NULL,key)!=0 || eureka576_enabled)abort();
+    key[4]=0;
+    if(eureka576_key(NULL,key)!=0)abort();
+    printf("PASS: 576 frames, 1200 note reactions, video CC sweeps, paired MIDI+YES press/release, stock MUTE key PASSTHROUGH ONLY (audio MUTE not simulated); %u rectangles\n",rectangle_count);
     return 0;
 }
