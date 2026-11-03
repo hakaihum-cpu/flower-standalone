@@ -743,8 +743,13 @@ int eureka576_key(void *brain,void *ev)
             if(!(flags&1)) eureka576_page_owned_mask&=~mask;
             return 1;
         }
+        /* Accept a page key while MIDI+FUNC is STILL HELD (flags bit 2).
+         * PG79 incorrectly required !FUNC, so the requested three-key
+         * operation fell through to stock and no custom page appeared.
+         * Keep ordinary FUNC+PAGE with no MIDI chord stock-owned. */
         if(eureka576_enabled && eureka576_param_armed &&
-           !(flags&2) && first) {
+           (!(flags&2) ||
+            eureka576_midi_state==E576_MIDI_PANEL_CHORD) && first) {
             unsigned i;
             uint32_t newpage=page+1u;
             eureka576_page_owned_mask|=mask;
