@@ -28,6 +28,10 @@ extern const uint8_t eureka576_seek_table_end[];
 static uint8_t eureka576_framebuf[E576_FRAME_BYTES];
 static uint32_t eureka576_readpos, eureka576_index, eureka576_phase;
 static uint32_t eureka576_midi_held, eureka576_enabled, eureka576_dirty;
+/* The stock KEYDISP must see matched YES press/release pairs. When
+ * EUREKA takes MIDI+YES key-down, it must also take its key-up,
+ * even if MIDI was released first. Other YES events pass untouched. */
+static uint32_t eureka576_yes_owned;
 /* Video-only random sequence state; no changes to audio or sound parameters. */
 #define E576_SEEK_ENTRY 1028u
 #define E576_SEEK_EVERY 6u
@@ -377,11 +381,18 @@ int eureka576_key(void *brain,void *ev)
         /* OS 1.44 reports a release as either 0 or 0x10. */
         if(!(flags&1)) eureka576_midi_held=0u;
     }
+    /* EUREKA owns both halves of the MIDI+YES gesture; forwarding
+     * an unpaired YES release to KEYDISP can alter stock key state. */
+    if(key==E576_KEY_YES && eureka576_yes_owned && !(flags&1)) {
+        eureka576_yes_owned=0u;
+        return 1;
+    }
     /* Never consume FUNC+BANK, FUNC+TRACK1..4, PTN+TRACK1..4,
      * MIDI bank selections or stock key LEDs. No MUTE overlay exists.
      * Even if MIDI is held, FUNC+YES stays with the stock firmware. */
     if((flags&2)!=0) return 0;
     if(key==E576_KEY_YES && first && eureka576_midi_held) {
+        eureka576_yes_owned=1u;
         eureka576_enabled^=1u;
         eureka576_phase=0u;
         eureka576_effect=0u;
