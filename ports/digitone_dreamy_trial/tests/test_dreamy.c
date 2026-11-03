@@ -19,6 +19,10 @@ int main(void)
     assert(GRAIN_DEFAULT == 4800u);
     assert(pitch_choice[0] == 4u && pitch_choice[1] == 6u);
     assert(grain_frames_target == 4800u);
+    assert(grain_position_target == 0u);
+    assert(GRAIN_ARM_FRAMES == 30000u);
+    assert(GRAIN_LAG_B + GRAIN_POSITION_MAX + GRAIN_MAX_FRAMES / 2u <
+           GRAIN_ARM_FRAMES);
 
     dreamy_open(0,0,0);
     assert(dreamy_owner.on);
@@ -44,12 +48,30 @@ int main(void)
     assert(dreamy_cc(0,36,76,CORE_MIDI_CC_AUTO)==1);
     assert(grain_frames_target==4800u); /* user-approved 100 ms */
     assert(dreamy_cc(0,35,127,CORE_MIDI_CC_AUTO)==0);
-    assert(dreamy_cc(0,37,127,CORE_MIDI_CC_AUTO)==0);
+    assert(dreamy_cc(0,37,127,CORE_MIDI_CC_AUTO)==1);
+    assert(grain_position_target==3000u);
+    assert(dreamy_cc(0,37,0,CORE_MIDI_CC_AUTO)==1);
+    assert(grain_position_target==0u);
     assert(dreamy_cc(0,33,64,CORE_MIDI_CC_AUTO)==1); /* default +5 */
     assert(dreamy_cc(0,34,96,CORE_MIDI_CC_AUTO)==1); /* default +12 */
     assert(dreamy_cc(0,33,127,0)==0); /* require AUTO */
     assert(dreamy_cc(0,36,-1,CORE_MIDI_CC_AUTO)==0);
     assert(dreamy_cc(0,36,128,CORE_MIDI_CC_AUTO)==0);
+    assert(dreamy_cc(0,37,-1,CORE_MIDI_CC_AUTO)==0);
+    assert(dreamy_cc(0,37,128,CORE_MIDI_CC_AUTO)==0);
+    /* Exhaustive safety: 8 pitches x 51 grain sizes x 128 positions. */
+    for(int pitch=0;pitch<8;++pitch)
+        for(unsigned size=1920u;size<=6720u;size+=96u)
+            for(unsigned pos=0u;pos<=3000u;pos+=30u) {
+                unsigned lag_min=GRAIN_LAG_A+pos;
+                unsigned lag_max=GRAIN_LAG_B+pos;
+                unsigned step=pitch_steps[pitch];
+                unsigned advanced=(unsigned)(((uint64_t)size*step)>>16);
+                /* never outrun the write pointer; negative pitch never
+                   reads history older than the fresh arm threshold. */
+                assert(lag_min > (advanced>=size ? advanced-size : 0u));
+                assert(lag_max+size/2u < GRAIN_ARM_FRAMES);
+            }
 
     /* 1 s program material, then silence. Grain pitch+envelopes must run,
        and there must be no overflow, stale read, or missing render output. */
@@ -76,6 +98,8 @@ int main(void)
             assert(dreamy_cc(0,34,127-cc,CORE_MIDI_CC_AUTO)==1);
             assert(dreamy_cc(0,36,(blocks/71)%2 ? 127 : 0,
                             CORE_MIDI_CC_AUTO)==1);
+            assert(dreamy_cc(0,37,(blocks/71)%2 ? 127 : 0,
+                            CORE_MIDI_CC_AUTO)==1);
         }
         for(i=0;i<64;++i)
             in[i]=(i&1 ? -11000 : 11000)*65536;
@@ -101,6 +125,7 @@ int main(void)
     assert(dreamy_cc(0,33,64,CORE_MIDI_CC_AUTO)==1);
     assert(dreamy_cc(0,34,96,CORE_MIDI_CC_AUTO)==1);
     assert(dreamy_cc(0,36,76,CORE_MIDI_CC_AUTO)==1);
+    assert(dreamy_cc(0,37,0,CORE_MIDI_CC_AUTO)==1);
 
     /* Reopen must never read the old 128 KiB ring's audio during refill. */
     dreamy_open(0,0,0);
@@ -109,7 +134,7 @@ int main(void)
     assert(dreamy_owner.on);
     assert(hist_valid==0u && hist_write==0u && grain_armed==0u);
     for(i=0;i<64;++i) in[i]=0;
-    for(blocks=0;blocks<850;++blocks) {
+    for(blocks=0;blocks<960;++blocks) {
         granular_render(out,in);
         for(i=0;i<64;++i) assert(out[i]==0);
     }
@@ -121,6 +146,6 @@ int main(void)
     granular_render(out,in);
     for(i=0;i<64;++i) assert(out[i]==in[i]);
 
-    printf("PASS GRANULAR: 8-note pitch CC33/34, 100ms default size CC36, mix CC60, output bounds, tail, clear-free reopen\n");
+    printf("PASS GRANULAR: 8-note CC33/34, CC36 40-140ms default100, CC37 safe position, CC60 mix, bounds, no stale history\n");
     return 0;
 }
