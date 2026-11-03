@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * EUREKA 576-frame Digitone mk1 / Keys OS 1.44 display-only mod.
  * EUREKA user frames retain the approved 04 HYBRID black/yellow images.
- * Stock MUTE key events pass through; actual MUTE AUDIO with
- * video ON is still unverified on hardware. Stock audio untouched.
+ * Based on instrument-tested MC78: original stock synth-track MUTE
+ * is preserved by isolating MIDI+YES from the MIDI-track MUTE selector.
+ * EUREKA 2.1 adds dedicated display pages without altering FM audio.
  */
 #include <stdint.h>
 #include "digitone-mk1/core3.h"
@@ -438,8 +439,11 @@ void eureka576_tick(void *ctrl)
             }
         }
     }
-    if(eureka576_enabled && (eureka576_cc_glitch || eureka576_cc_invert))
-        eureka576_dirty=1u; /* animate row effects at UI tick, not audio rate */
+    if(eureka576_enabled && !eureka576_param_page &&
+       (eureka576_cc_glitch || eureka576_cc_invert ||
+        eureka576_param[4][2] || eureka576_param[4][3] ||
+        eureka576_param[5][1]))
+        eureka576_dirty=1u; /* pulse/LFO/stripe visual changes even at STOP */
     if(eureka576_dirty) {
         *((volatile uint8_t *)ctrl+0x20)=1u;
         eureka576_dirty=0u;
