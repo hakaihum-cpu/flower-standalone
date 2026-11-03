@@ -1,55 +1,68 @@
-# Digitone OS 1.44 — EUREKA 04 HYBRID + GRANULAR MIDI v0.3
+# Digitone OS1.44 — EUREKA 04 HYBRID + GRANULAR + VIDEO MIDI
 
-Experimental **MIDI parameter extension**, based on the user-tested
-HG76 firmware (EUREKA 576 frames + GRANULAR v0.2). The HG76 audio mod
-has been confirmed operational by the owner on real Digitone hardware;
-this NEW v0.3 MIDI extension is **source-only and not yet built or tested
-on hardware**. Never replace the verified HG76 baseline automatically.
+Based strictly on user-confirmed working HG76 (EUREKA 576 HYBRID 04 and
+GRANULAR-only). This is a NEW trial combining the three approved items:
+(1) stock MUTE passthrough while animation continues,
+(2) GRANULAR MIDI, and (3) EUREKA VIDEO MIDI.
 
-- Display: the **same approved 04 HYBRID** conversion of 576 original
-  user-video frames, 128x64 yellow/black, with note-reactive jump,
-  reversal, speed and stutter. EUREKA's code and images are unchanged.
-- Mod Menu **GRANULAR** toggles the audio insert.
-- Two pitch voices, each with two overlapping triangular-window stereo
-  grains. No added delay/reverb/feedback. Built-in Digitone FM and
-  FX remain enabled, upstream of the granular insert.
+This trial is not the user-confirmed HG76 master until the owner tests it.
+No stock Digitone audio parameter, Delay/Reverb, file or MAIN branch is changed.
+One **user-approved** GitHub Actions firmware build, with mandatory native
+preflight and elekloader lint, is permitted. Rebuild/retry requires permission.
 
-## MIDI implementation (AUTO CHANNEL only, when GRANULAR is ON)
+## 1: Stock MUTE while EUREKA remains visible
 
-| CC | Parameter | Value mapping |
-|---|---|---|
-| 33 | PITCH A | 0-15: -12; 16-31: -7; 32-47: -5; 48-63: 0; 64-79: +5; 80-95: +7; 96-111: +12; 112-127: +24 semitones |
-| 34 | PITCH B | Same eight ranges as PITCH A |
-| 36 | GRAIN SIZE | 40-140 ms, 2 ms quantization |
-| 60 | MIX | 0 = dry, 127 = wet |
+The EUREKA ev_key handler returns 0 for stock FUNC combinations and every
+TRACK key, so the firmware itself processes MUTE. **No separate MUTE screen**
+is added, no mute state is written by the mod, and EUREKA does not hook
+ev_key_leds or change TRACK LEDs.
 
-Defaults: **PITCH A +5**, **PITCH B +12**, **GRAIN SIZE 100 ms**
-(4800 frames at 48 kHz, also obtained from CC36 = 76), **MIX 64**.
+- FUNC+BANK: Global/Pattern MUTE mode through stock firmware.
+- FUNC+double BANK: toggle Global/Pattern mode, unchanged.
+- T1..T4: stock track MUTE toggle while in MUTE mode.
+- FUNC+T1..T4: quick Global MUTE.
+- PTN+T1..T4: quick Pattern MUTE.
+- MIDI: stock MIDI track selection during MUTE.
+- MIDI+YES: EUREKA on/off, as in HG76; FUNC+YES is never stolen.
 
-- A/B pitches and grain size are **latched only at each grain's next
-  reset** (zero-width envelope edge), not in the middle of a grain.
-  This reduces parameter-change discontinuities without spawning
-  additional grains or causing large memory operations.
-- Audio continues using 32 stereo frames per render, Q1.31 input/output,
-  Q15 internal audio and one 128 KiB history ring.
-- For worst case +24 semitones, the 140 ms grain consumes 26880 input
-  samples in 6720 output frames, compared with 21000 or 23000 samples
-  of ring-history lag; the advancing write head prevents future reads.
-  The maximum catch-up is (4-1)*6720 = 20160 < 21000.
-- For worst case -12 semitones, the most distant read is
-  23000 + (1-0.5)*6720 = 26360 < 27000 fresh history frames.
-  Arming occurs after 27000 samples (~563 ms). No stale buffer data.
-- CC35, CC37, CC61 and CC62 are **not intercepted**.
-- The stock Digitone Delay and Reverb process the sound before GRANULAR,
-  not the post-granular signal.
+## 2: GRANULAR MIDI (AUTO channel, while GRANULAR enabled)
 
-## Safety and next build
+| CC | Parameter | Mapping |
+|--|--|--|
+| 33 | PITCH A | 0-15=-12; 16-31=-7; 32-47=-5; 48-63=0; 64-79=+5; 80-95=+7; 96-111=+12; 112-127=+24 semitones |
+| 34 | PITCH B | same eight 16-value steps |
+| 36 | GRAIN SIZE | 40–140 ms in 2 ms increments; CC 76=100 ms |
+| 37 | POSITION | add 0–3000 input-history frames, corresponding to +0–62.5 ms |
+| 60 | MIX | 0=100% dry; 127=100% granular wet |
 
-The base HG76 real-device result is positive, but **v0.3 has not yet
-passed host native/UBSan tests, Elekloader lint, build, or hardware testing**.
-The native test source checks CC quantization across 0-127, +24/-12
-extreme behavior, changing grain lengths, and dry/wet.
+Defaults at boot: +5/+12 semitones, 100 ms, 0 offset, MIX=64.
+Existing grains finish before pitch/size/position take effect.
+Two pitched voices, two overlapped grains per voice, 128KiB ring,
+30,000-frame clean startup, Q15 audio, Q1.31 stereo, fixed-point DSP,
+no added Delay/Reverb.
 
-The CI stays **workflow_dispatch only**, without automatic push
-builds. An explicit user build authorization is required. Main and
-the previously verified HG76 branch are not touched.
+## 3: EUREKA VIDEO MIDI (AUTO channel, while EUREKA enabled)
+
+| CC | Control | Mapping |
+|--|--|--|
+| 40 | GLITCH | 0=OFF; 1–127 increases max row-slice horizontal shift to 8 px |
+| 65 | STUTTER | 0=OFF; 1–127 loops 2–8 frames within the current 36-frame clip |
+| 67 | SPEED | 0–15 freeze; 16–47 half; 48–79 auto/note-response (64 default); 80–111 double; 112–127 reverse |
+| 68 | SCRUB | 0=OFF/auto; 1–127 holds frame positions 0–575; usable when STOPPED |
+| 69 | INVERT | 0=OFF; 1–126 variable 4-row stripe inversion; 127 full image inversion |
+
+EUREKA uses **the exact original HYBRID04 576 source frames at 128x64**.
+Effects are applied only to the rendered 1-bit pixels or playback position,
+without changing source assets or audio. MIDI callbacks only store scalar
+controls; all image decompress/seeks happen in UI task, not MIDI/audio task.
+One row-slice horizontal shift or inversion can never access outside the
+128x64 buffer. No screen patching, DMA or physical LED hooks.
+
+CC41/42/43/44 deliberately **NOT** used: Digitone stock OS MIDI manual
+maps them to native AMP/CHORUS and FILTER parameters. CC65/67/68/69 are not
+assigned in the Digitone parameter implementation table, but they are
+standard General MIDI pedal/legato CCs: direct them only to the Digitone
+AUTO channel, not simultaneously to other instruments.
+
+Safety caveat: this new version must be tested on the user's hardware;
+the original HG76 stays intact until separately approved.
