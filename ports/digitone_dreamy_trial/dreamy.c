@@ -3,7 +3,8 @@
  * Original Digitone FM, Delay and Reverb remain unchanged.
  *
  * Two pitch voices, two overlapping triangular-window grains per voice.
- * AUTO-channel CC33 PITCH A, CC34 PITCH B, CC36 SIZE, CC60 MIX.
+ * AUTO-channel CC33 PITCH A, CC34 PITCH B, CC36 SIZE,
+ * CC37 POSITION and CC60 MIX.
  * Fixed-point 32 stereo frames/block, no allocation or feedback.
  *
  * Only NEW grains latch MIDI pitch and length changes: continuing grains
@@ -17,19 +18,21 @@
 #define GRAIN_MIN_FRAMES    1920u  /* 40 ms at 48 kHz */
 #define GRAIN_MAX_FRAMES    6720u  /* 140 ms, bounded for +24 semitones */
 #define GRAIN_DEFAULT       4800u  /* 100 ms */
-#define GRAIN_ARM_FRAMES   27000u
+#define GRAIN_ARM_FRAMES   30000u
+#define GRAIN_POSITION_MAX  3000u  /* max +62.5 ms; safe for +24/-12 */
 #define GRAIN_LAG_A        21000u
 #define GRAIN_LAG_B        23000u
 
 /* Worst case: +24 pitch consumes 4 frames per output frame, but the
  * write head advances by 1. At 140 ms, it can approach by at most
  * 3 * 6720 = 20160 frames, less than LAG_A. Conversely, at -12,
- * the oldest B sample is only LAG_B + 6720 / 2 = 26360 back,
- * strictly within the 27000-frame startup history.
+ * the oldest B sample is LAG_B + POSITION_MAX + 6720/2 =
+ * 29360 back, within the 30000-frame startup history.
  */
 _Static_assert(GRAIN_LAG_A > GRAIN_MAX_FRAMES * 3u,
                "plus24 reads unwritten input");
-_Static_assert(GRAIN_LAG_B + GRAIN_MAX_FRAMES / 2u < GRAIN_ARM_FRAMES,
+_Static_assert(GRAIN_LAG_B + GRAIN_POSITION_MAX +
+               GRAIN_MAX_FRAMES / 2u < GRAIN_ARM_FRAMES,
                "minus12 reads stale input");
 _Static_assert(GRAIN_MAX_FRAMES * 262144u < 0xffffffffu,
                "16.16 read position overflow");
@@ -59,6 +62,7 @@ static uint32_t grain_frames[4], grain_speed[4], grain_window_q12[4];
 static volatile uint8_t mix_cc = 64u;
 static volatile uint8_t pitch_choice[2] = {4u, 6u}; /* +5, +12 */
 static volatile uint32_t grain_frames_target = GRAIN_DEFAULT;
+static volatile uint32_t grain_position_target = 0u;
 
 static int32_t clamp15(int32_t x)
 {
@@ -82,17 +86,21 @@ static void grain_begin(unsigned g, uint32_t start_halfway)
 {
     uint32_t len = grain_frames_target;
     uint32_t choice = pitch_choice[g / 2u];
+    uint32_t position = grain_position_target;
 
     if(len < GRAIN_MIN_FRAMES || len > GRAIN_MAX_FRAMES)
         len = GRAIN_DEFAULT;
     if(choice >= 8u)
         choice = 4u;
+    if(position > GRAIN_POSITION_MAX)
+        position = 0u;
 
     grain_frames[g] = len;
     grain_phase[g] = start_halfway ? len / 2u : 0u;
     grain_origin[g] =
         (hist_write + HIST_FRAMES -
-         (g < 2u ? GRAIN_LAG_A : GRAIN_LAG_B)) & HIST_MASK;
+         (g < 2u ? GRAIN_LAG_A : GRAIN_LAG_B) -
+         position) & HIST_MASK;
     grain_speed[g] = pitch_steps[choice];
     /* Triangle peaks near Q15=32768 regardless of grain length.
      * No division in grain_at's per-sample fast path.
@@ -180,8 +188,9 @@ const struct core_menu_item dreamy_menu = {
 };
 
 /* CC 33/34: eight exact 16-value bands, from -12 to +24 semitones.
- * CC 36: 40..140 ms, in 2 ms increments. Value 76 gives 100 ms.
- * CC 60: dry/wet 0..127. No other MIDI CC is consumed.
+ * CC 36: 40..140 ms, 2 ms steps; CC76 is the default 100ms.
+ * CC 37: POSITION +0..3000 historical frames (+0..62.5 ms).
+ * The minimum lag stays above +24 speed catchup. CC60 is MIX.
  */
 int dreamy_cc(int track, int cc, int value, int flags)
 {
@@ -202,6 +211,11 @@ int dreamy_cc(int track, int cc, int value, int flags)
     if(cc == 36) {
         uint32_t steps = ((uint32_t)value * 50u + 63u) / 127u;
         grain_frames_target = GRAIN_MIN_FRAMES + 96u * steps;
+        return 1;
+    }
+    if(cc == 37) {
+        grain_position_target =
+            ((uint32_t)value * GRAIN_POSITION_MAX + 63u) / 127u;
         return 1;
     }
     return 0;
