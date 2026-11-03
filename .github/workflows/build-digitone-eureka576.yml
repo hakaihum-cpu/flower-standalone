@@ -1,6 +1,13 @@
 name: Digitone EUREKA + LONG HANN GRANULAR (MUTE audit pending)
 on:
   workflow_dispatch:
+  # Authorized one-shot build. This temporary branch-scoped push trigger
+  # is removed immediately after the run has been queued.
+  push:
+    branches:
+      - feature/digitone-mute-audit-granular-long-hann-20261103
+    paths:
+      - .github/workflows/build-digitone-eureka576.yml
 permissions:
   contents: read
 jobs:
