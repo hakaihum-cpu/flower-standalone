@@ -155,8 +155,7 @@ static void crush_frame(int32_t *out,const int16_t dry[2],const struct dnfx_stat
 static uint32_t haze_loop_frames(unsigned ch,uint32_t t)
 {
     uint32_t n;
-    n=ch==0u ? 127u-t:t;
-    if(ch==0u) n=t;
+    n=ch==0u ? t : 127u-t; /* MIYAKO: opposite 10-second TIME halves */
     n=1200u+(n*478800u)/127u;
     return n>EUREKA_LEN-16u?EUREKA_LEN-16u:n;
 }
