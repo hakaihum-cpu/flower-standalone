@@ -11,6 +11,12 @@
 #define E576_KEY_MIDI 2
 #define E576_KEY_YES 13
 #define E576_KEY_FUNC 1
+#define E576_KEY_TRIG 20
+#define E576_KEY_LFO 25
+#define E576_KEY_STEP1 26
+#define E576_KEY_STEP16 41
+#define E576_PARAM_PAGES 6u
+#define E576_PARAM_KNOBS 4u
 /* Video CCs intentionally avoid all stock Digitone OS1.41 Appendix B
  * parameter CCs and the existing granular 33/34/36/37/60.
  * MIDI standard: 65/67/68/69 are generic pedal switches; use only
@@ -33,11 +39,32 @@ static uint32_t eureka576_midi_held, eureka576_enabled, eureka576_dirty;
  * changes the bank. Defer it, and either consume MIDI+YES as a whole or
  * replay the stock MIDI-down before any other chord's first key event. */
 enum { E576_MIDI_IDLE=0, E576_MIDI_PENDING=1,
-       E576_MIDI_PASSED=2, E576_MIDI_VIDEO_CHORD=3 };
+       E576_MIDI_PASSED=2, E576_MIDI_VIDEO_CHORD=3,
+       E576_MIDI_PANEL_CHORD=4 };
 static uint32_t eureka576_midi_state;
 /* Captured YES down must have a captured YES up, even when MIDI is
  * released before YES. No other key is intercepted by this flag. */
 static uint32_t eureka576_yes_owned;
+/* MIDI+FUNC toggles armed EUREKA page keys. 0=original animation,
+ * 1..6=TRIG/SYN1/SYN2/FLTR/AMP/LFO parameter pages. The stock page
+ * keys and stock sound knobs are never taken while this is disarmed. */
+static uint32_t eureka576_param_armed, eureka576_param_page;
+static uint32_t eureka576_func_owned, eureka576_page_owned_mask;
+static int32_t eureka576_enc_acc[E576_PARAM_KNOBS];
+static uint32_t eureka576_ui_ticks;
+/* Four independently functional A-D parameters on each page. Defaults
+ * preserve original 576-frame output with page controls untouched.
+ * E-H are reserved and consumed on a parameter page (do not edit
+ * stock sound invisibly behind the EUREKA page). */
+static uint8_t eureka576_param[E576_PARAM_PAGES][E576_PARAM_KNOBS] = {
+    {0u,55u,1u,0u},     /* TRIG: scene, note jump %, auto, cut 2-4b */
+    {64u,0u,0u,0u},     /* SYN1: speed, reverse, stutter, scrub */
+    {2u,100u,0u,64u},  /* SYN2: loop 12/24/36f, note %, mode, seed */
+    {0u,0u,8u,8u},     /* FLTR: glitch, invert, X/Y offset -8..+8 */
+    {127u,0u,0u,0u},   /* AMP: display density, thickness, blink, pulse */
+    {32u,0u,0u,0u}     /* LFO: rate, depth, target, waveform */
+};
+
 /* OS1.44 original KEYDISP, as documented by the pinned core-dn1 port.
  * In tests the exact same call is replaced with a key-event observer.
  * Never recursively call core_dn_key/core_key: those dispatch to us. */
@@ -66,6 +93,15 @@ static uint32_t eureka576_rng=0x534a5531u;
 static uint32_t eureka576_effect, eureka576_speed, eureka576_until, eureka576_reverse;
 static uint32_t eureka576_stutter_start, eureka576_stutter_span, eureka576_stutter_step;
 static uint32_t eureka576_was_playing;
+static void eureka576_toggle_pages(void)
+{
+    unsigned i;
+    eureka576_param_armed^=1u;
+    eureka576_param_page=0u;
+    for(i=0u;i<E576_PARAM_KNOBS;++i) eureka576_enc_acc[i]=0;
+    eureka576_dirty=1u;
+}
+
 /* Auto scene-cut deadline in the musical timeline. UI task only;
  * zero means "schedule a new random cut interval". */
 static uint32_t eureka576_next_scene_cut;
@@ -213,11 +249,20 @@ static int eureka576_random_scene(void)
 static void eureka576_trigger(uint32_t time)
 {
     uint32_t action, inside, duration, frame;
+    if(eureka576_random()%100u >= eureka576_param[2][1]) return;
     action=eureka576_random()%100u;
+    if(eureka576_param[2][2]!=0u) {
+        switch(eureka576_param[2][2]) {
+        case 1u: action=0u; break; /* forced random scene */
+        case 2u: action=99u; break; /* forced stutter */
+        case 3u: action=70u; break; /* forced speed */
+        default: action=65u; break; /* forced reverse */
+        }
+    }
     eureka576_effect=0u;
     eureka576_speed=0u;
     eureka576_phase=0u; /* keep the audible note's first visual jump visible */
-    if(action<55u) {
+    if(action<(uint32_t)eureka576_param[0][1]) {
         if(!eureka576_random_scene()) eureka576_enabled=0u;
     } else if(action<70u) {
         /* Reverse stays enabled until the next reverse event. */
@@ -275,10 +320,13 @@ static int eureka576_step(void)
         return eureka576_seek(eureka576_index>start
                               ?eureka576_index-1u:start+E576_CLIP_FRAMES-1u);
     }
-    /* Stay inside the current scene until a genuine random scene cut.
-     * Never expose the next scene merely by playing frames in order. */
-    if((eureka576_index+1u)%E576_CLIP_FRAMES==0u)
-        return eureka576_seek(eureka576_index+1u-E576_CLIP_FRAMES);
+    /* Loop 12/24/36 frames inside the selected 36-frame scene. */
+    {
+        uint32_t span=12u+12u*eureka576_param[2][0];
+        uint32_t base=(eureka576_index/E576_CLIP_FRAMES)*E576_CLIP_FRAMES;
+        if(eureka576_index+1u>=base+span)
+            return eureka576_seek(base);
+    }
     ++eureka576_index;
     return eureka576_next();
 }
@@ -295,6 +343,7 @@ void eureka576_tick(void *ctrl)
     if(playing && !eureka576_was_playing)
         eureka576_next_scene_cut=0u;
     eureka576_was_playing=playing;
+    if(eureka576_enabled) ++eureka576_ui_ticks;
     /* UI-only handling: never decode 576-frame data in the MIDI task. */
     if(eureka576_cc_serial_seen!=eureka576_cc_serial) {
         eureka576_cc_serial_seen=eureka576_cc_serial;
@@ -338,9 +387,11 @@ void eureka576_tick(void *ctrl)
      * 8/12/16 sixteenth steps = 2/3/4 beats at the host tempo.
      * Suppress a second cut in a tick where a note just caused one. */
     if(eureka576_enabled && playing && !eureka576_cc_scrub &&
-       eureka576_cc_speed>=16u) {
+       eureka576_cc_speed>=16u && eureka576_param[0][2]) {
         if(eureka576_next_scene_cut==0u) {
-            uint32_t steps=8u+4u*(eureka576_random()%3u);
+            uint32_t steps=eureka576_param[0][3]==0u
+                ?8u+4u*(eureka576_random()%3u)
+                :4u+4u*eureka576_param[0][3];
             eureka576_next_scene_cut=now+steps*E576_STEP_TIME;
         } else if(!had_note &&
                   (int32_t)(now-eureka576_next_scene_cut)>=0) {
