@@ -1,11 +1,11 @@
 {
   "id": "eureka576",
-  "version": "1.7",
+  "version": "1.8",
   "title": "EUREKA HYBRID04 576 + VIDEO MIDI",
   "category": "Display",
   "author": "analoglav",
   "license": "GPL-2.0-or-later",
-  "description": "576 original 128x64 yellow/black 04 HYBRID user frames. MIDI+YES toggles. Stock FUNC+BANK, FUNC+TRACK1-4, PTN+TRACK1-4 mute keys/LEDs pass through unchanged while animation continues. AUTO MIDI CC40 GLITCH, CC65 STUTTER, CC67 SPEED, CC68 SCRUB, CC69 INVERT; only captured while EUREKA is ON. Note-responsive JUMP/REVERSE/SPEED/STUTTER and tempo remain. No changes to stock audio.",
+  "description": "576 original 128x64 HYBRID04 user-supplied frames; MIDI+YES toggles video with BOTH YES press and release consumed as one gesture (no orphan key-up sent to stock). All FUNC+BANK and TRACK MUTE keys still pass through. STOCK AUDIO MUTE WHILE VIDEO ON IS USER-REPORTED BROKEN AND REMAINS UNVERIFIED; do not claim Mute fixed. AUTO video CC40 GLITCH, CC65 STUTTER, CC67 SPEED, CC68 SCRUB, CC69 INVERT. Note-driven video retained; original FM untouched.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
