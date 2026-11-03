@@ -52,6 +52,15 @@ int main(void)
         check(i);
     }
     if(eureka576_seek(576u)) abort();
+    /* Direction must genuinely reverse the chronological source sequence. */
+    if(!eureka576_seek(128u)) abort();
+    eureka576_effect=0u;
+    eureka576_reverse=1u;
+    if(!eureka576_step() || eureka576_index!=127u) abort();
+    check(127u);
+    eureka576_reverse=0u;
+    if(!eureka576_step() || eureka576_index!=128u) abort();
+    check(128u);
     fw_transport=1u;
     if(!eureka576_seek(0u)) abort();
     for(unsigned i=1u;i<576u;++i) {
