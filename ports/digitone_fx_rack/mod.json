@@ -1,0 +1,137 @@
+{
+  "id": "digitone-fx-rack",
+  "version": "0.1.0",
+  "license": "GPL-2.0-or-later",
+  "title": "DIGITONE FOUR FX RACK",
+  "category": "Effect",
+  "author": "analoglav",
+  "description": "Exclusive post-master audio INSERT rack for Digitone mk1 OS1.44: Granular v0.5, Haze-based Eureka source port, MIYAKO Reel source port and Bitcrusher. User-selected TRACK-hold Mod Menu with OFF. Stock FM/MUTE/Chorus/Delay/Reverb and EUREKA video visual module remain separate. Prototype unbuilt, DSP fidelity and physical performance not yet verified.",
+  "device": "digitone-mk1",
+  "os": "1.44",
+  "sources": [
+    "granular.c",
+    "rack_audio.c",
+    "rack_ui.c",
+    "digitone_fx_pages.c"
+  ],
+  "subscribe": [
+    {
+      "event": "ev_key",
+      "fn": "rack_key",
+      "order": 60
+    },
+    {
+      "event": "ev_enc",
+      "fn": "rack_enc",
+      "order": 60
+    },
+    {
+      "event": "ev_midi_cc",
+      "fn": "rack_cc",
+      "order": 60
+    },
+    {
+      "event": "ev_tick",
+      "fn": "rack_tick",
+      "order": 85
+    },
+    {
+      "event": "ev_draw",
+      "fn": "rack_draw",
+      "order": 90
+    }
+  ],
+  "contribute": [
+    {
+      "to": "core_menu",
+      "order": 46,
+      "data": "00000000",
+      "relocs": [
+        [
+          0,
+          "abs32",
+          "sym:rack_menu_granular",
+          0
+        ]
+      ]
+    },
+    {
+      "to": "core_menu",
+      "order": 47,
+      "data": "00000000",
+      "relocs": [
+        [
+          0,
+          "abs32",
+          "sym:rack_menu_eureka",
+          0
+        ]
+      ]
+    },
+    {
+      "to": "core_menu",
+      "order": 48,
+      "data": "00000000",
+      "relocs": [
+        [
+          0,
+          "abs32",
+          "sym:rack_menu_reel",
+          0
+        ]
+      ]
+    },
+    {
+      "to": "core_menu",
+      "order": 49,
+      "data": "00000000",
+      "relocs": [
+        [
+          0,
+          "abs32",
+          "sym:rack_menu_crush",
+          0
+        ]
+      ]
+    },
+    {
+      "to": "core_menu",
+      "order": 50,
+      "data": "00000000",
+      "relocs": [
+        [
+          0,
+          "abs32",
+          "sym:rack_menu_off",
+          0
+        ]
+      ]
+    },
+    {
+      "to": "core_audio",
+      "order": 80,
+      "data": "00000000",
+      "relocs": [
+        [
+          0,
+          "abs32",
+          "sym:rack_owner",
+          0
+        ]
+      ]
+    }
+  ],
+  "resources": {
+    "core": "4.1",
+    "regions": [
+      {
+        "name": "EUREKA FX stereo capture ring",
+        "lo": "0x47900000",
+        "hi": "0x47B00000"
+      }
+    ]
+  },
+  "requires": [
+    "core"
+  ]
+}
