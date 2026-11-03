@@ -47,12 +47,13 @@ static int32_t reel_low[2], reel_high[2];
 static uint32_t crush_counter;
 static int16_t crush_hold[2];
 static uint32_t haze_write,haze_valid,haze_phase[2],haze_start[2];
-static uint32_t haze_span[2],haze_loop[2],haze_target[2];
+static uint32_t haze_span[2],haze_target[2];
+static int32_t haze_current_haze;
 static uint8_t haze_primed[2];
 static int32_t haze_filter[2],haze_verb_pos;
 static int16_t haze_verb[2][VERB_LEN];
 static int8_t haze_reverse[2];
-static uint32_t haze_lfo,haze_mod;
+static uint32_t haze_lfo;
 #if defined(RACK_HOST_TEST)
 static int16_t haze_host_memory[EUREKA_LEN*2u];
 static int16_t *const haze_ring=haze_host_memory;
@@ -151,9 +152,9 @@ static void crush_frame(int32_t *out,const int16_t dry[2],const struct dnfx_stat
  * per block (not every sample), independent of Mod Menu and animation.
  * The record history resides in the profile's uncached safe bulk region.
  */
-static uint32_t haze_loop_frames(unsigned ch,const struct dnfx_state *s)
+static uint32_t haze_loop_frames(unsigned ch,uint32_t t)
 {
-    uint32_t t=s->value[0][1],n;
+    uint32_t n;
     n=ch==0u ? 127u-t:t;
     if(ch==0u) n=t;
     n=1200u+(n*478800u)/127u;
@@ -162,11 +163,28 @@ static uint32_t haze_loop_frames(unsigned ch,const struct dnfx_state *s)
 static void haze_setup(const struct dnfx_state *s)
 {
     unsigned ch;
+    int32_t lfo=(int32_t)wave[haze_lfo>>24];
+    int32_t mod=(int32_t)s->value[0][5]-64;
+    int32_t depth=mod<0?-mod:mod;
+    int32_t shift=(lfo*depth)/32767;
+    int32_t t=s->value[0][1],r=s->value[0][4];
+    haze_current_haze=(int32_t)s->value[0][2];
+    /* MIYAKO Haze MOD: below noon affects time/repeat, above noon HAZE. */
+    if(mod<0) {
+        t+=shift/4;
+        r+=shift/3;
+    } else if(mod>0) {
+        haze_current_haze+=shift/2;
+    }
+    if(t<0) t=0; if(t>127) t=127;
+    if(r<0) r=0; if(r>127) r=127;
+    if(haze_current_haze<0) haze_current_haze=0;
+    if(haze_current_haze>127) haze_current_haze=127;
     for(ch=0u;ch<2u;++ch) {
-        uint32_t loop=haze_loop_frames(ch,s),r=s->value[0][4];
+        uint32_t loop=haze_loop_frames(ch,(uint32_t)t);
         uint32_t span=loop, min=(s->value[1][4]?24u:4320u);
-        span=(span*(127u-r))/127u;
-        span=(span*(127u-r))/127u;
+        span=(span*(127u-(uint32_t)r))/127u;
+        span=(span*(127u-(uint32_t)r))/127u;
         if(span<min) span=min;
         if(span>loop) span=loop;
         /* A new effect must make sound after 90ms of fresh input, not
@@ -180,7 +198,6 @@ static void haze_setup(const struct dnfx_state *s)
             haze_span[ch]=min;
             haze_phase[ch]=0u;
         }
-        haze_loop[ch]=loop;
     }
 }
 static int32_t haze_read(unsigned ch,uint32_t off,uint32_t q8)
@@ -227,7 +244,7 @@ static int32_t haze_voice(unsigned ch,const struct dnfx_state *s,uint32_t speed)
     haze_phase[ch]=phase;
     /* MIYAKO HAZE: bit reduction and random noise increase toward extremes */
     {
-        int32_t haz=(int32_t)s->value[0][2]-64;
+        int32_t haz=haze_current_haze-64;
         uint32_t amount=(uint32_t)(haz<0?-haz:haz)*2u;
         unsigned bits=16u-(unsigned)((amount*(s->value[1][4]?9u:6u))/127u);
         int32_t step=1<<(16-bits);
@@ -266,7 +283,6 @@ static void haze_frame(int32_t *out,const int16_t dry[2],const struct dnfx_state
     speed=s->value[0][7]==0u?128u:s->value[0][7]==2u?512u:256u;
     if(s->value[1][2]) speed=(speed*3u)/4u; /* transpose */
     haze_lfo+=29528u; /* .33 Hz */
-    haze_mod+=1431655u; /* 16 Hz */
     if(s->value[1][1]) {
         int32_t drift=((int32_t)wave[haze_lfo>>24]*
                        (int32_t)s->value[1][1])/32767;
@@ -307,9 +323,10 @@ void rack_audio_reset(int mode)
     unsigned i,j;
     if(mode==DNFX_EUREKA) {
         haze_write=haze_valid=haze_verb_pos=0u;
-        haze_lfo=haze_mod=0u;
+        haze_lfo=0u;
+        haze_current_haze=64;
         for(i=0;i<2u;++i) {
-            haze_phase[i]=haze_span[i]=haze_loop[i]=haze_target[i]=0u;
+            haze_phase[i]=haze_span[i]=haze_target[i]=0u;
             haze_start[i]=0u;haze_reverse[i]=0;haze_primed[i]=0u;
             haze_filter[i]=0;
             for(j=0;j<VERB_LEN;++j) haze_verb[i][j]=0;
