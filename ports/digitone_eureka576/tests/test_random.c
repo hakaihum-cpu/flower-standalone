@@ -253,7 +253,18 @@ int main(void)
     key[3]=E576_KEY_MIDI;key[4]=3;
     if(eureka576_key(NULL,key)!=1 || !eureka576_param_armed ||
        stock_midi_downs!=0u) abort();
-    key[4]=0;
+    /* Reverse key order: FUNC then MIDI then LFO page, still held. */
+    key[3]=E576_KEY_LFO;key[4]=3;
+    if(eureka576_key(NULL,key)!=1 || eureka576_param_page!=6u ||
+       stock_midi_downs!=0u) abort();
+    key[4]=0x10;
+    if(eureka576_key(NULL,key)!=1) abort();
+    key[4]=3;
+    if(eureka576_key(NULL,key)!=1 || eureka576_param_page!=0u)
+        abort();
+    key[4]=0x10;
+    if(eureka576_key(NULL,key)!=1) abort();
+    key[3]=E576_KEY_MIDI;key[4]=0;
     if(eureka576_key(NULL,key)!=1) abort();
     key[3]=E576_KEY_FUNC;key[4]=0;
     if(eureka576_key(NULL,key)!=0) abort();
