@@ -1,11 +1,11 @@
-name: Digitone EUREKA note-reactive + DREAMY freeze test
+name: Digitone EUREKA + GRANULAR only trial
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-dreamy-freeze-mitigation-20261103'
+    if: github.ref == 'refs/heads/feature/digitone-eureka-granular-only-20261103'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -66,7 +66,7 @@ jobs:
                       raise SystemExit(f'ERROR: {module} subscribes undefined callback {fn}')
               print('PASS: all declared callbacks defined:', module)
           PY
-      - name: Preflight DREAMY native DSP with UBSan
+      - name: Preflight GRANULAR native DSP with UBSan
         run: |
           set -euo pipefail
           cd ports/digitone_dreamy_trial
@@ -83,7 +83,9 @@ jobs:
           assert 'CORE_AUDIO_INSERT' in d
           assert 'CORE_AUDIO_MUTE_VOICES' not in d
           assert 'CORE_MIDI_CC_AUTO' in d
-          assert 'delay_valid' in d and 'room_valid' in d and 'grain_armed' in d
+          assert 'grain_armed' in d and 'GRAIN_ARM_FRAMES' in d
+          assert 'delay_line' not in d and 'room_valid' not in d
+          assert 'memset(' not in d and 'malloc(' not in d
           print('PASS: audio insert isolated from EUREKA display')
           PY
       - name: Obtain pinned elekloader and core
@@ -100,27 +102,27 @@ jobs:
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_dreamy_trial" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.6.elemod"
-          DREAMY_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/dreamytrial-0.1.elemod"
+          GRANULAR_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/granulartrial-0.2.elemod"
           test -s "$VISUAL_MOD"
-          test -s "$DREAMY_MOD"
+          test -s "$GRANULAR_MOD"
           CORE="$GITHUB_WORKSPACE/_firmware/core.elemod"
           STOCK="$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.lint "$VISUAL_MOD" --stock "$STOCK" --with "$CORE"
-          python3 -m elekloader.lint "$DREAMY_MOD" --stock "$STOCK" --with "$CORE"
-          python3 -m elekloader.lint "$VISUAL_MOD" "$DREAMY_MOD" --stock "$STOCK" --with "$CORE"
+          python3 -m elekloader.lint "$GRANULAR_MOD" --stock "$STOCK" --with "$CORE"
+          python3 -m elekloader.lint "$VISUAL_MOD" "$GRANULAR_MOD" --stock "$STOCK" --with "$CORE"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
-            --mod "$VISUAL_MOD" --mod "$DREAMY_MOD" --check
+            --mod "$VISUAL_MOD" --mod "$GRANULAR_MOD" --check
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
-            --mod "$VISUAL_MOD" --mod "$DREAMY_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_NOTES_DREAMY_FIX_TEST.syx" \
-            --version DF76
+            --mod "$VISUAL_MOD" --mod "$GRANULAR_MOD" \
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_GRANULAR_ONLY_TEST.syx" \
+            --version GR76
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_EUREKA_NOTES_DREAMY_FIX_TEST.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_EUREKA_GRANULAR_ONLY_TEST.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
-          cp "$VISUAL_MOD" "$DREAMY_MOD" "$GITHUB_WORKSPACE/_release/"
+          cp "$VISUAL_MOD" "$GRANULAR_MOD" "$GITHUB_WORKSPACE/_release/"
           cp "$GITHUB_WORKSPACE/ports/digitone_eureka576/eureka_lcd_preview.png" "$GITHUB_WORKSPACE/_release/"
           python3 "$GITHUB_WORKSPACE/ports/digitone_eureka576/tests/render_face_preview.py" \
             "$GITHUB_WORKSPACE/ports/digitone_eureka576/reference.bin" \
@@ -129,7 +131,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-NOTES-DREAMY-FIX-TEST
+          name: Digitone-OS1.44-EUREKA-GRANULAR-ONLY-TEST
           path: _release/
           if-no-files-found: error
           retention-days: 30
