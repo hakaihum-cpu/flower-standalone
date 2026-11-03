@@ -53,7 +53,7 @@ static const int8_t tip[29][2] = {
     {6,-1},{6,-2},{5,-3},{5,-3},{4,-4}
 };
 static const uint8_t xcol[4]={33u,59u,86u,112u};
-static const int8_t pitch_st[8]={-12,-7,-5,0,5,7,12,24};
+static const char *const pitch_names[8]={"-12","-7","-5","0","+5","+7","+12","+24"};
 
 unsigned dnfx_page_count(unsigned effect)
 {
@@ -128,8 +128,8 @@ static void dial(void *bmp,int cx,int cy,int norm)
     fw_fillrect(bmp,cx-8,cy-2,cx-8,cy+2,1);
     fw_fillrect(bmp,cx+8,cy-2,cx+8,cy+2,1);
     for(i=-1;i<=1;i+=2) {
-        fw_fillrect(bmp,cx+3*i,cy+7,cx+4*i,cy+7,1);
-        fw_fillrect(bmp,cx+3*i,cy-7,cx+4*i,cy-7,1);
+        fw_fillrect(bmp,cx+(i<0?4*i:3*i),cy+7,cx+(i<0?3*i:4*i),cy+7,1);
+        fw_fillrect(bmp,cx+(i<0?4*i:3*i),cy-7,cx+(i<0?3*i:4*i),cy-7,1);
         fw_fillrect(bmp,cx+7*i,cy+3,cx+7*i,cy+4,1);
         fw_fillrect(bmp,cx+7*i,cy-4,cx+7*i,cy-3,1);
         dot(bmp,cx+5*i,cy+6);dot(bmp,cx+5*i,cy-6);
@@ -146,6 +146,23 @@ static void label(void *bmp,int cx,int y,const char *s)
     int w=(int)letters(s)*4;
     fw_textf(bmp,(const void *)fw_font_label,cx-(w/2),y,-1,"%s",s);
 }
+static const char *option_name(unsigned fx,unsigned pg,unsigned i,unsigned v)
+{
+    static const char *const speed[3]={"0.5X","1X","2X"};
+    static const char *const loops[3]={"1","2","2+"};
+    static const char *const warble[3]={"OFF","LITE","HEAV"};
+    if(fx==DNFX_GRANULAR && i<2u) return pitch_names[v>7?7:v];
+    if(fx==DNFX_EUREKA) {
+        if(pg==0u && i==7u) return speed[v>2?2:v];
+        if(pg==1u) {
+            if(i==0u) return loops[v>2?2:v];
+            if(i==1u) return warble[v>2?2:v];
+            if(i==7u) return v?"ST":"MO";
+            return v?"ON":"OFF";
+        }
+    }
+    return "";
+}
 static void print_value(void *bmp,int x,int y,const struct dnfx_state *s,unsigned i)
 {
     unsigned fx=s->effect,pg=s->page;
@@ -153,8 +170,7 @@ static void print_value(void *bmp,int x,int y,const struct dnfx_state *s,unsigne
     const void *font=(const void *)fw_font5;
     if(fx==DNFX_GRANULAR) {
         if(i<2u) {
-            int pitch=pitch_st[v>7?7:v];
-            fw_textf(bmp,font,x,y,-1,"%+dST",pitch);
+            fw_textf(bmp,font,x,y,-1,"%sST",pitch_names[v>7?7:v]);
         } else if(i==2u) {
             fw_textf(bmp,font,x,y,-1,"%dMS",120+5*v);
         } else if(i==3u) {
@@ -219,8 +235,10 @@ void dnfx_draw(void *bmp,const struct dnfx_state *s,unsigned bpm)
         if(p->style==DNFX_DIAL) {
             dial(bmp,cx,cy,norm);
         } else {
+            const char *opt=option_name(s->effect,s->page,i,(unsigned)v);
             fw_framerect(bmp,cx-8,cy-8,cx+8,cy+8,1);
-            fw_textf(bmp,(const void *)fw_font5,cx-4,cy-2,-1,"%d",v);
+            fw_textf(bmp,(const void *)fw_font5,
+                     cx-((int)letters(opt)*4-1)/2,cy-2,-1,"%s",opt);
         }
         label(bmp,cx,i<4u?27:0,p->label);
     }
