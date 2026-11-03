@@ -1,6 +1,12 @@
 name: Digitone EUREKA RANDOM SCENES + LONG HANN GRANULAR (MUTE source repair unverified)
 on:
   workflow_dispatch:
+  # One authorized run, removed immediately after Actions queues it.
+  push:
+    branches:
+      - feature/digitone-eureka-midi-yes-isolated-mute-20261103
+    paths:
+      - .github/workflows/build-digitone-eureka576.yml
 permissions:
   contents: read
 jobs:
