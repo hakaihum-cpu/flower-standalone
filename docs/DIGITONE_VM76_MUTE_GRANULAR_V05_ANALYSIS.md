@@ -189,3 +189,39 @@ scene loops and independent cuts without voice callbacks, but only
 an on-device test can judge whether each 36-frame group looks distinct
 and that scene cuts do not disturb the stock UI and timing. No
 event handler in v1.9 writes or patches stock MUTE.
+
+## 5 — EUREKA 2.0: implementation targeting MUTE audio/LED mismatch
+
+GH76 still has the confirmed MUTE bug. EUREKA v1.8 paired only YES
+down/up but passed the original MIDI key press into stock, which
+explains why no mute improvement was heard.
+
+A change is now IMPLEMENTED ON SOURCE in branch
+`feature/digitone-eureka-midi-yes-isolated-mute-20261103`:
+
+1. `eureka576_key` consumes the physical MIDI-down, deferring the stock
+   MIDI action until the next relevant key event.
+2. If YES is pressed next while MIDI remains held, both MIDI events
+   and the matched YES events are consumed as an isolated video-toggle
+   chord, so the **stock MUTE track group is not switched to MIDI**.
+3. If another key is pressed first (including TRACK), a call is made
+   to the original OS1.44 KEYDISP at `0x40016fc0` with one simulated
+   MIDI DOWN before the actual other key passes stock. This preserves
+   the normal MIDI+TRACK modifier use.
+4. If only MIDI is pressed, stock receives the delayed MIDI DOWN
+   before the actual physical MIDI UP, still permitting MIDI-only
+   track-bank navigation.
+5. All ordinary TRACK, FUNC+BANK, FUNC+TRACK and PTN+TRACK events
+   pass stock unchanged. No firmware MUTE mask is edited; original
+   global and pattern mute persistence are unchanged.
+
+The corresponding native tests now verify no stock MIDI DOWN on
+the MIDI+YES chord, exactly one delayed MIDI DOWN on solo MIDI and
+MIDI+TRACK, and paired YES/MIDI UP even when released in reverse
+order. The harness does NOT model actual OS1.44 stock mute sound, so
+the change must not be declared hardware verified before a new
+authorized SYX build and on-device audio test.
+
+The original 576 HYBRID04 images, 16 scene v1.9 random-cut behavior,
+and Granular v0.5 remain unchanged. The branch's workflow remains
+manual-only and HAS NOT BEEN STARTED.
