@@ -61,7 +61,8 @@ int main(void)
         check(i);
     }
     if(eureka576_seek(576u)) abort();
-    /* Direction must genuinely reverse the chronological source sequence. */
+    /* Forward and reverse must loop INSIDE the selected 36-frame scene;
+     * boundary must not enter the next scene in linear order. */
     if(!eureka576_seek(128u)) abort();
     eureka576_effect=0u;
     eureka576_reverse=1u;
@@ -70,19 +71,66 @@ int main(void)
     eureka576_reverse=0u;
     if(!eureka576_step() || eureka576_index!=128u) abort();
     check(128u);
+    if(!eureka576_seek(0u)) abort();
+    eureka576_reverse=1u;
+    if(!eureka576_step() || eureka576_index!=35u) abort();
+    check(35u);
+    eureka576_reverse=0u;
+    if(!eureka576_step() || eureka576_index!=0u) abort();
+    check(0u);
+    for(unsigned clip=0u;clip<E576_CLIPS;++clip) {
+        unsigned base=clip*E576_CLIP_FRAMES;
+        if(!eureka576_seek(base)) abort();
+        for(unsigned i=1u;i<E576_CLIP_FRAMES;++i) {
+            if(!eureka576_step() || eureka576_index!=base+i) abort();
+            check(base+i);
+        }
+        if(!eureka576_step() || eureka576_index!=base) abort();
+        check(base);
+    }
+    /* The UI timer must still play within the same clip at stock tempo. */
     fw_transport=1u;
     if(!eureka576_seek(0u)) abort();
-    for(unsigned i=1u;i<576u;++i) {
-        unsigned ticks=0;
+    for(unsigned i=1u;i<E576_CLIP_FRAMES;++i) {
+        unsigned ticks=0u;
         do {
             eureka576_tick(ctrl);
             if(++ticks>9u) abort();
         }while(eureka576_index!=i);
         check(i);
     }
-    for(unsigned i=0u;i<9u && eureka576_index!=0u;++i)eureka576_tick(ctrl);
+    for(unsigned i=0u;i<9u && eureka576_index!=0u;++i)
+        eureka576_tick(ctrl);
     if(eureka576_index!=0u) abort();
-    check(0);
+    check(0u);
+    /* No note events: random scene cuts must still occur every 2-4 beats.
+     * This used to be pure sequential animation in GH76. */
+    if(!eureka576_seek(0u)) abort();
+    eureka576_next_scene_cut=0u;
+    {
+        unsigned last_scene=0u, cuts=0u, nonsequential=0u, unique=0u;
+        uint32_t scenes_seen=1u;
+        for(unsigned k=0u;k<160u;++k) {
+            unsigned scene;
+            fw_timeline+=E576_STEP_TIME;
+            eureka576_tick(ctrl);
+            check(eureka576_index);
+            scene=eureka576_index/E576_CLIP_FRAMES;
+            if(scene!=last_scene) {
+                ++cuts;
+                if(scene!=(last_scene+1u)%E576_CLIPS) ++nonsequential;
+                scenes_seen|=(1u<<scene);
+                last_scene=scene;
+            }
+        }
+        for(unsigned bit=0u;bit<E576_CLIPS;++bit)
+            unique+=(scenes_seen>>bit)&1u;
+        if(cuts<7u || nonsequential<4u || unique<5u) {
+            fprintf(stderr,"insufficient true scene randomness: cuts=%u nonseq=%u unique=%u\\n",
+                    cuts,nonsequential,unique);
+            abort();
+        }
+    }
     /* Each sounding FM voice, including a live note, must be visible. */
     for(unsigned i=0u;i<1200u;++i) {
         uint32_t before=eureka576_index;
@@ -253,6 +301,6 @@ int main(void)
     if(eureka576_key(NULL,key)!=0 || eureka576_enabled)abort();
     key[4]=0;
     if(eureka576_key(NULL,key)!=0)abort();
-    printf("PASS: 576 frames, 1200 note reactions, video CC sweeps, paired MIDI+YES press/release, stock MUTE key PASSTHROUGH ONLY (audio MUTE not simulated); %u rectangles\n",rectangle_count);
+    printf("PASS: 576 frames, 16 scene-local loops, automatic nonsequential random cuts, 1200 note reactions, CC sweeps, paired MIDI+YES, MUTE pass-through only; %u rectangles\n",rectangle_count);
     return 0;
 }
