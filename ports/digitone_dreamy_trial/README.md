@@ -1,60 +1,44 @@
-# Digitone OS1.44 — EUREKA 2.0 + GRANULAR LONG HANN 0.5
+# Digitone OS1.44 — EUREKA 2.1 + GRANULAR 0.5
 
-Source-only integration built from the working GH76 firmware components.
-GH76 is unchanged. No new SYX has been built for this branch.
+**SOURCE-ONLY trial. No firmware build has been authorized or run for
+this branch.** The working user-tested **MC78** firmware remains unchanged
+on branch `feature/digitone-eureka-midi-yes-isolated-mute-20261103`.
 
-## Mute audio repair (source and tests updated, hardware pending)
+The MC78 user-confirmed correct audio-track MUTE behavior is preserved:
+the MIDI+YES shortcut must NOT forward MIDI DOWN to the stock Digitone
+MIDI-track mute bank. Its ordinary MIDI key, MIDI+TRACK, FUNC+BANK,
+TRACK LED and sequencer routines have not been replaced or overridden.
 
-User-tested reproduction on GH76:
+## EUREKA six dedicated video pages
 
-- Internal-sequencer audio track is muted in normal/global Mute mode
-- Enter EUREKA with MIDI+YES: the audio remains muted but all track LEDs
-  illuminate green
-- Pressing TRACK changes the LEDs but does not unmute/mute the synth audio
-- EUREKA OFF restores the regular audio track Mute operation
-- This is independent of whether the GRANULAR insert is enabled
+MIDI+FUNC while video is ON toggles page-key mode. TRIG, SYN1, SYN2,
+FLTR, AMP and LFO each open a separate visual parameter page, and the
+same key pressed again returns to the full-screen 576-frame animation.
+The other five page buttons open their pages directly. MIDI+FUNC again
+disables the custom page-key mode and returns to video.
 
-Root cause in original shortcut handling: the MIDI key press was passed
-to stock Digitone OS before the YES was consumed by EUREKA. In GLOBAL
-MUTE, the stock MIDI key switches the displayed Mute control group from
-audio tracks to MIDI tracks, matching the user's preserved synth audio
-mute with green MIDI track LEDs.
+A–D encoders each adjust a real setting on every page, using the stock
+Digitone 4 encoder counts/detent. E–H are protected from silently
+editing stock FM parameters behind a custom page. Video CC40,65,67,68,69
+still act on the same video effects. All 16 TRIG pad key events 26–41
+continue through to the stock sequencer and keyboard functionality in
+either view. This **does not create synthetic note events or guarantee
+a hardware pad behavior not yet tested**.
 
-The EUREKA 2.0 key hook now defers a bare MIDI DOWN:
+The 24 control labels, values, defaults and behavior are listed in
+[the full six-page specification](../../docs/DIGITONE_EUREKA_2_1_SIX_PAGES.md).
+Original 576 HYBRID04 pixels remain bit-exact at default video settings;
+random 16-scene playback and note-driven cuts are retained.
 
-- If followed by YES, **neither the MIDI DOWN nor MIDI UP** reaches stock;
-  EUREKA owns the paired YES DOWN/UP and toggles video
-- If MIDI is pressed alone, send one original-stock MIDI DOWN when the
-  key is released, then let the real MIDI UP through
-- If MIDI+TRACK or other non-YES chord is performed, dispatch the deferred
-  MIDI DOWN to original stock KEYDISP *before* allowing the other key
-  through; allow MIDI UP to pass normally
-- FUNC+BANK, PTN+TRACK, FUNC+TRACK and normal TRACK keys pass untouched
-- Do not create any duplicate or fake track-Mute database; the original
-  firmware controls the Mute/LEDs/project/pattern storage
+## GRANULAR v0.5 unmodified
 
-The original stock KEYDISP location 0x40016fc0 is grounded in
-elekloader/core-dn1 4.1.1 OS1.44, and a native test double intercepts
-the direct stock call. Real hardware MUTE and MIDI-alone delayed key
-handling remain to be verified.
+2.731s 512KiB stereo capture ring, 120–360ms Hann grains (240ms default),
+80ms wet fade, and original CC33/34/36/37/60 controls. FM synthesizer,
+stock Delay and Reverb are unchanged.
 
-## Random EUREKA animations: 2.0 includes 1.9 changes
-
-The same 576 unmodified 128x64 black/yellow HYBRID04 frames now play as
-16 independent 36-frame scenes. Forward and reverse loop within their
-current scene; scene selection is random every 8, 12 or 16 sixteenth-note
-steps during PLAY, independently of FM voice activity. The note-driven
-event switch favors a visibly different random scene 55% of the time
-instead of the original 35%. Speed/reverse/stutter and video CC40/65/67/
-68/69 are preserved. No new video assets have been added.
-
-## Granular v0.5 unchanged
-
-2.731s stereo 512KiB history, 120-360ms Hann-window 50% overlapping
-grains, 240ms default, 80ms WET fade; CC33/34 pitch, CC36 grain size,
-CC37 position, CC60 mix.
-
-No main push, no workflow run, no existing approved SYX changes.
-The authorized GH76 is still the fallback. A future **explicitly authorized**
-manual build must pass native/UBSan tests, Elekloader lint, 576-frame
-pixel-perfect checksum, memory budget and on-device real Mute sound test.
+The new branch's GitHub Actions workflow is **workflow_dispatch only**
+and has not been run. Before a future authorized build, require native
+video/parameter/16-key/MIDI+FUNC tests, UBSan for audio/video, 576-frame
+source comparison, Elekloader link/lint and SYX SHA verification.
+On-device audio MUTE and each stock pad's function must be confirmed
+rather than inferred from native hook-return values.
