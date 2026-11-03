@@ -7,6 +7,24 @@ volatile uint32_t fw_transport=0u, fw_timeline=0u;
 volatile int32_t fw_tempo=14400;
 static uint8_t display[64][128];
 static unsigned rectangle_count;
+static unsigned text_count, panel_frames;
+const char fw_font_title[1]={0}, fw_font_label[1]={0};
+int32_t fw_textf(void *bmp,const void *font,int32_t x,int32_t y,
+                 int32_t maxlen,const char *fmt,...)
+{
+    (void)bmp; (void)font; (void)fmt;
+    if(x<0 || x>127 || y<0 || y>63 || maxlen<1) abort();
+    ++text_count;
+    return 0;
+}
+void fw_framerect(void *bmp,int32_t x0,int32_t y0,int32_t x1,
+                  int32_t y1,int32_t c)
+{
+    (void)bmp;
+    if(x0<0 || y0<0 || x1>127 || y1>63 ||
+       x0>=x1 || y0>=y1 || c!=1) abort();
+    ++panel_frames;
+}
 void fw_fillrect(void *bmp,int32_t x0,int32_t y0,int32_t x1,int32_t y1,int32_t c)
 {
     (void)bmp;
@@ -77,6 +95,132 @@ int main(void)
        eureka576_midi_state!=E576_MIDI_IDLE ||
        stock_midi_downs!=0u) abort();
     check(0);
+    /* EUREKA VIDEO must NEVER suppress stock TRIG/KEY 1..16. */
+    for(int k=E576_KEY_STEP1;k<=E576_KEY_STEP16;++k) {
+        key[3]=k;key[4]=1;
+        if(eureka576_key(NULL,key)!=0) abort();
+        key[4]=9; /* stock-held event */
+        if(eureka576_key(NULL,key)!=0) abort();
+        key[4]=0;
+        if(eureka576_key(NULL,key)!=0) abort();
+    }
+    /* MIDI first, FUNC second toggles a page-key mode without ever
+     * dispatching MIDI DOWN to stock (critical audio MUTE regression). */
+    key[3]=E576_KEY_MIDI;key[4]=1;
+    if(eureka576_key(NULL,key)!=1) abort();
+    key[3]=E576_KEY_FUNC;key[4]=3;
+    if(eureka576_key(NULL,key)!=1 || !eureka576_param_armed ||
+       eureka576_param_page!=0u || !eureka576_func_owned ||
+       stock_midi_downs!=0u) abort();
+    key[4]=0;
+    if(eureka576_key(NULL,key)!=1 || eureka576_func_owned) abort();
+    key[3]=E576_KEY_MIDI;key[4]=0;
+    if(eureka576_key(NULL,key)!=1 || stock_midi_downs!=0u) abort();
+
+    /* All six pages open with their own key. A-D are real encoder
+     * controls, E-H are captured so hidden stock parameters don't turn.
+     * TRACK keys and the full TRIG1..16 keyboard still reach stock. */
+    for(int page=0;page<6;++page) {
+        key[3]=E576_KEY_TRIG+page;key[4]=1;
+        if(eureka576_key(NULL,key)!=1 ||
+           eureka576_param_page!=(uint32_t)(page+1)) abort();
+        key[4]=0;
+        if(eureka576_key(NULL,key)!=1) abort();
+        text_count=panel_frames=0u;
+        eureka576_draw(NULL,NULL);
+        if(text_count!=9u || panel_frames!=4u) abort();
+        for(int k=E576_KEY_STEP1;k<=E576_KEY_STEP16;++k) {
+            key[3]=k;key[4]=1;
+            if(eureka576_key(NULL,key)!=0) abort();
+            key[4]=0;
+            if(eureka576_key(NULL,key)!=0) abort();
+        }
+        for(int enc=5;enc<=8;++enc) {
+            key[3]=enc;key[4]=4;
+            if(eureka576_enc(NULL,key)!=1) abort();
+        }
+        /* Param changes route through the same callback as the Digitone.
+         * Read both fields to confirm A-D are not decorative knobs. */
+        for(int enc=1;enc<=4;++enc) {
+            uint32_t before=eureka576_param_read((unsigned)page,
+                                                 (unsigned)(enc-1));
+            uint32_t after;
+            key[3]=enc;key[4]=4;
+            if(eureka576_enc(NULL,key)!=1) abort();
+            after=eureka576_param_read((unsigned)page,(unsigned)(enc-1));
+            /* TRIG AUTO starts at 1 and cannot go higher, so test the
+             * reverse direction for a bounded discrete parameter. */
+            if(page==0 && enc==3) {
+                key[4]=-4;
+                if(eureka576_enc(NULL,key)!=1) abort();
+                after=eureka576_param_read(0u,2u);
+            }
+            if(before==after && !(page==0 && enc==3))
+                abort();
+        }
+        /* Same key again returns to the original animation. */
+        key[3]=E576_KEY_TRIG+page;key[4]=1;
+        if(eureka576_key(NULL,key)!=1 ||
+           eureka576_param_page!=0u) abort();
+        key[4]=0;
+        if(eureka576_key(NULL,key)!=1) abort();
+    }
+    /* Restore exact original video defaults before pixel-test sweep. */
+    {
+        const uint8_t init[6][4]={
+            {0u,55u,1u,0u},{64u,0u,0u,0u},
+            {2u,100u,0u,64u},{0u,0u,8u,8u},
+            {127u,0u,0u,0u},{32u,0u,0u,0u}
+        };
+        for(unsigned p=0u;p<6u;++p)
+            for(unsigned k=0u;k<4u;++k)
+                eureka576_param[p][k]=init[p][k];
+        eureka576_cc_glitch=0u;
+        eureka576_cc_invert=0u;
+        eureka576_cc_speed=64u;
+        eureka576_cc_stutter=0u;
+        eureka576_cc_scrub=0u;
+        eureka576_reverse=0u;
+        eureka576_rng=0x534a5531u;
+        eureka576_ui_ticks=0u;
+        eureka576_next_scene_cut=0u;
+        eureka576_cc_serial++;
+    }
+    if(!eureka576_seek(0u)) abort();
+    check(0u);
+    /* MIDI+FUNC while armed closes the dedicated page mode. */
+    key[3]=E576_KEY_MIDI;key[4]=1;
+    if(eureka576_key(NULL,key)!=1) abort();
+    key[3]=E576_KEY_FUNC;key[4]=3;
+    if(eureka576_key(NULL,key)!=1 || eureka576_param_armed ||
+       eureka576_param_page!=0u || stock_midi_downs!=0u) abort();
+    key[4]=0;
+    if(eureka576_key(NULL,key)!=1) abort();
+    key[3]=E576_KEY_MIDI;key[4]=0;
+    if(eureka576_key(NULL,key)!=1) abort();
+    /* With page mode disarmed all six normal page keys pass to stock. */
+    for(int page=0;page<6;++page) {
+        key[3]=E576_KEY_TRIG+page;key[4]=1;
+        if(eureka576_key(NULL,key)!=0) abort();
+        key[4]=0;
+        if(eureka576_key(NULL,key)!=0) abort();
+    }
+    key[3]=1;key[4]=4;
+    if(eureka576_enc(NULL,key)!=0) abort();
+    /* Also accept reverse chord ordering: FUNC first, then MIDI. */
+    key[3]=E576_KEY_FUNC;key[4]=1;
+    if(eureka576_key(NULL,key)!=0) abort();
+    key[3]=E576_KEY_MIDI;key[4]=3;
+    if(eureka576_key(NULL,key)!=1 || !eureka576_param_armed ||
+       stock_midi_downs!=0u) abort();
+    key[4]=0;
+    if(eureka576_key(NULL,key)!=1) abort();
+    key[3]=E576_KEY_FUNC;key[4]=0;
+    if(eureka576_key(NULL,key)!=0) abort();
+    /* Leave page mode disarmed for original GH76 regression suite. */
+    eureka576_param_armed=0u;
+    eureka576_param_page=0u;
+    check(0u);
     /* Exhaustive all-frame random seek and 4,718,592 display pixel comparisons. */
     for(unsigned i=0u;i<576u;++i) {
         if(!eureka576_seek(i)) abort();
