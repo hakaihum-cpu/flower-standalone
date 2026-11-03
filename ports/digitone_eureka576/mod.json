@@ -1,11 +1,11 @@
 {
   "id": "eureka576",
-  "version": "1.5",
+  "version": "1.6",
   "title": "EUREKA RG DOT 576",
   "category": "Display",
   "author": "analoglav",
   "license": "GPL-2.0-or-later",
-  "description": "All 576 original EUREKA user-video frames reprocessed as 128x64 source-preserving Bayer 4x4 black/yellow RG DOT images; note-TRIG JUMP/SPEED/STUTTER and BPM sync; MIDI+YES toggles, stock audio untouched.",
+  "description": "All 576 original EUREKA user-video frames reprocessed as 128x64 source-preserving Bayer 4x4 black/yellow RG DOT images; each FM voice note triggers JUMP/REVERSE/SPEED/STUTTER and BPM sync; MIDI+YES toggles, stock audio untouched.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
@@ -29,8 +29,8 @@
       "order": 70
     },
     {
-      "event": "ev_note_queue",
-      "fn": "eureka576_note_queue",
+      "event": "ev_voice_on",
+      "fn": "eureka576_voice_on",
       "order": 70
     }
   ],
