@@ -1,9 +1,6 @@
 name: Digitone EUREKA note-reactive + DREAMY freeze test
 on:
   workflow_dispatch:
-  push:
-    branches: [feature/digitone-dreamy-freeze-mitigation-20261103]
-    paths: ['.github/approved_runs/digitone-eureka-dreamy-freeze-fix-retry-20261103.trigger']
 permissions:
   contents: read
 jobs:
