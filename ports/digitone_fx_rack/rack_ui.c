@@ -53,6 +53,10 @@ void rack_choose(int mode)
     rack_pause=2u;
     rack_ramp=0u;
     rack_ui_open=mode>=0 && mode<DNFX_COUNT;
+    {
+        unsigned i;
+        for(i=0u;i<8u;++i) rack_acc[i]=0;
+    }
 }
 void rack_show_page(void) {if(rack_active>=0) rack_ui_open=1u;}
 void rack_hide_page(void) {rack_ui_open=0u;}
@@ -172,6 +176,8 @@ int rack_key(void *brain,void *ev)
         if(p) {
             s->value[s->page][k]=p->initial;
             s->focus=(uint8_t)k;s->flash=50u;
+            if(s->effect==DNFX_GRANULAR)
+                rack_granular_set(k,p->initial);
         }
         rack_controls_owned[key]=1u;
         return 1;
@@ -192,7 +198,8 @@ int rack_enc(void *brain,void *ev)
     rack_acc[k]+=delta;
     d=rack_acc[k]/COUNTS_PER_DETENT;
     rack_acc[k]-=d*COUNTS_PER_DETENT;
-    if(d) dnfx_edit(s,k,(int)d);
+    if(d && dnfx_edit(s,k,(int)d) && s->effect==DNFX_GRANULAR)
+        rack_granular_set(k,s->value[s->page][k]);
     return 1;
 }
 int rack_cc(int track,int cc,int value,int flags)

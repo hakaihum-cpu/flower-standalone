@@ -12,6 +12,7 @@ void rack_choose(int mode);
 void rack_render(int32_t *out,const int32_t *in);
 void rack_granular_render(int32_t *out,const int32_t *in);
 void rack_granular_reset(void);
+void rack_granular_set(unsigned knob,uint8_t value);
 int rack_granular_cc(int track,int cc,int value,int flags);
 void rack_audio_reset(int mode);
 void rack_audio_render(int32_t *out,const int32_t *in,int mode);

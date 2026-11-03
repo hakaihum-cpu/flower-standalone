@@ -210,6 +210,13 @@ void rack_granular_render(int32_t *out,const int32_t *in)
 {
     granular_render(out,in);
 }
+void rack_granular_set(unsigned knob,uint8_t value)
+{
+    if(knob==0u || knob==1u) pitch_choice[knob]=value>7u?7u:value;
+    else if(knob==2u) grain_frames_target=GRAIN_MIN_FRAMES+240u*(uint32_t)(value>48u?48u:value);
+    else if(knob==3u) grain_position_target=((uint32_t)value*GRAIN_POSITION_MAX+63u)/127u;
+    else if(knob==4u) mix_cc=value;
+}
 void rack_granular_reset(void)
 {
     hist_write=hist_valid=0u;
@@ -225,20 +232,24 @@ int rack_granular_cc(int track, int cc, int value, int flags)
 
     if(cc == 60) {
         mix_cc = (uint8_t)value;
+        rack_state[DNFX_GRANULAR].value[0][4]=(uint8_t)value;
         return 1;
     }
     if(cc == 33 || cc == 34) {
         pitch_choice[(unsigned)(cc - 33)] = (uint8_t)((unsigned)value >> 4);
+        rack_state[DNFX_GRANULAR].value[0][(unsigned)(cc-33)]=(uint8_t)((unsigned)value>>4);
         return 1;
     }
     if(cc == 36) {
         uint32_t steps = ((uint32_t)value * 48u + 63u) / 127u;
         grain_frames_target = GRAIN_MIN_FRAMES + 240u * steps;
+        rack_state[DNFX_GRANULAR].value[0][2]=(uint8_t)steps;
         return 1;
     }
     if(cc == 37) {
         grain_position_target =
             ((uint32_t)value * GRAIN_POSITION_MAX + 63u) / 127u;
+        rack_state[DNFX_GRANULAR].value[0][3]=(uint8_t)value;
         return 1;
     }
     return 0;

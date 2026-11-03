@@ -47,12 +47,12 @@ static int32_t reel_low[2], reel_high[2];
 static uint32_t crush_counter;
 static int16_t crush_hold[2];
 static uint32_t haze_write,haze_valid,haze_phase[2],haze_start[2];
-static uint32_t haze_span[2],haze_loop[2];
+static uint32_t haze_span[2],haze_loop[2],haze_target[2];
+static uint8_t haze_primed[2];
 static int32_t haze_filter[2],haze_verb_pos;
 static int16_t haze_verb[2][VERB_LEN];
 static int8_t haze_reverse[2];
 static uint32_t haze_lfo,haze_mod;
-static uint32_t haze_effective_frames;
 static int16_t *const haze_ring=(int16_t *)(uintptr_t)EUREKA_BULK;
 static uint32_t rng(void)
 {
@@ -164,10 +164,16 @@ static void haze_setup(const struct dnfx_state *s)
         span=(span*(127u-r))/127u;
         if(span<min) span=min;
         if(span>loop) span=loop;
-        if(haze_span[ch]!=span) {
-            haze_span[ch]=span;
-            haze_phase[ch]=0;
-            haze_start[ch]=(haze_write+EUREKA_LEN-span-32u)&EUREKA_MASK;
+        /* A new effect must make sound after 90ms of fresh input, not
+         * wait 5 seconds for the full default TIME=5s. Start from a short
+         * safe phrase and grow on successive loop boundaries. */
+        if(haze_valid>96u && span>haze_valid-96u)
+            span=haze_valid-96u;
+        if(span<min) span=min;
+        haze_target[ch]=span;
+        if(!haze_span[ch]) {
+            haze_span[ch]=min;
+            haze_phase[ch]=0u;
         }
         haze_loop[ch]=loop;
     }
@@ -185,7 +191,7 @@ static int32_t haze_voice(unsigned ch,const struct dnfx_state *s,uint32_t speed)
     uint32_t span=haze_span[ch],phase=haze_phase[ch],spq8=span<<8;
     uint32_t seam= s->value[1][4] ? 12u : 768u;
     int32_t wet,more;
-    if(span<24u || haze_valid<span+32u) return 0;
+    if(span<24u || !haze_primed[ch] || haze_valid<span+64u) return 0;
     if(seam>span/4u) seam=span/4u;
     if(seam<1u) seam=1u;
     if(phase>=spq8) phase=0;
@@ -202,7 +208,13 @@ static int32_t haze_voice(unsigned ch,const struct dnfx_state *s,uint32_t speed)
     } else phase+=speed;
     if(phase>=spq8) {
         phase%=spq8;
-        haze_start[ch]=(haze_write+EUREKA_LEN-span-32u)&EUREKA_MASK;
+        {
+            uint32_t target=haze_target[ch],step=span/4u+1u;
+            if(target>span) span+=(target-span>step?step:target-span);
+            else if(target<span) span=target;
+            haze_span[ch]=span;
+            haze_start[ch]=(haze_write+EUREKA_LEN-span-64u)&EUREKA_MASK;
+        }
         if(s->value[1][4] && (rng()&255u)<(uint32_t)s->value[0][2])
             haze_reverse[ch]=(int8_t)!haze_reverse[ch];
         else if(!s->value[1][4]) haze_reverse[ch]=0;
@@ -238,6 +250,13 @@ static void haze_frame(int32_t *out,const int16_t dry[2],const struct dnfx_state
         }
         haze_write=(haze_write+1u)&EUREKA_MASK;
         if(haze_valid<EUREKA_LEN) ++haze_valid;
+    }
+    for(ch=0u;ch<2u;++ch) {
+        if(!haze_primed[ch] && haze_valid>=haze_span[ch]+64u) {
+            haze_start[ch]=(haze_write+EUREKA_LEN-haze_span[ch]-64u)&EUREKA_MASK;
+            haze_phase[ch]=0u;
+            haze_primed[ch]=1u;
+        }
     }
     speed=s->value[0][7]==0u?128u:s->value[0][7]==2u?512u:256u;
     if(s->value[1][2]) speed=(speed*3u)/4u; /* transpose */
@@ -285,8 +304,8 @@ void rack_audio_reset(int mode)
         haze_write=haze_valid=haze_verb_pos=0u;
         haze_lfo=haze_mod=0u;
         for(i=0;i<2u;++i) {
-            haze_phase[i]=haze_span[i]=haze_loop[i]=0u;
-            haze_start[i]=0u;haze_reverse[i]=0;
+            haze_phase[i]=haze_span[i]=haze_loop[i]=haze_target[i]=0u;
+            haze_start[i]=0u;haze_reverse[i]=0;haze_primed[i]=0u;
             haze_filter[i]=0;
             for(j=0;j<VERB_LEN;++j) haze_verb[i][j]=0;
         }
