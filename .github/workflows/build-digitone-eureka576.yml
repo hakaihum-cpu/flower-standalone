@@ -1,12 +1,6 @@
 name: Digitone EUREKA 6 PARAM PAGES + TRIG1-16 + LONG HANN (MC78 protected)
 on:
   workflow_dispatch:
-  # Explicit authorized one-time PG79 build, auto-disarmed once queued.
-  push:
-    branches:
-      - feature/digitone-eureka-six-pages-trig-keys-20261103
-    paths:
-      - .github/workflows/build-digitone-eureka576.yml
 permissions:
   contents: read
 jobs:
