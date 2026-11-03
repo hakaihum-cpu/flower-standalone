@@ -9,5 +9,6 @@ extern volatile int32_t fw_tempo;
 #define FW_EVENT_TRACK(ev) (((volatile int32_t *)(ev))[2])
 #define FW_EVENT_STEP(ev) (((volatile uint32_t *)(ev))[10])
 #define FW_EVENT_NOTE_TRIG 1u
+#define CORE_MIDI_CC_AUTO 1u
 void fw_fillrect(void*,int32_t,int32_t,int32_t,int32_t,int32_t);
 #endif
