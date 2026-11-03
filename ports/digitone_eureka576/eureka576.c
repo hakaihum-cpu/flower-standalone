@@ -546,21 +546,21 @@ static void eureka576_draw_parameters(void *bmp)
     unsigned p=(unsigned)eureka576_param_page-1u;
     unsigned i;
     fw_fillrect(bmp,0,0,127,63,0);
-    fw_textf(bmp,(const void *)fw_font_title,3,56,20,
+    fw_textf(bmp,(const void *)fw_font_title,3,56,-1,
              "EUREKA %s",eureka576_page_titles[p]);
     fw_fillrect(bmp,0,52,127,52,1);
     for(i=0u;i<E576_PARAM_KNOBS;++i) {
         int32_t x=(int32_t)((i&1u)*64u)+2;
         int32_t y=(i<2u)?28:2;
         fw_framerect(bmp,x,y,x+59,y+22,1);
-        fw_textf(bmp,(const void *)fw_font_label,x+4,y+14,8,
+        fw_textf(bmp,(const void *)fw_font_label,x+4,y+14,-1,
                  "%s",eureka576_param_titles[p][i]);
         if(p==3u && i>=2u)
-            fw_textf(bmp,(const void *)fw_font_title,x+4,y+3,5,
+            fw_textf(bmp,(const void *)fw_font_title,x+4,y+3,-1,
                      "%d",(int32_t)eureka576_param_read(p,i)-8);
         else
-            fw_textf(bmp,(const void *)fw_font_title,x+4,y+3,5,
-                     "%u",eureka576_param_read(p,i));
+            fw_textf(bmp,(const void *)fw_font_title,x+4,y+3,-1,
+                     "%d",(int32_t)eureka576_param_read(p,i));
     }
 }
 /* For a 1-bit screen, brightness is the density of lit pixels.
