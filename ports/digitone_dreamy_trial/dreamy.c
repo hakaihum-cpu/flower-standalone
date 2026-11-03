@@ -16,8 +16,6 @@
 #define GRAIN_LEN   8192u
 #define GRAIN_HALF  (GRAIN_LEN/2u)
 #define VERB_ALLOC  3072u
-#define MEM_COUNT (HIST_FRAMES*2u + DEL_FRAMES*2u + 2u*3u*VERB_ALLOC)
-#define CLEAR_PER_TICK 16384u
 
 /* All samples use Q15, stereo interleaved, BSS. About 0.43 MB total.
  * The existing RG DOT artwork is in .run; combined RAM budget checked at link. */
@@ -26,11 +24,12 @@ static int16_t delay_line[DEL_FRAMES*2u];
 static int16_t room[2][3][VERB_ALLOC];
 static const uint16_t room_len[3] = { 1451u, 2137u, 2861u };
 static uint16_t room_pos[3];
+static uint16_t room_valid[3];
 static int32_t room_damp[2][3];
 static int32_t delay_lowpass[2];
-static uint32_t hist_write, hist_valid, delay_write;
+static uint32_t hist_write, hist_valid, delay_write, delay_valid;
+static uint8_t grain_armed;
 static uint32_t grain_origin[4], grain_phase[4];
-static volatile uint32_t clear_pos, requested_on;
 static volatile uint8_t mix_cc=64u, time_cc=75u, room_cc=72u;
 
 /* The three component amounts are independent, but full-scale output
@@ -82,6 +81,13 @@ static void dreamy_render(int32_t *out, const int32_t *in)
         for (ch=0u;ch<2u;++ch) dry[ch] = in[sample*2u+ch] >> 16;
 
         if (hist_valid > 24000u) {
+            if (!grain_armed) {
+                for (g=0u;g<4u;++g) {
+                    grain_phase[g]=(g&1u)?GRAIN_HALF:0u;
+                    grain_origin[g]=(hist_write+HIST_FRAMES-(g<2u?21000u:23000u))&HIST_MASK;
+                }
+                grain_armed=1u;
+            }
             for (g=0u;g<4u;++g) {
                 for (ch=0u;ch<2u;++ch)
                     pitch[ch] += grain_at(g,ch);
@@ -101,7 +107,7 @@ static void dreamy_render(int32_t *out, const int32_t *in)
         if(hist_valid<HIST_FRAMES) ++hist_valid;
 
         for(ch=0u;ch<2u;++ch) {
-            int32_t raw=delay_line[readpos*2u+ch];
+            int32_t raw=delay_valid>=delay_frames ? delay_line[readpos*2u+ch] : 0;
             delay_lowpass[ch]+=(raw-delay_lowpass[ch])>>2;
             delayed[ch]=delay_lowpass[ch];
         }
@@ -112,11 +118,12 @@ static void dreamy_render(int32_t *out, const int32_t *in)
             delay_line[delay_write*2u+ch]=(int16_t)soft15(sent+feedback);
         }
         delay_write=(delay_write+1u)&DEL_MASK;
+        if(delay_valid<DEL_FRAMES) ++delay_valid;
 
         for(j=0u;j<3u;++j) {
             unsigned n=room_pos[j];
             for(ch=0u;ch<2u;++ch) {
-                int32_t stored=room[ch][j][n];
+                int32_t stored=room_valid[j]>=room_len[j] ? room[ch][j][n] : 0;
                 room_damp[ch][j]+=(stored-room_damp[ch][j])>>3;
                 int32_t sent=(pitch[ch]+delayed[ch])>>2;
                 int32_t feedback=(room_damp[ch][j]*21135)>>15;
@@ -124,6 +131,7 @@ static void dreamy_render(int32_t *out, const int32_t *in)
                 ambience[ch]+=stored;
             }
             if (++room_pos[j]>=room_len[j]) room_pos[j]=0u;
+            if (room_valid[j]<room_len[j]) ++room_valid[j];
         }
 
         for(ch=0u;ch<2u;++ch) {
@@ -142,51 +150,35 @@ static void dreamy_render(int32_t *out, const int32_t *in)
  * This does not replace the original Digitone master or mute its voices. */
 struct core_audio_owner dreamy_owner={0, dreamy_render, CORE_AUDIO_INSERT};
 
+/* Never zero the 430 KB delay/history/room buffers on the UI thread:
+ * on a real Digitone, the long synchronous clear can starve its UI.
+ * Reset only small scalar state. Validity counters mask every old sample
+ * until the ring position has been overwritten by fresh audio.
+ * With on=0 during reset the audio interrupt does not read these values.
+ */
 static void dreamy_open(void *brain, void *event, int32_t track)
 {
+    unsigned i;
     (void)brain; (void)event; (void)track;
-    if (dreamy_owner.on || requested_on) {
+    if (dreamy_owner.on) {
         dreamy_owner.on=0;
-        requested_on=0;
-    } else {
-        /* Clear a bounded amount at each UI tick, never on the audio IRQ. */
-        dreamy_owner.on=0;
-        clear_pos=0u;
-        requested_on=1u;
+        return;
     }
-}
-const struct core_menu_item dreamy_menu={"DREAMY",dreamy_open,0,0};
-
-void dreamy_tick(void *ctrl)
-{
-    unsigned i, limit;
-    (void)ctrl;
-    if(!requested_on || dreamy_owner.on) return;
-    limit=clear_pos+CLEAR_PER_TICK;
-    if(limit>MEM_COUNT) limit=MEM_COUNT;
-    for(i=clear_pos;i<limit;++i) {
-        if (i < HIST_FRAMES*2u) history[i]=0;
-        else if (i < HIST_FRAMES*2u+DEL_FRAMES*2u)
-            delay_line[i-HIST_FRAMES*2u]=0;
-        else {
-            unsigned n=i-HIST_FRAMES*2u-DEL_FRAMES*2u;
-            room[n/(3u*VERB_ALLOC)][(n/VERB_ALLOC)%3u][n%VERB_ALLOC]=0;
-        }
-    }
-    clear_pos=limit;
-    if(clear_pos!=MEM_COUNT) return;
-    hist_write=hist_valid=delay_write=0u;
+    dreamy_owner.on=0;
+    hist_write=hist_valid=delay_write=delay_valid=0u;
+    grain_armed=0u;
     for(i=0u;i<3u;++i) {
-        room_pos[i]=0u;
+        room_pos[i]=room_valid[i]=0u;
         room_damp[0][i]=room_damp[1][i]=0;
     }
     delay_lowpass[0]=delay_lowpass[1]=0;
     for(i=0u;i<4u;++i) {
-        grain_phase[i]=(i&1u)?GRAIN_HALF:0u;
-        grain_origin[i]=(HIST_FRAMES-(i<2u?21000u:23000u))&HIST_MASK;
+        grain_phase[i]=0u;
+        grain_origin[i]=0u;
     }
     dreamy_owner.on=1;
 }
+const struct core_menu_item dreamy_menu={"DREAMY",dreamy_open,0,0};
 
 /* Reuse EFFECTS DREAMY's MIDI CC 60/61/62 on Digitone AUTO channel only.
  * We consume them only when the insert is active; other MIDI is untouched. */
