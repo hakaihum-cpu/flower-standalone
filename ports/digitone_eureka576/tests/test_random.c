@@ -132,7 +132,17 @@ int main(void)
         for(int k=E576_KEY_STEP1;k<=E576_KEY_STEP16;++k) {
             key[3]=k;key[4]=1;
             if(eureka576_key(NULL,key)!=0) abort();
+            key[4]=9;
+            if(eureka576_key(NULL,key)!=0) abort();
+            key[4]=3; /* FUNC+STEP also remains with stock */
+            if(eureka576_key(NULL,key)!=0) abort();
             key[4]=0;
+            if(eureka576_key(NULL,key)!=0) abort();
+        }
+        key[3]=19;key[4]=3; /* FUNC+BANK MUTE */
+        if(eureka576_key(NULL,key)!=0 || stock_midi_downs!=0u) abort();
+        for(int k=42;k<=45;++k) {
+            key[3]=k;key[4]=1;
             if(eureka576_key(NULL,key)!=0) abort();
         }
         for(int enc=5;enc<=8;++enc) {
