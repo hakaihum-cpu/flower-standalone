@@ -61,7 +61,7 @@ jobs:
               source = '\n'.join((root / f).read_text() for f in doc['sources'] if f.endswith('.c'))
               for subscription in doc.get('subscribe', []):
                   fn = subscription['fn']
-                  pattern = r'\\b(?:void|int|int32_t)\\s+' + re.escape(fn) + r'\\s*\\('
+                  pattern = r'\b(?:void|int|int32_t)\s+' + re.escape(fn) + r'\s*\('
                   if not re.search(pattern, source):
                       raise SystemExit(f'ERROR: {module} subscribes undefined callback {fn}')
               print('PASS: all declared callbacks defined:', module)
