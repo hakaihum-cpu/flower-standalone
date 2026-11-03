@@ -1,11 +1,11 @@
 {
   "id": "eureka576",
-  "version": "1.8",
+  "version": "1.9",
   "title": "EUREKA HYBRID04 576 + VIDEO MIDI",
   "category": "Display",
   "author": "analoglav",
   "license": "GPL-2.0-or-later",
-  "description": "576 original 128x64 HYBRID04 user-supplied frames; MIDI+YES toggles video with BOTH YES press and release consumed as one gesture (no orphan key-up sent to stock). All FUNC+BANK and TRACK MUTE keys still pass through. STOCK AUDIO MUTE WHILE VIDEO ON IS USER-REPORTED BROKEN AND REMAINS UNVERIFIED; do not claim Mute fixed. AUTO video CC40 GLITCH, CC65 STUTTER, CC67 SPEED, CC68 SCRUB, CC69 INVERT. Note-driven video retained; original FM untouched.",
+  "description": "Original 576 HYBRID04 user frames organized as sixteen independent 36-frame scenes. Each scene animates locally in forward/reverse; scene changes randomly every 2-4 beats while transport runs (even with no sounding voice) and 55% of MIDI/sequencer voice-on events pick a distinct scene. Other note events trigger reverse/speed/stutter. MIDI+YES toggles video with paired YES-down/up; CC40/65/67/68/69 video controls preserved. Stock MUTE AUDIBLE in video mode remains a user-confirmed unresolved problem; stock mute events/LEDs are passed unchanged. No modifications to FM or stock audio.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
