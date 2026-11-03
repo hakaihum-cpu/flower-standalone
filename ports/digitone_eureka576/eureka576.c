@@ -123,6 +123,7 @@ static void eureka576_trigger(uint32_t time)
     action=eureka576_random()%100u;
     eureka576_effect=0u;
     eureka576_speed=0u;
+    eureka576_phase=0u; /* keep the audible note's first visual jump visible */
     if(action<35u) {
         clip=((eureka576_index/36u)+1u+eureka576_random()%15u)%16u;
         inside=eureka576_random()%36u;
@@ -180,12 +181,16 @@ void eureka576_tick(void *ctrl)
     eureka576_was_playing=playing;
     /* Live notes change the displayed image even with transport STOPPED. */
     if(eureka576_enabled) {
+        uint32_t note_time=0u, have_note=0u;
         while(eureka576_event_head!=eureka576_event_tail) {
             uint32_t at=eureka576_event_times[eureka576_event_head];
             if((int32_t)(now-at)<0) break;
             eureka576_event_head=(eureka576_event_head+1u)&(E576_QUEUE_SIZE-1u);
-            eureka576_trigger(at);
+            note_time=at;
+            have_note=1u;
         }
+        /* One visible action per UI frame, even when a chord starts voices. */
+        if(have_note) eureka576_trigger(note_time);
     }
     if(eureka576_enabled && playing) {
         uint32_t tempo=(fw_tempo>=3600 && fw_tempo<=36000)?(uint32_t)fw_tempo:14400u;
