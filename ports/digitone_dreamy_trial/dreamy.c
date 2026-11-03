@@ -202,10 +202,7 @@ static void granular_render(int32_t *out, const int32_t *in)
                 out[sample * 2u + ch] = soft15(blended) * 65536;
             }
         }
-        /* body written above */
-        /*
-        */
-    }
+     }
 }
 
 /* Insert after Digitone's built-in FX. Existing synth and stock FX stay on. */
