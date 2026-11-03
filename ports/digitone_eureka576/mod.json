@@ -1,11 +1,11 @@
 {
   "id": "eureka576",
-  "version": "2.0",
-  "title": "EUREKA HYBRID04 RANDOM SCENES + STOCK MUTE CHORD FIX",
+  "version": "2.1",
+  "title": "EUREKA HYBRID04 RANDOM SCENES + SIX PERFORMANCE PARAM PAGES",
   "category": "Display",
   "author": "analoglav",
   "license": "GPL-2.0-or-later",
-  "description": "GH76 internal-sequencer Mute repair candidate: MIDI+YES is now one isolated chord. MIDI DOWN is temporarily deferred and is NOT forwarded to stock KEYDISP when followed by YES, so the original synth-track MUTE bank stays selected; solo MIDI and MIDI+TRACK are forwarded to the exact OS1.44 stock dispatcher with a matched MIDI DOWN/UP. Stock Mute, LED state, pattern/global Mute storage and FM audio are NOT overridden. 16 original 36-frame scenes randomly cut every 2-4 beats even in quiet parts; note-triggered 55% scene cuts, remaining speed/reverse/stutter. Video CC40,65,67,68,69 and 576 HYBRID04 frames unchanged. Requires on-device audio Mute verification; source-only, NOT YET BUILT.",
+  "description": "Based on user-approved MC78 Digitone OS1.44 MUTE working firmware. Isolated MIDI+YES stock MUTE repair unchanged. MIDI+FUNC toggles EUREKA panel navigation without switching stock MIDI mute bank; TRIG/SYN1/SYN2/FLTR/AMP/LFO page keys show 6 dedicated 128x64 parameter pages, pressing current page again returns to 576-frame 16-scene random animation. Encoders A-D manipulate four meaningful video controls per page (scene, note random chance, scene cut settings, speed/reverse/stutter/scrub, loop/note FX, glitch/inversion/x-y move, density/dilation/blink/pulse, rate/depth/target/waveform LFO). Encoder E-H captured only on page to avoid hidden edits. All TRIG keys 1..16 (OS key IDs26..41) pass to stock even while panels open; no stock note/sequencer reassignment. Original MUTE, global/pattern state and FM remain stock. Granular0.5 untouched. Source-only, compile and on-device pad responsiveness not yet verified.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
@@ -26,6 +26,11 @@
     {
       "event": "ev_key",
       "fn": "eureka576_key",
+      "order": 70
+    },
+    {
+      "event": "ev_enc",
+      "fn": "eureka576_enc",
       "order": 70
     },
     {
