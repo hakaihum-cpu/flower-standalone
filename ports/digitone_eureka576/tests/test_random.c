@@ -359,6 +359,10 @@ int main(void)
      * FUNC+T1..4, FUNC+YES while MIDI remains down).
      * PTN+TRACK and TRACK keys go to stock OS; EUREKA claims no LEDs. */
     for(int keycode=0;keycode<64;++keycode) {
+        /* MIDI+FUNC is intentionally EUREKA-owned in v2.1.
+         * It has its own two-press-order tests above.
+         * Every other FUNC chord must pass through unchanged. */
+        if(keycode==E576_KEY_MIDI) continue;
         key[3]=keycode; key[4]=3; /* down + FUNC */
         if(eureka576_key(NULL,key)!=0 || !eureka576_enabled) abort();
     }
