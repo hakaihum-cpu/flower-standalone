@@ -54,7 +54,7 @@ static int32_t haze_filter[2];
 static uint32_t haze_verb_pos;
 static int16_t haze_verb[2][VERB_LEN];
 static int8_t haze_reverse[2];
-static uint32_t haze_lfo;
+static uint32_t haze_lfo,haze_output_fade;
 #if defined(RACK_HOST_TEST)
 static int16_t haze_host_memory[EUREKA_LEN*2u];
 static int16_t *const haze_ring=haze_host_memory;
@@ -297,6 +297,12 @@ static void haze_frame(int32_t *out,const int16_t dry[2],const struct dnfx_state
         int32_t sum=(wet[0]+wet[1])/2;
         wet[0]=wet[1]=sum;
     }
+    /* Match MIYAKO's historyReady startup behavior: keep DRY=0, but
+     * fade the first usable wet phrase in over 60 ms to avoid an abrupt
+     * zero-to-full output step at the recording boundary. */
+    if(haze_valid<required+64u || !haze_primed[0] ||
+       (loopmode!=0u && !haze_primed[1])) haze_output_fade=0u;
+    else if(haze_output_fade<2880u) ++haze_output_fade;
     for(ch=0u;ch<2u;++ch) {
         int32_t filtered=wet[ch],mix=m;
         int32_t dist=(int32_t)s->value[0][3]-64;
@@ -308,14 +314,16 @@ static void haze_frame(int32_t *out,const int16_t dry[2],const struct dnfx_state
             filtered=dist<0?haze_filter[ch]:filtered-haze_filter[ch];
         }
         filtered=tape_soft(filtered,s->value[1][4]?422u:333u);
-        if(haze_valid<required+32u) mix=0;
-        filtered=(filtered*mix)/127; /* 100% wet: no dry added */
+        mix=(mix*(int32_t)haze_output_fade)/2880;
+        filtered=(filtered*mix)/127; /* processed-only, no dry added */
         if(s->value[0][6]) {
             uint32_t p=(haze_verb_pos+(ch?VERB_LEN-3599u:VERB_LEN-2951u))&VERB_MASK;
             int32_t delay=haze_verb[ch][p];
             int32_t verbWet=(delay*(int32_t)s->value[0][6])/244;
             haze_verb[ch][haze_verb_pos]=(int16_t)clamp16(filtered+delay*55/100);
             filtered=clamp16(filtered+verbWet);
+        } else {
+            haze_verb[ch][haze_verb_pos]=0; /* no stale tail on later enable */
         }
         out[ch]=clamp16(filtered);
     }
@@ -326,7 +334,7 @@ void rack_audio_reset(int mode)
     unsigned i,j;
     if(mode==DNFX_EUREKA) {
         haze_write=haze_valid=haze_verb_pos=0u;
-        haze_lfo=0u;
+        haze_lfo=haze_output_fade=0u;
         haze_current_haze=64;
         for(i=0;i<2u;++i) {
             haze_phase[i]=haze_span[i]=haze_target[i]=0u;

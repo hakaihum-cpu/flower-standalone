@@ -200,6 +200,7 @@ static void print_value(void *bmp,int x,int y,const struct dnfx_state *s,unsigne
     if(fx==DNFX_CRUSH) {
         if(i==0u) fw_textf(bmp,font,x,y,-1,"%dBIT",v);
         else if(i==1u) fw_textf(bmp,font,x,y,-1,"%dX",v);
+        else if(i==3u) fw_textf(bmp,font,x,y,-1,"%d%%",v);
         else fw_textf(bmp,font,x,y,-1,"%d%%",(v*100+63)/127);
         return;
     }
