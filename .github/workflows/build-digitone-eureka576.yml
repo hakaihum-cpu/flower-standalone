@@ -111,7 +111,11 @@ jobs:
           assert 'eureka576_cc' in a
           assert 'if((flags&2)!=0) return 0;' in a
           assert 'fw_fillrect(bmp,0,0,127,63,0);' in a
-          print('PASS: stock MUTE event passthrough only; full MUTE audio behavior NOT verified')
+          assert 'eureka576_yes_owned' in e
+          assert 'if(key==E576_KEY_YES && eureka576_yes_owned && !(flags&1))' in e
+          assert 'eureka576_yes_owned=1u;' in e
+          assert 'eureka576_yes_owned=0u;' in e
+          print('PASS: paired EUREKA YES down/up and stock MUTE event passthrough; audio MUTE NOT VERIFIED')
 
           assert 'delay_line' not in d and 'room_valid' not in d
           assert 'memset(' not in d and 'malloc(' not in d
@@ -130,7 +134,7 @@ jobs:
           cd _elekloader
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_dreamy_trial" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
-          VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.7.elemod"
+          VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.8.elemod"
           GRANULAR_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/granulartrial-0.5.elemod"
           test -s "$VISUAL_MOD"
           test -s "$GRANULAR_MOD"
