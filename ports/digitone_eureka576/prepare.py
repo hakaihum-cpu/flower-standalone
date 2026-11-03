@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert all 576 original EUREKA frames using the approved RG DOT 1-bit display.
+"""Convert all 576 original EUREKA JPEGs using user-approved #04 HYBRID 1-bit method.
 2-byte LE record size; mode 0 raw frame, mode 1 XOR-delta zero/literal RLE.
 The resulting 1-bit frames are compressed losslessly and verified. No frame is omitted.
 """
@@ -9,22 +9,26 @@ import argparse
 import hashlib
 import struct
 from PIL import Image, ImageOps
+import cv2
+import numpy as np
 
 W, H, EXPECTED = 128, 64, 576
 FRAME_BYTES = 1024
 
-# Match the approved RG Rotate DOT presentation, reduced to a 1-bit LCD:
-# preserve the source composition, do not detect/crop faces, do not draw or
-# substitute features. Fit the entire image with black letterboxing.
-BAYER4 = (
-     0,  8,  2, 10,
-    12,  4, 14,  6,
-     3, 11,  1,  9,
-    15,  7, 13,  5,
-)
+# Exact #04 HYBRID conversion used in the approved 7-methods comparison.
+# No generated art; source JPEG RGB composition preserved and fit by contain.
+# Image sizes, Bayer phase and CLAHE/blur constants are NOT approximations.
+BAYER4 = np.asarray((
+    (0, 8, 2, 10),
+    (12, 4, 14, 6),
+    (3, 11, 1, 9),
+    (15, 7, 13, 5),
+), dtype=np.float32)
+BAYER4 = np.tile(BAYER4, (H // 4, W // 4)) / 16.0
+
 
 def pack_image(jpeg, frame_index):
-    """Convert exactly one original JPEG to a 128x64 RG-DOT 1-bit LCD frame."""
+    """User-approved #04 HYBRID: local boost + solid fill/light ordered dither."""
     with Image.open(BytesIO(jpeg)) as source:
         source.load()
         original = source.convert("RGB")
@@ -36,17 +40,27 @@ def pack_image(jpeg, frame_index):
         fitted,
         ((W - fitted.width) // 2, (H - fitted.height) // 2))
 
-    pixels = frame.load()
+    pixels = np.asarray(frame, dtype=np.float32)
+    luma = (pixels[:, :, 0] * 0.2126 +
+            pixels[:, :, 1] * 0.7152 +
+            pixels[:, :, 2] * 0.0722) / 255.0
+    gray = np.uint8(np.clip(luma * 255.0, 0, 255))
+    clahe = cv2.createCLAHE(
+        clipLimit=2.7, tileGridSize=(5, 3)).apply(gray).astype(np.float32) / 255.0
+    clahe_soft = np.clip(clahe ** 0.79, 0, 1)
+    boost = np.clip((luma ** 0.61 - 0.045) * 1.12, 0, 1)
+    blur = cv2.GaussianBlur(luma, (3, 3), 0.65)
+    local = np.clip(
+        0.52 * boost + 0.48 * clahe_soft + 0.16 * (luma - blur), 0, 1)
+    solid = local >= 0.54
+    lit = (local >= 0.37) & (local >= (0.31 + 0.22 * BAYER4))
+    mask = solid | lit
     out = bytearray(FRAME_BYTES)
     for y in range(H):
         for x in range(W):
-            r, g, b = pixels[x, y]
-            luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
-            threshold = 0.13 + 0.63 * BAYER4[(x & 3) + ((y & 3) << 2)] / 16.0
-            if luminance >= threshold:
+            if mask[y, x]:
                 out[7 - (y >> 3) + 8 * x] |= 1 << (y & 7)
     return bytes(out)
-
 
 def save_preview(frames, path):
     """Contact sheet displaying the actual 1-bit firmware output in LCD yellow."""
