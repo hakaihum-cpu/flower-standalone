@@ -267,16 +267,20 @@ static void eureka576_trigger(uint32_t time)
     } else if(action<70u) {
         /* Reverse stays enabled until the next reverse event. */
         eureka576_reverse^=1u;
-        frame=(eureka576_index+(eureka576_reverse?E576_COUNT-6u:6u))
-              %E576_COUNT;
+        frame=(eureka576_index/E576_CLIP_FRAMES)*E576_CLIP_FRAMES+
+              ((eureka576_index%E576_CLIP_FRAMES+
+                (eureka576_reverse?E576_CLIP_FRAMES-6u:6u))
+                %E576_CLIP_FRAMES);
         if(!eureka576_seek(frame)) eureka576_enabled=0u;
     } else if(action<85u) {
         eureka576_effect=1u;
         eureka576_speed=1u+eureka576_random()%3u;
         duration=4u+eureka576_random()%5u;
         eureka576_until=time+duration*E576_STEP_TIME;
-        frame=(eureka576_index+(eureka576_reverse?E576_COUNT-7u:7u))
-              %E576_COUNT;
+        frame=(eureka576_index/E576_CLIP_FRAMES)*E576_CLIP_FRAMES+
+              ((eureka576_index%E576_CLIP_FRAMES+
+                (eureka576_reverse?E576_CLIP_FRAMES-7u:7u))
+                %E576_CLIP_FRAMES);
         if(!eureka576_seek(frame)) eureka576_enabled=0u;
     } else {
         eureka576_effect=2u;
@@ -307,8 +311,10 @@ static int eureka576_step(void)
     }
     if(eureka576_cc_speed>=112u) {
         uint32_t start=(eureka576_index/E576_CLIP_FRAMES)*E576_CLIP_FRAMES;
-        return eureka576_seek(eureka576_index>start
-                              ?eureka576_index-1u:start+E576_CLIP_FRAMES-1u);
+        uint32_t span=12u+12u*eureka576_param[2][0];
+        return eureka576_seek(eureka576_index>start &&
+                              eureka576_index<start+span
+                              ?eureka576_index-1u:start+span-1u);
     }
     if(eureka576_effect==2u) {
         frame=eureka576_stutter_start+
@@ -317,8 +323,10 @@ static int eureka576_step(void)
     }
     if(eureka576_reverse) {
         uint32_t start=(eureka576_index/E576_CLIP_FRAMES)*E576_CLIP_FRAMES;
-        return eureka576_seek(eureka576_index>start
-                              ?eureka576_index-1u:start+E576_CLIP_FRAMES-1u);
+        uint32_t span=12u+12u*eureka576_param[2][0];
+        return eureka576_seek(eureka576_index>start &&
+                              eureka576_index<start+span
+                              ?eureka576_index-1u:start+span-1u);
     }
     /* Loop 12/24/36 frames inside the selected 36-frame scene. */
     {
@@ -567,42 +575,72 @@ static uint32_t eureka576_video_sample(int32_t x,int32_t y)
 void eureka576_draw(void *bmp, void *ctrl)
 {
     uint32_t x,y;
+    uint32_t rate,phase,pulsed,dim,blink_period,blink_off;
+    int32_t wave,lfo,lfo_x=0,lfo_y=0;
+    uint32_t lfo_flip=0u;
     (void)ctrl;
     if(!eureka576_enabled) return;
+    if(eureka576_param_page) {
+        eureka576_draw_parameters(bmp);
+        return;
+    }
+    rate=1u+eureka576_param[5][0]/8u;
+    phase=(eureka576_ui_ticks*rate)&255u;
+    wave=phase<128u ? (int32_t)phase*2-127 : 383-(int32_t)phase*2;
+    if(eureka576_param[5][3]) wave=phase<128u ? -127 : 127;
+    lfo=wave*(int32_t)eureka576_param[5][1]/127;
+    if(eureka576_param[5][2]==0u) lfo_x=lfo;
+    if(eureka576_param[5][2]==1u) lfo_y=lfo;
+    if(eureka576_param[5][2]==2u && wave>0 && lfo!=0)
+        lfo_flip=1u;
+    dim=eureka576_param[4][0];
+    pulsed=(eureka576_ui_ticks*3u)&127u;
+    if(pulsed>63u) pulsed=127u-pulsed;
+    if(eureka576_param[4][3])
+        dim=(dim*(127u-eureka576_param[4][3]+
+             (eureka576_param[4][3]*pulsed)/63u))/127u;
+    blink_period=(128u-(uint32_t)eureka576_param[4][2])/8u+1u;
+    blink_off=eureka576_param[4][2] &&
+              ((eureka576_ui_ticks/blink_period)&1u);
     fw_fillrect(bmp,0,0,127,63,0);
     for(y=0u;y<64u;++y) {
-        uint32_t page=7u-(y>>3);
-        uint8_t bit=(uint8_t)(1u<<(y&7u));
         uint32_t amp=((uint32_t)eureka576_cc_glitch+15u)/16u;
         uint32_t stripe=y>>2;
-        uint32_t invert=0u, hash=0u;
-        int32_t shift=0, start=-1;
+        uint32_t invert=lfo_flip, hash=0u;
+        int32_t shift=(int32_t)eureka576_param[3][2]-8+lfo_x;
+        int32_t sy=(int32_t)y-((int32_t)eureka576_param[3][3]-8)-lfo_y;
+        int32_t start=-1;
         if(amp) {
-            /* One offset per 4-line band: bounded +-8 pixels, not a
-             * per-pixel random generator. Decoding cost stays fixed. */
             hash=(stripe*1103515245u) ^
                  ((eureka576_index+(fw_timeline>>15))*2654435761u);
             hash^=hash>>13;
-            shift=(int32_t)(hash%(2u*amp+1u))-(int32_t)amp;
+            shift+=(int32_t)(hash%(2u*amp+1u))-(int32_t)amp;
         }
         if(eureka576_cc_invert) {
-            /* 0 off; 127 inverted everywhere; intermediate values
-             * invert a variable fraction of four-line video stripes. */
-            if(eureka576_cc_invert==127u) invert=1u;
+            if(eureka576_cc_invert==127u) invert^=1u;
             else {
                 hash=(stripe*29u+(fw_timeline>>17))&127u;
-                invert=(hash<(uint32_t)eureka576_cc_invert);
+                if(hash<(uint32_t)eureka576_cc_invert) invert^=1u;
             }
         }
-        /* Scan pixels once; flush consecutive yellow runs with 1 rect.
-         * When all CCs are zero this is exactly the original 128x64
-         * 1-bit image, not a new drawing, mask or source animation.
-         */
         for(x=0u;x<=128u;++x) {
             int32_t sx=(int32_t)x-shift;
             uint32_t lit=0u;
-            if(x<128u && sx>=0 && sx<128) {
-                lit=(eureka576_framebuf[page+8u*(uint32_t)sx]&bit)!=0u;
+            if(x<128u && !blink_off) {
+                unsigned wide=eureka576_param[4][1];
+                lit=eureka576_video_sample(sx,sy);
+                if(!lit && wide>=1u)
+                    lit=eureka576_video_sample(sx-1,sy) |
+                        eureka576_video_sample(sx+1,sy);
+                if(!lit && wide>=2u)
+                    lit=eureka576_video_sample(sx-2,sy) |
+                        eureka576_video_sample(sx+2,sy);
+                if(lit && dim<127u) {
+                    /* Fixed spatial dither: dynamic pulse changes density,
+                     * but the original source frame buffer is untouched. */
+                    uint32_t dither=((x*19u+y*37u)&127u);
+                    if(dither>=dim) lit=0u;
+                }
             }
             if(x<128u && invert) lit^=1u;
             if(lit) {
