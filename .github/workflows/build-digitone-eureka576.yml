@@ -1,6 +1,9 @@
 name: Digitone EUREKA 04 HYBRID + GRANULAR only trial
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/digitone-eureka-granular-only-20261103]
+    paths: ['.github/approved_runs/digitone-eureka-hybrid04-granular-once-20261103.trigger']
 permissions:
   contents: read
 jobs:
