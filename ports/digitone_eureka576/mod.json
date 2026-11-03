@@ -1,11 +1,11 @@
 {
   "id": "eureka576",
-  "version": "1.9",
-  "title": "EUREKA HYBRID04 576 + VIDEO MIDI",
+  "version": "2.0",
+  "title": "EUREKA HYBRID04 RANDOM SCENES + STOCK MUTE CHORD FIX",
   "category": "Display",
   "author": "analoglav",
   "license": "GPL-2.0-or-later",
-  "description": "Original 576 HYBRID04 user frames organized as sixteen independent 36-frame scenes. Each scene animates locally in forward/reverse; scene changes randomly every 2-4 beats while transport runs (even with no sounding voice) and 55% of MIDI/sequencer voice-on events pick a distinct scene. Other note events trigger reverse/speed/stutter. MIDI+YES toggles video with paired YES-down/up; CC40/65/67/68/69 video controls preserved. Stock MUTE AUDIBLE in video mode remains a user-confirmed unresolved problem; stock mute events/LEDs are passed unchanged. No modifications to FM or stock audio.",
+  "description": "GH76 internal-sequencer Mute repair candidate: MIDI+YES is now one isolated chord. MIDI DOWN is temporarily deferred and is NOT forwarded to stock KEYDISP when followed by YES, so the original synth-track MUTE bank stays selected; solo MIDI and MIDI+TRACK are forwarded to the exact OS1.44 stock dispatcher with a matched MIDI DOWN/UP. Stock Mute, LED state, pattern/global Mute storage and FM audio are NOT overridden. 16 original 36-frame scenes randomly cut every 2-4 beats even in quiet parts; note-triggered 55% scene cuts, remaining speed/reverse/stutter. Video CC40,65,67,68,69 and 576 HYBRID04 frames unchanged. Requires on-device audio Mute verification; source-only, NOT YET BUILT.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
