@@ -1,11 +1,11 @@
 {
   "id": "eureka576",
-  "version": "2.1",
-  "title": "EUREKA HYBRID04 RANDOM SCENES + SIX PERFORMANCE PARAM PAGES",
+  "version": "2.2",
+  "title": "EUREKA HYBRID04 SIX PAGES — MIDI+FUNC HELD INPUT FIX",
   "category": "Display",
   "author": "analoglav",
   "license": "GPL-2.0-or-later",
-  "description": "Based on user-approved MC78 Digitone OS1.44 MUTE working firmware. Isolated MIDI+YES stock MUTE repair unchanged. MIDI+FUNC toggles EUREKA panel navigation without switching stock MIDI mute bank; TRIG/SYN1/SYN2/FLTR/AMP/LFO page keys show 6 dedicated 128x64 parameter pages, pressing current page again returns to 576-frame 16-scene random animation. Encoders A-D manipulate four meaningful video controls per page (scene, note random chance, scene cut settings, speed/reverse/stutter/scrub, loop/note FX, glitch/inversion/x-y move, density/dilation/blink/pulse, rate/depth/target/waveform LFO). Encoder E-H captured only on page to avoid hidden edits. All TRIG keys 1..16 (OS key IDs26..41) pass to stock even while panels open; no stock note/sequencer reassignment. Original MUTE, global/pattern state and FM remain stock. Granular0.5 untouched. Source-only, compile and on-device pad responsiveness not yet verified.",
+  "description": "Based on user-tested MC78 and PG79 source. Corrects a provable page-key guard defect: with MIDI+FUNC physically held, Digitone page-key events carry FUNC flag bit2, which PG79 rejected. When armed by MIDI+FUNC, TRIG/SYN1/SYN2/FLTR/AMP/LFO each open its custom 128x64 parameter page even while both modifier keys remain held, and second press returns to the original animation. Standalone FUNC+PAGE still passes through to stock. The successful MC78 isolated MIDI+YES stock MUTE fix, original stock TRIG1..16, 576 frames, random scenes, and Granular0.5 are unchanged. Source-only, unbuilt, device verification pending.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
