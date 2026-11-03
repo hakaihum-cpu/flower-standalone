@@ -16,10 +16,13 @@ New isolated working branch:
    reserved MIDI DOWN, and therefore must not change stock MUTE
    audio-track/MIDI-track selection.
 3. When page-key mode is ON, press **TRIG / SYN1 / SYN2 / FLTR / AMP /
-   LFO** to open a page; press **that same key again** to return to the
-   full-screen animation, keeping page-key mode armed for another page.
-   Pressing another page key switches directly. MIDI+FUNC again
-   disarms the feature and returns to animation.
+   LFO** to open a page. Both operations must work: (a) while keeping
+   **MIDI+FUNC held**, press the desired page key (FUNC modifier bit set),
+   or (b) release MIDI+FUNC, then press the desired page key (no FUNC
+   modifier bit). Press the same page key again to return to the
+   full-screen animation. Another page key switches directly.
+   Standalone FUNC+page continues to use the stock firmware.
+   MIDI+FUNC again disarms the page mode.
 4. During EUREKA panels, encoders **A–D** control four real video
    parameters. Encoders E–H are captured as no-ops solely so they
    cannot silently alter stock FM parameters under the custom page.
@@ -69,3 +72,27 @@ reads their current effective values.
   native key-passthrough proof of real audible 1–16 operation.
 
 Only the feature branch is changed. No main push or automatic CI build.
+
+
+## PG79 page display failure — root investigation and 2.2 fix
+
+PG79 had a definite implementation defect. The page-key handler
+required `!(flags & 2)`, rejecting any page press while FUNC was
+physically held. The user's intended MIDI+FUNC+page gesture has bit
+2 set in the page-key event, so PG79 could never open the custom
+page in that sequence. Prior native tests used only page events
+with flags=1; those tests missed the failure.
+
+In v2.2, the input is accepted when `eureka576_midi_state` is
+`E576_MIDI_PANEL_CHORD`, i.e. MIDI+FUNC actually engaged.
+This preserves ordinary stock FUNC+page without MIDI. Six held-page
+tests check flags=3, same-page toggle to video, both MIDI/FUNC press
+orders, stock MUTE-bank noninterference, and six released-chord
+page entries. The underlying stock note/sequencer and audio code
+are left unchanged.
+
+**State:** source updated; native tests not yet executed on this
+branch; no new SYX built or instrument tests performed. If PG79
+also failed when the chord was released before the page key, that
+requires a second root-cause investigation; the held-FUNC defect alone
+does not explain such behavior.
