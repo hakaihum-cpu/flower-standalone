@@ -3,6 +3,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+/* Preserve the exact failing assertion line in Actions logs. The native
+ * decoder/pixel suite contains many unconditional abort() checks. */
+#define abort() do { \
+    fprintf(stderr,"PG79_NATIVE_FAIL %s:%d\\n",__FILE__,__LINE__); \
+    fflush(stderr); \
+    __builtin_abort(); \
+} while(0)
 volatile uint32_t fw_transport=0u, fw_timeline=0u;
 volatile int32_t fw_tempo=14400;
 static uint8_t display[64][128];
