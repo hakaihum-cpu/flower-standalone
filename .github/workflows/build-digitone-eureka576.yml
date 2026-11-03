@@ -1,11 +1,11 @@
-name: Digitone EUREKA 04 HYBRID + GRANULAR MIDI trial
+name: Digitone EUREKA VIDEO CC + GRANULAR MIDI + MUTE test
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-granular-midi-pitch-size-20261103'
+    if: github.ref == 'refs/heads/feature/digitone-eureka-mute-granular-video-cc-20261103'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -89,6 +89,20 @@ jobs:
           assert 'grain_frames_target' in d and 'pitch_choice' in d
           assert 'cc == 33 || cc == 34' in d and 'cc == 36' in d
           assert 'grain_begin(g, 0u)' in d and 'pitch_steps[8]' in d
+          assert 'GRAIN_POSITION_MAX  3000u' in d
+          assert 'GRAIN_ARM_FRAMES   30000u' in d
+          assert 'if(cc == 37)' in d
+          assert 'grain_position_target' in d
+          assert 'E576_CC_GLITCH 40' in a
+          assert 'E576_CC_STUTTER 65' in a
+          assert 'E576_CC_SPEED 67' in a
+          assert 'E576_CC_SCRUB 68' in a
+          assert 'E576_CC_INVERT 69' in a
+          assert 'eureka576_cc' in a
+          assert 'if((flags&2)!=0) return 0;' in a
+          assert 'fw_fillrect(bmp,0,0,127,63,0);' in a
+          print('PASS: stock MUTE passthrough, CC40/65/67/68/69, granular CC33/34/36/37/60')
+
           assert 'delay_line' not in d and 'room_valid' not in d
           assert 'memset(' not in d and 'malloc(' not in d
           print('PASS: audio insert isolated from EUREKA display')
@@ -106,8 +120,8 @@ jobs:
           cd _elekloader
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_dreamy_trial" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
-          VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.6.elemod"
-          GRANULAR_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/granulartrial-0.3.elemod"
+          VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.7.elemod"
+          GRANULAR_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/granulartrial-0.4.elemod"
           test -s "$VISUAL_MOD"
           test -s "$GRANULAR_MOD"
           CORE="$GITHUB_WORKSPACE/_firmware/core.elemod"
@@ -120,11 +134,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$GRANULAR_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_HYBRID04_GRANULAR_MIDI_TEST.syx" \
-            --version GM76
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_VIDEO_MIDI_GRANULAR_MUTE_TEST.syx" \
+            --version VM76
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_EUREKA_HYBRID04_GRANULAR_MIDI_TEST.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_EUREKA_VIDEO_MIDI_GRANULAR_MUTE_TEST.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$GRANULAR_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -136,7 +150,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-HYBRID04-GRANULAR-MIDI-TEST
+          name: Digitone-OS1.44-EUREKA-VIDEO-CC-GRANULAR-MUTE-TEST
           path: _release/
           if-no-files-found: error
           retention-days: 30
