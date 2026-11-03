@@ -30,7 +30,8 @@ static volatile int32_t rack_pending=-2;
 static uint8_t rack_pause=0u,rack_ui_open=0u,rack_no_owned=0u;
 static uint8_t rack_controls_owned[64];
 static uint8_t rack_ready=0u;
-static uint32_t rack_ramp=0u;
+static volatile uint32_t rack_ramp=0u;
+static volatile uint8_t rack_fading=0u;
 static int32_t rack_acc[8];
 struct core_audio_owner rack_owner={0,rack_render,CORE_AUDIO_INSERT};
 
@@ -47,11 +48,16 @@ void rack_choose(int mode)
     /* No large ring clearing in the render callback. The UI waits two
      * UI ticks with stock audio before rearming the one insert owner. */
     rack_init();
-    rack_owner.on=0;
-    rack_active=-1;
     rack_pending=(mode>=0 && mode<DNFX_COUNT)?mode:-1;
-    rack_pause=2u;
-    rack_ramp=0u;
+    if(rack_owner.on && rack_active>=0) {
+        rack_fading=1u; /* old path fades to dry before release */
+    } else {
+        rack_owner.on=0;
+        rack_active=-1;
+        rack_pause=2u;
+        rack_ramp=0u;
+        rack_fading=0u;
+    }
     rack_ui_open=mode>=0 && mode<DNFX_COUNT;
     {
         unsigned i;
@@ -92,14 +98,17 @@ void rack_render(int32_t *out,const int32_t *in)
      * No dynamic allocation, no buffer resets in the audio callback. */
     for(i=0u;i<32u;++i) {
         unsigned ch;
-        uint32_t gain=rack_ramp<720u?rack_ramp:720u;
+        uint32_t gain;
+        if(rack_fading) {
+            if(rack_ramp>0u) --rack_ramp;
+        } else if(rack_ramp<720u) ++rack_ramp;
+        gain=rack_ramp;
         for(ch=0u;ch<2u;++ch) {
             unsigned n=i*2u+ch;
             int32_t dry=in[n]>>16,wet=out[n]>>16;
             int32_t v=dry+((wet-dry)*(int32_t)gain)/720;
             out[n]=v*65536;
         }
-        if(rack_ramp<720u) ++rack_ramp;
     }
 }
 static void rack_mark_dirty(void *ctrl)
@@ -110,7 +119,14 @@ void rack_tick(void *ctrl)
 {
     int32_t pending;
     rack_init();
-    if(rack_pause) --rack_pause;
+    if(rack_fading && rack_ramp==0u) {
+        rack_owner.on=0;
+        rack_active=-1;
+        rack_fading=0u;
+        rack_pause=2u;
+    } else if(rack_fading) {
+        /* Old insert stays active during its 15ms fade to stock sound. */
+    } else if(rack_pause) --rack_pause;
     else if((pending=rack_pending)!=-2) {
         if(pending==DNFX_GRANULAR) rack_granular_reset();
         else if(pending>=DNFX_EUREKA && pending<DNFX_COUNT)

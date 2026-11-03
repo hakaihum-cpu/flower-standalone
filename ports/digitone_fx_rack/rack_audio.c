@@ -53,7 +53,12 @@ static int32_t haze_filter[2],haze_verb_pos;
 static int16_t haze_verb[2][VERB_LEN];
 static int8_t haze_reverse[2];
 static uint32_t haze_lfo,haze_mod;
+#if defined(RACK_HOST_TEST)
+static int16_t haze_host_memory[EUREKA_LEN*2u];
+static int16_t *const haze_ring=haze_host_memory;
+#else
 static int16_t *const haze_ring=(int16_t *)(uintptr_t)EUREKA_BULK;
+#endif
 static uint32_t rng(void)
 {
     noise_seed ^= noise_seed<<13;
