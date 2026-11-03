@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * EUREKA 576-frame Digitone mk1 / Keys OS 1.44 display-only mod.
  * EUREKA user frames retain the approved 04 HYBRID black/yellow images.
- * Stock MUTE (FUNC+BANK, FUNC+TRACK, PTN+TRACK) remains fully stock.
- * Stock audio untouched.
+ * Stock MUTE key events pass through; actual MUTE AUDIO with
+ * video ON is still unverified on hardware. Stock audio untouched.
  */
 #include <stdint.h>
 #include "digitone-mk1/core3.h"
