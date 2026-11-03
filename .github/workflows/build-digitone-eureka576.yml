@@ -1,11 +1,11 @@
-name: Digitone EUREKA + LONG HANN GRANULAR (MUTE audit pending)
+name: Digitone EUREKA RANDOM SCENES + LONG HANN GRANULAR (MUTE unresolved)
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-mute-audit-granular-long-hann-20261103'
+    if: github.ref == 'refs/heads/feature/digitone-eureka-random-scenes-mute-investigation-20261103'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -116,6 +116,13 @@ jobs:
           assert 'if(key==E576_KEY_YES && eureka576_yes_owned && !(flags&1))' in e
           assert 'eureka576_yes_owned=1u;' in e
           assert 'eureka576_yes_owned=0u;' in e
+          assert '#define E576_CLIP_FRAMES 36u' in e
+          assert 'static int eureka576_random_scene(void)' in e
+          assert 'eureka576_next_scene_cut' in e
+          assert '8u+4u*(eureka576_random()%3u)' in e
+          assert '(eureka576_index+1u)%E576_CLIP_FRAMES==0u' in e
+          assert 'eureka576_random_scene()' in e
+
           print('PASS: paired EUREKA YES down/up and stock MUTE event passthrough; audio MUTE NOT VERIFIED')
 
           assert 'delay_line' not in d and 'room_valid' not in d
@@ -135,7 +142,7 @@ jobs:
           cd _elekloader
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_dreamy_trial" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
-          VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.8.elemod"
+          VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.9.elemod"
           GRANULAR_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/granulartrial-0.5.elemod"
           test -s "$VISUAL_MOD"
           test -s "$GRANULAR_MOD"
@@ -149,11 +156,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$GRANULAR_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_VIDEO_CC_LONG_HANN_GRANULAR_TRIAL.syx" \
-            --version GH76
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_RANDOM_SCENES_LONG_HANN_TRIAL.syx" \
+            --version RS77
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_EUREKA_VIDEO_CC_LONG_HANN_GRANULAR_TRIAL.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_EUREKA_RANDOM_SCENES_LONG_HANN_TRIAL.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$GRANULAR_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -165,7 +172,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-VIDEO-CC-LONG-HANN-GRANULAR-TRIAL
+          name: Digitone-OS1.44-EUREKA-RANDOM-SCENES-LONG-HANN-TRIAL
           path: _release/
           if-no-files-found: error
           retention-days: 30
