@@ -144,19 +144,13 @@ int main(void)
         for(int enc=1;enc<=4;++enc) {
             uint32_t before=eureka576_param_read((unsigned)page,
                                                  (unsigned)(enc-1));
+            uint32_t max=eureka576_param_max[page][enc-1];
             uint32_t after;
-            key[3]=enc;key[4]=4;
+            key[3]=enc;
+            key[4]=(before>=max)?-4:4;
             if(eureka576_enc(NULL,key)!=1) abort();
             after=eureka576_param_read((unsigned)page,(unsigned)(enc-1));
-            /* TRIG AUTO starts at 1 and cannot go higher, so test the
-             * reverse direction for a bounded discrete parameter. */
-            if(page==0 && enc==3) {
-                key[4]=-4;
-                if(eureka576_enc(NULL,key)!=1) abort();
-                after=eureka576_param_read(0u,2u);
-            }
-            if(before==after && !(page==0 && enc==3))
-                abort();
+            if(before==after) abort();
         }
         /* Same key again returns to the original animation. */
         key[3]=E576_KEY_TRIG+page;key[4]=1;
