@@ -48,6 +48,12 @@ void rack_choose(int mode)
     /* No large ring clearing in the render callback. The UI waits two
      * UI ticks with stock audio before rearming the one insert owner. */
     rack_init();
+    /* Reselecting the current effect opens its page WITHOUT restarting
+     * capture history or turning off an active sustained loop. */
+    if(mode==rack_active && rack_pending==-2 && !rack_fading) {
+        rack_ui_open=mode>=0;
+        return;
+    }
     rack_pending=(mode>=0 && mode<DNFX_COUNT)?mode:-1;
     if(rack_owner.on && rack_active>=0) {
         rack_fading=1u; /* old path fades to dry before release */
@@ -105,9 +111,15 @@ void rack_render(int32_t *out,const int32_t *in)
         gain=rack_ramp;
         for(ch=0u;ch<2u;++ch) {
             unsigned n=i*2u+ch;
-            int32_t dry=in[n]>>16,wet=out[n]>>16;
-            int32_t v=dry+((wet-dry)*(int32_t)gain)/720;
-            out[n]=v*65536;
+            if(gain==720u || out[n]==in[n]) continue;
+            if(gain==0u) {out[n]=in[n];continue;}
+            /* Only the transitional crossfade is 16-bit; the steady
+             * dry path retains the stock master's full Q1.31 word. */
+            {
+                int32_t dry=in[n]>>16,wet=out[n]>>16;
+                int32_t v=dry+((wet-dry)*(int32_t)gain)/720;
+                out[n]=v*65536;
+            }
         }
     }
 }

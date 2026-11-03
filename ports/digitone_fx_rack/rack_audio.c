@@ -259,7 +259,8 @@ static void haze_frame(int32_t *out,const int16_t dry[2],const struct dnfx_state
     unsigned ch;
     uint32_t speed,loopmode=(uint32_t)s->value[1][0];
     int32_t wet[2],m=(int32_t)s->value[0][0];
-    uint32_t required=haze_span[0]>haze_span[1]?haze_span[0]:haze_span[1];
+    uint32_t required=loopmode==0u?haze_span[0]:
+         (haze_span[0]>haze_span[1]?haze_span[0]:haze_span[1]);
     /* Record before reading; invalid bulk bytes never get read before filled. */
     if(!s->value[1][5]) {
         for(ch=0u;ch<2u;++ch) {
@@ -355,7 +356,14 @@ void rack_audio_render(int32_t *out,const int32_t *in,int mode)
         else if(mode==DNFX_CRUSH) crush_frame(wet,dry,s);
         else if(mode==DNFX_EUREKA) haze_frame(wet,dry,s);
         else {wet[0]=dry[0];wet[1]=dry[1];}
-        for(ch=0u;ch<2u;++ch)
-            out[n*2u+ch]=wet[ch]*65536;
+        for(ch=0u;ch<2u;++ch) {
+            /* Neutral REEL and CRUSH must preserve the complete
+             * 24-bit Digitone master output, not discard eight bits. */
+            if((mode==DNFX_REEL && s->value[0][4]==0u) ||
+               (mode==DNFX_CRUSH && s->value[0][2]==0u &&
+                s->value[0][3]==100u))
+                out[n*2u+ch]=in[n*2u+ch];
+            else out[n*2u+ch]=wet[ch]*65536;
+        }
     }
 }

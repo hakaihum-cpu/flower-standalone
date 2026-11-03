@@ -22,6 +22,11 @@ int main(void)
     fill(in,12345*65536);
     rack_audio_render(out,in,DNFX_CRUSH);
     for(i=0u;i<64u;++i) check(out[i]==in[i]);
+    /* The bottom eight Q31 bits must survive an unprocessed path. */
+    fill(in,12345*65536+321);
+    rack_audio_render(out,in,DNFX_CRUSH);
+    for(i=0u;i<64u;++i) check(out[i]==in[i]);
+    fill(in,12345*65536);
     rack_state[DNFX_CRUSH].value[0][0]=4u;
     rack_audio_reset(DNFX_CRUSH);
     rack_audio_render(out,in,DNFX_CRUSH);
@@ -36,7 +41,7 @@ int main(void)
     rack_state[DNFX_REEL].value[0][4]=0u;
     rack_audio_reset(DNFX_REEL);
     for(k=0u;k<150u;++k) {
-        fill(in,10000*65536);
+        fill(in,10000*65536+511);
         rack_audio_render(out,in,DNFX_REEL);
         for(i=0u;i<64u;++i) check(out[i]==in[i]);
     }
