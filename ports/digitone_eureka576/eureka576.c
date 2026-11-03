@@ -37,11 +37,17 @@ static uint32_t eureka576_yes_owned;
 #define E576_SEEK_EVERY 6u
 #define E576_SEEK_COUNT 96u
 #define E576_STEP_TIME 5400000u
+#define E576_CLIP_FRAMES 36u
+#define E576_CLIPS (E576_COUNT / E576_CLIP_FRAMES)
 #define E576_QUEUE_SIZE 32u
+_Static_assert(E576_CLIPS == 16u, "16 separate EUREKA scenes");
 static uint32_t eureka576_rng=0x534a5531u;
 static uint32_t eureka576_effect, eureka576_speed, eureka576_until, eureka576_reverse;
 static uint32_t eureka576_stutter_start, eureka576_stutter_span, eureka576_stutter_step;
 static uint32_t eureka576_was_playing;
+/* Auto scene-cut deadline in the musical timeline. UI task only;
+ * zero means "schedule a new random cut interval". */
+static uint32_t eureka576_next_scene_cut;
 /* MIDI task writes only aligned scalar controls, never framebuffer/state.
  * UI tick applies seeks; UI draw applies lightweight per-row transforms.
  * Defaults: glitch off, stutter off, speed auto, scrub off, invert off.
@@ -165,26 +171,40 @@ void eureka576_voice_on(int32_t voice, int32_t track, void *event)
     eureka576_event_times[tail]=fw_timeline;
     eureka576_event_tail=next;
 }
-/* Every actual note makes a visible change. Randomize the action, not
- * whether the note has any effect: jump / reverse / speed / stutter. */
+/* The original 576 frames are sixteen independent 36-frame scenes.
+ * Pick a DIFFERENT scene, so cuts never merely jump within one scene
+ * or step to the next scene in chronological order. */
+static int eureka576_random_scene(void)
+{
+    uint32_t old=eureka576_index/E576_CLIP_FRAMES;
+    uint32_t delta=1u+eureka576_random()%(E576_CLIPS-1u);
+    uint32_t scene=(old+delta)%E576_CLIPS;
+    uint32_t frame=scene*E576_CLIP_FRAMES+(eureka576_random()%6u);
+    eureka576_effect=0u;
+    eureka576_speed=0u;
+    eureka576_phase=0u;
+    eureka576_stutter_anchor=frame;
+    eureka576_cc_stutter_step=0u;
+    return eureka576_seek(frame);
+}
+/* An audible note still produces a video action, but a majority of
+ * note actions now visibly CUT to a different 36-frame scene. */
 static void eureka576_trigger(uint32_t time)
 {
-    uint32_t action, clip, inside, duration, frame;
+    uint32_t action, inside, duration, frame;
     action=eureka576_random()%100u;
     eureka576_effect=0u;
     eureka576_speed=0u;
     eureka576_phase=0u; /* keep the audible note's first visual jump visible */
-    if(action<35u) {
-        clip=((eureka576_index/36u)+1u+eureka576_random()%15u)%16u;
-        inside=eureka576_random()%36u;
-        if(!eureka576_seek(clip*36u+inside)) eureka576_enabled=0u;
-    } else if(action<60u) {
+    if(action<55u) {
+        if(!eureka576_random_scene()) eureka576_enabled=0u;
+    } else if(action<70u) {
         /* Reverse stays enabled until the next reverse event. */
         eureka576_reverse^=1u;
         frame=(eureka576_index+(eureka576_reverse?E576_COUNT-6u:6u))
               %E576_COUNT;
         if(!eureka576_seek(frame)) eureka576_enabled=0u;
-    } else if(action<80u) {
+    } else if(action<85u) {
         eureka576_effect=1u;
         eureka576_speed=1u+eureka576_random()%3u;
         duration=4u+eureka576_random()%5u;
@@ -220,26 +240,39 @@ static int eureka576_step(void)
         return eureka576_seek(frame);
     }
     if(eureka576_cc_speed>=112u) {
-        return eureka576_seek((eureka576_index+E576_COUNT-1u)%E576_COUNT);
+        uint32_t start=(eureka576_index/E576_CLIP_FRAMES)*E576_CLIP_FRAMES;
+        return eureka576_seek(eureka576_index>start
+                              ?eureka576_index-1u:start+E576_CLIP_FRAMES-1u);
     }
     if(eureka576_effect==2u) {
         frame=eureka576_stutter_start+
               (eureka576_stutter_step++%eureka576_stutter_span);
         return eureka576_seek(frame);
     }
-    if(eureka576_reverse)
-        return eureka576_seek((eureka576_index+E576_COUNT-1u)%E576_COUNT);
-    if(++eureka576_index==E576_COUNT) return eureka576_seek(0u);
+    if(eureka576_reverse) {
+        uint32_t start=(eureka576_index/E576_CLIP_FRAMES)*E576_CLIP_FRAMES;
+        return eureka576_seek(eureka576_index>start
+                              ?eureka576_index-1u:start+E576_CLIP_FRAMES-1u);
+    }
+    /* Stay inside the current scene until a genuine random scene cut.
+     * Never expose the next scene merely by playing frames in order. */
+    if((eureka576_index+1u)%E576_CLIP_FRAMES==0u)
+        return eureka576_seek(eureka576_index+1u-E576_CLIP_FRAMES);
+    ++eureka576_index;
     return eureka576_next();
 }
 void eureka576_tick(void *ctrl)
 {
     uint32_t playing=(fw_transport==1u), now=fw_timeline;
+    uint32_t had_note=0u;
     if(!playing && eureka576_was_playing) {
         eureka576_event_head=eureka576_event_tail;
         eureka576_effect=0u;
         eureka576_speed=0u;
+        eureka576_next_scene_cut=0u;
     }
+    if(playing && !eureka576_was_playing)
+        eureka576_next_scene_cut=0u;
     eureka576_was_playing=playing;
     /* UI-only handling: never decode 576-frame data in the MIDI task. */
     if(eureka576_cc_serial_seen!=eureka576_cc_serial) {
@@ -271,11 +304,27 @@ void eureka576_tick(void *ctrl)
         }
         /* One visible action per UI frame, even when a chord starts voices. */
         if(have_note && !eureka576_cc_scrub) {
+            had_note=1u;
             eureka576_trigger(note_time);
             if(eureka576_cc_stutter) {
                 eureka576_stutter_anchor=eureka576_index;
                 eureka576_cc_stutter_step=0u;
             }
+        }
+    }
+    /* A reliable random cut with no new voices is essential: a muted or
+     * quiet sequencer must not reduce EUREKA to sequential playback.
+     * 8/12/16 sixteenth steps = 2/3/4 beats at the host tempo.
+     * Suppress a second cut in a tick where a note just caused one. */
+    if(eureka576_enabled && playing && !eureka576_cc_scrub &&
+       eureka576_cc_speed>=16u) {
+        if(eureka576_next_scene_cut==0u) {
+            uint32_t steps=8u+4u*(eureka576_random()%3u);
+            eureka576_next_scene_cut=now+steps*E576_STEP_TIME;
+        } else if(!had_note &&
+                  (int32_t)(now-eureka576_next_scene_cut)>=0) {
+            if(!eureka576_random_scene()) eureka576_enabled=0u;
+            eureka576_next_scene_cut=0u;
         }
     }
     if(eureka576_enabled && playing && !eureka576_cc_scrub) {
@@ -399,6 +448,7 @@ int eureka576_key(void *brain,void *ev)
         eureka576_speed=0u;
         eureka576_reverse=0u;
         eureka576_event_head=eureka576_event_tail;
+        eureka576_next_scene_cut=0u;
         eureka576_scrub_seen=0u;
         eureka576_stutter_seen=0u;
         eureka576_cc_glitch=0u;
