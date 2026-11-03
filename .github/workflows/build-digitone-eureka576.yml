@@ -48,6 +48,24 @@ jobs:
             ./_host_check
             rm _host_check
           )
+      - name: Verify module callback declarations before cross-compilation
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+          for module in ('digitone_eureka576', 'digitone_dreamy_trial'):
+              root = Path('ports') / module
+              doc = json.loads((root / 'mod.json').read_text())
+              source = '\n'.join((root / f).read_text() for f in doc['sources'] if f.endswith('.c'))
+              for subscription in doc.get('subscribe', []):
+                  fn = subscription['fn']
+                  pattern = r'\\b(?:void|int|int32_t)\\s+' + re.escape(fn) + r'\\s*\\('
+                  if not re.search(pattern, source):
+                      raise SystemExit(f'ERROR: {module} subscribes undefined callback {fn}')
+              print('PASS: all declared callbacks defined:', module)
+          PY
       - name: Preflight DREAMY native DSP with UBSan
         run: |
           set -euo pipefail
