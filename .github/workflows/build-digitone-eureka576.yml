@@ -136,7 +136,7 @@ jobs:
           assert 'static int eureka576_random_scene(void)' in e
           assert 'eureka576_next_scene_cut' in e
           assert '8u+4u*(eureka576_random()%3u)' in e
-          assert '(eureka576_index+1u)%E576_CLIP_FRAMES==0u' in e
+          assert 'eureka576_index+1u>=base+span' in e
           assert 'eureka576_random_scene()' in e
 
           print('PASS: paired EUREKA YES down/up and stock MUTE event passthrough; audio MUTE NOT VERIFIED')
