@@ -1,11 +1,11 @@
-name: Digitone EUREKA VIDEO CC + GRANULAR MIDI + MUTE test
+name: Digitone EUREKA + LONG HANN GRANULAR (MUTE audit pending)
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-eureka-mute-granular-video-cc-20261103'
+    if: github.ref == 'refs/heads/feature/digitone-mute-audit-granular-long-hann-20261103'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -84,13 +84,23 @@ jobs:
           assert 'CORE_AUDIO_MUTE_VOICES' not in d
           assert 'CORE_MIDI_CC_AUTO' in d
           assert 'grain_armed' in d and 'GRAIN_ARM_FRAMES' in d
-          assert 'GRAIN_DEFAULT       4800u' in d
-          assert 'GRAIN_MAX_FRAMES    6720u' in d
+          assert 'GRAIN_DEFAULT       11520u' in d
+          assert 'GRAIN_MAX_FRAMES    17280u' in d
           assert 'grain_frames_target' in d and 'pitch_choice' in d
           assert 'cc == 33 || cc == 34' in d and 'cc == 36' in d
           assert 'grain_begin(g, 0u)' in d and 'pitch_steps[8]' in d
           assert 'GRAIN_POSITION_MAX  3000u' in d
-          assert 'GRAIN_ARM_FRAMES   30000u' in d
+          assert 'HIST_FRAMES        131072u' in d
+          assert 'GRAIN_MIN_FRAMES     5760u' in d
+          assert 'GRAIN_RAMP_FRAMES    3840u' in d
+          assert 'grain_hann_q15[256]' in d
+          assert 'grain_window_step_q16' in d
+          assert 'uint32_t fraction = pos * grain_speed[g];' in d
+          assert 'fraction >> 12' in d
+          assert 'wet[0] >>= 1;' in d and 'wet[1] >>= 1;' in d
+          assert 'CORE_AUDIO_INSERT' in d
+
+          assert 'GRAIN_ARM_FRAMES    90000u' in d
           assert 'if(cc == 37)' in d
           assert 'grain_position_target' in d
           assert 'E576_CC_GLITCH 40' in a
@@ -101,7 +111,7 @@ jobs:
           assert 'eureka576_cc' in a
           assert 'if((flags&2)!=0) return 0;' in a
           assert 'fw_fillrect(bmp,0,0,127,63,0);' in a
-          print('PASS: stock MUTE passthrough, CC40/65/67/68/69, granular CC33/34/36/37/60')
+          print('PASS: stock MUTE event passthrough only; full MUTE audio behavior NOT verified')
 
           assert 'delay_line' not in d and 'room_valid' not in d
           assert 'memset(' not in d and 'malloc(' not in d
@@ -121,7 +131,7 @@ jobs:
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_dreamy_trial" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.7.elemod"
-          GRANULAR_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/granulartrial-0.4.elemod"
+          GRANULAR_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/granulartrial-0.5.elemod"
           test -s "$VISUAL_MOD"
           test -s "$GRANULAR_MOD"
           CORE="$GITHUB_WORKSPACE/_firmware/core.elemod"
@@ -134,11 +144,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$GRANULAR_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_VIDEO_MIDI_GRANULAR_MUTE_TEST.syx" \
-            --version VM76
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_VIDEO_CC_LONG_HANN_GRANULAR_TRIAL.syx" \
+            --version GH76
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_EUREKA_VIDEO_MIDI_GRANULAR_MUTE_TEST.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_EUREKA_VIDEO_CC_LONG_HANN_GRANULAR_TRIAL.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$GRANULAR_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -150,7 +160,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-VIDEO-CC-GRANULAR-MUTE-TEST
+          name: Digitone-OS1.44-EUREKA-VIDEO-CC-LONG-HANN-GRANULAR-TRIAL
           path: _release/
           if-no-files-found: error
           retention-days: 30
