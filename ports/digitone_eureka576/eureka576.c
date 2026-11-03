@@ -437,6 +437,130 @@ void eureka576_tick(void *ctrl)
         eureka576_dirty=0u;
     }
 }
+
+/* Real A-D controls for all six pages; the stock synth never receives
+ * the encoder event while a dedicated EUREKA page is open. */
+static const uint8_t eureka576_param_max[E576_PARAM_PAGES][E576_PARAM_KNOBS]={
+    {15u,100u,1u,3u},
+    {127u,1u,127u,127u},
+    {2u,100u,4u,127u},
+    {127u,127u,16u,16u},
+    {127u,2u,127u,127u},
+    {127u,8u,2u,1u}
+};
+static const char *const eureka576_page_titles[E576_PARAM_PAGES] = {
+    "TRIG", "SYN1", "SYN2", "FLTR", "AMP", "LFO"
+};
+static const char *const eureka576_param_titles[E576_PARAM_PAGES][E576_PARAM_KNOBS] = {
+    {"SCNE","JUMP","AUTO","CUT"},
+    {"SPED","REVR","STUT","SCRB"},
+    {"LOOP","NOTE","MODE","SEED"},
+    {"GLCH","INVT","XOFF","YOFF"},
+    {"DIM","WIDE","BLNK","PULS"},
+    {"RATE","DEPT","DEST","WAVE"}
+};
+static uint32_t eureka576_param_read(unsigned page,unsigned knob)
+{
+    if(page==0u && knob==0u) return eureka576_index/E576_CLIP_FRAMES;
+    if(page==1u) {
+        if(knob==0u) return eureka576_cc_speed;
+        if(knob==1u) return eureka576_reverse?1u:0u;
+        if(knob==2u) return eureka576_cc_stutter;
+        return eureka576_cc_scrub;
+    }
+    if(page==3u) {
+        if(knob==0u) return eureka576_cc_glitch;
+        if(knob==1u) return eureka576_cc_invert;
+    }
+    return eureka576_param[page][knob];
+}
+static void eureka576_param_adjust(unsigned page,unsigned knob,int32_t detents)
+{
+    int32_t value=(int32_t)eureka576_param_read(page,knob);
+    int32_t max=(int32_t)eureka576_param_max[page][knob];
+    int32_t multiplier=max>=100 ? 4 : 1;
+    int32_t next=value+detents*multiplier;
+    if(next<0) next=0;
+    if(next>max) next=max;
+    if(next==value) return;
+    eureka576_param[page][knob]=(uint8_t)next;
+    if(page==0u && knob==0u) {
+        if(!eureka576_seek((uint32_t)next*E576_CLIP_FRAMES))
+            eureka576_enabled=0u;
+        eureka576_phase=0u;
+        eureka576_next_scene_cut=0u;
+    } else if(page==0u && (knob==2u || knob==3u)) {
+        eureka576_next_scene_cut=0u;
+    } else if(page==1u) {
+        if(knob==0u) eureka576_cc_speed=(uint8_t)next;
+        if(knob==1u) eureka576_reverse=(uint32_t)next;
+        if(knob==2u) eureka576_cc_stutter=(uint8_t)next;
+        if(knob==3u) eureka576_cc_scrub=(uint8_t)next;
+        ++eureka576_cc_serial;
+    } else if(page==2u && knob==3u) {
+        /* A different repeatable pseudo-random phase. Zero is forbidden
+         * because xorshift32 would never leave zero again. */
+        eureka576_rng=0x534a5531u^(0x9e3779b9u*(uint32_t)(next+1));
+        if(eureka576_rng==0u) eureka576_rng=0x6ac1e572u;
+        eureka576_next_scene_cut=0u;
+    } else if(page==3u) {
+        if(knob==0u) eureka576_cc_glitch=(uint8_t)next;
+        if(knob==1u) eureka576_cc_invert=(uint8_t)next;
+        ++eureka576_cc_serial;
+    }
+    eureka576_dirty=1u;
+}
+int eureka576_enc(void *brain,void *ev)
+{
+    int id=*(int *)((uint8_t *)ev+12);
+    int delta=*(int *)((uint8_t *)ev+16);
+    (void)brain;
+    if(!eureka576_enabled || !eureka576_param_armed ||
+       eureka576_param_page==0u) return 0;
+    /* Digitone A-H encoder IDs 1-8. A-D map to actual controls,
+     * E-H deliberately don't touch hidden stock FM settings. */
+    if(id>=1 && id<=(int)E576_PARAM_KNOBS) {
+        unsigned knob=(unsigned)(id-1);
+        int32_t total=eureka576_enc_acc[knob]+delta;
+        int32_t detents=total/4; /* original Digitone has 4 counts / tick */
+        eureka576_enc_acc[knob]=total-detents*4;
+        if(detents)
+            eureka576_param_adjust(eureka576_param_page-1u,knob,detents);
+    }
+    return 1;
+}
+static void eureka576_draw_parameters(void *bmp)
+{
+    unsigned p=(unsigned)eureka576_param_page-1u;
+    unsigned i;
+    fw_fillrect(bmp,0,0,127,63,0);
+    fw_textf(bmp,(const void *)fw_font_title,3,56,20,
+             "EUREKA %s",eureka576_page_titles[p]);
+    fw_fillrect(bmp,0,52,127,52,1);
+    for(i=0u;i<E576_PARAM_KNOBS;++i) {
+        int32_t x=(int32_t)((i&1u)*64u)+2;
+        int32_t y=(i<2u)?28:2;
+        fw_framerect(bmp,x,y,x+59,y+22,1);
+        fw_textf(bmp,(const void *)fw_font_label,x+4,y+14,8,
+                 "%s",eureka576_param_titles[p][i]);
+        if(p==3u && i>=2u)
+            fw_textf(bmp,(const void *)fw_font_title,x+4,y+3,5,
+                     "%d",(int32_t)eureka576_param_read(p,i)-8);
+        else
+            fw_textf(bmp,(const void *)fw_font_title,x+4,y+3,5,
+                     "%u",eureka576_param_read(p,i));
+    }
+}
+/* For a 1-bit screen, brightness is the density of lit pixels.
+ * At default DIM=127/WIDE=0/PULSE=0/BLNK=0 the original image is exact. */
+static uint32_t eureka576_video_sample(int32_t x,int32_t y)
+{
+    uint32_t page,bit;
+    if(x<0 || x>=128 || y<0 || y>=64) return 0u;
+    page=7u-((uint32_t)y>>3);
+    bit=1u<<((uint32_t)y&7u);
+    return (eureka576_framebuf[page+8u*(uint32_t)x]&bit)!=0u;
+}
 /* Draw black frame, then horizontal yellow runs on the portable Bitmap.
  * y=0 is bottom in the firmware; y=0 is top in the source image.
  */
