@@ -22,10 +22,13 @@ int main(void)
     fill(in,12345*65536);
     rack_audio_render(out,in,DNFX_CRUSH);
     for(i=0u;i<64u;++i) check(out[i]==in[i]);
-    /* The bottom eight Q31 bits must survive an unprocessed path. */
+    /* With MIX=0, the complete Q31 input must remain untouched.
+     * With MIX=127/BITS=16, 24-bit input is intentionally reduced. */
+    rack_state[DNFX_CRUSH].value[0][2]=0u;
     fill(in,12345*65536+321);
     rack_audio_render(out,in,DNFX_CRUSH);
     for(i=0u;i<64u;++i) check(out[i]==in[i]);
+    rack_state[DNFX_CRUSH].value[0][2]=127u;
     fill(in,12345*65536);
     rack_state[DNFX_CRUSH].value[0][0]=4u;
     rack_audio_reset(DNFX_CRUSH);
