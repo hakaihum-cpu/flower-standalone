@@ -1,6 +1,7 @@
 #ifndef EUREKA576_HOST_TEST_CORE3_H
 #define EUREKA576_HOST_TEST_CORE3_H
 #include <stdint.h>
+#define CORE_MIDI_CC_AUTO 1u
 extern volatile uint32_t fw_transport, fw_timeline;
 extern volatile int32_t fw_tempo;
 #define FW_EVENT_KIND(ev) (((volatile uint32_t *)(ev))[0])
