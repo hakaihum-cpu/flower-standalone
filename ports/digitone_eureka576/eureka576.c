@@ -28,10 +28,31 @@ extern const uint8_t eureka576_seek_table_end[];
 static uint8_t eureka576_framebuf[E576_FRAME_BYTES];
 static uint32_t eureka576_readpos, eureka576_index, eureka576_phase;
 static uint32_t eureka576_midi_held, eureka576_enabled, eureka576_dirty;
-/* The stock KEYDISP must see matched YES press/release pairs. When
- * EUREKA takes MIDI+YES key-down, it must also take its key-up,
- * even if MIDI was released first. Other YES events pass untouched. */
+/* MIDI+YES must never select the stock MIDI MUTE bank. The MIDI-down event
+ * comes BEFORE the YES down event, so forwarding MIDI immediately already
+ * changes the bank. Defer it, and either consume MIDI+YES as a whole or
+ * replay the stock MIDI-down before any other chord's first key event. */
+enum { E576_MIDI_IDLE=0, E576_MIDI_PENDING=1,
+       E576_MIDI_PASSED=2, E576_MIDI_VIDEO_CHORD=3 };
+static uint32_t eureka576_midi_state;
+/* Captured YES down must have a captured YES up, even when MIDI is
+ * released before YES. No other key is intercepted by this flag. */
 static uint32_t eureka576_yes_owned;
+/* OS1.44 original KEYDISP, as documented by the pinned core-dn1 port.
+ * In tests the exact same call is replaced with a key-event observer.
+ * Never recursively call core_dn_key/core_key: those dispatch to us. */
+#ifndef E576_STOCK_KEYDISP
+#define E576_STOCK_KEYDISP ((void (*)(void *,void *))0x40016fc0u)
+#endif
+static void eureka576_stock_midi_down(void *brain,void *ev)
+{
+    int *key=(int *)((uint8_t *)ev+12);
+    int *flags=(int *)((uint8_t *)ev+16);
+    int old_key=*key, old_flags=*flags;
+    *key=E576_KEY_MIDI; *flags=1;
+    E576_STOCK_KEYDISP(brain,ev);
+    *key=old_key; *flags=old_flags;
+}
 /* Video-only random sequence state; no changes to audio or sound parameters. */
 #define E576_SEEK_ENTRY 1028u
 #define E576_SEEK_EVERY 6u
@@ -424,23 +445,67 @@ int eureka576_key(void *brain,void *ev)
     int key=*(int *)((uint8_t *)ev+12);
     int flags=*(int *)((uint8_t *)ev+16);
     int first=(flags&1) && !(flags&8);
-    (void)brain;
+
     if(key==E576_KEY_MIDI) {
-        if(first) eureka576_midi_held=1u;
-        /* OS 1.44 reports a release as either 0 or 0x10. */
-        if(!(flags&1)) eureka576_midi_held=0u;
+        if(first) {
+            eureka576_midi_held=1u;
+            if(!(flags&2)) {
+                /* A potential MIDI+YES chord must be invisible to the
+                 * stock MIDI track-bank selector until YES is known. */
+                eureka576_midi_state=E576_MIDI_PENDING;
+                return 1;
+            }
+            /* FUNC+MIDI belongs to the stock firmware. */
+            eureka576_midi_state=E576_MIDI_PASSED;
+            return 0;
+        }
+        if(!(flags&1)) {
+            eureka576_midi_held=0u;
+            if(eureka576_midi_state==E576_MIDI_PENDING) {
+                /* MIDI alone: complete a normal stock press/release
+                 * on release, with no duplicated MIDI-down event. */
+                eureka576_midi_state=E576_MIDI_IDLE;
+                eureka576_stock_midi_down(brain,ev);
+                return 0; /* stock receives the genuine MIDI release */
+            }
+            if(eureka576_midi_state==E576_MIDI_VIDEO_CHORD) {
+                eureka576_midi_state=E576_MIDI_IDLE;
+                return 1; /* stock saw neither half of this MIDI */
+            }
+            eureka576_midi_state=E576_MIDI_IDLE;
+            return 0; /* prior stock MIDI DOWN gets its stock UP */
+        }
+        /* Hold/repeat events from a deferred/captured MIDI key must not
+         * leak into stock when it never received the DOWN event. */
+        if(eureka576_midi_state==E576_MIDI_PENDING ||
+           eureka576_midi_state==E576_MIDI_VIDEO_CHORD)
+            return 1;
+        return 0;
     }
-    /* EUREKA owns both halves of the MIDI+YES gesture; forwarding
-     * an unpaired YES release to KEYDISP can alter stock key state. */
+
+    /* A consumed YES-down has a consumed YES-up regardless of MIDI order. */
     if(key==E576_KEY_YES && eureka576_yes_owned && !(flags&1)) {
         eureka576_yes_owned=0u;
         return 1;
     }
-    /* Never consume FUNC+BANK, FUNC+TRACK1..4, PTN+TRACK1..4,
-     * MIDI bank selections or stock key LEDs. No MUTE overlay exists.
-     * Even if MIDI is held, FUNC+YES stays with the stock firmware. */
+
+    if(eureka576_midi_state==E576_MIDI_PENDING && first) {
+        if(key==E576_KEY_YES && !(flags&2)) {
+            eureka576_midi_state=E576_MIDI_VIDEO_CHORD;
+        } else {
+            /* MIDI+TRACK, MIDI+bank, FUNC+YES etc remain stock chords.
+             * Give stock MIDI DOWN before forwarding the second key. */
+            eureka576_midi_state=E576_MIDI_PASSED;
+            eureka576_stock_midi_down(brain,ev);
+        }
+    }
+
+    /* All FUNC+BANK, FUNC+TRACK, PTN+TRACK, and stock key navigation
+     * pass unchanged. No parallel MUTE database and no LED spoofing. */
     if((flags&2)!=0) return 0;
-    if(key==E576_KEY_YES && first && eureka576_midi_held) {
+    if(key==E576_KEY_YES && first &&
+       eureka576_midi_state==E576_MIDI_VIDEO_CHORD &&
+       eureka576_midi_held) {
         eureka576_yes_owned=1u;
         eureka576_enabled^=1u;
         eureka576_phase=0u;
