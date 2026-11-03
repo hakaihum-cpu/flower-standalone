@@ -184,6 +184,22 @@ jobs:
           assert 'workflow_dispatch:' in Path('.github/workflows/build-digitone-eureka576.yml').read_text()
           print('PASS: four FX descriptors, single master insert, video separation, source gates')
           PY
+      - name: Preflight new FX rack UI and stereo DSP stress with sanitizers
+        run: |
+          set -euo pipefail
+          RACK=ports/digitone_fx_rack
+          COMMON='-DRACK_HOST_TEST -std=c11 -O1 -g -Wall -Wextra -Werror -Wconversion -fsanitize=address,undefined -fno-sanitize-recover=all'
+          gcc $COMMON -I "$RACK" -I "$RACK/tests/include" \
+            "$RACK/rack_ui.c" "$RACK/digitone_fx_pages.c" \
+            "$RACK/rack_audio.c" "$RACK/granular.c" \
+            "$RACK/tests/test_rack_ui.c" -o /tmp/digitone_rack_ui
+          /tmp/digitone_rack_ui
+          gcc $COMMON -I "$RACK" \
+            "$RACK/rack_audio.c" "$RACK/tests/test_rack_stress.c" \
+            -o /tmp/digitone_rack_stress
+          /tmp/digitone_rack_stress
+          rm /tmp/digitone_rack_ui /tmp/digitone_rack_stress
+          echo 'PASS: linked UI/Granular, original keys preserved, 11.52M DSP samples UBSan+ASan'
       - name: Obtain pinned elekloader and core
         run: |
           set -euo pipefail
