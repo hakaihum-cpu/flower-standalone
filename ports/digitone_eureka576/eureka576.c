@@ -662,41 +662,49 @@ int eureka576_key(void *brain,void *ev)
     if(key==E576_KEY_MIDI) {
         if(first) {
             eureka576_midi_held=1u;
+            if(eureka576_enabled && (flags&2)) {
+                /* FUNC first, then MIDI. Keep the already delivered FUNC
+                 * down/up stock-owned; don't send MIDI to stock. */
+                eureka576_midi_state=E576_MIDI_PANEL_CHORD;
+                eureka576_toggle_pages();
+                return 1;
+            }
             if(!(flags&2)) {
-                /* A potential MIDI+YES chord must be invisible to the
-                 * stock MIDI track-bank selector until YES is known. */
+                /* Defer MIDI DOWN: MIDI+YES must NOT switch the original
+                 * stock audio MUTE bank to MIDI tracks. MC78 fix. */
                 eureka576_midi_state=E576_MIDI_PENDING;
                 return 1;
             }
-            /* FUNC+MIDI belongs to the stock firmware. */
             eureka576_midi_state=E576_MIDI_PASSED;
             return 0;
         }
         if(!(flags&1)) {
             eureka576_midi_held=0u;
             if(eureka576_midi_state==E576_MIDI_PENDING) {
-                /* MIDI alone: complete a normal stock press/release
-                 * on release, with no duplicated MIDI-down event. */
                 eureka576_midi_state=E576_MIDI_IDLE;
                 eureka576_stock_midi_down(brain,ev);
-                return 0; /* stock receives the genuine MIDI release */
+                return 0; /* genuine stock MIDI UP */
             }
-            if(eureka576_midi_state==E576_MIDI_VIDEO_CHORD) {
+            if(eureka576_midi_state==E576_MIDI_VIDEO_CHORD ||
+               eureka576_midi_state==E576_MIDI_PANEL_CHORD) {
                 eureka576_midi_state=E576_MIDI_IDLE;
-                return 1; /* stock saw neither half of this MIDI */
+                return 1; /* no MIDI DOWN was sent to stock */
             }
             eureka576_midi_state=E576_MIDI_IDLE;
-            return 0; /* prior stock MIDI DOWN gets its stock UP */
+            return 0;
         }
-        /* Hold/repeat events from a deferred/captured MIDI key must not
-         * leak into stock when it never received the DOWN event. */
         if(eureka576_midi_state==E576_MIDI_PENDING ||
-           eureka576_midi_state==E576_MIDI_VIDEO_CHORD)
+           eureka576_midi_state==E576_MIDI_VIDEO_CHORD ||
+           eureka576_midi_state==E576_MIDI_PANEL_CHORD)
             return 1;
         return 0;
     }
-
-    /* A consumed YES-down has a consumed YES-up regardless of MIDI order. */
+    /* If MIDI was pressed first, the FUNC down/up pair belongs to EUREKA.
+     * If FUNC was pressed first, FUNC remains stock-owned. */
+    if(key==E576_KEY_FUNC && eureka576_func_owned && !(flags&1)) {
+        eureka576_func_owned=0u;
+        return 1;
+    }
     if(key==E576_KEY_YES && eureka576_yes_owned && !(flags&1)) {
         eureka576_yes_owned=0u;
         return 1;
@@ -705,16 +713,47 @@ int eureka576_key(void *brain,void *ev)
     if(eureka576_midi_state==E576_MIDI_PENDING && first) {
         if(key==E576_KEY_YES && !(flags&2)) {
             eureka576_midi_state=E576_MIDI_VIDEO_CHORD;
+        } else if(key==E576_KEY_FUNC && eureka576_enabled) {
+            /* MIDI first, then FUNC: consume both halves of each key
+             * without changing the stock MUTE bank. */
+            eureka576_midi_state=E576_MIDI_PANEL_CHORD;
+            eureka576_func_owned=1u;
+            eureka576_toggle_pages();
+            return 1;
         } else {
-            /* MIDI+TRACK, MIDI+bank, FUNC+YES etc remain stock chords.
-             * Give stock MIDI DOWN before forwarding the second key. */
+            /* Any other MIDI combination still has its standard Digitone
+             * meaning, including MIDI+TRACK. */
             eureka576_midi_state=E576_MIDI_PASSED;
             eureka576_stock_midi_down(brain,ev);
         }
     }
 
-    /* All FUNC+BANK, FUNC+TRACK, PTN+TRACK, and stock key navigation
-     * pass unchanged. No parallel MUTE database and no LED spoofing. */
+    /* EUREKA page keys are taken ONLY when the page mode is armed.
+     * Consume matched down/up; one press opens its page and the next
+     * press of the same key returns to the full-screen animation.
+     * Even while video is enabled, all 1..16 TRIG keys go to stock. */
+    if(key>=E576_KEY_TRIG && key<=E576_KEY_LFO) {
+        unsigned page=(unsigned)(key-E576_KEY_TRIG);
+        uint32_t mask=1u<<page;
+        if(eureka576_page_owned_mask&mask) {
+            if(!(flags&1)) eureka576_page_owned_mask&=~mask;
+            return 1;
+        }
+        if(eureka576_enabled && eureka576_param_armed &&
+           !(flags&2) && first) {
+            unsigned i;
+            uint32_t newpage=page+1u;
+            eureka576_page_owned_mask|=mask;
+            eureka576_param_page=
+                (eureka576_param_page==newpage)?0u:newpage;
+            for(i=0u;i<E576_PARAM_KNOBS;++i) eureka576_enc_acc[i]=0;
+            eureka576_dirty=1u;
+            return 1;
+        }
+    }
+    if(key>=E576_KEY_STEP1 && key<=E576_KEY_STEP16)
+        return 0; /* preserve all stock 1..16 trigger/key events */
+
     if((flags&2)!=0) return 0;
     if(key==E576_KEY_YES && first &&
        eureka576_midi_state==E576_MIDI_VIDEO_CHORD &&
@@ -739,6 +778,9 @@ int eureka576_key(void *brain,void *ev)
             eureka576_readpos=0u;
             eureka576_clear();
             if(!eureka576_seek(0u)) eureka576_enabled=0u;
+        } else {
+            eureka576_param_armed=0u;
+            eureka576_param_page=0u;
         }
         eureka576_dirty=1u;
         return 1;
