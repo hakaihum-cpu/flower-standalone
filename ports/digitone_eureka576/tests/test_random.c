@@ -13,7 +13,7 @@ int32_t fw_textf(void *bmp,const void *font,int32_t x,int32_t y,
                  int32_t maxlen,const char *fmt,...)
 {
     (void)bmp; (void)font; (void)fmt;
-    if(x<0 || x>127 || y<0 || y>63 || maxlen<1) abort();
+    if(x<0 || x>127 || y<0 || y>63 || (maxlen!= -1 && maxlen<1)) abort();
     ++text_count;
     return 0;
 }
