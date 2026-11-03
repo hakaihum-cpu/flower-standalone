@@ -15,6 +15,18 @@ void fw_fillrect(void *bmp,int32_t x0,int32_t y0,int32_t x1,int32_t y1,int32_t c
     for(int32_t y=y0;y<=y1;++y)
         for(int32_t x=x0;x<=x1;++x) display[y][x]=(uint8_t)c;
 }
+/* Stock OS1.44 KEYDISP normally handles MIDI. The native test replaces
+ * only the direct delayed MIDI-down with an observer. */
+static unsigned stock_midi_downs;
+static void native_stock_keydisp(void *brain,void *ev)
+{
+    const int *key=(const int *)((const uint8_t *)ev+12);
+    const int *flags=(const int *)((const uint8_t *)ev+16);
+    (void)brain;
+    if(*key!=2 || *flags!=1) abort();
+    ++stock_midi_downs;
+}
+#define E576_STOCK_KEYDISP native_stock_keydisp
 #include "../eureka576.c"
 extern const uint8_t eureka576_reference[],eureka576_reference_end[];
 static void check(unsigned index)
@@ -42,9 +54,15 @@ int main(void)
     if((uintptr_t)eureka576_reference_end-(uintptr_t)eureka576_reference!=589824u)
         abort();
     key[3]=2;key[4]=1;
-    if(eureka576_key(NULL,key)!=0) abort();
+    if(eureka576_key(NULL,key)!=1 ||
+       eureka576_midi_state!=E576_MIDI_PENDING) abort();
+    if(stock_midi_downs!=0u) abort();
     key[3]=13;
-    if(eureka576_key(NULL,key)!=1 || !eureka576_enabled) abort();
+    if(eureka576_key(NULL,key)!=1 || !eureka576_enabled ||
+       eureka576_midi_state!=E576_MIDI_VIDEO_CHORD) abort();
+    /* Crucial: this shortcut must not change the stock MIDI/MUTE bank.
+     * The old firmware forwarded MIDI DOWN and broke audio-track MUTE. */
+    if(stock_midi_downs!=0u) abort();
     if(!eureka576_yes_owned) abort();
     /* VM76 only intercepted YES DOWN and forwarded its unmatched UP.
      * Both halves of a consumed MIDI+YES gesture must stay out of stock.
@@ -54,6 +72,10 @@ int main(void)
     /* A second, unowned YES key-up stays in the stock dispatcher. */
     key[4]=0;
     if(eureka576_key(NULL,key)!=0) abort();
+    key[3]=E576_KEY_MIDI;key[4]=0;
+    if(eureka576_key(NULL,key)!=1 ||
+       eureka576_midi_state!=E576_MIDI_IDLE ||
+       stock_midi_downs!=0u) abort();
     check(0);
     /* Exhaustive all-frame random seek and 4,718,592 display pixel comparisons. */
     for(unsigned i=0u;i<576u;++i) {
@@ -192,6 +214,50 @@ int main(void)
     key[3]=E576_KEY_YES; key[4]=3;
     if(eureka576_key(NULL,key)!=0 || !eureka576_enabled) abort();
 
+    /* A normal standalone MIDI press must still activate stock MIDI
+     * selection; defer the press but dispatch it before its real UP. */
+    key[3]=E576_KEY_MIDI;key[4]=1;
+    if(eureka576_key(NULL,key)!=1 ||
+       eureka576_midi_state!=E576_MIDI_PENDING) abort();
+    key[4]=9; /* real MIDI hold */
+    if(eureka576_key(NULL,key)!=1 || stock_midi_downs!=0u) abort();
+    key[4]=0;
+    if(eureka576_key(NULL,key)!=0 || stock_midi_downs!=1u ||
+       eureka576_midi_state!=E576_MIDI_IDLE) abort();
+
+    /* MIDI+TRACK must reach stock with MIDI DOWN first, then the
+     * regular track press; the input key event is restored afterward. */
+    key[3]=E576_KEY_MIDI;key[4]=1;
+    if(eureka576_key(NULL,key)!=1) abort();
+    key[3]=42;key[4]=1;
+    if(eureka576_key(NULL,key)!=0 || stock_midi_downs!=2u ||
+       key[3]!=42 || key[4]!=1 ||
+       eureka576_midi_state!=E576_MIDI_PASSED) abort();
+    key[3]=E576_KEY_MIDI;key[4]=0;
+    if(eureka576_key(NULL,key)!=0 ||
+       eureka576_midi_state!=E576_MIDI_IDLE) abort();
+
+    /* MIDI+YES again to exit must never select the MIDI mute bank. */
+    key[3]=E576_KEY_MIDI;key[4]=1;
+    if(eureka576_key(NULL,key)!=1) abort();
+    key[3]=E576_KEY_YES;key[4]=1;
+    if(eureka576_key(NULL,key)!=1 || eureka576_enabled ||
+       stock_midi_downs!=2u) abort();
+    key[4]=0;
+    if(eureka576_key(NULL,key)!=1) abort();
+    key[3]=E576_KEY_MIDI;key[4]=0;
+    if(eureka576_key(NULL,key)!=1) abort();
+    /* Re-enter video mode for remaining original video CC tests. */
+    key[3]=E576_KEY_MIDI;key[4]=1;
+    if(eureka576_key(NULL,key)!=1) abort();
+    key[3]=E576_KEY_YES;key[4]=1;
+    if(eureka576_key(NULL,key)!=1 || !eureka576_enabled ||
+       stock_midi_downs!=2u) abort();
+    key[4]=0;
+    if(eureka576_key(NULL,key)!=1) abort();
+    key[3]=E576_KEY_MIDI;key[4]=0;
+    if(eureka576_key(NULL,key)!=1) abort();
+
     /* Video controls only consume AUTO-channel messages and never native
      * CC41/42/43/44 (AMP/FILTER/CHORUS), nor granular's MIDI controls. */
     if(eureka576_cc(0,40,127,0)!=0) abort();
@@ -285,13 +351,14 @@ int main(void)
     key[3]=E576_KEY_YES;key[4]=1;
     if(eureka576_key(NULL,key)!=0 || !eureka576_enabled)abort();
     key[3]=E576_KEY_MIDI;key[4]=1;
-    if(eureka576_key(NULL,key)!=0)abort();
+    if(eureka576_key(NULL,key)!=1)abort();
     key[3]=13;key[4]=1;
-    if(eureka576_key(NULL,key)!=1 || eureka576_enabled)abort();
+    if(eureka576_key(NULL,key)!=1 || eureka576_enabled ||
+       stock_midi_downs!=2u)abort();
     if(!eureka576_yes_owned)abort();
     /* MIDI released before YES: its pending UP must still be consumed. */
     key[3]=E576_KEY_MIDI;key[4]=0;
-    if(eureka576_key(NULL,key)!=0)abort();
+    if(eureka576_key(NULL,key)!=1)abort();
     key[3]=E576_KEY_YES;key[4]=0x10;
     if(eureka576_key(NULL,key)!=1 || eureka576_yes_owned)abort();
     /* FUNC+YES and free YES presses are left with the stock OS. */
@@ -301,6 +368,6 @@ int main(void)
     if(eureka576_key(NULL,key)!=0 || eureka576_enabled)abort();
     key[4]=0;
     if(eureka576_key(NULL,key)!=0)abort();
-    printf("PASS: 576 frames, 16 scene-local loops, automatic nonsequential random cuts, 1200 note reactions, CC sweeps, paired MIDI+YES, MUTE pass-through only; %u rectangles\n",rectangle_count);
+    printf("PASS: 576 frames, 16 random scenes, 1200 note reactions, CC sweeps, isolated MIDI+YES, solo MIDI and MIDI+TRACK stock replay, MUTE keys forwarded; %u rectangles\n",rectangle_count);
     return 0;
 }
