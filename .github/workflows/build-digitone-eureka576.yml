@@ -1,6 +1,12 @@
 name: Digitone EUREKA 6 PARAM PAGES + TRIG1-16 + LONG HANN (MC78 protected)
 on:
   workflow_dispatch:
+  # One-shot continuation after native test regression correction.
+  push:
+    branches:
+      - feature/digitone-eureka-six-pages-trig-keys-20261103
+    paths:
+      - .github/workflows/build-digitone-eureka576.yml
 permissions:
   contents: read
 jobs:
