@@ -126,7 +126,7 @@ int main(void)
         for(unsigned bit=0u;bit<E576_CLIPS;++bit)
             unique+=(scenes_seen>>bit)&1u;
         if(cuts<7u || nonsequential<4u || unique<5u) {
-            fprintf(stderr,"insufficient true scene randomness: cuts=%u nonseq=%u unique=%u\\n",
+            fprintf(stderr,"insufficient true scene randomness: cuts=%u nonseq=%u unique=%u\n",
                     cuts,nonsequential,unique);
             abort();
         }
