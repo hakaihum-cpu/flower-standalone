@@ -37,8 +37,8 @@ static void check(unsigned index)
 int main(void)
 {
     uint8_t ctrl[128]={0};
-    int32_t key[6]={0},note[20]={0};
-    unsigned speeds=0,stutters=0,jumps=0;
+    int32_t key[6]={0};
+    unsigned speeds=0,stutters=0,jumps=0,reverses=0;
     if((uintptr_t)eureka576_reference_end-(uintptr_t)eureka576_reference!=589824u)
         abort();
     key[3]=2;key[4]=1;
@@ -65,36 +65,54 @@ int main(void)
     for(unsigned i=0u;i<9u && eureka576_index!=0u;++i)eureka576_tick(ctrl);
     if(eureka576_index!=0u) abort();
     check(0);
-    note[0]=0;note[2]=0;note[10]=FW_EVENT_NOTE_TRIG;
+    /* Each sounding FM voice, including a live note, must be visible. */
     for(unsigned i=0u;i<1200u;++i) {
-        uint32_t at=fw_timeline+E576_STEP_TIME;
         uint32_t before=eureka576_index;
-        eureka576_note_queue(note,at);
-        fw_timeline=at-1u;
+        uint32_t dir=eureka576_reverse;
+        unsigned was_clip=before/36u;
+        fw_timeline+=3u*E576_STEP_TIME;
+        eureka576_voice_on(0,0,NULL);
         eureka576_tick(ctrl);
-        if(eureka576_event_head==eureka576_event_tail)abort();
-        fw_timeline=at;
-        eureka576_tick(ctrl);
-        if(eureka576_event_head!=eureka576_event_tail)abort();
+        if(eureka576_event_head!=eureka576_event_tail) abort();
+        if(before==eureka576_index) {
+            fprintf(stderr,"note caused no visible frame change at %u\n",i);
+            abort();
+        }
         check(eureka576_index);
-        if(eureka576_effect==1u)++speeds;
-        if(eureka576_effect==2u)++stutters;
-        if(eureka576_index!=before && eureka576_effect==0u)++jumps;
+        if(dir!=eureka576_reverse) ++reverses;
+        if(eureka576_effect==1u) ++speeds;
+        if(eureka576_effect==2u) ++stutters;
+        if(eureka576_index/36u!=was_clip) ++jumps;
         fw_timeline+=2u*E576_STEP_TIME;
         eureka576_tick(ctrl);
         check(eureka576_index);
         if(!eureka576_enabled) abort();
     }
-    if(!speeds || !stutters || !jumps) {
-        fprintf(stderr,"not all effects fired: %u/%u/%u\n",jumps,speeds,stutters);
+    if(!speeds || !stutters || !jumps || !reverses) {
+        fprintf(stderr,"missing visual effects: jump=%u speed=%u stutter=%u reverse=%u\n",
+                jumps,speeds,stutters,reverses);
         abort();
     }
+    /* Chords coalesce to one change, and non-FM voices must be ignored. */
+    eureka576_voice_on(0,4,NULL);
+    if(eureka576_event_head!=eureka576_event_tail) abort();
+    fw_timeline+=E576_STEP_TIME;
+    for(unsigned i=0u;i<4u;++i)eureka576_voice_on((int32_t)i,0,NULL);
+    eureka576_tick(ctrl);
+    if(eureka576_event_head!=eureka576_event_tail) abort();
+    check(eureka576_index);
     fw_transport=0u;eureka576_tick(ctrl);
     unsigned frozen=eureka576_index;
     for(unsigned i=0u;i<50u;++i)eureka576_tick(ctrl);
     if(frozen!=eureka576_index)abort();
+    /* Manual live note must change image with transport stopped. */
+    unsigned before_live=eureka576_index;
+    eureka576_voice_on(0,0,NULL);
+    eureka576_tick(ctrl);
+    if(eureka576_index==before_live) abort();
+    check(eureka576_index);
     key[3]=13;key[4]=1;
     if(eureka576_key(NULL,key)!=1 || eureka576_enabled)abort();
-    printf("PASS: 576/576 seek + pixels, playback/wrap, 1200 timed triggers, JUMP/SPEED/STUTTER, stop/toggle; %u rectangles\n",rectangle_count);
+    printf("PASS: 576/576 seek + pixels, playback/wrap, 1200 note-on reactions, JUMP/REVERSE/SPEED/STUTTER, live/stop/toggle; %u rectangles\n",rectangle_count);
     return 0;
 }
