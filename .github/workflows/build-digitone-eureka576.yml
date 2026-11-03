@@ -1,11 +1,11 @@
-name: Digitone EUREKA 04 HYBRID + GRANULAR only trial
+name: Digitone EUREKA 04 HYBRID + GRANULAR MIDI trial
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-eureka-granular-only-20261103'
+    if: github.ref == 'refs/heads/feature/digitone-granular-midi-pitch-size-20261103'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -84,6 +84,11 @@ jobs:
           assert 'CORE_AUDIO_MUTE_VOICES' not in d
           assert 'CORE_MIDI_CC_AUTO' in d
           assert 'grain_armed' in d and 'GRAIN_ARM_FRAMES' in d
+          assert 'GRAIN_DEFAULT       4800u' in d
+          assert 'GRAIN_MAX_FRAMES    6720u' in d
+          assert 'grain_frames_target' in d and 'pitch_choice' in d
+          assert 'cc == 33 || cc == 34' in d and 'cc == 36' in d
+          assert 'grain_begin(g, 0u)' in d and 'pitch_steps[8]' in d
           assert 'delay_line' not in d and 'room_valid' not in d
           assert 'memset(' not in d and 'malloc(' not in d
           print('PASS: audio insert isolated from EUREKA display')
@@ -102,7 +107,7 @@ jobs:
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_dreamy_trial" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.6.elemod"
-          GRANULAR_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/granulartrial-0.2.elemod"
+          GRANULAR_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/granulartrial-0.3.elemod"
           test -s "$VISUAL_MOD"
           test -s "$GRANULAR_MOD"
           CORE="$GITHUB_WORKSPACE/_firmware/core.elemod"
@@ -115,11 +120,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$GRANULAR_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_HYBRID04_GRANULAR_ONLY.syx" \
-            --version HG76
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_HYBRID04_GRANULAR_MIDI_TEST.syx" \
+            --version GM76
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_EUREKA_HYBRID04_GRANULAR_ONLY.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_EUREKA_HYBRID04_GRANULAR_MIDI_TEST.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$GRANULAR_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -131,7 +136,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-HYBRID04-GRANULAR-ONLY
+          name: Digitone-OS1.44-EUREKA-HYBRID04-GRANULAR-MIDI-TEST
           path: _release/
           if-no-files-found: error
           retention-days: 30
