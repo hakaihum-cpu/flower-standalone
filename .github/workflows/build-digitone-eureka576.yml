@@ -78,6 +78,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           a=Path('../digitone_eureka576/eureka576.c').read_text()
+          e=a
           d=Path('dreamy.c').read_text()
           assert 'core_audio_owner' not in a
           assert 'CORE_AUDIO_INSERT' in d
