@@ -13,11 +13,6 @@
   ],
   "subscribe": [
     {
-      "event": "ev_tick",
-      "fn": "dreamy_tick",
-      "order": 66
-    },
-    {
       "event": "ev_midi_cc",
       "fn": "dreamy_cc",
       "order": 60
