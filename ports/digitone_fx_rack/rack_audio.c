@@ -176,8 +176,10 @@ static void haze_setup(const struct dnfx_state *s)
     } else if(mod>0) {
         haze_current_haze+=shift/2;
     }
-    if(t<0) t=0; if(t>127) t=127;
-    if(r<0) r=0; if(r>127) r=127;
+    if(t<0) t=0;
+    if(t>127) t=127;
+    if(r<0) r=0;
+    if(r>127) r=127;
     if(haze_current_haze<0) haze_current_haze=0;
     if(haze_current_haze>127) haze_current_haze=127;
     for(ch=0u;ch<2u;++ch) {
