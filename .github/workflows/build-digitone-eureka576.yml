@@ -1,12 +1,6 @@
 name: Digitone FOUR EXCLUSIVE FX + EUREKA VIDEO (PG79 protected)
 on:
   workflow_dispatch:
-  # User-authorized one-shot PG80 build: disarm this push trigger once queued.
-  push:
-    branches:
-      - feature/digitone-fx-dedicated-pages-20261103
-    paths:
-      - .github/workflows/build-digitone-eureka576.yml
 permissions:
   contents: read
 jobs:
