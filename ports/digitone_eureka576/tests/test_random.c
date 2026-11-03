@@ -120,8 +120,117 @@ int main(void)
     eureka576_tick(ctrl);
     if(eureka576_index==before_live) abort();
     check(eureka576_index);
+    /* MUTE integration: never consume any FUNC combination (including
+     * FUNC+BANK, FUNC+T1..4, and FUNC+YES while MIDI remains down).
+     * PTN+TRACK and TRACK keys also go to the untouched stock OS;
+     * EUREKA stays visible and does not claim LEDs. */
+    for(int keycode=0;keycode<64;++keycode) {
+        key[3]=keycode; key[4]=3; /* down + FUNC */
+        if(eureka576_key(NULL,key)!=0 || !eureka576_enabled) abort();
+    }
+    for(int keycode=42;keycode<46;++keycode) {
+        key[3]=keycode; key[4]=1;
+        if(eureka576_key(NULL,key)!=0 || !eureka576_enabled) abort();
+    }
+    key[3]=E576_KEY_YES; key[4]=3;
+    if(eureka576_key(NULL,key)!=0 || !eureka576_enabled) abort();
+
+    /* Video controls only consume AUTO-channel messages and never native
+     * CC41/42/43/44 (AMP/FILTER/CHORUS), nor granular's MIDI controls. */
+    if(eureka576_cc(0,40,127,0)!=0) abort();
+    if(eureka576_cc(0,40,128,CORE_MIDI_CC_AUTO)!=0) abort();
+    if(eureka576_cc(0,33,64,CORE_MIDI_CC_AUTO)!=0) abort();
+    for(int cc=41;cc<=44;++cc)
+        if(eureka576_cc(0,cc,127,CORE_MIDI_CC_AUTO)!=0) abort();
+    for(int cc=0;cc<128;++cc) {
+        if(eureka576_cc(0,40,cc,CORE_MIDI_CC_AUTO)!=1) abort();
+        if(eureka576_cc(0,65,cc,CORE_MIDI_CC_AUTO)!=1) abort();
+        if(eureka576_cc(0,67,cc,CORE_MIDI_CC_AUTO)!=1) abort();
+        if(eureka576_cc(0,68,cc,CORE_MIDI_CC_AUTO)!=1) abort();
+        if(eureka576_cc(0,69,cc,CORE_MIDI_CC_AUTO)!=1) abort();
+    }
+    for(int cc=0;cc<128;++cc) {
+        if(cc==40 || cc==65 || cc==67 || cc==68 || cc==69) continue;
+        if(eureka576_cc(0,cc,32,CORE_MIDI_CC_AUTO)!=0) abort();
+    }
+    if(eureka576_cc(0,40,0,CORE_MIDI_CC_AUTO)!=1)abort();
+    if(eureka576_cc(0,65,0,CORE_MIDI_CC_AUTO)!=1)abort();
+    if(eureka576_cc(0,67,64,CORE_MIDI_CC_AUTO)!=1)abort();
+    if(eureka576_cc(0,68,0,CORE_MIDI_CC_AUTO)!=1)abort();
+    if(eureka576_cc(0,69,0,CORE_MIDI_CC_AUTO)!=1)abort();
+    eureka576_tick(ctrl);
+    if(!eureka576_seek(0u))abort();
+    check(0); /* all 5 controls at defaults, exact original 8192 pixels */
+
+    /* Invert 127 means the exact 8192-pixel complement of the original. */
+    if(eureka576_cc(0,69,127,CORE_MIDI_CC_AUTO)!=1)abort();
+    fw_transport=0u;
+    eureka576_tick(ctrl);
+    memset(display,0xa5,sizeof(display));
+    eureka576_draw(NULL,NULL);
+    for(unsigned y=0;y<64u;++y)
+        for(unsigned x=0;x<128u;++x) {
+            unsigned orig=((unsigned)eureka576_framebuf[
+                (7u-(y>>3))+8u*x]>>(y&7u))&1u;
+            if((unsigned)display[63u-y][x]!=(orig^1u))abort();
+        }
+    if(eureka576_cc(0,69,0,CORE_MIDI_CC_AUTO)!=1)abort();
+    if(eureka576_cc(0,40,127,CORE_MIDI_CC_AUTO)!=1)abort();
+    eureka576_tick(ctrl);
+    memset(display,0xa5,sizeof(display));
+    eureka576_draw(NULL,NULL);
+    unsigned glitch_changed=0u;
+    for(unsigned y=0;y<64u;++y)
+        for(unsigned x=0;x<128u;++x) {
+            unsigned orig=((unsigned)eureka576_framebuf[
+                (7u-(y>>3))+8u*x]>>(y&7u))&1u;
+            if((unsigned)display[63u-y][x]!=orig)++glitch_changed;
+        }
+    if(glitch_changed<5u)abort();
+    if(eureka576_cc(0,40,0,CORE_MIDI_CC_AUTO)!=1)abort();
+    eureka576_tick(ctrl); check(0);
+
+    /* SCRUB 127 is frame 575, and a second CC changes while stopped. */
+    if(eureka576_cc(0,68,127,CORE_MIDI_CC_AUTO)!=1)abort();
+    eureka576_tick(ctrl);
+    if(eureka576_index!=575u)abort();
+    check(575u);
+    if(eureka576_cc(0,68,1,CORE_MIDI_CC_AUTO)!=1)abort();
+    eureka576_tick(ctrl);
+    if(eureka576_index!=0u)abort();
+    check(0u);
+    if(eureka576_cc(0,68,0,CORE_MIDI_CC_AUTO)!=1)abort();
+    eureka576_tick(ctrl);
+
+    /* Force freeze, then reverse, then an 8-frame CC-driven stutter.
+     * Stutter must never seek outside the 36-frame current source clip. */
+    if(!eureka576_seek(35u))abort();
+    if(eureka576_cc(0,67,0,CORE_MIDI_CC_AUTO)!=1)abort();
+    fw_transport=1u;
+    uint32_t freeze_index=eureka576_index;
+    for(int i=0;i<20;++i)eureka576_tick(ctrl);
+    if(eureka576_index!=freeze_index)abort();
+    if(eureka576_cc(0,67,112,CORE_MIDI_CC_AUTO)!=1)abort();
+    if(!eureka576_step() || eureka576_index!=34u)abort();
+    if(eureka576_cc(0,67,64,CORE_MIDI_CC_AUTO)!=1)abort();
+    if(!eureka576_seek(35u))abort();
+    if(eureka576_cc(0,65,127,CORE_MIDI_CC_AUTO)!=1)abort();
+    eureka576_tick(ctrl);
+    for(int i=0;i<24;++i) {
+        if(!eureka576_step() || eureka576_index>=36u)abort();
+    }
+    if(eureka576_cc(0,65,0,CORE_MIDI_CC_AUTO)!=1)abort();
+    eureka576_tick(ctrl);
+
+    /* A released MIDI key (0 or 0x10) cannot leave a stuck toggle chord. */
+    key[3]=E576_KEY_MIDI;key[4]=0;
+    if(eureka576_key(NULL,key)!=0)abort();
+    key[3]=E576_KEY_YES;key[4]=1;
+    if(eureka576_key(NULL,key)!=0 || !eureka576_enabled)abort();
+    key[3]=E576_KEY_MIDI;key[4]=1;
+    if(eureka576_key(NULL,key)!=0)abort();
     key[3]=13;key[4]=1;
     if(eureka576_key(NULL,key)!=1 || eureka576_enabled)abort();
-    printf("PASS: 576/576 seek + pixels, playback/wrap, 1200 note-on reactions, JUMP/REVERSE/SPEED/STUTTER, live/stop/toggle; %u rectangles\n",rectangle_count);
+    printf("PASS: 576/576 seek + pixels, playback/wrap, 1200 note-on reactions, JUMP/REVERSE/SPEED/STUTTER, video MIDI+MUTE passthrough; %u rectangles\n",rectangle_count);
     return 0;
 }
