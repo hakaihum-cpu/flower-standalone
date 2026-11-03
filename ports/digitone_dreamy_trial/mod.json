@@ -1,11 +1,11 @@
 {
   "id": "granulartrial",
-  "version": "0.4",
+  "version": "0.5",
   "license": "GPL-2.0-or-later",
-  "title": "GRANULAR (Digitone insert)",
+  "title": "GRANULAR LONG HANN (Digitone insert)",
   "category": "Effect",
   "author": "analoglav",
-  "description": "GRANULAR 2 stereo pitch voices, two overlapping grains per pitch; AUTO CC33/34 pitch 8 bands -12,-7,-5,0,+5,+7,+12,+24; CC36 grain size 40..140 ms default 100ms; CC37 position up to +62.5ms; CC60 DRY/WET. Parameter changes latch at grain boundaries, +24/-12 buffer range verified. No custom delay/reverb; Digitone stock synth/FX untouched.",
+  "description": "Experimental sound-quality revision of VM76: 2.73s 512KiB stereo capture history at 48kHz, two overlapping Hann-window grains per voice, grain length CC36 120..360ms in 5ms steps (240ms default), 80ms wet fade after 1.875s arm. CC33/34 pitch options -12,-7,-5,0,+5,+7,+12,+24 (defaults +5/+12), CC37 position 0..62.5ms, CC60 dry/wet. Q20.12 pitch accum avoids 32-bit overflow for +24 & 360ms. Original FM, Delay, Reverb, video unchanged. Mute root cause remains under investigation; no audio/stock mute patch applied.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
