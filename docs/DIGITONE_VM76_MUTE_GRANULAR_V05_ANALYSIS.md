@@ -14,13 +14,26 @@ The Digitone mk1 runs its **internal sequencer**. FUNC+BANK opens
 **GLOBAL MUTE** with **green LEDs**; pressing the TRACK 1-4 keys makes
 their LEDs extinguish/light again, but **the internal sequencer
 continues sounding those tracks**. This happens with GRANULAR ON
-and with GRANULAR OFF.
+and with GRANULAR OFF. Crucial additional user's A/B check:
+**EUREKA video OFF => stock MUTE audio works**;
+**EUREKA video ON => LED MUTE state changes but the internal sequencer
+continues sounding**. Both were tested on the same instrument. Thus
+the failing condition is EUREKA being enabled, not the granular insert.
 
 Firmware / public source review:
 
 - `EUREKA eureka576_key()`: every TRACK key and FUNC combination returns
   0 and therefore passes through to `core_dn_key` then stock `KEYDISP`.
-  The only intentionally consumed key is MIDI+YES to toggle video.
+  In VM76 v1.7 the MIDI+YES **YES down** was consumed (return 1)
+  but the corresponding **YES up** was passed to the stock dispatcher
+  (return 0). This creates a mismatched key-event pair in the
+  stock key handler and is a concrete source-level defect candidate.
+- The **experimental EUREKA v1.8** corrects this asymmetry: after
+  capturing MIDI+YES's YES DOWN, it captures that YES UP too, even if
+  the MIDI key was released first. The latching flag is cleared on
+  YES UP. Other YES actions and all stock FUNC/MUTE events still pass
+  through. Native regression test cases have been added, but NOT
+  executed. This repair is plausible, **not a demonstrated MUTE fix**.
 - EUREKA `ev_draw` overlays 128x64 image; it does not write the track
   mute state, change the voice audio buffers or write LED status.
 - `core-dn1/menu.s` tracks key-down bits, handles long TRACK holds and
@@ -36,6 +49,11 @@ Firmware / public source review:
 0 cannot prove MUTE actually silences any sequencer events. The former
 VM76 test's PASS MUTE claim was too broad. No evidence currently
 identifies the exact state/voice-routing failure in OS1.44+core.
+The EUREKA draw hook paints over the full 128x64 display while enabled.
+That hides the stock MUTE page but cannot itself establish why sequencer
+audio continues after the LEDs go dark. Do not interpret a hidden
+LCD as a proven audio-mute causation.
+
 Do NOT randomly patch stock MUTE flags, spoof the LEDs, or intercept
 `ev_note_queue` to mutate note events: its published event interface is
 read-only and stock global/pattern mute state and pattern persistence
@@ -50,7 +68,7 @@ mute-flags hacks. A successful MUTE regression must *audibly suppress
 fresh internal sequencer note triggers* across a pattern wrap, not
 merely change the LEDs; test Mute on/off and four tracks.
 
-## 2 — GRANULAR v0.5: implemented SOURCE, no SYX built
+## 2 — GRANULAR v0.5 + EUREKA v1.8: implemented SOURCE, no SYX built
 
 | Property | VM76 v0.4 | Trial v0.5 |
 |---|---:|---:|
@@ -104,3 +122,21 @@ branch; a future manual-only workflow contains compiler+UBSan tests,
 Elekloader lint, a combined-module link check, and SYX packaging.
 Do not claim mute fixed or granular sounding better on hardware
 before actual playback verification.
+
+
+## 3 — Correct regression criteria and build gate
+
+The working branch includes the MIDI+YES press/release symmetry candidate
+and Granular v0.5. **No new firmware image has been built or supplied**.
+The EUREKA C test verifies correct event consumption and preservation of
+other key events, but does not include stock Digitone's actual MUTE
+machine or audio sequencer. Therefore static PASS is not sufficient.
+
+On next explicitly user-authorized build, the required on-device checks
+include: with the *internal* Digitone sequencer playing, EUREKA ON,
+FUNC+BANK Global MUTE green LEDs, each T1-4 genuinely silences its
+own new steps; releasing mute resumes them; toggling EUREKA OFF/ON
+keeps the mute working; GRANULAR OFF and ON both tested. Confirm that
+MIDI+YES still toggles video reliably, and no phantom YES actions
+occur in stock UI. If MUTE audio still fails, diagnose exact stock
+state before making further guesses.
