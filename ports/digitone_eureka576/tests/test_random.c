@@ -119,10 +119,39 @@ int main(void)
     if(eureka576_key(NULL,key)!=1 || !eureka576_param_armed ||
        eureka576_param_page!=0u || !eureka576_func_owned ||
        stock_midi_downs!=0u) abort();
-    key[4]=0;
+    /* User's exact operation: MIDI+FUNC remains physically held,
+     * then page-key DOWN has FUNC flag=3. PG79 blocked this gesture.
+     * Verify all six pages open, and same held chord returns to video. */
+    for(int p=0;p<6;++p) {
+        key[3]=E576_KEY_TRIG+p;key[4]=3;
+        if(eureka576_key(NULL,key)!=1 ||
+           eureka576_param_page!=(uint32_t)(p+1) ||
+           stock_midi_downs!=0u) abort();
+        key[4]=0x10;
+        if(eureka576_key(NULL,key)!=1) abort();
+        text_count=panel_frames=0u;
+        eureka576_draw(NULL,NULL);
+        if(text_count!=9u || panel_frames!=4u) abort();
+        key[4]=3;
+        if(eureka576_key(NULL,key)!=1 ||
+           eureka576_param_page!=0u) abort();
+        key[4]=0x10;
+        if(eureka576_key(NULL,key)!=1) abort();
+    }
+    key[3]=E576_KEY_FUNC;key[4]=0;
     if(eureka576_key(NULL,key)!=1 || eureka576_func_owned) abort();
     key[3]=E576_KEY_MIDI;key[4]=0;
     if(eureka576_key(NULL,key)!=1 || stock_midi_downs!=0u) abort();
+
+    /* FUNC+PAGE on its own remains a stock shortcut, even while
+     * EUREKA page mode is armed. Only held MIDI+FUNC+PAGE is ours. */
+    key[3]=E576_KEY_FUNC;key[4]=1;
+    if(eureka576_key(NULL,key)!=0) abort();
+    key[3]=E576_KEY_TRIG;key[4]=3;
+    if(eureka576_key(NULL,key)!=0 ||
+       eureka576_param_page!=0u) abort();
+    key[3]=E576_KEY_FUNC;key[4]=0;
+    if(eureka576_key(NULL,key)!=0) abort();
 
     /* All six pages open with their own key. A-D are real encoder
      * controls, E-H are captured so hidden stock parameters don't turn.
