@@ -1,4 +1,4 @@
-name: Digitone EUREKA + GRANULAR only trial
+name: Digitone EUREKA 04 HYBRID + GRANULAR only trial
 on:
   workflow_dispatch:
 permissions:
@@ -15,7 +15,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu
-          python3 -m pip install --user --break-system-packages 'Pillow==11.3.0'
+          python3 -m pip install --user --break-system-packages 'Pillow==12.3.0' 'numpy==2.3.5' 'opencv-python-headless==4.13.0.92'
           m68k-linux-gnu-gcc --version
       - name: Obtain and verify official OS 1.44
         run: |
@@ -24,7 +24,7 @@ jobs:
           curl -fL --retry 3 -o _firmware/stock.zip 'https://www.elektron.se/wp-content/uploads/2026/10/Digitone_and_Digitone_Keys_OS1.44_dist.zip'
           unzip -p _firmware/stock.zip Digitone_and_Digitone_Keys_OS1.44.syx > _firmware/stock.syx
           echo 'd4f200d04484333d82822db7744e6484d0def8f2db8ddf55ee2b780cc13c9659  _firmware/stock.syx' | sha256sum -c -
-      - name: Reconstruct original EUREKA footage and convert 576 RG DOT frames
+      - name: Reconstruct original EUREKA footage and convert 576 HYBRID 04 frames
         run: |
           set -euo pipefail
           python3 scripts/materialize_frame_pack.py
@@ -115,11 +115,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$GRANULAR_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_GRANULAR_ONLY_TEST.syx" \
-            --version GR76
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_HYBRID04_GRANULAR_ONLY.syx" \
+            --version HG76
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_EUREKA_GRANULAR_ONLY_TEST.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_EUREKA_HYBRID04_GRANULAR_ONLY.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$GRANULAR_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -131,7 +131,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-GRANULAR-ONLY-TEST
+          name: Digitone-OS1.44-EUREKA-HYBRID04-GRANULAR-ONLY
           path: _release/
           if-no-files-found: error
           retention-days: 30
