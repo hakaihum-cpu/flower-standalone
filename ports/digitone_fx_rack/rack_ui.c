@@ -179,23 +179,30 @@ int rack_key(void *brain,void *ev)
        (key>=KEY_STEP1 && key<=KEY_STEP16) ||
        (key>=KEY_T1 && key<=KEY_T4)) return 0;
     if(!press) return 0;
+    /* No audio-panel operation may steal FUNC combinations used by the
+     * original Digitone's pages, MIDI, or MUTE. */
+    if(flags&2) return 0;
     if(key==KEY_NO) {
         rack_ui_open=0u;rack_no_owned=1u;return 1;
     }
-    if(key==KEY_LEFT || key==KEY_RIGHT || key==KEY_PAGE ||
-       (key>=KEY_TRIG && key<=KEY_LFO)) {
+    if(key>=KEY_TRIG && key<=KEY_LFO) {
+        /* Stock page selection is always available while an FX runs.
+         * The visual EUREKA module also needs these six native keys. */
+        rack_ui_open=0u;
+        return 0;
+    }
+    if(key==KEY_LEFT || key==KEY_RIGHT || key==KEY_PAGE) {
         struct dnfx_state *s=&rack_state[(unsigned)rack_active];
         unsigned pages=dnfx_page_count(s->effect);
-        unsigned next=s->page;
         if(pages>1u) {
-            if(key==KEY_LEFT) next=(next+pages-1u)%pages;
-            else if(key==KEY_TRIG) next=0u;
-            else if(key==KEY_TRIG+1) next=1u;
-            else next=(next+1u)%pages;
+            unsigned next=(s->page+(key==KEY_LEFT?pages-1u:1u))%pages;
+            dnfx_set_page(s,next);
+            rack_controls_owned[key]=1u;
+            return 1;
         }
-        dnfx_set_page(s,next);
-        rack_controls_owned[key]=1u;
-        return 1;
+        /* Other FX pages have no second panel; use stock page key. */
+        rack_ui_open=0u;
+        return 0;
     }
     if(key>=KEY_PUSH_A && key<=KEY_PUSH_H) {
         struct dnfx_state *s=&rack_state[(unsigned)rack_active];
@@ -207,10 +214,13 @@ int rack_key(void *brain,void *ev)
             if(s->effect==DNFX_GRANULAR)
                 rack_granular_set(k,p->initial);
         }
-        rack_controls_owned[key]=1u;
-        return 1;
+        if(p) {
+            rack_controls_owned[key]=1u;
+            return 1;
+        }
+        return 0; /* Unassigned knob presses belong to stock. */
     }
-    if(key==KEY_YES) {rack_controls_owned[key]=1u;return 1;}
+    /* YES and all other keys keep their original Digitone meaning. */
     return 0;
 }
 int rack_enc(void *brain,void *ev)
