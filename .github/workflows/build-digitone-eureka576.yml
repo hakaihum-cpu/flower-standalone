@@ -1,11 +1,11 @@
-name: Digitone EUREKA RG DOT + DREAMY trial
+name: Digitone EUREKA note-reactive + DREAMY freeze test
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-eureka-rgdot-dreamy-insert-20261103'
+    if: github.ref == 'refs/heads/feature/digitone-dreamy-freeze-mitigation-20261103'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -65,7 +65,7 @@ jobs:
           assert 'CORE_AUDIO_INSERT' in d
           assert 'CORE_AUDIO_MUTE_VOICES' not in d
           assert 'CORE_MIDI_CC_AUTO' in d
-          assert 'requested_on' in d
+          assert 'delay_valid' in d and 'room_valid' in d and 'grain_armed' in d
           print('PASS: audio insert isolated from EUREKA display')
           PY
       - name: Obtain pinned elekloader and core
@@ -81,7 +81,7 @@ jobs:
           cd _elekloader
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_dreamy_trial" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
-          VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.5.elemod"
+          VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-1.6.elemod"
           DREAMY_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/dreamytrial-0.1.elemod"
           test -s "$VISUAL_MOD"
           test -s "$DREAMY_MOD"
@@ -95,11 +95,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$DREAMY_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_RGDOT_DREAMY_TRIAL.syx" \
-            --version DM76
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_NOTES_DREAMY_FIX_TEST.syx" \
+            --version DF76
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_EUREKA_RGDOT_DREAMY_TRIAL.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_EUREKA_NOTES_DREAMY_FIX_TEST.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$DREAMY_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -111,7 +111,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-RGDOT-DREAMY-TRIAL
+          name: Digitone-OS1.44-EUREKA-NOTES-DREAMY-FIX-TEST
           path: _release/
           if-no-files-found: error
           retention-days: 30
