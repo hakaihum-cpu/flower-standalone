@@ -14,9 +14,9 @@ int main(void)
     assert(strcmp(dreamy_menu.name,"DREAMY")==0);
 
     dreamy_open(0,0,0);
-    assert(!dreamy_owner.on);
-    for(i=0;i<32 && !dreamy_owner.on;i++) dreamy_tick(0);
-    assert(dreamy_owner.on && clear_pos==MEM_COUNT);
+    assert(dreamy_owner.on);
+    assert(hist_valid==0 && delay_valid==0);
+    assert(room_valid[0]==0 && room_valid[1]==0 && room_valid[2]==0);
 
     assert(dreamy_cc(0,60,0,0)==0);
     assert(dreamy_cc(0,60,74,CORE_MIDI_CC_AUTO)==1);
@@ -41,10 +41,18 @@ int main(void)
     assert(saturation==0);
 
     dreamy_open(0,0,0);
-    assert(!dreamy_owner.on && !requested_on);
+    assert(!dreamy_owner.on);
+    /* All ring arrays still contain the previous performance. Reopening
+       must not read stale delay/room/history data or block the UI. */
+    assert(hist_valid>0 && delay_valid>0);
     dreamy_open(0,0,0);
-    for(i=0;i<32 && !dreamy_owner.on;i++) dreamy_tick(0);
     assert(dreamy_owner.on && hist_valid==0 && hist_write==0);
+    assert(delay_valid==0 && delay_write==0 && grain_armed==0);
+    assert(room_valid[0]==0 && room_valid[1]==0 && room_valid[2]==0);
+    for(i=0;i<64;i++) in[i]=0;
+    dreamy_render(out,in);
+    for(i=0;i<64;i++) assert(out[i]==0);
+    assert(delay_valid==32 && hist_valid==32);
     puts("PASS DREAMY insert: activation, CC, audio, tail, bounds, fresh state");
     return 0;
 }
