@@ -1,50 +1,60 @@
-# Digitone OS1.44 — EUREKA 04 HYBRID + GRANULAR LONG HANN v0.5
+# Digitone OS1.44 — EUREKA 2.0 + GRANULAR LONG HANN 0.5
 
-This experimental **SOURCE-ONLY** branch is based on the user-tested VM76
-custom firmware (EUREKA 576 original user-supplied HYBRID04 frames, MIDI VFX
-and the stereo GRANULAR insert). The previous VM76 binary, original HG76
-user-tested baseline and all original visual frames remain unchanged.
+Source-only integration built from the working GH76 firmware components.
+GH76 is unchanged. No new SYX has been built for this branch.
 
-**User-reported VM76 issue:** GLOBAL MUTE green LEDs toggle on and off but
-internal sequencer notes keep playing, whether GRANULAR is enabled or not.
-**MUTE AUDIO IS NOT FIXED IN v0.5.** The MUTE path investigation is in
-[docs/DIGITONE_VM76_MUTE_GRANULAR_V05_ANALYSIS.md](../../docs/DIGITONE_VM76_MUTE_GRANULAR_V05_ANALYSIS.md).
-The EUREKA key callback already passes MUTE events to stock firmware; this
-was insufficient. Do not relabel visual LED passthrough as an audio MUTE fix.
+## Mute audio repair (source and tests updated, hardware pending)
 
-## New GRANULAR v0.5: longer, less glitchy texture
+User-tested reproduction on GH76:
 
-- 2.731s stereo 16-bit circular history (131072 frames, 512 KiB) at 48 kHz,
-  compared to the prior 0.683s, 128 KiB.
-- A pair of 50%-overlapped Hann-window grains per pitch voice, with a
-  256-phase precomputed window (no live trigonometry).
-- MIDI CC36 grain length **120–360ms**, 5ms steps; **240ms** is the
-  default. CC63 and CC64 both select exactly 240ms.
-- The source lag is ~1.46s and ~1.58s before the advancing live head;
-  0–62.5ms of additional old-history offset remains available on CC37.
-- The effect stays dry until 90000 valid audio frames have been recorded
-  (1.875s), then fades into the requested wet/dry mix over 80ms.
-- Wet output averages the two pitch voices, instead of halving their
-  combined level again: musical sustained grains should be more present.
-- Pitch A/B choices on CC33/34 stay the user's eight discrete semitones:
-  **−12, −7, −5, 0, +5, +7, +12, +24** (16 CC values per choice).
-  The defaults remain **+5/+12**.
-- CC60 MIX 0–127 unchanged; no new effects or feedback added.
-- Pitch and grain size/position changes latch when a new grain begins.
-- Uses Q20.12 audio read positions to avoid +24×360ms integer overflow.
-  Safety bounds are asserted for both fastest and slowest pitches.
-- The Digitone's built-in FM synthesis, Delay and Reverb are left intact,
-  and the output still uses CORE_AUDIO_INSERT after the stock master.
-- The HYBRID04 video, its note reactions and video MIDI CC mapping
-  (40/65/67/68/69) are untouched.
+- Internal-sequencer audio track is muted in normal/global Mute mode
+- Enter EUREKA with MIDI+YES: the audio remains muted but all track LEDs
+  illuminate green
+- Pressing TRACK changes the LEDs but does not unmute/mute the synth audio
+- EUREKA OFF restores the regular audio track Mute operation
+- This is independent of whether the GRANULAR insert is enabled
 
-## Building
+Root cause in original shortcut handling: the MIDI key press was passed
+to stock Digitone OS before the YES was consumed by EUREKA. In GLOBAL
+MUTE, the stock MIDI key switches the displayed Mute control group from
+audio tracks to MIDI tracks, matching the user's preserved synth audio
+mute with green MIDI track LEDs.
 
-**No firmware build is authorized by this request.** This branch includes
-a manual-only GitHub Actions workflow; it must not be run without the owner's
-fresh explicit permission. The existing SYX files are unchanged.
+The EUREKA 2.0 key hook now defers a bare MIDI DOWN:
 
-When authorized, the workflow must pass full original 576/576 frame and
-8,192-pixel tests, extended native/UBSan granular tests, cross-compilation,
-Elekloader lint and firmware SHA-256 verification. The already working
-software must remain available as the fallback.
+- If followed by YES, **neither the MIDI DOWN nor MIDI UP** reaches stock;
+  EUREKA owns the paired YES DOWN/UP and toggles video
+- If MIDI is pressed alone, send one original-stock MIDI DOWN when the
+  key is released, then let the real MIDI UP through
+- If MIDI+TRACK or other non-YES chord is performed, dispatch the deferred
+  MIDI DOWN to original stock KEYDISP *before* allowing the other key
+  through; allow MIDI UP to pass normally
+- FUNC+BANK, PTN+TRACK, FUNC+TRACK and normal TRACK keys pass untouched
+- Do not create any duplicate or fake track-Mute database; the original
+  firmware controls the Mute/LEDs/project/pattern storage
+
+The original stock KEYDISP location 0x40016fc0 is grounded in
+elekloader/core-dn1 4.1.1 OS1.44, and a native test double intercepts
+the direct stock call. Real hardware MUTE and MIDI-alone delayed key
+handling remain to be verified.
+
+## Random EUREKA animations: 2.0 includes 1.9 changes
+
+The same 576 unmodified 128x64 black/yellow HYBRID04 frames now play as
+16 independent 36-frame scenes. Forward and reverse loop within their
+current scene; scene selection is random every 8, 12 or 16 sixteenth-note
+steps during PLAY, independently of FM voice activity. The note-driven
+event switch favors a visibly different random scene 55% of the time
+instead of the original 35%. Speed/reverse/stutter and video CC40/65/67/
+68/69 are preserved. No new video assets have been added.
+
+## Granular v0.5 unchanged
+
+2.731s stereo 512KiB history, 120-360ms Hann-window 50% overlapping
+grains, 240ms default, 80ms WET fade; CC33/34 pitch, CC36 grain size,
+CC37 position, CC60 mix.
+
+No main push, no workflow run, no existing approved SYX changes.
+The authorized GH76 is still the fallback. A future **explicitly authorized**
+manual build must pass native/UBSan tests, Elekloader lint, 576-frame
+pixel-perfect checksum, memory budget and on-device real Mute sound test.
