@@ -23,9 +23,9 @@ static uint32_t eureka576_midi_held, eureka576_enabled, eureka576_dirty;
 #define E576_STEP_TIME 5400000u
 #define E576_QUEUE_SIZE 32u
 static uint32_t eureka576_rng=0x534a5531u;
-static uint32_t eureka576_effect, eureka576_speed, eureka576_until;
+static uint32_t eureka576_effect, eureka576_speed, eureka576_until, eureka576_reverse;
 static uint32_t eureka576_stutter_start, eureka576_stutter_span, eureka576_stutter_step;
-static uint32_t eureka576_last_change, eureka576_have_change, eureka576_was_playing;
+static uint32_t eureka576_was_playing;
 static volatile uint32_t eureka576_event_times[E576_QUEUE_SIZE];
 static volatile uint32_t eureka576_event_head, eureka576_event_tail;
 
@@ -102,56 +102,57 @@ static uint32_t eureka576_random(void)
     eureka576_rng=x;
     return x;
 }
-/* Core 4.1.1 calls this before a note plays. It may run with IRQs masked.
- * Queue only its scheduled time: no decoding, drawing or firmware calls. */
-void eureka576_note_queue(void *event, uint32_t time)
+/* A real FM voice has started (keyboard, MIDI or sequencer).
+ * The callback can run at interrupt level: enqueue time, no frame decoding. */
+void eureka576_voice_on(int32_t voice, int32_t track, void *event)
 {
-    uint32_t tail, next, kind, step;
-    int32_t track;
-    if(!eureka576_enabled || !event) return;
-    kind=FW_EVENT_KIND(event);
-    if(kind!=FW_EVENT_FIRE && kind!=FW_EVENT_FIRST) return;
-    track=FW_EVENT_TRACK(event);
-    if(track<0 || track>3) return;
-    step=FW_EVENT_STEP(event);
-    if(!(step&FW_EVENT_NOTE_TRIG)) return;
+    uint32_t tail,next;
+    (void)voice; (void)event;
+    if(!eureka576_enabled || track<0 || track>3) return;
     tail=eureka576_event_tail;
     next=(tail+1u)&(E576_QUEUE_SIZE-1u);
     if(next==eureka576_event_head) return;
-    eureka576_event_times[tail]=time;
+    eureka576_event_times[tail]=fw_timeline;
     eureka576_event_tail=next;
 }
+/* Every actual note makes a visible change. Randomize the action, not
+ * whether the note has any effect: jump / reverse / speed / stutter. */
 static void eureka576_trigger(uint32_t time)
 {
-    uint32_t action, clip, inside, duration;
-    if(eureka576_have_change &&
-       (uint32_t)(time-eureka576_last_change)<2u*E576_STEP_TIME) return;
-    if(eureka576_random()%100u>=30u) return;
-    eureka576_have_change=1u;
-    eureka576_last_change=time;
+    uint32_t action, clip, inside, duration, frame;
     action=eureka576_random()%100u;
     eureka576_effect=0u;
     eureka576_speed=0u;
-    if(action<45u) {
-        /* 45%: jump to another of 16 clips at a random frame. */
+    if(action<35u) {
         clip=((eureka576_index/36u)+1u+eureka576_random()%15u)%16u;
         inside=eureka576_random()%36u;
         if(!eureka576_seek(clip*36u+inside)) eureka576_enabled=0u;
+    } else if(action<60u) {
+        /* Reverse stays enabled until the next reverse event. */
+        eureka576_reverse^=1u;
+        frame=(eureka576_index+(eureka576_reverse?E576_COUNT-6u:6u))
+              %E576_COUNT;
+        if(!eureka576_seek(frame)) eureka576_enabled=0u;
     } else if(action<80u) {
-        /* 35%: half-speed, double-speed, or hold for 4-8 steps. */
         eureka576_effect=1u;
         eureka576_speed=1u+eureka576_random()%3u;
         duration=4u+eureka576_random()%5u;
         eureka576_until=time+duration*E576_STEP_TIME;
+        frame=(eureka576_index+(eureka576_reverse?E576_COUNT-7u:7u))
+              %E576_COUNT;
+        if(!eureka576_seek(frame)) eureka576_enabled=0u;
     } else {
-        /* 20%: 2-3 adjacent frames repeated for 2-4 steps. */
         eureka576_effect=2u;
         inside=eureka576_index%36u;
-        eureka576_stutter_start=eureka576_index-inside+(inside>33u?33u:inside);
+        eureka576_stutter_start=eureka576_index-inside+
+                                (inside>32u?32u:inside);
         eureka576_stutter_span=2u+eureka576_random()%2u;
         eureka576_stutter_step=0u;
         duration=2u+eureka576_random()%3u;
         eureka576_until=time+duration*E576_STEP_TIME;
+        frame=eureka576_stutter_start+
+              (eureka576_index==eureka576_stutter_start?1u:0u);
+        if(!eureka576_seek(frame)) eureka576_enabled=0u;
     }
     eureka576_dirty=1u;
 }
@@ -163,6 +164,8 @@ static int eureka576_step(void)
               (eureka576_stutter_step++%eureka576_stutter_span);
         return eureka576_seek(frame);
     }
+    if(eureka576_reverse)
+        return eureka576_seek((eureka576_index+E576_COUNT-1u)%E576_COUNT);
     if(++eureka576_index==E576_COUNT) return eureka576_seek(0u);
     return eureka576_next();
 }
@@ -173,18 +176,19 @@ void eureka576_tick(void *ctrl)
         eureka576_event_head=eureka576_event_tail;
         eureka576_effect=0u;
         eureka576_speed=0u;
-        eureka576_have_change=0u;
     }
     eureka576_was_playing=playing;
-    if(eureka576_enabled && playing) {
-        uint32_t tempo=(fw_tempo>=3600 && fw_tempo<=36000)?(uint32_t)fw_tempo:14400u;
-        /* TRIGs are queued early; act only once their sound should play. */
+    /* Live notes change the displayed image even with transport STOPPED. */
+    if(eureka576_enabled) {
         while(eureka576_event_head!=eureka576_event_tail) {
             uint32_t at=eureka576_event_times[eureka576_event_head];
             if((int32_t)(now-at)<0) break;
             eureka576_event_head=(eureka576_event_head+1u)&(E576_QUEUE_SIZE-1u);
             eureka576_trigger(at);
         }
+    }
+    if(eureka576_enabled && playing) {
+        uint32_t tempo=(fw_tempo>=3600 && fw_tempo<=36000)?(uint32_t)fw_tempo:14400u;
         if(eureka576_effect && (int32_t)(now-eureka576_until)>=0) {
             eureka576_effect=0u;
             eureka576_speed=0u;
@@ -245,7 +249,7 @@ int eureka576_key(void *brain,void *ev)
         eureka576_phase=0u;
         eureka576_effect=0u;
         eureka576_speed=0u;
-        eureka576_have_change=0u;
+        eureka576_reverse=0u;
         eureka576_event_head=eureka576_event_tail;
         if(eureka576_enabled) {
             eureka576_readpos=0u;
