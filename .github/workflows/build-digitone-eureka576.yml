@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-eureka-six-pages-trig-keys-20261103'
+    if: github.ref == 'refs/heads/feature/digitone-eureka-func-held-page-fix-20261103'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -130,6 +130,9 @@ jobs:
           assert 'E576_KEY_STEP1 26' in e and 'E576_KEY_STEP16 41' in e
           assert 'return 0; /* preserve all stock 1..16 trigger/key events */' in e
           assert 'if(eureka576_enabled && eureka576_param_armed &&' in e
+          assert 'eureka576_midi_state==E576_MIDI_PANEL_CHORD) && first' in e
+          assert '(!(flags&2) ||' in e
+
 
 
           assert '#define E576_CLIP_FRAMES 36u' in e
@@ -158,7 +161,7 @@ jobs:
           cd _elekloader
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_dreamy_trial" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
-          VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-2.1.elemod"
+          VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-2.2.elemod"
           GRANULAR_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/granulartrial-0.5.elemod"
           test -s "$VISUAL_MOD"
           test -s "$GRANULAR_MOD"
@@ -172,11 +175,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$GRANULAR_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_SIX_PAGES_TRIG_KEYS_TRIAL.syx" \
-            --version PG79
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_HELD_FUNC_PAGES_TRIAL.syx" \
+            --version PG80
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_EUREKA_SIX_PAGES_TRIG_KEYS_TRIAL.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_EUREKA_HELD_FUNC_PAGES_TRIAL.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$GRANULAR_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -188,7 +191,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-SIX-PAGES-TRIG-KEYS-TRIAL
+          name: Digitone-OS1.44-EUREKA-HELD-FUNC-PAGES-TRIAL
           path: _release/
           if-no-files-found: error
           retention-days: 30
