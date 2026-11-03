@@ -1,11 +1,11 @@
 {
   "id": "eureka576",
-  "version": "1.6",
-  "title": "EUREKA RG DOT 576",
+  "version": "1.7",
+  "title": "EUREKA HYBRID 04 + MIDI Glitch 576",
   "category": "Display",
   "author": "analoglav",
   "license": "GPL-2.0-or-later",
-  "description": "All 576 original EUREKA user-video frames reprocessed as 128x64 source-preserving Bayer 4x4 black/yellow RG DOT images; each FM voice note triggers JUMP/REVERSE/SPEED/STUTTER and BPM sync; MIDI+YES toggles, stock audio untouched.",
+  "description": "All 576 original EUREKA frames preserved as approved 128x64 yellow/black HYBRID 04 images. Sound-triggered JUMP/REVERSE/SPEED/STUTTER retained. MIDI AUTO-channel CC37 horizontal tearing, CC38 source-pixel tile fragmentation (2x2..8x8), CC40 4/2/1-frame repeat; 0 restores normal presentation. MIDI+YES toggles; non-modal keys and mute passthrough; stock audio untouched.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
@@ -32,6 +32,11 @@
       "event": "ev_voice_on",
       "fn": "eureka576_voice_on",
       "order": 70
+    },
+    {
+      "event": "ev_midi_cc",
+      "fn": "eureka576_cc",
+      "order": 71
     }
   ],
   "requires": [
