@@ -1,18 +1,39 @@
-# Digitone EUREKA RG DOT + DREAMY (experimental)
+# Digitone EUREKA RG DOT + GRANULAR (experimental)
 
-This is a **trial** port of the existing EFFECTS DREAMY idea, not a bit-exact port of the JUCE algorithm.
+This is an experimental **granular-only** port based on the previous
+DREAMY prototype. Because the DREAMY prototype repeatedly froze on real
+Digitone hardware, it is NOT considered reliable. Do not use or distribute
+it as a validated firmware without further tests.
 
-- Hardware: Digitone mk1 / Digitone Keys on official OS 1.44.
-- Base: existing `eureka576` 576-frame EUREKA video, source composition unchanged, Bayer 4x4 128x64 1-bit LCD.
-- Mod Menu > DREAMY: toggle the insert on/off. The original Digitone FM voices and the stock effects are **not muted**.
-- Auto-channel MIDI CC 60: dry/wet mix (default 64/127); CC 61: delay time 160–520 ms (default 75); CC 62: room tail level (default 72).
-- DREAMY: two overlapping stereo pitch-shifted grains at +5/+12 semitones, a damped stereo cross-feedback delay, and three recirculating damped ambience lines.
-- Software path: stock audio master -> `CORE_AUDIO_INSERT` -> DREAMY -> outputs.
-- Audio: 48 kHz stereo, 32-frame Q1.31 blocks; internal Q15 DSP. Stateful buffers are statically allocated and reset in bounded segments **outside** the audio callback.
-- No added third-party samples or generated visual images. The existing EUREKA image bank and playback controls are untouched.
+- Hardware: Digitone mk1 / Digitone Keys, official OS 1.44.
+- Visual: EUREKA original 576 frames, 128x64 1-bit Bayer RG DOT;
+  sound-driven jump, reversal, speed and stutter remain unchanged.
+- Mod Menu **GRANULAR**: toggle the master insert.
+- Audio: two simultaneous granular pitch voices at **+5 semitones**
+  (perfect fourth up) and **+12 semitones** (octave up). Each pitch
+  uses two overlapping, triangular-window stereo grains.
+- **No added delay, reverb or feedback network.** Both the stock Digitone
+  DELAY and REVERB remain available, with their original controls.
+- AUTO-channel MIDI **CC 60**: dry/wet MIX (0–127, default 64).
+  CC 61 and 62 are **not intercepted** by this mod.
+- The existing Digitone FM and stock FX remain enabled.
+  Audio path is **stock FM/stock delay/reverb -> GRANULAR insert -> output**:
+  the stock FX cannot provide a post-granulator reverb in this routing.
+- 48 kHz stereo, 32 frames per render, Q1.31 I/O and Q15 intermediate.
+  The history ring uses about 128 KiB, down from DREAMY's ~430 KiB.
+  Enabling from Mod Menu resets counters only: it never clears the
+  128 KiB array in a UI callback.
+- Existing base OS, UI assets, EUREKA frames and master remain unchanged.
 
-## Limits and safety
+## Safety and verification
 
-The stereo ambience lines approximate a spacious reverb; they do **not** reproduce JUCE Reverb's internal algorithm. Parameter smoothing, detailed independent controls, and automatic source switching are not in this trial. The output uses a soft saturation knee to constrain peaks, which may affect very loud material. This is **not yet validated on real hardware**; test first at a low monitoring level. Do not treat static checks or a valid SYX as proof of audio quality or boot safety.
+Removing the custom delay and reverb reduces the audio callback work but
+does **not** prove this code meets the Digitone real-time CPU budget.
+Likewise, a successful host test, Elekloader lint or firmware build cannot
+prove absence of the prior hardware freeze. No emulator, measured CPU budget,
+or real-device validation has yet been completed for GRANULAR-only.
 
-The workflow is inherited GitHub Actions, with prebuild native tests and a combined Elekloader lint/patch check. The user-approved one-time run is manually gated. No automatic pushes to main or changes to the approved baseline.
+The firmware is configured for an existing **manual-only** GitHub Actions
+build. There is no auto-trigger. Do not build or upload to hardware without
+the owner's explicit permission, and use a low monitor volume for the first
+hardware experiment.
