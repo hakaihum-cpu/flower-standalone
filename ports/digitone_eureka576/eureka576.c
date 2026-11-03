@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * EUREKA 576-frame Digitone mk1 / Keys OS 1.44 display-only mod.
- * EUREKA user frames preserve their original composition in black/yellow RG DOT.
+ * EUREKA user frames retain the approved 04 HYBRID black/yellow images.
+ * Stock MUTE (FUNC+BANK, FUNC+TRACK, PTN+TRACK) remains fully stock.
  * Stock audio untouched.
  */
 #include <stdint.h>
@@ -9,6 +10,17 @@
 #define E576_FRAME_BYTES 1024u
 #define E576_KEY_MIDI 2
 #define E576_KEY_YES 13
+#define E576_KEY_FUNC 1
+/* Video CCs intentionally avoid all stock Digitone OS1.41 Appendix B
+ * parameter CCs and the existing granular 33/34/36/37/60.
+ * MIDI standard: 65/67/68/69 are generic pedal switches; use only
+ * on Digitone AUTO channel with the video mod enabled.
+ */
+#define E576_CC_GLITCH 40
+#define E576_CC_STUTTER 65
+#define E576_CC_SPEED 67
+#define E576_CC_SCRUB 68
+#define E576_CC_INVERT 69
 extern const uint8_t eureka576_frames[];
 extern const uint8_t eureka576_frames_end[];
 extern const uint8_t eureka576_seek_table[];
@@ -26,6 +38,19 @@ static uint32_t eureka576_rng=0x534a5531u;
 static uint32_t eureka576_effect, eureka576_speed, eureka576_until, eureka576_reverse;
 static uint32_t eureka576_stutter_start, eureka576_stutter_span, eureka576_stutter_step;
 static uint32_t eureka576_was_playing;
+/* MIDI task writes only aligned scalar controls, never framebuffer/state.
+ * UI tick applies seeks; UI draw applies lightweight per-row transforms.
+ * Defaults: glitch off, stutter off, speed auto, scrub off, invert off.
+ */
+static volatile uint8_t eureka576_cc_glitch = 0u;
+static volatile uint8_t eureka576_cc_stutter = 0u;
+static volatile uint8_t eureka576_cc_speed = 64u;
+static volatile uint8_t eureka576_cc_scrub = 0u;
+static volatile uint8_t eureka576_cc_invert = 0u;
+static volatile uint32_t eureka576_cc_serial;
+static uint32_t eureka576_cc_serial_seen;
+static uint32_t eureka576_stutter_anchor, eureka576_cc_stutter_step;
+static uint8_t eureka576_stutter_seen, eureka576_scrub_seen;
 static volatile uint32_t eureka576_event_times[E576_QUEUE_SIZE];
 static volatile uint32_t eureka576_event_head, eureka576_event_tail;
 
@@ -95,6 +120,27 @@ static int eureka576_seek(uint32_t frame)
     eureka576_dirty=1u;
     return 1;
 }
+/* Before the stock MIDI CC router applies a CC, core's AUTO flag
+ * identifies the selected track's AUTO channel. Only take video CCs
+ * while EUREKA is enabled, and never consume other stock controls. */
+int eureka576_cc(int32_t track, int32_t cc, int32_t value, int32_t flags)
+{
+    volatile uint8_t *destination;
+    (void)track;
+    if(!eureka576_enabled || (((uint32_t)flags & CORE_MIDI_CC_AUTO)==0u) ||
+       value<0 || value>127) return 0;
+    switch(cc) {
+    case E576_CC_GLITCH: destination=&eureka576_cc_glitch; break;
+    case E576_CC_STUTTER: destination=&eureka576_cc_stutter; break;
+    case E576_CC_SPEED: destination=&eureka576_cc_speed; break;
+    case E576_CC_SCRUB: destination=&eureka576_cc_scrub; break;
+    case E576_CC_INVERT: destination=&eureka576_cc_invert; break;
+    default: return 0;
+    }
+    *destination=(uint8_t)value;
+    ++eureka576_cc_serial;  /* UI task notices MIDI updates even when STOPPED */
+    return 1;
+}
 static uint32_t eureka576_random(void)
 {
     uint32_t x=eureka576_rng;
@@ -159,7 +205,19 @@ static void eureka576_trigger(uint32_t time)
 }
 static int eureka576_step(void)
 {
-    uint32_t frame;
+    uint32_t frame, span;
+    if(eureka576_cc_stutter) {
+        /* Span is 2..8 frames, constrained within the source 36-frame clip. */
+        span=2u+(((uint32_t)eureka576_cc_stutter-1u)*6u)/126u;
+        frame=eureka576_stutter_anchor-
+              (eureka576_stutter_anchor%36u)+
+              ((eureka576_stutter_anchor%36u+
+                (eureka576_cc_stutter_step++%span))%36u);
+        return eureka576_seek(frame);
+    }
+    if(eureka576_cc_speed>=112u) {
+        return eureka576_seek((eureka576_index+E576_COUNT-1u)%E576_COUNT);
+    }
     if(eureka576_effect==2u) {
         frame=eureka576_stutter_start+
               (eureka576_stutter_step++%eureka576_stutter_span);
@@ -179,6 +237,24 @@ void eureka576_tick(void *ctrl)
         eureka576_speed=0u;
     }
     eureka576_was_playing=playing;
+    /* UI-only handling: never decode 576-frame data in the MIDI task. */
+    if(eureka576_cc_serial_seen!=eureka576_cc_serial) {
+        eureka576_cc_serial_seen=eureka576_cc_serial;
+        eureka576_dirty=1u;
+    }
+    if(eureka576_cc_stutter!=eureka576_stutter_seen) {
+        eureka576_stutter_seen=eureka576_cc_stutter;
+        eureka576_stutter_anchor=eureka576_index;
+        eureka576_cc_stutter_step=0u;
+    }
+    if(eureka576_cc_scrub!=eureka576_scrub_seen) {
+        eureka576_scrub_seen=eureka576_cc_scrub;
+        if(eureka576_enabled && eureka576_scrub_seen!=0u) {
+            uint32_t index=
+                ((uint32_t)(eureka576_scrub_seen-1u)*575u)/126u;
+            if(!eureka576_seek(index)) eureka576_enabled=0u;
+        }
+    }
     /* Live notes change the displayed image even with transport STOPPED. */
     if(eureka576_enabled) {
         uint32_t note_time=0u, have_note=0u;
@@ -190,27 +266,47 @@ void eureka576_tick(void *ctrl)
             have_note=1u;
         }
         /* One visible action per UI frame, even when a chord starts voices. */
-        if(have_note) eureka576_trigger(note_time);
+        if(have_note && !eureka576_cc_scrub) {
+            eureka576_trigger(note_time);
+            if(eureka576_cc_stutter) {
+                eureka576_stutter_anchor=eureka576_index;
+                eureka576_cc_stutter_step=0u;
+            }
+        }
     }
-    if(eureka576_enabled && playing) {
+    if(eureka576_enabled && playing && !eureka576_cc_scrub) {
         uint32_t tempo=(fw_tempo>=3600 && fw_tempo<=36000)?(uint32_t)fw_tempo:14400u;
         if(eureka576_effect && (int32_t)(now-eureka576_until)>=0) {
             eureka576_effect=0u;
             eureka576_speed=0u;
         }
-        if(eureka576_effect!=1u || eureka576_speed!=3u) {
-            /* 4.5fps at 120BPM, scaled by actual sequencer tempo. */
+        {
+            /* 0..15 freeze, 16..47 half, 48..79 AUTO, 80..111 2x,
+             * 112..127 reverse. AUTO retains the HG76 note effects. */
+            uint32_t speed=eureka576_cc_speed;
+            uint32_t auto_speed=(speed>=48u && speed<80u);
+            uint32_t freeze=(speed<16u) ||
+                (auto_speed && eureka576_effect==1u &&
+                 eureka576_speed==3u);
             uint32_t delta=9u*tempo;
-            if(eureka576_effect==1u && eureka576_speed==1u) delta/=2u;
-            if(eureka576_effect==1u && eureka576_speed==2u) delta*=2u;
-            eureka576_phase+=delta;
-            if(eureka576_phase>=864000u) {
-                eureka576_phase-=864000u;
-                if(!eureka576_step()) eureka576_enabled=0u;
-                eureka576_dirty=1u;
+            if(speed<48u) delta/=2u;
+            else if(speed>=80u && speed<112u) delta*=2u;
+            else if(auto_speed && eureka576_effect==1u) {
+                if(eureka576_speed==1u) delta/=2u;
+                if(eureka576_speed==2u) delta*=2u;
+            }
+            if(!freeze) {
+                eureka576_phase+=delta;
+                if(eureka576_phase>=864000u) {
+                    eureka576_phase-=864000u;
+                    if(!eureka576_step()) eureka576_enabled=0u;
+                    eureka576_dirty=1u;
+                }
             }
         }
     }
+    if(eureka576_enabled && (eureka576_cc_glitch || eureka576_cc_invert))
+        eureka576_dirty=1u; /* animate row effects at UI tick, not audio rate */
     if(eureka576_dirty) {
         *((volatile uint8_t *)ctrl+0x20)=1u;
         eureka576_dirty=0u;
@@ -221,21 +317,52 @@ void eureka576_tick(void *ctrl)
  */
 void eureka576_draw(void *bmp, void *ctrl)
 {
-    uint32_t x,y,start;
+    uint32_t x,y;
     (void)ctrl;
     if(!eureka576_enabled) return;
     fw_fillrect(bmp,0,0,127,63,0);
     for(y=0u;y<64u;++y) {
         uint32_t page=7u-(y>>3);
         uint8_t bit=(uint8_t)(1u<<(y&7u));
-        x=0u;
-        while(x<128u) {
-            while(x<128u && !(eureka576_framebuf[page+8u*x]&bit)) ++x;
-            if(x==128u) break;
-            start=x;
-            while(x<128u && (eureka576_framebuf[page+8u*x]&bit)) ++x;
-            fw_fillrect(bmp,(int32_t)start,(int32_t)(63u-y),
-                        (int32_t)(x-1u),(int32_t)(63u-y),1);
+        uint32_t amp=((uint32_t)eureka576_cc_glitch+15u)/16u;
+        uint32_t stripe=y>>2;
+        uint32_t invert=0u, hash=0u;
+        int32_t shift=0, start=-1;
+        if(amp) {
+            /* One offset per 4-line band: bounded +-8 pixels, not a
+             * per-pixel random generator. Decoding cost stays fixed. */
+            hash=(stripe*1103515245u) ^
+                 ((eureka576_index+(fw_timeline>>15))*2654435761u);
+            hash^=hash>>13;
+            shift=(int32_t)(hash%(2u*amp+1u))-(int32_t)amp;
+        }
+        if(eureka576_cc_invert) {
+            /* 0 off; 127 inverted everywhere; intermediate values
+             * invert a variable fraction of four-line video stripes. */
+            if(eureka576_cc_invert==127u) invert=1u;
+            else {
+                hash=(stripe*29u+(fw_timeline>>17))&127u;
+                invert=(hash<(uint32_t)eureka576_cc_invert);
+            }
+        }
+        /* Scan pixels once; flush consecutive yellow runs with 1 rect.
+         * When all CCs are zero this is exactly the original 128x64
+         * 1-bit image, not a new drawing, mask or source animation.
+         */
+        for(x=0u;x<=128u;++x) {
+            int32_t sx=(int32_t)x-shift;
+            uint32_t lit=0u;
+            if(x<128u && sx>=0 && sx<128) {
+                lit=(eureka576_framebuf[page+8u*(uint32_t)sx]&bit)!=0u;
+            }
+            if(x<128u && invert) lit^=1u;
+            if(lit) {
+                if(start<0) start=(int32_t)x;
+            } else if(start>=0) {
+                fw_fillrect(bmp,start,(int32_t)(63u-y),
+                            (int32_t)x-1,(int32_t)(63u-y),1);
+                start=-1;
+            }
         }
     }
 }
@@ -247,8 +374,13 @@ int eureka576_key(void *brain,void *ev)
     (void)brain;
     if(key==E576_KEY_MIDI) {
         if(first) eureka576_midi_held=1u;
-        if(flags&16) eureka576_midi_held=0u;
+        /* OS 1.44 reports a release as either 0 or 0x10. */
+        if(!(flags&1)) eureka576_midi_held=0u;
     }
+    /* Never consume FUNC+BANK, FUNC+TRACK1..4, PTN+TRACK1..4,
+     * MIDI bank selections or stock key LEDs. No MUTE overlay exists.
+     * Even if MIDI is held, FUNC+YES stays with the stock firmware. */
+    if((flags&2)!=0) return 0;
     if(key==E576_KEY_YES && first && eureka576_midi_held) {
         eureka576_enabled^=1u;
         eureka576_phase=0u;
@@ -256,6 +388,14 @@ int eureka576_key(void *brain,void *ev)
         eureka576_speed=0u;
         eureka576_reverse=0u;
         eureka576_event_head=eureka576_event_tail;
+        eureka576_scrub_seen=0u;
+        eureka576_stutter_seen=0u;
+        eureka576_cc_glitch=0u;
+        eureka576_cc_stutter=0u;
+        eureka576_cc_speed=64u;
+        eureka576_cc_scrub=0u;
+        eureka576_cc_invert=0u;
+        eureka576_cc_serial++;
         if(eureka576_enabled) {
             eureka576_readpos=0u;
             eureka576_clear();
