@@ -1,11 +1,11 @@
-name: Digitone EUREKA 6 PARAM PAGES + TRIG1-16 + LONG HANN (MC78 protected)
+name: Digitone FOUR EXCLUSIVE FX + EUREKA VIDEO (PG79 protected)
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-eureka-six-pages-trig-keys-20261103'
+    if: github.ref == 'refs/heads/feature/digitone-fx-dedicated-pages-20261103'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -55,7 +55,7 @@ jobs:
           import json
           import re
           from pathlib import Path
-          for module in ('digitone_eureka576', 'digitone_dreamy_trial'):
+          for module in ('digitone_eureka576', 'digitone_fx_rack'):
               root = Path('ports') / module
               doc = json.loads((root / 'mod.json').read_text())
               source = '\n'.join((root / f).read_text() for f in doc['sources'] if f.endswith('.c'))
@@ -145,6 +145,45 @@ jobs:
           assert 'memset(' not in d and 'malloc(' not in d
           print('PASS: audio insert isolated from EUREKA display')
           PY
+      - name: Preflight all four exclusive FX DSP and UI (host only)
+        run: |
+          set -euo pipefail
+          gcc -DRACK_HOST_TEST -std=c11 -O1 -g -Wall -Wextra -Werror -Wconversion \
+            -fsanitize=undefined -fno-sanitize-recover=all \
+            -I ports/digitone_fx_rack \
+            ports/digitone_fx_rack/rack_audio.c \
+            ports/digitone_fx_rack/test_rack_audio.c -o /tmp/dn_rack_host_test
+          /tmp/dn_rack_host_test
+          rm /tmp/dn_rack_host_test
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=Path('ports/digitone_fx_rack')
+          j=json.loads((r/'mod.json').read_text())
+          menu=[x for x in j['contribute'] if x['to']=='core_menu']
+          audio=[x for x in j['contribute'] if x['to']=='core_audio']
+          assert len(menu)==5 and len(audio)==1, 'one owner and five menu entries'
+          assert j['resources']['regions'][0]['lo']=='0x47900000'
+          assert j['resources']['regions'][0]['hi']=='0x47B00000'
+          assert j['sources']==['granular.c','rack_audio.c','rack_ui.c','digitone_fx_pages.c']
+          d=(r/'rack_audio.c').read_text()
+          u=(r/'rack_ui.c').read_text()
+          g=(r/'granular.c').read_text()
+          p=(r/'digitone_fx_pages.c').read_text()
+          assert 'struct core_audio_owner rack_owner={0,rack_render,CORE_AUDIO_INSERT};' in u
+          assert 'rack_audio_render(out,in,active)' in u
+          assert 'rack_granular_render(out,in)' in u
+          assert 'haze_host_memory' in d and 'haze_primed' in d
+          assert 'reel_frame' in d and 'crush_frame' in d and 'haze_frame' in d
+          assert 'rack_granular_set' in g and 'rack_granular_cc' in g
+          assert 'dnfx_page_count' in p and 'haze' not in j['id'].lower()
+          assert 'KEY_STEP1' in u and 'KEY_STEP16' in u and 'return 0;' in u
+          assert 'rack_fading' in u and 'rack_ramp' in u
+          assert 'CORE_AUDIO_MUTE_VOICES' not in u
+          assert 'void eureka576_draw' in Path('ports/digitone_eureka576/eureka576.c').read_text()
+          assert 'workflow_dispatch:' in Path('.github/workflows/build-digitone-eureka576.yml').read_text()
+          print('PASS: four FX descriptors, single master insert, video separation, source gates')
+          PY
       - name: Obtain pinned elekloader and core
         run: |
           set -euo pipefail
@@ -157,29 +196,29 @@ jobs:
           set -euo pipefail
           cd _elekloader
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
-          python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_dreamy_trial" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
+          python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_fx_rack" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-2.1.elemod"
-          GRANULAR_MOD="$GITHUB_WORKSPACE/ports/digitone_dreamy_trial/out/granulartrial-0.5.elemod"
+          RACK_MOD="$GITHUB_WORKSPACE/ports/digitone_fx_rack/out/digitone-fx-rack-0.1.0.elemod"
           test -s "$VISUAL_MOD"
-          test -s "$GRANULAR_MOD"
+          test -s "$RACK_MOD"
           CORE="$GITHUB_WORKSPACE/_firmware/core.elemod"
           STOCK="$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.lint "$VISUAL_MOD" --stock "$STOCK" --with "$CORE"
-          python3 -m elekloader.lint "$GRANULAR_MOD" --stock "$STOCK" --with "$CORE"
-          python3 -m elekloader.lint "$VISUAL_MOD" "$GRANULAR_MOD" --stock "$STOCK" --with "$CORE"
+          python3 -m elekloader.lint "$RACK_MOD" --stock "$STOCK" --with "$CORE"
+          python3 -m elekloader.lint "$VISUAL_MOD" "$RACK_MOD" --stock "$STOCK" --with "$CORE"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
-            --mod "$VISUAL_MOD" --mod "$GRANULAR_MOD" --check
+            --mod "$VISUAL_MOD" --mod "$RACK_MOD" --check
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
-            --mod "$VISUAL_MOD" --mod "$GRANULAR_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_EUREKA_SIX_PAGES_TRIG_KEYS_TRIAL.syx" \
-            --version PG79
+            --mod "$VISUAL_MOD" --mod "$RACK_MOD" \
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_FX_RACK_EUREKA_TRIAL.syx" \
+            --version PG80
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_EUREKA_SIX_PAGES_TRIG_KEYS_TRIAL.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_FX_RACK_EUREKA_TRIAL.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
-          cp "$VISUAL_MOD" "$GRANULAR_MOD" "$GITHUB_WORKSPACE/_release/"
+          cp "$VISUAL_MOD" "$RACK_MOD" "$GITHUB_WORKSPACE/_release/"
           cp "$GITHUB_WORKSPACE/ports/digitone_eureka576/eureka_lcd_preview.png" "$GITHUB_WORKSPACE/_release/"
           python3 "$GITHUB_WORKSPACE/ports/digitone_eureka576/tests/render_face_preview.py" \
             "$GITHUB_WORKSPACE/ports/digitone_eureka576/reference.bin" \
@@ -188,7 +227,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-SIX-PAGES-TRIG-KEYS-TRIAL
+          name: Digitone-OS1.44-FOUR-FX-RACK-TRIAL
           path: _release/
           if-no-files-found: error
           retention-days: 30
