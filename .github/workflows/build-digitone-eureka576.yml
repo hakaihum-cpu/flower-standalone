@@ -1,6 +1,12 @@
 name: Digitone PG81 EXCLUSIVE FX CPUFIX + EUREKA VIDEO (PG79 protected)
 on:
   workflow_dispatch:
+  # Authorized one-time CPUFIX PG81 test build; remove push once queued.
+  push:
+    branches:
+      - fix/digitone-pg80-audio-cpu-20261104
+    paths:
+      - .github/workflows/build-digitone-eureka576.yml
 permissions:
   contents: read
 jobs:
