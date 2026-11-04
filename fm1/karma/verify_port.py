@@ -76,10 +76,18 @@ def main():
         "No excluded MIYAKO engines": (not any(v in parts["eng_miyako.c"] for v in
                                             ("Vongon", "Knowing", "Twilight", "EP-Sampler", "Rings", "Warps"))),
         "No JUCE / runtime allocation": (not forbidden_dependencies(parts["eng_miyako.c"])),
-        "MIYAKO buffer bounded": ("#define MIYAKO_RING 4096u" in parts["eng_miyako.c"] and
+        "MIYAKO buffer bounded": ("#define MIYAKO_RING 1024u" in parts["eng_miyako.c"] and
+                                  "#define MIYAKO_EUREKA_DECIM 4u" in parts["eng_miyako.c"] and
+                                  "mi_eureka_max_segment_fits" in parts["eng_miyako.c"] and
                                   "edge < 32u" in parts["eng_miyako.c"] and
                                   "mi_slot_max_bytes" in parts["eng_miyako.c"] and
                                   "mi_ring_power_of_two" in parts["eng_miyako.c"]),
+        "Native reverb buffers rebalanced without losing either allpass": (
+            'static int16_t rev_ap0[556] __attribute__((section(".pool")));' in parts["fx.c"] and
+            'static int16_t rev_ap1[441];' in parts["fx.c"] and
+            'c = k ? rev_ap1 : rev_ap0;' in parts["fx.c"] and
+            'c += REV_AP[k];' not in parts["fx.c"] and
+            'static int16_t rev_ap[556 + 441]' not in parts["fx.c"]),
         "Target linker guards flash/RAM/pool": (
             "XIP" in (root / "firmware" / "app.ld").read_text() and
             "POOL" in (root / "firmware" / "app.ld").read_text() and
