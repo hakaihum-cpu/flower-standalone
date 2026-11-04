@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Static preflight before the explicit CircleCI FM-1 build. No target build here."""
 from pathlib import Path
+import re
 
 root = Path(__file__).resolve().parent.parent
 engine = (root / "fm1" / "karma" / "eng_miyako.c").read_text(encoding="utf-8")
@@ -28,8 +29,11 @@ for token in ('Plaits', 'Elements', 'Clouds'):
     require(token in manifest, f"Mutable retention omitted: {token}")
 for token in ('Vongon', 'EP-Sampler', 'Knowing', 'Tape', 'Twilight', 'Rings', 'Warps'):
     require(token in manifest, f"requested exclusion omitted: {token}")
+# Reject target-incompatible APIs in code, not in explanatory comments.
+# The former raw-text scan incorrectly rejected "new slice"/"new one" comments.
+engine_code = re.sub(r'/\\*[\\s\\S]*?\\*/|//[^\\n]*', '', engine)
 for forbidden in ('JuceHeader', 'malloc(', 'calloc(', 'realloc(', 'new ', 'float ', 'double '):
-    require(forbidden not in engine, f"unsupported target dependency: {forbidden}")
+    require(forbidden not in engine_code, f"unsupported target dependency: {forbidden}")
 require('#define MIYAKO_RING 4096u' in engine, "bounded capture ring missing")
 require('mi_slot_max_bytes' in engine and 'mi_ring_power_of_two' in engine,
         "static target-memory safety guard missing")
