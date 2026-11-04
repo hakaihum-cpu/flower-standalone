@@ -21,11 +21,11 @@ Upstream: KARMA commit `db3cda79359ae914d1e58c0fc96c6ca744e7950e`.
   brackets, parentheses, properly terminated comments and string literals.
   This is **not** a C compiler type check.
 - PASS: tested numeric upper bounds with Python for all parameter extrema:
-  EUREKA segment 256..3304 samples fits 4096 x int16 ring.
+  EUREKA 256..3304 input samples fit 1024 x int16 storage at 4:1 sampling.
   Repeats max 4, total tail max 16520 samples (about 375 ms at 44.1kHz).
   32-bit interpolation intermediate at most 16,711,170.
   32-bit wet multiply bound 2,147,287,044 < INT32_MAX 2,147,483,647.
-- PASS: measured equivalent host `sizeof(miyako_slot_t)=8228` bytes and
+- PASS: measured equivalent host `old sizeof(miyako_slot_t)=8228` bytes and
   confirmed the C static bound rejects structures above 8448 bytes.
   The actual JieLi compiler layout **not measured**.
 - PASS: the patched physical EDIT/FX button routes, SELECT/PRESETS/ALGORITHM
@@ -66,3 +66,16 @@ ROM region, heap/stack/pool budget, firmware slot or integrity assertion fails.
 
 Next action requires explicit user approval for the manual
 `run_build=true` CircleCI pipeline. Until then no .fwsc has been produced.
+
+## Pool headroom correction (2026-11-04)
+Previous target linker measured .pool 341632 B of 344064 (only 2432 B free,
+8192 required). Optimized track-1 arena is bounded by Juno's 2456 B,
+freeing a measured-host equivalent 5772 B. The reverb's second allpass
+(441 int16, 882 B) is moved from .pool to .bss without changing DSP.
+Projected POOL free: 2432 + 5772 + 882 = **9086 B**, over the original
+8192 B safety floor. Projected RAM .data+.bss: 96728 + 882 = **97610 B**,
+below 98304. These are projections from the last actual link and must be
+validated by the JieLi target build; no linker thresholds were lowered.
+Local host ASan/UBSan DSP/FX/UI tests and 100000-sample split-reverb
+bit-equivalence test pass. EUREKA retains 256..3304-sample timing using
+4:1 stored points and interpolated replay.
