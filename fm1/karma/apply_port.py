@@ -164,26 +164,26 @@ def main():
     # increment; the new pointers preserve identical per-stage sample data.
     replacement(src / "fx.c",
                 'static int16_t rev_ap[556 + 441] __attribute__((section(".pool")));',
-                'static int16_t rev_ap0[556] __attribute__((section(".pool")));\\n'
+                'static int16_t rev_ap0[556] __attribute__((section(".pool")));\n'
                 'static int16_t rev_ap1[441]; /* .bss: unchanged second allpass */')
     replacement(src / "fx.c",
-                '            int16_t *c = rev_ap;\\n'
-                '            for (k = 0; k < 2u; k++) {\\n'
-                '                int32_t b = c[fx.ap_i[k]], v = a + (b >> 1);\\n'
-                '                c[fx.ap_i[k]] = (int16_t)clamp(v, -32768, 32767);\\n'
-                '                a = b - (v >> 1);\\n'
-                '                if (++fx.ap_i[k] >= REV_AP[k])\\n'
-                '                    fx.ap_i[k] = 0;\\n'
-                '                c += REV_AP[k];\\n'
+                '            int16_t *c = rev_ap;\n'
+                '            for (k = 0; k < 2u; k++) {\n'
+                '                int32_t b = c[fx.ap_i[k]], v = a + (b >> 1);\n'
+                '                c[fx.ap_i[k]] = (int16_t)clamp(v, -32768, 32767);\n'
+                '                a = b - (v >> 1);\n'
+                '                if (++fx.ap_i[k] >= REV_AP[k])\n'
+                '                    fx.ap_i[k] = 0;\n'
+                '                c += REV_AP[k];\n'
                 '            }',
-                '            int16_t *c;\\n'
-                '            for (k = 0; k < 2u; k++) {\\n'
-                '                c = k ? rev_ap1 : rev_ap0;\\n'
-                '                int32_t b = c[fx.ap_i[k]], v = a + (b >> 1);\\n'
-                '                c[fx.ap_i[k]] = (int16_t)clamp(v, -32768, 32767);\\n'
-                '                a = b - (v >> 1);\\n'
-                '                if (++fx.ap_i[k] >= REV_AP[k])\\n'
-                '                    fx.ap_i[k] = 0;\\n'
+                '            int16_t *c;\n'
+                '            for (k = 0; k < 2u; k++) {\n'
+                '                c = k ? rev_ap1 : rev_ap0;\n'
+                '                int32_t b = c[fx.ap_i[k]], v = a + (b >> 1);\n'
+                '                c[fx.ap_i[k]] = (int16_t)clamp(v, -32768, 32767);\n'
+                '                a = b - (v >> 1);\n'
+                '                if (++fx.ap_i[k] >= REV_AP[k])\n'
+                '                    fx.ap_i[k] = 0;\n'
                 '            }')
     # EUREKA's captured segment must remain audible after a note ends,
     # even when KARMA's legacy DIST/INSERT tail counter reaches zero.
