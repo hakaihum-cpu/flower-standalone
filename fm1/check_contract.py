@@ -41,6 +41,27 @@ require('new ' not in code_only('/* fade the new one */\n// new slice\nvoid ok(v
 require('malloc(' in code_only('void bad(void) { malloc(4); }'),
         "comment stripping regression: forbidden API hidden")
 engine_code = code_only(engine)
+# A previous CircleCI run failed at C compilation because F_INT was used
+# by the native source but absent from the host harness. Detect *all* such
+# missing native format symbols before the first compiler is invoked.
+host_harness = code_only((root / "fm1" / "karma" / "test_engine.c").read_text(encoding="utf-8"))
+native_format_order = (
+    "F_INT", "F_PCT", "F_BIPCT", "F_TIME", "F_LFOHZ", "F_CUTOFF",
+    "F_DB", "F_SEMI", "F_ENUM", "F_BPM", "F_NOTE", "F_ONOFF",
+    "F_OCT", "F_STEPS", "F_SWING", "F_FILT"
+)
+host_format_match = re.search(r"enum\\s*\\{([^}]*\\bF_INT\\b[^}]*)\\}", host_harness)
+require(host_format_match is not None, "host C ABI missing native F_INT enum")
+host_format_order = tuple(re.findall(r"\\bF_[A-Z0-9_]+\\b", host_format_match.group(1)))
+require(host_format_order == native_format_order,
+        f"host C ABI does not match pinned KARMA core.h format order: {host_format_order}")
+native_format_usage = set(re.findall(r"\\bF_[A-Z0-9_]+\\b", engine_code))
+require(native_format_usage <= set(host_format_order),
+        f"host C ABI lacks engine format symbols: {sorted(native_format_usage - set(host_format_order))}")
+host_defines = set(re.findall(r"^#define\\s+(P_E[0-7]|ENGI_ACID)\\b", host_harness, re.M))
+native_id_usage = set(re.findall(r"\\b(?:P_E[0-7]|ENGI_ACID)\\b", engine_code))
+require(native_id_usage <= host_defines,
+        f"host C ABI lacks engine IDs: {sorted(native_id_usage - host_defines)}")
 for forbidden in ('JuceHeader', 'malloc(', 'calloc(', 'realloc(', 'new ', 'float ', 'double '):
     require(forbidden not in engine_code, f"unsupported target dependency: {forbidden}")
 require('#define MIYAKO_RING 4096u' in engine, "bounded capture ring missing")
