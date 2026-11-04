@@ -194,6 +194,28 @@ int main(void) {
         require(!miyako_tail_active(t), "other engines never claim MIYAKO arena");
         t->engine = ENGI_ACID;
     }
+    require(sizeof(miyako_slot_t) == 2084u,
+            "MIYAKO slot fits 2084-byte memory cap");
+    {
+        /* Exercise maximum EUREKA slice duration and repeat count. The
+         * downsampled ring must never index beyond 1024 int16 entries. */
+        miyako_slot_t *st = (miyako_slot_t *)host_arena;
+        uint32_t j;
+        memset(st, 0, sizeof(*st));
+        st->mode = 2;
+        st->wet = 32766;
+        t->p[P_E4] = 2;
+        t->p[P_E5] = 127;
+        t->p[P_E6] = 127; /* original longest slice: 3304 input samples */
+        t->p[P_E7] = 127; /* original maximum: 4 repeats */
+        for (j = 0; j < 600u; ++j) {
+            memset(b, 0, sizeof(b));
+            b[0] = (j & 1u) ? 16000 : -16000;
+            miyako_post(t, b, 32u);
+        }
+        require(st->segment == 3304u,
+                "maximum EUREKA slice still spans 3304 input samples");
+    }
     require(ENG_MIYAKO.npresets==6,"six factory presets; FM uses Plaits");
     require(ENG_MIYAKO.post==miyako_post,"real post callback");
     require(ENG_MIYAKO.desc==miyako_desc,"actual DSP-driven parameter descriptors");
