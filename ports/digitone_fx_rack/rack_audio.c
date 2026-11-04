@@ -133,6 +133,7 @@ static const int16_t haze_soft_og[257]={
 static int16_t reel_soft_table[2][257];
 static volatile uint8_t reel_soft_index=0u;
 static uint8_t reel_soft_drive=255u;
+static uint8_t reel_wow_prepared=255u,reel_flutter_prepared=255u;
 static uint32_t reel_wow_depth_q8,reel_flutter_depth_q8;
 
 static int32_t tape_lookup(int32_t value,const int16_t *table)
@@ -152,6 +153,16 @@ void rack_audio_prepare_reel(uint8_t drive)
     uint32_t drive256;
     uint8_t next;
     unsigned i;
+    uint8_t wow=rack_state[DNFX_REEL].value[0][1];
+    uint8_t flutter=rack_state[DNFX_REEL].value[0][2];
+    if(wow!=reel_wow_prepared) {
+        reel_wow_depth_q8=49152u*(uint32_t)wow/127u;
+        reel_wow_prepared=wow;
+    }
+    if(flutter!=reel_flutter_prepared) {
+        reel_flutter_depth_q8=12288u*(uint32_t)flutter/127u;
+        reel_flutter_prepared=flutter;
+    }
     if(drive>127u) drive=127u;
     if(reel_soft_drive==drive) return;
     drive256=256u+(1536u*(uint32_t)drive)/127u;
@@ -162,8 +173,6 @@ void rack_audio_prepare_reel(uint8_t drive)
         int32_t y=(x*(int32_t)drive256)/denom;
         reel_soft_table[next][i]=(int16_t)clamp16(y);
     }
-    reel_wow_depth_q8=49152u*(uint32_t)rack_state[DNFX_REEL].value[0][1]/127u;
-    reel_flutter_depth_q8=12288u*(uint32_t)rack_state[DNFX_REEL].value[0][2]/127u;
     reel_soft_drive=drive;
     reel_soft_index=next; /* atomic 8-bit commit: table is complete */
 }
@@ -181,7 +190,7 @@ static void reel_frame(int32_t *out,const int16_t dry[2],const struct dnfx_state
     unsigned ch;
     uint32_t wow=(uint32_t)s->value[0][1],flutter=(uint32_t)s->value[0][2];
     uint32_t wet=(uint32_t)s->value[0][4];
-    const int16_t *soft=reel_soft_table[reel_soft_index];
+    const int16_t *curve=reel_soft_table[reel_soft_index];
     /* 18ms head; per-knob modulation depths are computed in the UI.
      * 32-bit products fit: 49152*32767 < INT32_MAX. */
     int32_t d_0=(int32_t)(864*256);
@@ -201,7 +210,7 @@ static void reel_frame(int32_t *out,const int16_t dry[2],const struct dnfx_state
         reel_low[ch]+=((read-reel_low[ch])*25518)>>15; /* ~11.5k lowpass */
         reel_high[ch]+=((reel_low[ch]-reel_high[ch])*180)>>15; /* 42Hz hipass */
         filtered=reel_low[ch]-reel_high[ch];
-        soft=tape_lookup(filtered,soft);
+        soft=tape_lookup(filtered,curve);
         hiss=((int32_t)((rng()>>16)&65535u)-32768)*
              (int32_t)s->value[0][3]/(127*77); /* <= ~1.3% */
         processed=add_sat(soft,hiss);
