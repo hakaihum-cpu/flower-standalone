@@ -19,3 +19,12 @@ Branch: `feature/fm1-miyako-port-20261104` in `hakaihum-cpu/flower-standalone`.
 - The CircleCI branch listing UI and the historical `<<` YAML error cannot be certified by GitHub source inspection alone. A valid branch is present and the configuration contains only the intended parameter interpolation.
 
 Next allowed validation is the existing CircleCI `androidapp-build` pipeline with both source branches set to this feature branch and `run_build=true` **only when the user authorizes execution**.
+
+## Pool headroom failure (observed JieLi target link)
+Observed: .pool 341632 / 344064, spare 2432 < required 8192.
+Fixed in source by bounding the MIYAKO track-1 arena under Juno's
+existing 2456-byte arena and relocating only the second 441-sample native
+reverb allpass (882 bytes) from .pool to .bss. EUREKA preserves 256..3304
+input-sample slice timing via 4:1 capture with interpolated playback.
+Projected next link: .pool free 9086, .data+.bss 97610 / 98304; no
+linker guard weakened. Native target link has NOT yet been rerun.
