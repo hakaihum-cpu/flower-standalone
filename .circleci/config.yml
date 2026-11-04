@@ -93,7 +93,7 @@ jobs:
           command: |
             set -eu
             cd fm1-karma
-            ./build.sh
+            sh ./build.sh
             test -s build/felucca.bin
             test -s build/loader/ota.bin
             test -s build/felucca.fwsc
