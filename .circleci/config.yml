@@ -1,161 +1,109 @@
+# MIYAKO on M-VAVE FM-1. MANUAL ONLY: run_build=true.
+# Firmware base is pinned KARMA, preserving Plaits + Elements + Clouds.
+# This branch never builds Android and never writes to main.
 version: 2.1
-
 parameters:
   run_build:
     type: boolean
     default: false
 
 jobs:
-  android_build:
+  fm1_firmware:
     docker:
-      - image: cimg/android:2026.08.1
+      - image: cimg/base:2024.08-22.04
     resource_class: medium
+    environment:
+      KARMA_PIN: "db3cda79359ae914d1e58c0fc96c6ca744e7950e"
+      JIELI_TOOLCHAIN: "/home/circleci/.jieli/toolchain"
+      AC79_SDK: "/home/circleci/fw-AC79_AIoT_SDK"
+      PYTHON: "/home/circleci/.venv-fm1/bin/python"
     steps:
       - checkout
-
       - run:
-          name: Static EP Sampler source preflight
+          name: Gate branch and check user feature contract
           command: |
-            set -euo pipefail
-            test -f EP_Sampler/settings.gradle
-            test -f EP_Sampler/app/build.gradle
-            test -f EP_Sampler/app/src/main/cpp/SampleBank.cpp
-            test -f EP_Sampler/app/src/main/cpp/AudioEngine.cpp
-            test -f EP_Sampler/app/src/main/java/com/example/epsampler/MainActivity.java
-            grep -F "abiFilters 'arm64-v8a', 'armeabi-v7a'" EP_Sampler/app/build.gradle
-            grep -F 'signingConfig signingConfigs.debug' EP_Sampler/app/build.gradle
-            test ! -f EP_Sampler/app/src/main/assets/epbank_24bit_dedup.bin
-
+            set -eu
+            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-port-20261104"
+            test "$(uname -m)" = "x86_64"
+            grep -q '^ID=ubuntu' /etc/os-release
+            grep -q '^VERSION_ID="22.04"' /etc/os-release
+            python3 -m py_compile fm1/karma/apply_port.py fm1/check_contract.py
+            python3 fm1/check_contract.py
       - run:
-          name: Install Android SDK components
+          name: Install build prerequisites
           command: |
-            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-              "platforms;android-35" \
-              "build-tools;35.0.0" \
-              "ndk;26.1.10909125" \
-              "cmake;3.22.1"
-
+            set -eu
+            sudo apt-get update
+            sudo apt-get install -y git curl xz-utils gcc g++ python3-pip python3-venv libtinfo5
+            python3 -m venv /home/circleci/.venv-fm1
+            /home/circleci/.venv-fm1/bin/python -m pip install --disable-pip-version-check "Pillow==10.4.0"
+            /home/circleci/.venv-fm1/bin/python -c "from PIL import Image; print('Pillow available')" 
       - run:
-          name: Prepare Gradle 8.9
+          name: Host-side MIYAKO C audio smoke test with sanitizers
           command: |
-            set -euo pipefail
-            curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle-8.9-bin.zip
-            rm -rf /tmp/gradle-8.9
-            unzip -q /tmp/gradle-8.9-bin.zip -d /tmp
-            echo 'export PATH=/tmp/gradle-8.9/bin:$PATH' >> "$BASH_ENV"
-
+            set -eu
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_host fm1/karma/test_engine.c -lm
+            /tmp/miyako_host
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_dot fm1/karma/test_dot_ui.c -lm
+            /tmp/miyako_dot
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_stress fm1/karma/test_stress.c -lm
+            /tmp/miyako_stress
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_boot fm1/karma/test_boot_ui.c
+            /tmp/miyako_boot
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_panel fm1/karma/test_panel_nav.c
+            /tmp/miyako_panel
       - run:
-          name: Create Android debug signing keystore
+          name: Retrieve pinned KARMA FM-1 sources
           command: |
-            set -euo pipefail
-            mkdir -p "$HOME/.android"
-            rm -f "$HOME/.android/debug.keystore"
-            keytool -genkeypair -v \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android -alias androiddebugkey -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US" \
-              -keyalg RSA -keysize 2048 -validity 10000
-
-      - restore_cache:
-          keys:
-            - gradle-ep-sampler-v1-
-
+            set -eu
+            git clone https://github.com/eatyourgreensstudio-dotcom/karma-fm1.git fm1-karma
+            cd fm1-karma
+            git checkout --detach "$KARMA_PIN"
+            test "$(git rev-parse HEAD)" = "$KARMA_PIN"
       - run:
-          name: Build EP Sampler APK
-          no_output_timeout: 30m
+          name: Patch actual MIYAKO code and audit retained Mutable engines
           command: |
-            set -u
-            export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
-            export CMAKE_BUILD_PARALLEL_LEVEL=2
-            export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=2"
-            mkdir -p android-artifact
-            LOG="$PWD/android-artifact/gradle-build.log"
-            EXIT_FILE="$PWD/android-artifact/gradle-exit-code.txt"
-
-            {
-              echo "[diagnostic] start $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              echo "[diagnostic] nproc=$(nproc)"
-              echo "[diagnostic] CMAKE_BUILD_PARALLEL_LEVEL=$CMAKE_BUILD_PARALLEL_LEVEL"
-              java -version 2>&1
-              free -m || true
-              df -h || true
-            } | tee "$LOG"
-
-            cd EP_Sampler
-            printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-
-            set +e
-            gradle :app:assembleRelease --stacktrace --info --console=plain --no-daemon --max-workers=2 >> "$LOG" 2>&1 &
-            GRADLE_PID=$!
-            echo "[diagnostic] gradle_pid=$GRADLE_PID" | tee -a "$LOG"
-
-            while kill -0 "$GRADLE_PID" 2>/dev/null; do
-              {
-                echo "[heartbeat] $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-                free -m || true
-                ps -eo pid,ppid,%cpu,%mem,rss,vsz,comm --sort=-rss | head -n 16 || true
-              } | tee -a "$LOG"
-              sleep 30
-            done
-
-            wait "$GRADLE_PID"
-            STATUS=$?
-            set -e
-            cd ..
-            echo "$STATUS" | tee "$EXIT_FILE"
-            tail -n 250 "$LOG" || true
-            exit 0
-
-      - save_cache:
-          key: gradle-ep-sampler-v1-{{ epoch }}
-          paths:
-            - ~/.gradle/caches
-            - ~/.gradle/wrapper
-
+            set -eu
+            python3 fm1/karma/apply_port.py fm1-karma
+            python3 fm1/karma/verify_port.py fm1-karma
       - run:
-          name: Collect EP Sampler APK
-          when: always
+          name: Install JieLi toolchain and AC79 SDK
           command: |
-            set -euo pipefail
-            mkdir -p android-artifact
-            git rev-parse HEAD | tee android-artifact/SOURCE_COMMIT.txt
-            APK="$(find EP_Sampler/app/build/outputs/apk/release -type f -name '*.apk' | head -n 1 || true)"
-            if [ -n "$APK" ]; then
-              cp "$APK" android-artifact/EP-Sampler-Android.apk
-              sha256sum android-artifact/EP-Sampler-Android.apk | tee android-artifact/SHA256.txt
-            else
-              echo "No release APK produced." | tee android-artifact/NO_APK.txt
-            fi
-
+            set -eu
+            cd fm1-karma
+            sh tools/get_toolchain.sh
+            git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$AC79_SDK"
+            test -x "$JIELI_TOOLCHAIN/pi32v2/bin/clang"
+            test -f "$AC79_SDK/cpu/wl82/tools/uboot.boot"
+            test -f "$AC79_SDK/cpu/wl82/tools/cfg_tool.bin"
+            test -f "$AC79_SDK/cpu/wl82/tools/cfg/eq_cfg_hw.bin"
+            printf '%s  %s\n' \
+              4e3b4c220dc96641cb5a723f41e68ce41d5261ae9434bb33fbd7f2c59976ded4 "$AC79_SDK/cpu/wl82/tools/uboot.boot" \
+              276579954f076886a6a7694f65dc71c034a63a2c204b76749065c0ac7b010d1b "$AC79_SDK/cpu/wl82/tools/cfg_tool.bin" \
+              41167491bffed4651750719c973d2758adeb9021a5670d02d6a53c85ed80ea7d "$AC79_SDK/cpu/wl82/tools/cfg/eq_cfg_hw.bin" | sha256sum --check --status
+      - run:
+          name: Build MIYAKO FM-1 preview firmware and validate image
+          command: |
+            set -eu
+            cd fm1-karma
+            ./build.sh
+            test -s build/felucca.bin
+            test -s build/loader/ota.bin
+            test -s build/felucca.fwsc
+            python3 -c 'from pathlib import Path; p=Path("build/felucca.bin"); n=p.stat().st_size; assert 0<n<=0x8DFBC, f"FM-1 app slot exceeded: {n} bytes"; print(f"PASS: app image {n} of 581564 bytes")'
+            mkdir -p ../fm1-dist
+            cp build/felucca.fwsc ../fm1-dist/MIYAKO-FM1-PREVIEW.fwsc
+            cd ../fm1-dist
+            sha256sum * > SHA256SUMS
       - store_artifacts:
-          path: android-artifact/EP-Sampler-Android.apk
-          destination: EP-Sampler-Android.apk
-
-      - store_artifacts:
-          path: android-artifact
-          destination: diagnostics
-
-      - run:
-          name: Propagate Gradle build result
-          when: always
-          command: |
-            set -euo pipefail
-            if [ ! -f android-artifact/gradle-exit-code.txt ]; then
-              echo "Gradle exit code file is missing."
-              exit 97
-            fi
-            STATUS="$(cat android-artifact/gradle-exit-code.txt)"
-            echo "Gradle exit code: $STATUS"
-            if [ "$STATUS" != "0" ] && [ -f android-artifact/gradle-build.log ]; then
-              grep -nE '(^|[^A-Za-z])(error:|fatal error:|FAILURE:|FAILED|Exception|undefined reference|ninja: build stopped|Execution failed for task)' \
-                android-artifact/gradle-build.log | tail -n 120 || true
-              tail -n 300 android-artifact/gradle-build.log || true
-            fi
-            exit "$STATUS"
+          path: fm1-dist
+          destination: fm1
 
 workflows:
-  manual_android_build:
+  fm1_manual:
     when: << pipeline.parameters.run_build >>
     jobs:
-      - android_build
+      - fm1_firmware:
+          filters:
+            branches:
+              only: feature/fm1-miyako-port-20261104
