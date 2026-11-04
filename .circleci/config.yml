@@ -27,7 +27,8 @@ jobs:
             test "$(uname -m)" = "x86_64"
             grep -q '^ID=ubuntu' /etc/os-release
             grep -q '^VERSION_ID="22.04"' /etc/os-release
-            python3 -m py_compile fm1/karma/apply_port.py fm1/karma/verify_port.py fm1/check_contract.py
+            python3 -m py_compile fm1/karma/native_guard.py fm1/karma/apply_port.py fm1/karma/verify_port.py fm1/check_contract.py
+            python3 fm1/karma/native_guard.py
             python3 fm1/check_contract.py
       - run:
           name: Install build prerequisites
