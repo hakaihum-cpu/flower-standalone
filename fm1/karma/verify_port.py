@@ -2,8 +2,10 @@
 """Fail-closed post-patch verifier. Does not claim target build or sound test."""
 from pathlib import Path
 import sys
+from native_guard import forbidden_dependencies, selftest as guard_selftest
 
 def main():
+    guard_selftest()
     if len(sys.argv) != 2:
         raise RuntimeError("usage: verify_port.py PINNED_KARMA_CHECKOUT")
     root = Path(sys.argv[1]).resolve()
@@ -73,8 +75,7 @@ def main():
                                             'case TX_TAPE:' not in parts["fx.c"]),
         "No excluded MIYAKO engines": (not any(v in parts["eng_miyako.c"] for v in
                                             ("Vongon", "Knowing", "Twilight", "EP-Sampler", "Rings", "Warps"))),
-        "No JUCE / runtime allocation": (not any(v in parts["eng_miyako.c"] for v in
-                                            ("JuceHeader", "malloc(", "calloc(", "realloc(", "new ", "float ", "double "))),
+        "No JUCE / runtime allocation": (not forbidden_dependencies(parts["eng_miyako.c"])),
         "MIYAKO buffer bounded": ("#define MIYAKO_RING 4096u" in parts["eng_miyako.c"] and
                                   "edge < 32u" in parts["eng_miyako.c"] and
                                   "mi_slot_max_bytes" in parts["eng_miyako.c"] and
