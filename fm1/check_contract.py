@@ -69,7 +69,15 @@ require(not forbidden_dependencies(engine),
         f"unsupported target dependency: {forbidden_dependencies(engine)}")
 require('from native_guard import forbidden_dependencies' in verifier,
         "post-patch verifier must use the same native dependency policy")
-require('#define MIYAKO_RING 4096u' in engine, "bounded capture ring missing")
+require('#define MIYAKO_RING 1024u' in engine and
+        '#define MIYAKO_EUREKA_DECIM 4u' in engine and
+        'mi_eureka_max_segment_fits' in engine and
+        'sizeof(miyako_slot_t) <= 2084u' in engine,
+        "FM-1 pool-safe capture layout or unchanged EUREKA duration missing")
+require('rev_ap0[556]' in patcher and 'rev_ap1[441]' in patcher and
+        'c = k ? rev_ap1 : rev_ap0;' in patcher,
+        "same-length reverb allpasses must be relocated into available RAM")
+
 require('mi_slot_max_bytes' in engine and 'mi_ring_power_of_two' in engine,
         "static target-memory safety guard missing")
 require('miyako_tail_active(track_t *t)' in engine and 'tail_left' in engine and
