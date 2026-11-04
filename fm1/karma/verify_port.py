@@ -20,7 +20,8 @@ def main():
         "Removed ACID DSP": ('#include "eng_acid.c"' not in parts["engines.c"] and
                              'acid_slot_t acid;' not in parts["engines.c"]),
         "MIYAKO arena allocated": ("miyako_slot_t miyako;" in parts["engines.c"] and
-                                   "eng == ENGI_ACID ? sizeof(miyako_slot_t)" in parts["engines.c"]),
+                                   "eng == ENGI_ACID ? sizeof(miyako_slot_t)" in parts["engines.c"] and
+                                   "mi_pool_arena0_not_grow" in parts["engines.c"]),
         "Eureka note-off tail retained": ('miyako_tail_active(track_t *t)' in parts["eng_miyako.c"] and
                                            'tail_left' in parts["eng_miyako.c"] and
                                            '&& !miyako_tail_active(t) && !slicer_busy(t) &&' in parts["fx.c"]),
