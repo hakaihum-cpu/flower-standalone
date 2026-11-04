@@ -33,6 +33,7 @@ static uint8_t rack_ready=0u;
 static volatile uint32_t rack_ramp=0u;
 static volatile uint8_t rack_fading=0u;
 static int32_t rack_acc[8];
+static uint8_t rack_redraw_divider=0u;
 struct core_audio_owner rack_owner={0,rack_render,CORE_AUDIO_INSERT};
 
 static void rack_init(void)
@@ -152,8 +153,15 @@ void rack_tick(void *ctrl)
         rack_audio_prepare_reel(rack_state[DNFX_REEL].value[0][0]);
     if(rack_ui_open && rack_active>=0) {
         dnfx_tick(&rack_state[(unsigned)rack_active]);
-        rack_mark_dirty(ctrl);
-    }
+        /* A parameter panel is static except for an edit/flash. The old
+         * unconditional redraw every UI tick needlessly competes with
+         * the EUREKA animation and audio work on the main CPU.
+         * Retain periodic refresh without stealing stock key callbacks. */
+        if(++rack_redraw_divider>=4u) {
+            rack_redraw_divider=0u;
+            rack_mark_dirty(ctrl);
+        }
+    } else rack_redraw_divider=0u;
 }
 int rack_key(void *brain,void *ev)
 {
