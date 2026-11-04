@@ -148,6 +148,8 @@ void rack_tick(void *ctrl)
         rack_owner.on=pending>=0;
         rack_mark_dirty(ctrl);
     }
+    if(rack_active==DNFX_REEL && rack_owner.on)
+        rack_audio_prepare_reel(rack_state[DNFX_REEL].value[0][0]);
     if(rack_ui_open && rack_active>=0) {
         dnfx_tick(&rack_state[(unsigned)rack_active]);
         rack_mark_dirty(ctrl);
