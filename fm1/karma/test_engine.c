@@ -19,6 +19,7 @@
 #define ENGI_ACID 14u
 #define F_ENUM 1
 #define F_PCT 2
+#define F_INT 3
 #define NVOICE 8
 #define NELEM(a) (sizeof(a) / sizeof((a)[0]))
 #define FX(a,b,c,d) .fx={(a)+1,(b)+1,(c)+1,(d)+1}
