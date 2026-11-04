@@ -2,6 +2,7 @@
 """Static preflight before the explicit CircleCI FM-1 build. No target build here."""
 from pathlib import Path
 import re
+from karma.native_guard import code_only, forbidden_dependencies, selftest as guard_selftest
 
 root = Path(__file__).resolve().parent.parent
 engine = (root / "fm1" / "karma" / "eng_miyako.c").read_text(encoding="utf-8")
@@ -29,10 +30,8 @@ for token in ('Plaits', 'Elements', 'Clouds'):
     require(token in manifest, f"Mutable retention omitted: {token}")
 for token in ('Vongon', 'EP-Sampler', 'Knowing', 'Tape', 'Twilight', 'Rings', 'Warps'):
     require(token in manifest, f"requested exclusion omitted: {token}")
-# Reject target-incompatible APIs in code, not in explanatory comments.
-# The former raw-text scan incorrectly rejected "new slice"/"new one" comments.
-def code_only(source):
-    return re.sub(r'/\*[\s\S]*?\*/|//[^\n]*', '', source)
+# The preflight and post-patch verifier use one executable dependency policy.
+guard_selftest()
 
 # Regression: explanatory prose must not masquerade as dynamic allocation;
 # an actual allocation in C code must still be rejected.
@@ -66,8 +65,10 @@ boot_harness = (root / "fm1" / "karma" / "test_boot_ui.c").read_text(encoding="u
 require('#define FELUCCA_VERSION "MIYAKO FM1 P1"' in boot_harness,
         "host boot C harness lacks the native firmware version macro")
 
-for forbidden in ('JuceHeader', 'malloc(', 'calloc(', 'realloc(', 'new ', 'float ', 'double '):
-    require(forbidden not in engine_code, f"unsupported target dependency: {forbidden}")
+require(not forbidden_dependencies(engine),
+        f"unsupported target dependency: {forbidden_dependencies(engine)}")
+require('from native_guard import forbidden_dependencies' in verifier,
+        "post-patch verifier must use the same native dependency policy")
 require('#define MIYAKO_RING 4096u' in engine, "bounded capture ring missing")
 require('mi_slot_max_bytes' in engine and 'mi_ring_power_of_two' in engine,
         "static target-memory safety guard missing")
