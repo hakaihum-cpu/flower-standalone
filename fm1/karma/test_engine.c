@@ -17,9 +17,15 @@
 #define P_E6 6
 #define P_E7 7
 #define ENGI_ACID 14u
-#define F_ENUM 1
-#define F_PCT 2
-#define F_INT 3
+/* Exact KARMA core.h parameter format ABI (pinned db3cda79).
+ * Do not invent host-only numeric values: they must match the target. */
+enum {
+    F_INT, F_PCT, F_BIPCT, F_TIME, F_LFOHZ, F_CUTOFF, F_DB, F_SEMI,
+    F_ENUM, F_BPM, F_NOTE, F_ONOFF, F_OCT, F_STEPS, F_SWING, F_FILT
+};
+typedef char host_fmt_int_is_zero[(F_INT == 0) ? 1 : -1];
+typedef char host_fmt_pct_is_one[(F_PCT == 1) ? 1 : -1];
+typedef char host_fmt_enum_is_eight[(F_ENUM == 8) ? 1 : -1];
 #define NVOICE 8
 #define NELEM(a) (sizeof(a) / sizeof((a)[0]))
 #define FX(a,b,c,d) .fx={(a)+1,(b)+1,(c)+1,(d)+1}
