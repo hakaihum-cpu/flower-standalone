@@ -29,19 +29,18 @@ jobs:
             grep -q '^VERSION_ID="22.04"' /etc/os-release
             python3 -m py_compile fm1/karma/apply_port.py fm1/karma/verify_port.py fm1/check_contract.py
             python3 fm1/check_contract.py
-            # C syntax and missing identifiers are checked BEFORE apt, Pillow,
-            # KARMA clone, JieLi SDK download, or a target firmware build.
-            # cimg/base includes build-essential, so cc is already available.
-            for t in test_engine test_dot_ui test_stress test_boot_ui test_panel_nav; do
-              echo "[prebuild C syntax] $t"
-              cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only "fm1/karma/$t.c"
-            done
       - run:
           name: Install build prerequisites
           command: |
             set -eu
             sudo apt-get update
             sudo apt-get install -y git curl xz-utils gcc g++ python3-pip python3-venv libtinfo5
+            # Compiler is guaranteed installed by apt in the immediately
+            # preceding step; avoid depending on the base-image tool inventory.
+            for t in test_engine test_dot_ui test_stress test_boot_ui test_panel_nav; do
+              echo "[native C compiler preflight] $t"
+              cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only "fm1/karma/$t.c"
+            done
             python3 -m venv /home/circleci/.venv-fm1
             /home/circleci/.venv-fm1/bin/python -m pip install --disable-pip-version-check "Pillow==10.4.0"
             /home/circleci/.venv-fm1/bin/python -c "from PIL import Image; print('Pillow available')" 
