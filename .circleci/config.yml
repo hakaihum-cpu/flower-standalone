@@ -27,8 +27,15 @@ jobs:
             test "$(uname -m)" = "x86_64"
             grep -q '^ID=ubuntu' /etc/os-release
             grep -q '^VERSION_ID="22.04"' /etc/os-release
-            python3 -m py_compile fm1/karma/apply_port.py fm1/check_contract.py
+            python3 -m py_compile fm1/karma/apply_port.py fm1/karma/verify_port.py fm1/check_contract.py
             python3 fm1/check_contract.py
+            # C syntax and missing identifiers are checked BEFORE apt, Pillow,
+            # KARMA clone, JieLi SDK download, or a target firmware build.
+            # cimg/base includes build-essential, so cc is already available.
+            for t in test_engine test_dot_ui test_stress test_boot_ui test_panel_nav; do
+              echo "[prebuild C syntax] $t"
+              cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only "fm1/karma/$t.c"
+            done
       - run:
           name: Install build prerequisites
           command: |
