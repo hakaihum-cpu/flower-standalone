@@ -1,11 +1,11 @@
-name: Digitone FOUR EXCLUSIVE FX + EUREKA VIDEO (PG79 protected)
+name: Digitone PG81 EXCLUSIVE FX CPUFIX + EUREKA VIDEO (PG79 protected)
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-fx-dedicated-pages-20261103'
+    if: github.ref == 'refs/heads/fix/digitone-pg80-audio-cpu-20261104'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -237,11 +237,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$RACK_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_FX_RACK_EUREKA_TRIAL.syx" \
-            --version PG80
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_FX_RACK_CPUFIX_PG81_TRIAL.syx" \
+            --version PG81
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_FX_RACK_EUREKA_TRIAL.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_FX_RACK_CPUFIX_PG81_TRIAL.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$RACK_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -253,7 +253,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-FOUR-FX-RACK-TRIAL
+          name: Digitone-OS1.44-FOUR-FX-CPUFIX-PG81-TRIAL
           path: _release/
           if-no-files-found: error
           retention-days: 30
