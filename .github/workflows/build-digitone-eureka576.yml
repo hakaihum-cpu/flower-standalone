@@ -200,6 +200,16 @@ jobs:
           /tmp/digitone_rack_stress
           rm /tmp/digitone_rack_ui /tmp/digitone_rack_stress
           echo 'PASS: linked UI/Granular, original keys preserved, 11.52M DSP samples UBSan+ASan'
+      - name: Verify optimized DSP math against old PG80 output
+        run: |
+          set -euo pipefail
+          RACK=ports/digitone_fx_rack
+          gcc -DRACK_HOST_TEST -std=c11 -O1 -g -Wall -Wextra -Werror -Wconversion \
+            -fsanitize=address,undefined -fno-sanitize-recover=all \
+            -I "$RACK" "$RACK/tests/test_rack_cpu_lut.c" \
+            -o /tmp/digitone_rack_cpu_lut
+          /tmp/digitone_rack_cpu_lut
+          rm /tmp/digitone_rack_cpu_lut
       - name: Obtain pinned elekloader and core
         run: |
           set -euo pipefail
