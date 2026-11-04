@@ -31,7 +31,16 @@ for token in ('Vongon', 'EP-Sampler', 'Knowing', 'Tape', 'Twilight', 'Rings', 'W
     require(token in manifest, f"requested exclusion omitted: {token}")
 # Reject target-incompatible APIs in code, not in explanatory comments.
 # The former raw-text scan incorrectly rejected "new slice"/"new one" comments.
-engine_code = re.sub(r'/\*[\s\S]*?\*/|//[^\n]*', '', engine)
+def code_only(source):
+    return re.sub(r'/\*[\s\S]*?\*/|//[^\n]*', '', source)
+
+# Regression: explanatory prose must not masquerade as dynamic allocation;
+# an actual allocation in C code must still be rejected.
+require('new ' not in code_only('/* fade the new one */\n// new slice\nvoid ok(void) {}'),
+        "comment stripping regression: false-positive new")
+require('malloc(' in code_only('void bad(void) { malloc(4); }'),
+        "comment stripping regression: forbidden API hidden")
+engine_code = code_only(engine)
 for forbidden in ('JuceHeader', 'malloc(', 'calloc(', 'realloc(', 'new ', 'float ', 'double '):
     require(forbidden not in engine_code, f"unsupported target dependency: {forbidden}")
 require('#define MIYAKO_RING 4096u' in engine, "bounded capture ring missing")
