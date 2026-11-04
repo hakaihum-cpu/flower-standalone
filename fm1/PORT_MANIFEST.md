@@ -1,5 +1,5 @@
 # MIYAKO FM-1 port — feature contract and progress (2026-11-04)
-Repository: hakaihum-cpu/Vstplugin
+Repository: hakaihum-cpu/flower-standalone
 Branch: feature/fm1-miyako-port-20261104
 Original MIYAKO development baseline: feature/miyako-ep-sampler-16part-20261030
 Target: M-VAVE FM-1 with 240 x 240 display.
@@ -43,7 +43,9 @@ Original Android video data, 720x720 UI, JUCE framework, sample banks.
 - The KARMA engine index 14 is reused, so the original ACID preset trims are
   explicitly bypassed rather than incorrectly altering MIYAKO's patch levels.
 - REEL and EUREKA are mutually exclusive choices in a single `MODE` parameter.
-- The ring buffer holds 4096 x int16 samples, 92.9 milliseconds at 44.1 kHz.
+- The Reel ring holds 1024 x int16 samples. EUREKA retains its 256..3304
+  input-sample capture/repeat duration by recording one sample per four and
+  linearly interpolating playback; temporal resolution is reduced to fit SRAM.
 - The previous plugin source `fm1/miyako.c` is obsolete and NOT in the KARMA build.
 - 240x124 MIYAKO OSC/FX graph visuals are implemented; entire-system DOT theme is not
   complete. The existing four-knob bands and screen navigation remain unchanged.
@@ -170,7 +172,7 @@ Original Android video data, 720x720 UI, JUCE framework, sample banks.
   additional 12 integration checks for actual Plaits/Elements/Clouds
   DSP includes, physical controls, EUREKA's idle-tail hook, Tape
   removal, boot/DOT UI, and versioning all passed.
-- The current engine uses a 4096 x int16 EUREKA buffer. A local
+- The original engine used a 4096 x int16 EUREKA buffer. A local
   C ABI layout check of the equivalent structures reports
   `sizeof(juno_slot_t)=2456`, `sizeof(miyako_slot_t)=8228` on
   the x86-64 host (rough union size growth **5772 bytes**).
@@ -188,3 +190,25 @@ Original Android video data, 720x720 UI, JUCE framework, sample banks.
 - The firmware cross-build and physical FM-1 audio/UI validation
   have **not** been run in this stage. The job remains gated behind
   explicit `run_build=true` permission and restricted to this branch.
+
+## 2026-11-04 — pool headroom correction after actual JieLi link
+- Actual initial CircleCI target link: image 519752 bytes, .data+.bss 96728 / 98304,
+  .pool 341632 / 344064 (only 2432 bytes spare; required spare is 8192).
+- Replaced 4096 x int16 shared Reel/EUREKA ring with 1024 x int16.
+  EUREKA's 256..3304-sample slice LENGTH and 1..4 repeat count are preserved;
+  every fourth original input is stored and linearly interpolated on replay.
+  Reel's actual wow/flutter range is unchanged and the ring contains its delay.
+- The track-1 engine arena is now bounded by the existing Juno arena (2456 B),
+  asserted at target compilation by `mi_pool_arena0_not_grow`. Native MIYAKO
+  slot cap is 2084 B; a separate compile-time assertion checks the 3304/4
+  EUREKA sampling bound.
+- Moved only the native reverb's second 441-sample diffuser (882 B) from .pool
+  to currently available .bss; both allpass lengths and arithmetic unchanged.
+  A 100,000-sample local old-vs-new C comparison yielded bit-identical output.
+- Projected from the **last successful target link measurements**, not a new
+  target link: pool 334978 / 344064 (9086 B spare, >8192); RAM+bss 97610 /
+  98304 (694 B spare). Actual linker results remain necessary for confirmation.
+- All five local x86 host ASan/UBSan test programs passed after the new engine
+  layout (including 640,000 random audio samples and maximum 3304-sample Eureka).
+- No safety guard was disabled, no Plaits/Elements/Clouds path removed, and no
+  user-triggered CircleCI build was started by this source correction.
