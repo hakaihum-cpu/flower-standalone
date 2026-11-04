@@ -62,6 +62,10 @@ host_defines = set(re.findall(r"^#define\s+(P_E[0-7]|ENGI_ACID)\b", host_harness
 native_id_usage = set(re.findall(r"\b(?:P_E[0-7]|ENGI_ACID)\b", engine_code))
 require(native_id_usage <= host_defines,
         f"host C ABI lacks engine IDs: {sorted(native_id_usage - host_defines)}")
+boot_harness = (root / "fm1" / "karma" / "test_boot_ui.c").read_text(encoding="utf-8")
+require('#define FELUCCA_VERSION "MIYAKO FM1 P1"' in boot_harness,
+        "host boot C harness lacks the native firmware version macro")
+
 for forbidden in ('JuceHeader', 'malloc(', 'calloc(', 'realloc(', 'new ', 'float ', 'double '):
     require(forbidden not in engine_code, f"unsupported target dependency: {forbidden}")
 require('#define MIYAKO_RING 4096u' in engine, "bounded capture ring missing")
