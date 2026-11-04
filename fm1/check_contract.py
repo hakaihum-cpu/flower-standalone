@@ -31,7 +31,7 @@ for token in ('Vongon', 'EP-Sampler', 'Knowing', 'Tape', 'Twilight', 'Rings', 'W
     require(token in manifest, f"requested exclusion omitted: {token}")
 # Reject target-incompatible APIs in code, not in explanatory comments.
 # The former raw-text scan incorrectly rejected "new slice"/"new one" comments.
-engine_code = re.sub(r'/\\*[\\s\\S]*?\\*/|//[^\\n]*', '', engine)
+engine_code = re.sub(r'/\*[\s\S]*?\*/|//[^\n]*', '', engine)
 for forbidden in ('JuceHeader', 'malloc(', 'calloc(', 'realloc(', 'new ', 'float ', 'double '):
     require(forbidden not in engine_code, f"unsupported target dependency: {forbidden}")
 require('#define MIYAKO_RING 4096u' in engine, "bounded capture ring missing")
