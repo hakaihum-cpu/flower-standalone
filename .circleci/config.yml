@@ -48,15 +48,15 @@ jobs:
           name: Host-side MIYAKO C audio smoke test with sanitizers
           command: |
             set -eu
-            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_host fm1/karma/test_engine.c -lm
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie -o /tmp/miyako_host fm1/karma/test_engine.c -lm
             /tmp/miyako_host
-            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_dot fm1/karma/test_dot_ui.c -lm
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie -o /tmp/miyako_dot fm1/karma/test_dot_ui.c -lm
             /tmp/miyako_dot
-            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_stress fm1/karma/test_stress.c -lm
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie -o /tmp/miyako_stress fm1/karma/test_stress.c -lm
             /tmp/miyako_stress
-            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_boot fm1/karma/test_boot_ui.c
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie -o /tmp/miyako_boot fm1/karma/test_boot_ui.c
             /tmp/miyako_boot
-            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_panel fm1/karma/test_panel_nav.c
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie -o /tmp/miyako_panel fm1/karma/test_panel_nav.c
             /tmp/miyako_panel
       - run:
           name: Retrieve pinned KARMA FM-1 sources
