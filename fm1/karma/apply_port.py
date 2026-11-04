@@ -136,6 +136,7 @@ def main():
     replacement(src / "engines.c", '#include "eng_prism.c"',
                 '#include "eng_prism.c"\n#include "eng_miyako.c"')
     replacement(src / "engines.c", 'typedef union { acid_slot_t acid; juno_slot_t juno; } eng_arena0_t;',
+                'typedef char mi_pool_arena0_not_grow[(sizeof(miyako_slot_t) <= sizeof(juno_slot_t)) ? 1 : -1];\n'
                 'typedef union { juno_slot_t juno; miyako_slot_t miyako; } eng_arena0_t;')
     replacement(src / "engines.c", 'eng == ENGI_ACID ? sizeof(acid_slot_t)',
                 'eng == ENGI_ACID ? sizeof(miyako_slot_t)')
