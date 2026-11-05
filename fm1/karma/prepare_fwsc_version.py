@@ -20,17 +20,18 @@ from pathlib import Path
 OLD_PRODUCT = 'PRODUCT = "FM-1_926"'
 OLD_VERSION = "VERSION = None"
 PREVIOUS_ID = 926
+BASE_CIRCLE_JOB = 243
 MAX_COMPAT_ID = 999  # current upstream ota loader regex: ota-FM-1_9dd
 
 
 def run(build_py: Path, build_number: int, record: Path) -> str:
-    if not 1 <= build_number <= MAX_COMPAT_ID - PREVIOUS_ID:
+    if not BASE_CIRCLE_JOB < build_number <= BASE_CIRCLE_JOB + MAX_COMPAT_ID - PREVIOUS_ID:
         raise RuntimeError(
-            f"CircleCI job build number {build_number} is outside 1..73. "
+            f"CircleCI job build number {build_number} is outside 244..316. "
             "STOP rather than reuse an updater identity or cross the "
             "FM-1_9xx recovery-loader compatibility range."
         )
-    identity_number = PREVIOUS_ID + build_number
+    identity_number = PREVIOUS_ID + build_number - BASE_CIRCLE_JOB
     product = f"FM-1_{identity_number}"
     src = build_py.read_text(encoding="utf-8")
     if src.count(OLD_PRODUCT) != 1 or src.count(OLD_VERSION) != 1:
