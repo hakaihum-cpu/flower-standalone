@@ -1,47 +1,59 @@
 #!/usr/bin/env python3
-"""Reject stale/mismatched firmware identities before publishing an FWSC."""
+"""After build, prove package, app and loader expose the same new identity.
+
+Do not rely on FWSC filename or FELUCCA_VERSION alone: M-UPGRADE compares
+the numeric FM-1_9xx identity carried by the 20 marker bytes and by
+the OTA 0x11 device handshake.
+"""
 import argparse
 import re
 from pathlib import Path
 
-BLOCKS, BLOCK, MARK = 20, 0x30, 0x2F
-BASE_JOB, BASE_ID = 243, 926
+BLOCKS = 20
+BLOCK = 0x30
+KEEP = 0x2F
+
 
 def package_product(raw: bytes) -> str:
     if len(raw) < BLOCKS * BLOCK:
-        raise RuntimeError("FWSC header missing")
-    value = "".join(
-        chr((raw[i * BLOCK + MARK] - i - 1) & 255)
+        raise RuntimeError("FWSC too short to carry its update identity")
+    text = "".join(
+        chr((raw[i * BLOCK + KEEP] - i - 1) & 255)
         for i in range(BLOCKS)
-        if raw[i * BLOCK + MARK] != 0x7D
+        if raw[i * BLOCK + KEEP] != 0x7D
     )
-    if re.fullmatch(r"FM-1_9\d\d", value) is None:
-        raise RuntimeError(f"bad updater identity {value!r}")
-    return value
+    if not re.fullmatch(r"FM-1_9\d\d", text):
+        raise RuntimeError(f"Invalid updater package identity: {text!r}")
+    return text
+
 
 def verify(record: Path, package: Path, app: Path, loader: Path) -> str:
-    settings = dict(line.split("=", 1) for line in record.read_text(encoding="ascii").splitlines())
-    job = int(settings["CIRCLE_BUILD_NUM"])
-    expected = f"FM-1_{BASE_ID + job - BASE_JOB}"
-    if job <= BASE_JOB or not 927 <= BASE_ID + job - BASE_JOB <= 999:
-        raise RuntimeError(f"invalid FWSC job number {job}: old 926 is forbidden")
-    if settings.get("BASE_JOB") != "243" or settings.get("FWSC_PRODUCT") != expected:
-        raise RuntimeError("FWSC version record disagrees with CircleCI job")
+    lines = record.read_text(encoding="ascii").splitlines()
+    entries = dict(line.split("=", 1) for line in lines)
+    identity = entries["FWSC_PRODUCT"]
+    build_num = int(entries["CIRCLE_BUILD_NUM"])
+    if identity != f"FM-1_{926 + build_num}":
+        raise RuntimeError("Build number does not match the incremented identity")
+    if int(identity.rsplit("_", 1)[1]) <= 926:
+        raise RuntimeError("Previous FM-1_926 updater identity was reused")
     actual = package_product(package.read_bytes())
-    if actual != expected:
-        raise RuntimeError(f"FWSC package identity {actual} != {expected}")
-    if expected.encode("ascii") not in app.read_bytes():
-        raise RuntimeError(f"app OTA identity != {expected}")
-    if ("ota-" + expected).encode("ascii") not in loader.read_bytes():
-        raise RuntimeError(f"loader OTA identity != ota-{expected}")
-    print(f"PASS FWSC/app/loader updater identities: {expected} (job {job})")
-    return expected
+    if actual != identity:
+        raise RuntimeError(f"FWSC identity {actual} differs from expected {identity}")
+    app_data, loader_data = app.read_bytes(), loader.read_bytes()
+    if identity.encode("ascii") not in app_data:
+        raise RuntimeError(f"App OTA handshake missing {identity}")
+    if ("ota-" + identity).encode("ascii") not in loader_data:
+        raise RuntimeError(f"Update loader OTA handshake missing ota-{identity}")
+    print(f"PASS: FWSC package/app/loader all expose {identity}; "
+          f"previous baseline FM-1_926, CircleCI build #{build_num}")
+    return identity
+
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser()
-    p.add_argument("record", type=Path)
-    p.add_argument("package", type=Path)
-    p.add_argument("app", type=Path)
-    p.add_argument("loader", type=Path)
-    a = p.parse_args()
-    verify(a.record, a.package, a.app, a.loader)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("record", type=Path)
+    parser.add_argument("package", type=Path)
+    parser.add_argument("app", type=Path)
+    parser.add_argument("loader", type=Path)
+    args = parser.parse_args()
+    verify(args.record, args.package, args.app, args.loader)
