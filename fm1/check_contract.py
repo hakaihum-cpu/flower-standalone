@@ -83,8 +83,13 @@ require((root / "fm1" / "karma" / "test_eureka_vq_decoder.c").is_file(),
         "VQ native regression missing")
 require('pack_eureka_vq_candidate.py' in ci and
         'test_eureka_vq_decoder.c' in ci and
-        '--min-psnr-db' in ci,
-        "VQ candidate not used by CI quality/decoder steps")
+        '--min-psnr-db' in ci and
+        'test_vq_selector_integrity.py' in ci and
+        (root / "fm1" / "karma" / "test_vq_selector_integrity.py").is_file() and
+        'final_dist = norms[:, None]' in vq and
+        'for balance in (1.0, 2.0)' in vq and
+        'frame_balance > 0' in vq,
+        "VQ candidate, final-selector integrity or frame-balanced test not wired into CI")
 require('scripts/materialize_miyako_eureka_video.py' in ci and
         'pack_eureka_vq_candidate.py' in ci,
         "CI must restore all 576 original frames before host/target checks")
