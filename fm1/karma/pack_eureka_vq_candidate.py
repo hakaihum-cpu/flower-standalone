@@ -88,6 +88,14 @@ def train_clip(original, palette565, loops=6):
         cost = ((means[:, :, None, :] - pal[None, None, :, :]) ** 2).sum(axis=3)
         codebook[1:] = np.argmin(cost[1:], axis=2).astype(np.uint8)
         codebook[0] = 0
+    # The final Lloyd update changes codebook entries after the last selector
+    # assignment. Re-evaluate all 8x4 tile IDs against the ACTUAL dictionary
+    # that will be stored in firmware. Otherwise an outdated selector map is
+    # paired with a newer dictionary, introducing avoidable image errors.
+    final_centroids = pal[codebook].reshape(DICT_SIZE, TILE_PIXELS * 3).astype(np.float32)
+    final_norms = np.einsum("ij,ij->i", final_centroids, final_centroids)
+    final_dist = norms[:, None] + final_norms[None, :] - 2 * (v @ final_centroids.T)
+    ids = np.argmin(final_dist, axis=1).astype(np.uint8)
     ids = ids.reshape(FRAMES, TILE_COUNT)
     restored = tile_expand(codebook, ids)
     if restored.max() >= 16 or ids.size != 36 * TILE_COUNT:
