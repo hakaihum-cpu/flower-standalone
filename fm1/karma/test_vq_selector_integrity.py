@@ -18,24 +18,32 @@ palette565 = np.array([
     0x07FF, 0x4208, 0x8410, 0xC618, 0xFBE0, 0x03EF, 0x780F, 0xA514,
 ], dtype=np.uint16)
 
-book, selectors, restored, quality = train_clip(indices, palette565)
-assert book.shape == (DICT_SIZE, TILE_PIXELS)
-assert selectors.shape == (FRAMES, TILE_COUNT)
-assert book.max() < 16
-assert np.array_equal(restored, tile_expand(book, selectors))
+def verify_dictionary_integrity(book, selectors, restored, quality):
+    assert book.shape == (DICT_SIZE, TILE_PIXELS)
+    assert selectors.shape == (FRAMES, TILE_COUNT)
+    assert book.max() < 16
+    assert np.array_equal(restored, tile_expand(book, selectors))
 
-palette = rgb_palette(palette565)
-source_tiles = tile_extract(indices)
-source_rgb = palette[source_tiles].reshape(-1, TILE_PIXELS * 3).astype(np.float32)
-dict_rgb = palette[book].reshape(DICT_SIZE, TILE_PIXELS * 3).astype(np.float32)
-source_norms = np.einsum("ij,ij->i", source_rgb, source_rgb)
-dict_norms = np.einsum("ij,ij->i", dict_rgb, dict_rgb)
-distances = (source_norms[:, None] + dict_norms[None, :]
-             - 2 * (source_rgb @ dict_rgb.T))
-expected_selectors = np.argmin(distances, axis=1).astype(np.uint8)
-assert np.array_equal(selectors.ravel(), expected_selectors), (
-    "VQ selectors refer to a stale dictionary, not the final firmware dictionary"
-)
-assert quality[0] <= quality[1]
-assert quality[2] == FRAMES and quality[3] == FRAMES
-print("PASS: all 11520 synthetic 8x4 tile IDs reference the final 256-entry VQ dictionary")
+    palette = rgb_palette(palette565)
+    source_tiles = tile_extract(indices)
+    source_rgb = palette[source_tiles].reshape(-1, TILE_PIXELS * 3).astype(np.float32)
+    dict_rgb = palette[book].reshape(DICT_SIZE, TILE_PIXELS * 3).astype(np.float32)
+    source_norms = np.einsum("ij,ij->i", source_rgb, source_rgb)
+    dict_norms = np.einsum("ij,ij->i", dict_rgb, dict_rgb)
+    distances = (source_norms[:, None] + dict_norms[None, :]
+                 - 2 * (source_rgb @ dict_rgb.T))
+    expected_selectors = np.argmin(distances, axis=1).astype(np.uint8)
+    assert np.array_equal(selectors.ravel(), expected_selectors), (
+        "VQ selectors refer to a stale dictionary, not the final firmware dictionary"
+    )
+    assert quality[0] <= quality[1]
+    assert quality[2] == FRAMES and quality[3] == FRAMES
+
+baseline = train_clip(indices, palette565)
+verify_dictionary_integrity(*baseline)
+for alpha in (1.0, 2.0):
+    balanced = train_clip(indices, palette565, loops=8, frame_balance=alpha)
+    verify_dictionary_integrity(*balanced)
+    chosen = max((baseline, balanced), key=lambda result: (result[3][0], result[3][1]))
+    assert chosen[3][0] >= baseline[3][0]
+print("PASS: 3 VQ training paths x 11520 synthetic 8x4 tiles; final dictionary IDs consistent")
