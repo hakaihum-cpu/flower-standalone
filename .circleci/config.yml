@@ -28,7 +28,7 @@ jobs:
             test "$(uname -m)" = "x86_64"
             grep -q '^ID=ubuntu' /etc/os-release
             grep -q '^VERSION_ID="22.04"' /etc/os-release
-            python3 -m py_compile fm1/karma/apply_port.py fm1/karma/verify_port.py fm1/karma/pack_eureka_frames.py fm1/karma/pack_eureka_vq_candidate.py scripts/materialize_miyako_eureka_video.py fm1/karma/prepare_fwsc_version.py fm1/karma/verify_fwsc_version.py fm1/karma/test_fwsc_version.py fm1/check_contract.py
+            python3 -m py_compile fm1/karma/apply_port.py fm1/karma/verify_port.py fm1/karma/pack_eureka_frames.py fm1/karma/pack_eureka_vq_candidate.py fm1/karma/test_vq_selector_integrity.py scripts/materialize_miyako_eureka_video.py fm1/karma/prepare_fwsc_version.py fm1/karma/verify_fwsc_version.py fm1/karma/test_fwsc_version.py fm1/check_contract.py
             python3 fm1/check_contract.py
             python3 fm1/karma/test_fwsc_version.py
       - run:
