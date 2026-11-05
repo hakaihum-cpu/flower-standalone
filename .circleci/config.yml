@@ -1,5 +1,6 @@
 # MIYAKO on M-VAVE FM-1. MANUAL ONLY: run_build=true.
-# Firmware base is pinned KARMA, preserving Plaits + Elements + Clouds.
+# KARMA is pinned as an internal backend only; its UI is never displayed.
+# Mutable engines and Clouds are not user accessible (muted and disabled).
 # This branch never builds Android and never writes to main.
 version: 2.1
 parameters:
@@ -27,37 +28,57 @@ jobs:
             test "$(uname -m)" = "x86_64"
             grep -q '^ID=ubuntu' /etc/os-release
             grep -q '^VERSION_ID="22.04"' /etc/os-release
-            python3 -m py_compile fm1/karma/native_guard.py fm1/karma/apply_port.py fm1/karma/verify_port.py fm1/check_contract.py
-            python3 fm1/karma/native_guard.py
+            python3 -m py_compile fm1/karma/apply_port.py fm1/karma/verify_port.py fm1/karma/pack_eureka_frames.py fm1/karma/pack_eureka_vq_candidate.py scripts/materialize_miyako_eureka_video.py fm1/karma/prepare_fwsc_version.py fm1/karma/verify_fwsc_version.py fm1/karma/test_fwsc_version.py fm1/check_contract.py
             python3 fm1/check_contract.py
+            python3 fm1/karma/test_fwsc_version.py
       - run:
           name: Install build prerequisites
           command: |
             set -eu
             sudo apt-get update
             sudo apt-get install -y git curl xz-utils gcc g++ python3-pip python3-venv libtinfo5
-            # Compiler is guaranteed installed by apt in the immediately
-            # preceding step; avoid depending on the base-image tool inventory.
-            for t in test_engine test_dot_ui test_stress test_boot_ui test_panel_nav; do
-              echo "[native C compiler preflight] $t"
-              cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only "fm1/karma/$t.c"
-            done
             python3 -m venv /home/circleci/.venv-fm1
-            /home/circleci/.venv-fm1/bin/python -m pip install --disable-pip-version-check "Pillow==10.4.0"
+            /home/circleci/.venv-fm1/bin/python -m pip install --disable-pip-version-check "Pillow==10.4.0" "numpy==1.26.4"
             /home/circleci/.venv-fm1/bin/python -c "from PIL import Image; print('Pillow available')" 
+      - run:
+          name: Restore all 576 original JPEGs and make actual RGB565 16-colour VQ pack + preview
+          command: |
+            set -eu
+            python3 scripts/materialize_miyako_eureka_video.py
+            mkdir -p fm1-dist
+            /home/circleci/.venv-fm1/bin/python fm1/karma/pack_eureka_vq_candidate.py \
+              Resources/miyako_eureka_frames.pack \
+              fm1/karma/mi_eureka_vq_frames.h \
+              --preview fm1-dist/eureka-vq-preview.png --min-psnr-db 26.0
+            test -s fm1/karma/mi_eureka_vq_frames.h
+            test -s fm1-dist/eureka-vq-preview.png
+            grep -q 'MI_EUREKA_ASSET_COUNT 576u' fm1/karma/mi_eureka_vq_frames.h
+            grep -q 'MI_EUREKA_ASSET_COLORS 16u' fm1/karma/mi_eureka_vq_frames.h
+            grep -q 'MI_EUREKA_ASSET_BPP 4u' fm1/karma/mi_eureka_vq_frames.h
+            grep -q 'MI_EUREKA_VQ_TILE_COUNT 320u' fm1/karma/mi_eureka_vq_frames.h
+            grep -q 'MI_EUREKA_DECODED_CRC32' fm1/karma/mi_eureka_vq_frames.h
+            grep -Fq 'mi_eureka_vq_palette[16][16]' fm1/karma/mi_eureka_vq_frames.h
+      - run:
+          name: Native C regression of all 576 VQ frames, RGB565 drawing and audio reactive playback
+          command: |
+            set -eu
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_eureka_video fm1/karma/test_eureka_video.c
+            /tmp/miyako_eureka_video
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_vq_decoder fm1/karma/test_eureka_vq_decoder.c
+            /tmp/miyako_vq_decoder
       - run:
           name: Host-side MIYAKO C audio smoke test with sanitizers
           command: |
             set -eu
-            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie -o /tmp/miyako_host fm1/karma/test_engine.c -lm
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_host fm1/karma/test_engine.c -lm
             /tmp/miyako_host
-            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie -o /tmp/miyako_dot fm1/karma/test_dot_ui.c -lm
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_dot fm1/karma/test_dot_ui.c -lm
             /tmp/miyako_dot
-            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie -o /tmp/miyako_stress fm1/karma/test_stress.c -lm
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_stress fm1/karma/test_stress.c -lm
             /tmp/miyako_stress
-            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie -o /tmp/miyako_boot fm1/karma/test_boot_ui.c
+            cc -std=c99 -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_boot fm1/karma/test_boot_ui.c
             /tmp/miyako_boot
-            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie -o /tmp/miyako_panel fm1/karma/test_panel_nav.c
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_panel fm1/karma/test_panel_nav.c
             /tmp/miyako_panel
       - run:
           name: Retrieve pinned KARMA FM-1 sources
@@ -68,11 +89,20 @@ jobs:
             git checkout --detach "$KARMA_PIN"
             test "$(git rev-parse HEAD)" = "$KARMA_PIN"
       - run:
-          name: Patch actual MIYAKO code and audit retained Mutable engines
+          name: Patch MIYAKO-only full screen and audit native hardware mappings
           command: |
             set -eu
             python3 fm1/karma/apply_port.py fm1-karma
             python3 fm1/karma/verify_port.py fm1-karma
+      - run:
+          name: Set fresh M-UPGRADE numeric identity using CircleCI build number
+          command: |
+            set -eu
+            test -n "${CIRCLE_BUILD_NUM:-}"
+            python3 fm1/karma/prepare_fwsc_version.py fm1-karma/tools/build.py \
+              fm1-dist/FWSC_VERSION.txt --build-number "$CIRCLE_BUILD_NUM"
+            grep -Eq '^FWSC_PRODUCT=FM-1_9[0-9][0-9]$' fm1-dist/FWSC_VERSION.txt
+            test -s fm1-dist/FWSC_VERSION.txt
       - run:
           name: Install JieLi toolchain and AC79 SDK
           command: |
@@ -93,13 +123,16 @@ jobs:
           command: |
             set -eu
             cd fm1-karma
-            sh ./build.sh
+            ./build.sh
             test -s build/felucca.bin
             test -s build/loader/ota.bin
             test -s build/felucca.fwsc
             python3 -c 'from pathlib import Path; p=Path("build/felucca.bin"); n=p.stat().st_size; assert 0<n<=0x8DFBC, f"FM-1 app slot exceeded: {n} bytes"; print(f"PASS: app image {n} of 581564 bytes")'
             mkdir -p ../fm1-dist
             cp build/felucca.fwsc ../fm1-dist/MIYAKO-FM1-PREVIEW.fwsc
+            python3 ../fm1/karma/verify_fwsc_version.py \
+              ../fm1-dist/FWSC_VERSION.txt ../fm1-dist/MIYAKO-FM1-PREVIEW.fwsc \
+              build/felucca.bin build/loader/loader.bin
             cd ../fm1-dist
             sha256sum * > SHA256SUMS
       - store_artifacts:
