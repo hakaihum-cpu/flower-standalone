@@ -97,11 +97,42 @@ require('mi_cloud_shim.c' in patcher and
         'cl_mulaw(int32_t pcm)' in cloud_shim and
         '#include "cloud_dsp.c"' not in cloud_shim,
         "Clouds DSP removal would break shared punch recording buffer")
-require("'#include \"eng_prism.c\"'" in patcher and
-        "'#include \"eng_elem.c\"'" in patcher and
-        "'#include \"eng_phys.c\"'" in patcher and
-        "'&ENG_GONE, &ENG_GONE, &ENG_MIYAKO, &ENG_JUNO,'" in patcher,
-        "Plaits/Elements/PHYS must be fully removed from C compile path")
+# Inspect the actual replacement() calls, not fragile fragments of their
+# Python string representation (which may include upstream source comments).
+import ast
+
+def native_replacements(filename):
+    operations = []
+    for node in ast.walk(ast.parse(patcher)):
+        if not (isinstance(node, ast.Call) and
+                isinstance(node.func, ast.Name) and
+                node.func.id == "replacement" and len(node.args) == 3):
+            continue
+        target = node.args[0]
+        if not (isinstance(target, ast.BinOp) and
+                isinstance(target.op, ast.Div) and
+                isinstance(target.left, ast.Name) and
+                target.left.id == "src"):
+            continue
+        try:
+            if ast.literal_eval(target.right) != filename:
+                continue
+            operations.append((ast.literal_eval(node.args[1]),
+                               ast.literal_eval(node.args[2])))
+        except (ValueError, TypeError, SyntaxError) as exc:
+            raise SystemExit(f"FAIL malformed native replacement: {exc}")
+    return operations
+
+engine_ops = native_replacements("engines.c")
+for removed in ("eng_prism.c", "eng_elem.c", "eng_phys.c"):
+    active = '#include "' + removed + '"'
+    require(any(active in old and active not in new_source
+                for old, new_source in engine_ops),
+            f"Mutable DSP removal missing from actual patch operations: {removed}")
+require(any('&ENG_PRISM, &ENG_ELEM, &ENG_ACID, &ENG_JUNO,' in old and
+            '&ENG_GONE, &ENG_GONE, &ENG_MIYAKO, &ENG_JUNO,' in new_source
+            for old, new_source in engine_ops),
+        "Mutable engine table IDs not reserved/replaced by MIYAKO")
 require('mi_full_ui.c' in patcher and
         'mi_full_draw(); /* MIYAKO exclusive' in patcher and
         'mi_full_input(); /* physical encoder' in patcher and
