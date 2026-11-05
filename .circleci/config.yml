@@ -40,6 +40,7 @@ jobs:
             python3 -m venv /home/circleci/.venv-fm1
             /home/circleci/.venv-fm1/bin/python -m pip install --disable-pip-version-check "Pillow==10.4.0" "numpy==1.26.4"
             /home/circleci/.venv-fm1/bin/python -c "from PIL import Image; print('Pillow available')" 
+            /home/circleci/.venv-fm1/bin/python fm1/karma/test_vq_selector_integrity.py
       - run:
           name: Restore all 576 original JPEGs and make actual RGB565 16-colour VQ pack + preview
           command: |
