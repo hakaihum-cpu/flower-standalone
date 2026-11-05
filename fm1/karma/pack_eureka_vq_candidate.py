@@ -62,7 +62,7 @@ def tile_expand(codebook, ids):
     return codebook[ids].reshape(FRAMES, 20, 16, 4, 8).transpose(0, 1, 3, 2, 4).reshape(FRAMES, PAD_H, WIDTH)
 
 
-def train_clip(original, palette565, loops=6):
+def train_clip(original, palette565, loops=6, frame_balance=0.0):
     """Deterministic RGB-aware K-means; 256 codebook tiles per 36-frame clip."""
     tiles = tile_extract(original)
     unique = np.unique(tiles, axis=0)
@@ -81,9 +81,26 @@ def train_clip(original, palette565, loops=6):
         ids = np.argmin(dist, axis=1).astype(np.uint8)
         means = np.empty((DICT_SIZE, TILE_PIXELS * 3), dtype=np.float32)
         means[0] = 0
-        for i in range(1, DICT_SIZE):
-            group = v[ids == i]
-            means[i] = group.mean(axis=0) if len(group) else centroids[i]
+        if frame_balance > 0:
+            # Still a SINGLE 256-entry dictionary per clip and 8x4 tiles.
+            # Bias Lloyd updates toward the frame with the highest error.
+            # No frame, palette entry, tile size or bit depth is changed.
+            losses = np.maximum(dist[np.arange(len(tiles)), ids], 1.0)
+            frame_error = losses.reshape(FRAMES, TILE_COUNT).mean(axis=1)
+            weights = np.maximum(frame_error, 1.0) ** frame_balance
+            weights = np.clip(weights / weights.mean(), 0.15, 8.0)
+            tile_weights = np.repeat(weights, TILE_COUNT)
+            weighted_sum = np.zeros((DICT_SIZE, v.shape[1]), dtype=np.float64)
+            np.add.at(weighted_sum, ids, v * tile_weights[:, None])
+            weight_totals = np.bincount(ids, weights=tile_weights,
+                                        minlength=DICT_SIZE)
+            means[1:] = np.where(weight_totals[1:, None] > 0,
+                weighted_sum[1:] / np.maximum(weight_totals[1:, None], 1e-9),
+                centroids[1:])
+        else:
+            for i in range(1, DICT_SIZE):
+                group = v[ids == i]
+                means[i] = group.mean(axis=0) if len(group) else centroids[i]
         means = means.reshape(DICT_SIZE, TILE_PIXELS, 3)
         cost = ((means[:, :, None, :] - pal[None, None, :, :]) ** 2).sum(axis=3)
         codebook[1:] = np.argmin(cost[1:], axis=2).astype(np.uint8)
@@ -208,7 +225,18 @@ def main():
         images = jpeg_frames(source, clip)
         palette, fourbit = clip_pixels(images)
         idx = source_indices(fourbit)
-        book, ids, recon, quality = train_clip(idx, palette)
+        # Improve the CURRENT 8x4 / 256-tile VQ dictionary only. Preserve the
+        # original candidate as a guaranteed fallback if tuning is worse.
+        base = train_clip(idx, palette)
+        selected = "original"
+        chosen = base
+        if base[3][0] < a.min_psnr_db:
+            for balance in (1.0, 2.0):
+                trial = train_clip(idx, palette, loops=18,
+                                   frame_balance=balance)
+                if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
+                    chosen, selected = trial, f"frame-balanced {balance:g}"
+        book, ids, recon, quality = chosen
         blob = pack_nibbles(book)
         if not np.array_equal(book, np.stack([np.frombuffer(blob, np.uint8) >> 4,
             np.frombuffer(blob, np.uint8) & 15], axis=-1).reshape(256, 32)):
@@ -226,7 +254,8 @@ def main():
         maps.append(ids.tobytes())
         worst.append(float(quality[0]))
         print(f"INFO clip {clip+1}/16 RGB PSNR worst={quality[0]:.2f} "
-              f"mean={quality[1]:.2f} distinct={quality[3]}/36 vs input={quality[2]}/36")
+              f"mean={quality[1]:.2f} distinct={quality[3]}/36 vs input={quality[2]}/36 "
+              f"dictionary={selected}")
         if montage is not None:
             pal = rgb_palette(palette)
             montage.paste(Image.fromarray(pal[idx[0, :HEIGHT]]), (0, clip * HEIGHT))
