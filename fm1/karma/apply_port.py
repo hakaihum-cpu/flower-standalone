@@ -124,6 +124,14 @@ def main():
             if body.count(needle) != 1:
                 raise RuntimeError(f"{filename}: incompatible upstream; anchor count {body.count(needle)}: {needle!r}")
     preflight_all_replacements(src)
+    # Remove the unconditional Plaits C++ linker input. All Plaits C sources
+    # are absent from the MIYAKO engine graph, but the pinned KARMA builder
+    # otherwise links every C++ model object even when no model is reachable.
+    # Check this pinned build.py anchor BEFORE modifying any source.
+    build_script = root / "tools" / "build.py"
+    plx_anchor = "    plx = build_plx()"
+    if not build_script.is_file() or build_script.read_text(encoding="utf-8").count(plx_anchor) != 1:
+        raise RuntimeError("Pinned KARMA build.py Plaits link anchor changed; stop before patch")
     # Only the approved 576-frame RGB565 16-colour VQ candidate is allowed.
     # A packer quality failure MUST abort CI before any source edits/build.
     packed = HERE / "mi_eureka_vq_frames.h"
@@ -153,6 +161,10 @@ def main():
     shutil.copyfile(HERE / "mi_panel_nav.c", src / "mi_panel_nav.c")
     shutil.copyfile(HERE / "mi_boot_anim.c", src / "mi_boot_anim.c")
     shutil.copyfile(HERE / "mi_splash.c", src / "splash.c")
+    builder_text = build_script.read_text(encoding="utf-8")
+    build_script.write_text(builder_text.replace(
+        plx_anchor, "    plx = []  # MIYAKO: no Plaits C++ model objects", 1),
+        encoding="utf-8")
     # ACID is no longer an accessible engine. Remove its DSP compilation as
     # well, rather than retaining dead firmware code and stale arena types.
     replacement(src / "engines.c",
