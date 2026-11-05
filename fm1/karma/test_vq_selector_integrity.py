@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""Host-only regression: final 8x4 VQ selectors reference the FINAL 256-tile dictionary.
+
+Synthetic integer-index input is a regression fixture, not generated video
+and never becomes a user-visible EUREKA source frame or firmware asset.
+"""
+import numpy as np
+
+from pack_eureka_vq_candidate import (
+    DICT_SIZE, FRAMES, PAD_H, TILE_COUNT, TILE_PIXELS, WIDTH,
+    rgb_palette, tile_expand, tile_extract, train_clip,
+)
+
+rng = np.random.default_rng(20261106)
+indices = rng.integers(0, 16, size=(FRAMES, PAD_H, WIDTH), dtype=np.uint8)
+palette565 = np.array([
+    0x0000, 0xFFFF, 0xF800, 0x07E0, 0x001F, 0x7BEF, 0xFFE0, 0xF81F,
+    0x07FF, 0x4208, 0x8410, 0xC618, 0xFBE0, 0x03EF, 0x780F, 0xA514,
+], dtype=np.uint16)
+
+book, selectors, restored, quality = train_clip(indices, palette565)
+assert book.shape == (DICT_SIZE, TILE_PIXELS)
+assert selectors.shape == (FRAMES, TILE_COUNT)
+assert book.max() < 16
+assert np.array_equal(restored, tile_expand(book, selectors))
+
+palette = rgb_palette(palette565)
+source_tiles = tile_extract(indices)
+source_rgb = palette[source_tiles].reshape(-1, TILE_PIXELS * 3).astype(np.float32)
+dict_rgb = palette[book].reshape(DICT_SIZE, TILE_PIXELS * 3).astype(np.float32)
+source_norms = np.einsum("ij,ij->i", source_rgb, source_rgb)
+dict_norms = np.einsum("ij,ij->i", dict_rgb, dict_rgb)
+distances = (source_norms[:, None] + dict_norms[None, :]
+             - 2 * (source_rgb @ dict_rgb.T))
+expected_selectors = np.argmin(distances, axis=1).astype(np.uint8)
+assert np.array_equal(selectors.ravel(), expected_selectors), (
+    "VQ selectors refer to a stale dictionary, not the final firmware dictionary"
+)
+assert quality[0] <= quality[1]
+assert quality[2] == FRAMES and quality[3] == FRAMES
+print("PASS: all 11520 synthetic 8x4 tile IDs reference the final 256-entry VQ dictionary")
