@@ -2,6 +2,7 @@
 """Fail-closed post-patch verifier. Does not claim target build or sound test."""
 from pathlib import Path
 import sys
+from native_guard import forbidden_dependencies, selftest as guard_selftest
 
 def main():
     if len(sys.argv) != 2:
@@ -13,6 +14,7 @@ def main():
               "eng_elem.c", "eng_prism.c", "fx.c", "mi_cloud_shim.c", "ui_draw.c", "mi_dot_ui.c",
               "ui_vis.c", "mi_boot_anim.c", "splash.c", "ui_input.c", "mi_panel_nav.c", "mi_full_ui.c",
               "mi_eureka_video.c", "mi_eureka_vq_decoder.c", "mi_eureka_vq_frames.h")}
+    guard_selftest()
     checks = {
         "MIYAKO engine table": ('&ENG_GONE, &ENG_GONE, &ENG_MIYAKO, &ENG_JUNO,' in parts["engines.c"]),
         "MIYAKO native source included": ('#include "eng_miyako.c"' in parts["engines.c"]),
@@ -124,8 +126,7 @@ def main():
                                             'case TX_TAPE:' not in parts["fx.c"]),
         "No excluded MIYAKO engines": (not any(v in parts["eng_miyako.c"] for v in
                                             ("Vongon", "Knowing", "Twilight", "EP-Sampler", "Rings", "Warps"))),
-        "No JUCE / runtime allocation": (not any(v in parts["eng_miyako.c"] for v in
-                                            ("JuceHeader", "malloc(", "calloc(", "realloc(", "new ", "float ", "double "))),
+        "No JUCE / runtime allocation": (not forbidden_dependencies(parts["eng_miyako.c"])),
         "MIYAKO buffer bounded": ("#define MIYAKO_RING 4096u" in parts["eng_miyako.c"] and
                                   "edge < 32u" in parts["eng_miyako.c"] and
                                   "mi_slot_max_bytes" in parts["eng_miyako.c"] and
