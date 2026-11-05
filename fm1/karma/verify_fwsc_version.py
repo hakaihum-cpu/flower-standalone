@@ -31,7 +31,9 @@ def verify(record: Path, package: Path, app: Path, loader: Path) -> str:
     lines = record.read_text(encoding="ascii").splitlines()
     entries = dict(line.split("=", 1) for line in lines)
     identity = entries["FWSC_PRODUCT"]
-    build_num = int(entries["CIRCLE_BUILD_NUM"])\n    if not 244 <= build_num <= 316:\n        raise RuntimeError("CircleCI job must be 244..316; actual FM-1_926 was job #243")
+    build_num = int(entries["CIRCLE_BUILD_NUM"])
+    if not 244 <= build_num <= 316:
+        raise RuntimeError("CircleCI job must be 244..316; actual FM-1_926 was job #243")
     if identity != f"FM-1_{926 + build_num - 243}":
         raise RuntimeError("Build number does not match the incremented identity")
     if int(identity.rsplit("_", 1)[1]) <= 926:
