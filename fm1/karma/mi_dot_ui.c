@@ -2,12 +2,14 @@
  * MIYAKO's 240x124 graph strip on the FM-1's real 240x240 LCD.
  * Deliberately uses only KARMA's existing bounded canvas/bitmap font APIs.
  * The knob band, header, footer and all controls remain KARMA's working UI.
- * Yellow 1-bit-style pixels on black; there are no external image assets.
+ * Yellow 1-bit-style pixels on black. Original user EUREKA video frames
+ * are embedded by the build-time compressor; never replaced by fake bars.
  */
 #define MI_DOT_Y RGB(255, 209, 12)
 #define MI_DOT_B RGB(150, 121, 12)
 #define MI_DOT_D RGB(43, 39, 20)
 #define MI_DOT_W C_WHITE
+#include "mi_eureka_video.c"
 
 static int32_t mi_dot_wave(int32_t wave, uint32_t ph, uint32_t width)
 {
@@ -53,9 +55,14 @@ static void mi_dot_fx(const track_t *t)
     int32_t mode = clamp(t->p[P_E4], 0, 2);
     int32_t wet = clamp(t->p[P_E5], 0, 127);
     int32_t depth = clamp(t->p[P_E6], 0, 127);
-    int32_t rate = clamp(t->p[P_E7], 0, 127);
     int32_t x, h;
     static const char *const modes[] = {"BYPASS", "REEL", "EUREKA"};
+    if (mode == 2) {
+        /* Actual 576-frame user EUREKA video; no bar-graph substitute. */
+        mi_ev_draw(t);
+        return;
+    }
+    mi_ev_enabled = 0u;
     cv_text(10, 30, &FONT_S, modes[mode], mode ? MI_DOT_Y : MI_DOT_B);
     if (mode == 1) {
         int32_t px = 10, py = 78;
@@ -66,14 +73,6 @@ static void mi_dot_fx(const track_t *t)
             int32_t y = 77 + ((sine_i(p) * depth) >> 18);
             if (x > 10) cv_line(px, py, x, y, MI_DOT_Y);
             px = x; py = y;
-        }
-    } else if (mode == 2) {
-        /* Match actual DSP: P_E7 >> 5 selects 1..4 repeats. */
-        int32_t n = 1 + (rate >> 5);
-        for (x = 0; x < n; x++) {
-            int32_t ww = (212 / n) - 4;
-            int32_t h2 = 10 + depth / 8 + (x & 1) * 10;
-            cv_rect(14 + x * (212 / n), 85 - h2, ww, h2, x & 1 ? MI_DOT_B : MI_DOT_Y);
         }
     } else {
         for (x = 0; x < 26; x++)
