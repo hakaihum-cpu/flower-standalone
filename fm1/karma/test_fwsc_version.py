@@ -40,10 +40,11 @@ with tempfile.TemporaryDirectory() as folder:
         loader.write_bytes(b"usb ota-" + expected.encode("ascii"))
         assert package_product(fwsc.read_bytes()) == expected
         assert verify(version, fwsc, app, loader) == expected
-    try:
-        run(home / "build.py", 317, home / "version.txt")
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError("FWSC updater identity reused or exceeded 999")
-print("PASS: unique FM-1_927, FM-1_928, FM-1_999; reject #317")
+    for invalid_job in (243, 317):
+        try:
+            run(home / "build.py", invalid_job, home / "version.txt")
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError(f"FWSC updater accepted invalid job {invalid_job}")
+print("PASS: unique FM-1_927, FM-1_928, FM-1_999; reject #243 and #317")
