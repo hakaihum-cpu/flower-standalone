@@ -9,7 +9,6 @@
 #define RGB(r,g,b) ((uint16_t)((((r)>>3)<<11)|(((g)>>2)<<5)|((b)>>3)))
 #define C_BLACK 0u
 #define C_WHITE 0xFFFFu
-#define FELUCCA_VERSION "MIYAKO FM1 P1"
 typedef struct {uint8_t h; uint8_t glyph_w;} font_t;
 static const font_t FONT_S = {16,8}, FONT_L={32,16};
 static uint32_t draw_count, illegal;
