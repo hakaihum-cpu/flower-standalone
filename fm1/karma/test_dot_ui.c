@@ -20,6 +20,7 @@ static const test_font_t FONT_S={16};
 typedef struct { int16_t p[8]; int32_t peak; } track_t;
 static struct { uint32_t frame; } ui;
 static int32_t cv_oy;
+static uint32_t fm1_ms;
 static unsigned long draws, oob;
 static int32_t clamp(int32_t v,int32_t a,int32_t b){return v<a?a:v>b?b:v;}
 static int32_t sine_i(uint32_t p){return (int32_t)(32767.0*sin((double)p*(6.283185307179586/4294967296.0)));}
@@ -52,6 +53,66 @@ int main(void) {
         t.p[P_E6]=e?127:0;t.p[P_E7]=e?127:0;
         t.peak=e?100:0;ui.frame=70u;
         mi_dot_graph(&t,1); scenes++;
+    }
+    /* Every one of the 576 supplied frames must decode in the C runtime.
+     * Verify sequential playback, random seeks, and clip keyframe resets. */
+    {
+        unsigned f;
+        uint32_t checksum = 0u;
+        for(f=0;f<MI_EUREKA_ASSET_COUNT;f++) {
+            unsigned k;
+            if(!mi_ev_seek(f)) {
+                fprintf(stderr,"FAIL: EUREKA decoder frame %u\n",f);
+                return 1;
+            }
+            for(k=0;k<MI_EUREKA_ASSET_BYTES;k++)
+                checksum = (checksum * 33u) ^ mi_ev_pixels[k];
+        }
+        if(!mi_ev_seek(0u) || !mi_ev_seek(575u) || checksum==0u) {
+            fprintf(stderr,"FAIL: EUREKA random seek/integrity\n");
+            return 1;
+        }
+        /* Original MIYAKO does NOT loop on a held input level.
+         * Meaningful amplitude changes advance 1..4 frames or change clip,
+         * while silence and a steady level freeze the current real frame. */
+        t.p[P_E4]=2;
+        mi_ev_enabled=0u; mi_ev_clip=-1; mi_ev_prior=0u;
+        { unsigned changed=0, switched=0; uint32_t prev=0u;
+          for(f=0;f<128u;f++) {
+              t.peak=(int32_t)(1500u+(f%4u)*3200u);
+              ui.frame+=3u;
+              mi_dot_graph(&t,1);
+              if(f && mi_ev_visible!=prev) changed++;
+              if(f && mi_ev_visible/36u!=prev/36u) switched++;
+              prev=mi_ev_visible;
+          }
+          if(changed<16u || switched==0u) {
+              fprintf(stderr,"FAIL: EUREKA original audio dynamics/clip switch (changed=%u switched=%u)\n",changed,switched);
+              return 1;
+          }
+        }
+        /* First sample after activity drop may change the frame, then stop. */
+        t.peak=0; mi_dot_graph(&t,1);
+        { uint32_t frozen=mi_ev_visible;
+          for(f=0;f<16u;f++) {
+              t.peak=0; ui.frame+=4u; mi_dot_graph(&t,1);
+              if(mi_ev_visible!=frozen) {
+                  fprintf(stderr,"FAIL: EUREKA auto-plays in silence\n");
+                  return 1;
+              }
+          }
+        }
+        t.peak=8000; mi_dot_graph(&t,1);
+        { uint32_t frozen=mi_ev_visible;
+          for(f=0;f<16u;f++) {
+              t.peak=8000; ui.frame+=3u; mi_dot_graph(&t,1);
+              if(mi_ev_visible!=frozen) {
+                  fprintf(stderr,"FAIL: EUREKA auto-plays on steady held level\n");
+                  return 1;
+              }
+          }
+        }
+        printf("PASS: EUREKA 576/576 frames C decode, random seeks, audio-dynamic/random-clip and idle/held freeze\n");
     }
     if(oob||draws<1000){fprintf(stderr,"FAIL: scenes=%u draws=%lu oob=%lu\n",scenes,draws,oob);return 1;}
     printf("PASS: %u MIYAKO DOT scenes, %lu bounded draw operations\n",scenes,draws);
