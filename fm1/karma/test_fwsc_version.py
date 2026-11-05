@@ -23,27 +23,27 @@ def mock_package(product: str) -> bytes:
 
 with tempfile.TemporaryDirectory() as folder:
     home = Path(folder)
-    for n in (1, 2, 73):
+    for n in (244, 245, 316):
         buildpy = home / "build.py"
         version = home / "version.txt"
         fwsc = home / "test.fwsc"
         app = home / "app.bin"
         loader = home / "loader.bin"
         buildpy.write_text('PRODUCT = "FM-1_926"\nVERSION = None\n', encoding="utf-8")
-        expected = f"FM-1_{926 + n}"
+        expected = f"FM-1_{926 + n - 243}"
         got = run(buildpy, n, version)
         assert got == expected
         assert f'PRODUCT = "{expected}"' in buildpy.read_text()
-        assert f'VERSION = "MIYAKO FM1 {926 + n}"' in buildpy.read_text()
+        assert f'VERSION = "MIYAKO FM1 {926 + n - 243}"' in buildpy.read_text()
         fwsc.write_bytes(mock_package(expected))
         app.write_bytes(b"audio OTA " + expected.encode("ascii"))
         loader.write_bytes(b"usb ota-" + expected.encode("ascii"))
         assert package_product(fwsc.read_bytes()) == expected
         assert verify(version, fwsc, app, loader) == expected
     try:
-        run(home / "build.py", 74, home / "version.txt")
+        run(home / "build.py", 317, home / "version.txt")
     except RuntimeError:
         pass
     else:
         raise AssertionError("FWSC updater identity reused or exceeded 999")
-print("PASS: unique FM-1_927, FM-1_928, FM-1_999; reject #74")
+print("PASS: unique FM-1_927, FM-1_928, FM-1_999; reject #317")
