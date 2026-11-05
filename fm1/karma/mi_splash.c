@@ -19,7 +19,7 @@ static void sloop_splash(void)
     cv_begin(240, 35, C_BLACK);
     cv_text(120 - text_w(&FONT_S, FELUCCA_VERSION) / 2, 1,
             &FONT_S, FELUCCA_VERSION, RGB(196, 196, 204));
-    cv_text(120 - text_w(&FONT_S, "KARMA / FELUCCA") / 2, 18,
-            &FONT_S, "KARMA / FELUCCA", RGB(96, 96, 104));
+    cv_text(120 - text_w(&FONT_S, "EUREKA 16C") / 2, 18,
+            &FONT_S, "EUREKA 16C", RGB(96, 96, 104));
     cv_blit(0, 202);
 }
