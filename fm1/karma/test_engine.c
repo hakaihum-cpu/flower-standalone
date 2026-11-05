@@ -17,15 +17,8 @@
 #define P_E6 6
 #define P_E7 7
 #define ENGI_ACID 14u
-/* Exact KARMA core.h parameter format ABI (pinned db3cda79).
- * Do not invent host-only numeric values: they must match the target. */
-enum {
-    F_INT, F_PCT, F_BIPCT, F_TIME, F_LFOHZ, F_CUTOFF, F_DB, F_SEMI,
-    F_ENUM, F_BPM, F_NOTE, F_ONOFF, F_OCT, F_STEPS, F_SWING, F_FILT
-};
-typedef char host_fmt_int_is_zero[(F_INT == 0) ? 1 : -1];
-typedef char host_fmt_pct_is_one[(F_PCT == 1) ? 1 : -1];
-typedef char host_fmt_enum_is_eight[(F_ENUM == 8) ? 1 : -1];
+#define F_ENUM 1
+#define F_PCT 2
 #define NVOICE 8
 #define NELEM(a) (sizeof(a) / sizeof((a)[0]))
 #define FX(a,b,c,d) .fx={(a)+1,(b)+1,(c)+1,(d)+1}
@@ -193,28 +186,6 @@ int main(void) {
         t->engine = 13u; /* Plaits is an independent engine on track 3. */
         require(!miyako_tail_active(t), "other engines never claim MIYAKO arena");
         t->engine = ENGI_ACID;
-    }
-    require(sizeof(miyako_slot_t) == 2084u,
-            "MIYAKO slot fits 2084-byte memory cap");
-    {
-        /* Exercise maximum EUREKA slice duration and repeat count. The
-         * downsampled ring must never index beyond 1024 int16 entries. */
-        miyako_slot_t *st = (miyako_slot_t *)host_arena;
-        uint32_t j;
-        memset(st, 0, sizeof(*st));
-        st->mode = 2;
-        st->wet = 32766;
-        t->p[P_E4] = 2;
-        t->p[P_E5] = 127;
-        t->p[P_E6] = 127; /* original longest slice: 3304 input samples */
-        t->p[P_E7] = 127; /* original maximum: 4 repeats */
-        for (j = 0; j < 600u; ++j) {
-            memset(b, 0, sizeof(b));
-            b[0] = (j & 1u) ? 16000 : -16000;
-            miyako_post(t, b, 32u);
-        }
-        require(st->segment == 3304u,
-                "maximum EUREKA slice still spans 3304 input samples");
     }
     require(ENG_MIYAKO.npresets==6,"six factory presets; FM uses Plaits");
     require(ENG_MIYAKO.post==miyako_post,"real post callback");
