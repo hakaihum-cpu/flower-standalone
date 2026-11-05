@@ -41,9 +41,11 @@ def verify_dictionary_integrity(book, selectors, restored, quality):
 
 baseline = train_clip(indices, palette565)
 verify_dictionary_integrity(*baseline)
-for alpha in (1.0, 2.0):
+for alpha in (1.0, 2.0, 3.0, 4.0, 6.0):
     balanced = train_clip(indices, palette565, loops=8, frame_balance=alpha)
     verify_dictionary_integrity(*balanced)
+    assert np.isfinite(balanced[3][0]) and np.isfinite(balanced[3][1]), (
+        "frame-balanced VQ numeric overflow at weighting power " + str(alpha))
     chosen = max((baseline, balanced), key=lambda result: (result[3][0], result[3][1]))
     assert chosen[3][0] >= baseline[3][0]
-print("PASS: 3 VQ training paths x 11520 synthetic 8x4 tiles; final dictionary IDs consistent")
+print("PASS: 6 VQ training paths x 11520 synthetic 8x4 tiles; final dictionary IDs consistent")
