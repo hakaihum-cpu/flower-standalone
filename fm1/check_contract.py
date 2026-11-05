@@ -133,6 +133,10 @@ require(any('&ENG_PRISM, &ENG_ELEM, &ENG_ACID, &ENG_JUNO,' in old and
             '&ENG_GONE, &ENG_GONE, &ENG_MIYAKO, &ENG_JUNO,' in new_source
             for old, new_source in engine_ops),
         "Mutable engine table IDs not reserved/replaced by MIYAKO")
+require('plx_anchor = "    plx = build_plx()"' in patcher and
+        'no Plaits C++ model objects' in patcher and
+        'Plaits C++ linker inputs excluded' in verifier,
+        "Plaits C++ models still linked into MIYAKO-only app slot")
 require('mi_full_ui.c' in patcher and
         'mi_full_draw(); /* MIYAKO exclusive' in patcher and
         'mi_full_input(); /* physical encoder' in patcher and
