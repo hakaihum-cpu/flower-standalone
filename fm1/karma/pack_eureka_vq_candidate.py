@@ -87,7 +87,11 @@ def train_clip(original, palette565, loops=6, frame_balance=0.0):
             # No frame, palette entry, tile size or bit depth is changed.
             losses = np.maximum(dist[np.arange(len(tiles)), ids], 1.0)
             frame_error = losses.reshape(FRAMES, TILE_COUNT).mean(axis=1)
-            weights = np.maximum(frame_error, 1.0) ** frame_balance
+            # Normalize BEFORE exponentiating: raw RGB squared errors can
+            # overflow float32 for stronger frame balancing (e.g. power 6).
+            relative_error = np.maximum(frame_error, 1.0)
+            relative_error /= max(float(relative_error.mean()), 1.0)
+            weights = relative_error.astype(np.float64) ** frame_balance
             weights = np.clip(weights / weights.mean(), 0.15, 8.0)
             tile_weights = np.repeat(weights, TILE_COUNT)
             weighted_sum = np.zeros((DICT_SIZE, v.shape[1]), dtype=np.float64)
@@ -231,7 +235,7 @@ def main():
         selected = "original"
         chosen = base
         if base[3][0] < a.min_psnr_db:
-            for balance in (1.0, 2.0):
+            for balance in (1.0, 2.0, 3.0, 4.0, 6.0):
                 trial = train_clip(idx, palette, loops=18,
                                    frame_balance=balance)
                 if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
