@@ -16,6 +16,9 @@ def main():
               "mi_eureka_video.c", "mi_eureka_vq_decoder.c", "mi_eureka_vq_frames.h")}
     guard_selftest()
     checks = {
+        "Plaits C++ linker inputs excluded": (
+            'plx = []  # MIYAKO: no Plaits C++ model objects'
+            in (root / "tools" / "build.py").read_text(encoding="utf-8")),
         "MIYAKO engine table": ('&ENG_GONE, &ENG_GONE, &ENG_MIYAKO, &ENG_JUNO,' in parts["engines.c"]),
         "MIYAKO native source included": ('#include "eng_miyako.c"' in parts["engines.c"]),
         "Removed ACID DSP": ('#include "eng_acid.c"' not in parts["engines.c"] and
