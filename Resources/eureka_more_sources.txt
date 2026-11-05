@@ -1,0 +1,6 @@
+# EUREKA five additional clips: slots 2/3 are replaced with 1.mp4 and 2.mp4; each provides 36 JPEG frames at 720x720, direct resize from original 1080x1080 with no black letterboxing; the other 3 clips are unchanged.
+436441182_1792311285651534.mp4
+1.mp4
+2.mp4
+881269787_1792311671806683.mp4
+131027485_1792311397114360.mp4
