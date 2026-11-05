@@ -3,11 +3,8 @@
  * Plaits, Elements and Clouds remain KARMA's separate native DSP paths.
  * Native mono fixed-point engine, no Android/JUCE allocation.
  */
-#define MIYAKO_RING 1024u
+#define MIYAKO_RING 4096u
 #define MIYAKO_MASK (MIYAKO_RING - 1u)
-/* Preserve EUREKA's original 256..3304-sample timing while storing one
- * sample every four; replay linearly interpolates the captured points. */
-#define MIYAKO_EUREKA_DECIM 4u
 typedef struct {
     int16_t ring[MIYAKO_RING];
     uint32_t wr, valid, phase, segment, wow, flutter;
@@ -19,9 +16,7 @@ typedef struct {
  * FM-1 EUREKA buffer or breaks the power-of-two ring-mask assumption.
  * The target linker independently checks the remaining .pool headroom. */
 typedef char mi_ring_power_of_two[(MIYAKO_RING && !(MIYAKO_RING & (MIYAKO_RING - 1u))) ? 1 : -1];
-typedef char mi_slot_max_bytes[(sizeof(miyako_slot_t) <= 2084u) ? 1 : -1];
-typedef char mi_eureka_max_segment_fits[((256u + 127u * 24u + MIYAKO_EUREKA_DECIM - 1u)
-                                          / MIYAKO_EUREKA_DECIM <= MIYAKO_RING) ? 1 : -1];
+typedef char mi_slot_max_bytes[(sizeof(miyako_slot_t) <= 8448u) ? 1 : -1];
 
 static miyako_slot_t *miyako_slot(track_t *t)
 {
@@ -95,7 +90,7 @@ static void miyako_post(track_t *t, int32_t *out, uint32_t n)
             /* Keep eight fractional bits: an integer tap jumps as the head moves. */
             a = (sine_i(s->wow) * clamp(t->p[P_E6], 0, 127)) >> 9;
             b = (sine_i(s->flutter) * clamp(t->p[P_E7], 0, 127)) >> 11;
-            delay_q8 = clamp((256 << 8) + a + b, 64 << 8, 960 << 8);
+            delay_q8 = clamp((256 << 8) + a + b, 64 << 8, 1024 << 8);
             delay = (uint32_t)delay_q8 >> 8;
             frac = (uint32_t)delay_q8 & 255u;
             if (s->valid > delay + 1u) {
@@ -126,17 +121,10 @@ static void miyako_post(track_t *t, int32_t *out, uint32_t n)
                 segment = s->segment;
             }
             at = s->phase % segment;
-            if (s->phase < segment) {
-                if ((at & (MIYAKO_EUREKA_DECIM - 1u)) == 0u)
-                    s->ring[at / MIYAKO_EUREKA_DECIM] = (int16_t)dry;
-            } else {
-                uint32_t idx = at / MIYAKO_EUREKA_DECIM;
-                uint32_t frac = at & (MIYAKO_EUREKA_DECIM - 1u);
-                int32_t s0 = s->ring[idx];
-                int32_t s1 = ((idx + 1u) * MIYAKO_EUREKA_DECIM < segment)
-                           ? s->ring[idx + 1u] : s0;
-                effected = s0 + (((s1 - s0) * (int32_t)frac) >> 2);
-            }
+            if (s->phase < segment)
+                s->ring[at] = (int16_t)dry;
+            else
+                effected = s->ring[at];
             edge = at < segment - at - 1u ? at : segment - at - 1u;
             if (s->phase >= segment && edge < 32u)
                 effected = dry + (((effected - dry) * (int32_t)edge) >> 5);
