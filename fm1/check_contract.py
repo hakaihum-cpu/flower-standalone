@@ -36,8 +36,11 @@ for token in ('ENG_PRISM', 'ENG_ELEM', 'CLOUD', '"KARMA"'):
     require(token not in full, f"non-MIYAKO UI reference: {token}")
 for token in ('Vongon', 'EP-Sampler', 'Knowing', 'Tape', 'Twilight', 'Rings', 'Warps'):
     require(token in manifest, f"requested exclusion omitted: {token}")
-for forbidden in ('JuceHeader', 'malloc(', 'calloc(', 'realloc(', 'new ', 'float ', 'double '):
-    require(forbidden not in engine, f"unsupported target dependency: {forbidden}")
+from karma.native_guard import forbidden_dependencies, selftest as guard_selftest
+# Scan executable C only: English comments mentioning "new" are not allocations.
+guard_selftest()
+violations = forbidden_dependencies(engine)
+require(not violations, f"unsupported target dependency: {', '.join(violations)}")
 require('#define MIYAKO_RING 4096u' in engine, "bounded capture ring missing")
 require('mi_slot_max_bytes' in engine and 'mi_ring_power_of_two' in engine,
         "static target-memory safety guard missing")
