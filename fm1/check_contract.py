@@ -79,6 +79,13 @@ require('COUNT = 16 * 36' in packer and
         'mi_eureka_vq_frames.h' in patcher and
         'mi_eureka_vq_frames.h' in verifier,
         "16-colour 576-frame VQ renderer/quality checks not fully integrated")
+require('WARNING: VQ visual quality below advisory' in vq and
+        'raise SystemExit(f"FAIL: VQ quality below' not in vq and
+        'if min(worst) < a.min_psnr_db:' in vq and
+        'reconstructed != 576' in vq and
+        'if MEDIA_BYTES >= APP_SLOT:' in vq and
+        '--min-psnr-db 26.0' in ci,
+        "26 dB must remain visible as advisory only; enforce frame/flash integrity")
 require((root / "fm1" / "karma" / "test_eureka_vq_decoder.c").is_file(),
         "VQ native regression missing")
 require('pack_eureka_vq_candidate.py' in ci and
