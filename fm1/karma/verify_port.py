@@ -10,7 +10,7 @@ def main():
     root = Path(sys.argv[1]).resolve()
     src = root / "firmware" / "src"
     parts = {n: (src / n).read_text(encoding="utf-8") for n in
-             ("engines.c", "params.c", "ui.c", "eng_miyako.c", "cloud.c", "cloud_dsp.c",
+             ("engines.c", "voice.c", "gen_seq.c", "ui_op.c", "params.c", "ui.c", "eng_miyako.c", "cloud.c", "cloud_dsp.c",
               "eng_elem.c", "eng_prism.c", "fx.c", "mi_cloud_shim.c", "ui_draw.c", "mi_dot_ui.c",
               "ui_vis.c", "mi_boot_anim.c", "splash.c", "ui_input.c", "mi_panel_nav.c", "mi_full_ui.c",
               "mi_eureka_video.c", "mi_eureka_vq_decoder.c", "mi_eureka_vq_frames.h")}
@@ -21,6 +21,17 @@ def main():
             in (root / "tools" / "build.py").read_text(encoding="utf-8")),
         "MIYAKO engine table": ('&ENG_GONE, &ENG_GONE, &ENG_MIYAKO, &ENG_JUNO,' in parts["engines.c"]),
         "MIYAKO native source included": ('#include "eng_miyako.c"' in parts["engines.c"]),
+
+        "#251 omitted-engine dependency closure": (
+            all(sym not in parts["voice.c"] for sym in
+                ("ENG_PHYS", "ENG_ELEM", "ENG_PRISM", "phys_poly(", "elem_poly(", "prism_poly(")) and
+            'ENGINES[t->engine]->poly' in parts["voice.c"] and
+            all(sym not in parts["gen_seq.c"] for sym in ("EM_BOUNCE", "EM_PICK")) and
+            't->p[P_ATK] < 12 && t->p[P_REL] < 40' in parts["gen_seq.c"] and
+            all(sym not in parts["ui_op.c"] for sym in
+                ("op_prism_panel(", "prism_model(", "PRM_FOLD", "PRM_WAVE",
+                 "PRM_HARM", "PRM_SWARM", "pr_harm_t", "pr_fold_t", "pr_wave_t")) and
+            "op_px = 0;" in parts["ui_op.c"]),
         "Removed ACID DSP": ('#include "eng_acid.c"' not in parts["engines.c"] and
                              'acid_slot_t acid;' not in parts["engines.c"]),
         "MIYAKO arena allocated": ("miyako_slot_t miyako;" in parts["engines.c"] and
