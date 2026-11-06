@@ -252,6 +252,7 @@ def main():
     reconstructed = 0
     montage = Image.new("RGB", (256, 78 * CLIPS)) if a.preview else None
     for clip in range(CLIPS):
+        print(f"EFFECTS source clip {clip+1}/{CLIPS}: quantising all 36 frames", flush=True)
         images = jpeg_frames(source, clip)
         palette, fourbit = clip_pixels(images)
         idx = source_indices(fourbit)
@@ -303,7 +304,7 @@ def main():
         worst.append(float(quality[0]))
         print(f"INFO clip {clip+1}/{CLIPS} RGB PSNR worst={quality[0]:.2f} "
               f"mean={quality[1]:.2f} distinct={quality[3]}/36 vs input={quality[2]}/36 "
-              f"dictionary={selected}")
+              f"dictionary={selected}", flush=True)
         if montage is not None:
             pal = rgb_palette(palette)
             montage.paste(Image.fromarray(pal[idx[0, :HEIGHT]]), (0, clip * HEIGHT))
