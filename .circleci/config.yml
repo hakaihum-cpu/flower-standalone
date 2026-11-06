@@ -25,6 +25,7 @@ jobs:
           command: |
             set -eu
             test "$CIRCLE_BRANCH" = "feature/fm1-miyako-visual-arp-fx-20261107"
+            python3 -m compileall -q fm1/native
             python3 -m py_compile fm1/native/verify_standalone.py fm1/native/test_pipeline_contract.py
             python3 fm1/native/verify_standalone.py
             python3 fm1/native/test_pipeline_contract.py
