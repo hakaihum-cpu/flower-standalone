@@ -20,6 +20,17 @@
 - DREAMY: still pending a distinct faithful DSP; never claim a fully working DREAMY.
 - Original simultaneous MIYAKO multi-effect chain: still pending; do not claim equivalence.
 
+## Binding visual-quality decision (confirmed from earlier 2026-11-06 history)
+- The user already requested the **26 dB PSNR pass/fail gate be discontinued**.
+- The assistant had accepted removing this arbitrary numerical quality blocker and
+  retaining exact frame count, original-source images, 16-colour format, memory size,
+  data integrity, and independent C/Python CRC verification.
+- PSNR **MUST be reported only**; a result such as 24.43 dB MUST NOT block
+  an installable trial FM-1 development FWSC on its own.
+- Do NOT silently cut frames, use generated images, suppress visual loss or waive
+  technical memory/flash/package integrity checks.
+- The enforced regression lives in `fm1/native/test_pipeline_contract.py`.
+
 ## Build input and output
 Repository: hakaihum-cpu/flower-standalone
 Branch: feature/fm1-miyako-no-eureka-20261106
