@@ -108,11 +108,12 @@ for target in list((root / "fm1/native").glob("mi_*.c")) + [
     root / "fm1/native/app.c",
 ] + list((root / "fm1/native").glob("*.h")):
     body = target.read_text(encoding="utf-8")
-    assert not _re.search(r'#\\s*include\\s*<string\\.h>', body), (
+    assert not _re.search(r'#\s*include\s*<string\.h>', body), (
         f"target imports missing bare-metal string.h: {target.name}"
     )
-    assert not _re.search(r'(?<![a-zA-Z_])memset\\s*\\(', body), (
-        f"target still calls unavailable hosted memset: {target.name}"
-    )
+    if target.suffix == ".c":
+        assert not _re.search(r'\b(?:memset|strcmp)\s*\(', body), (
+            f"target still calls unavailable hosted libc: {target.name}"
+        )
 assert (root / "fm1/native/mi_memory.h").is_file()
 print("PASS: manual no-EUREKA FM-1 firmware pipeline with original EFFECTS video and native FX")
