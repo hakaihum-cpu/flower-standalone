@@ -26,15 +26,15 @@ static void apply_preset(mi_state_t *s, unsigned preset)
     s->sub = (uint8_t)(preset == 3 ? 32 : 0);
     s->crush = 0;
     s->fx = (uint8_t)(preset == 4 ? MI_FX_REEL :
-                      preset == 5 ? MI_FX_EUREKA : MI_FX_OFF);
+                      preset == 5 ? MI_FX_CHORUS : MI_FX_OFF);
     s->wet = (uint8_t)(preset == 4 ? 80 : preset == 5 ? 95 : 0);
     if (preset == 4) {
         s->fx_options[MI_FX_REEL][0] = 48;
         s->fx_options[MI_FX_REEL][1] = 45;
     }
     if (preset == 5) {
-        s->fx_options[MI_FX_EUREKA][0] = 64;
-        s->fx_options[MI_FX_EUREKA][1] = 80;
+        s->fx_options[MI_FX_CHORUS][0] = 64;
+        s->fx_options[MI_FX_CHORUS][1] = 80;
     }
 }
 void mi_init(mi_state_t *s)
@@ -173,7 +173,7 @@ const char *mi_view_name(mi_view_t v)
 const char *mi_fx_name(mi_fx_t effect)
 {
     static const char *const names[] = {
-        "OFF", "REEL", "EUREKA", "DREAMY", "DELAY", "REVERB", "CHORUS"
+        "OFF", "REEL", "DREAMY", "DELAY", "REVERB", "CHORUS"
     };
     return (unsigned)effect < MI_FX_COUNT ? names[effect] : "?";
 }
@@ -189,7 +189,9 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
     if ((s->view == MI_FX || s->view == MI_VIDEO) && k >= 2) {
         if (s->fx == MI_FX_REEL) return k == 2 ? "WOW" : "FLTR";
-        if (s->fx == MI_FX_EUREKA) return k == 2 ? "SIZE" : "REPS";
+        if (s->fx == MI_FX_DELAY) return k == 2 ? "TIME" : "FDBK";
+        if (s->fx == MI_FX_REVERB) return k == 2 ? "DECAY" : "TONE";
+        if (s->fx == MI_FX_CHORUS) return k == 2 ? "RATE" : "DEPTH";
         /* Other DSP controls are pending source-accurate port; not fabricated. */
         return "TBD";
     }
