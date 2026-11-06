@@ -1,177 +1,40 @@
-# MIYAKO on M-VAVE FM-1. MANUAL ONLY: run_build=true.
-# KARMA is pinned as an internal backend only; its UI is never displayed.
-# Mutable engines and Clouds are not user accessible (muted and disabled).
-# This branch never builds Android and never writes to main.
+# FM-1 MIYAKO native standalone branch. CI deliberately has NO upstream KARMA checkout.
+# Manual only (run_build=true). This workflow tests native source, NOT flashable FWSC.
 version: 2.1
+
 parameters:
   run_build:
     type: boolean
     default: false
 
 jobs:
-  fm1_firmware:
+  fm1_standalone_preflight:
     docker:
       - image: cimg/base:2024.08-22.04
     resource_class: medium
-    environment:
-      KARMA_PIN: "db3cda79359ae914d1e58c0fc96c6ca744e7950e"
-      JIELI_TOOLCHAIN: "/home/circleci/.jieli/toolchain"
-      AC79_SDK: "/home/circleci/fw-AC79_AIoT_SDK"
-      PYTHON: "/home/circleci/.venv-fm1/bin/python"
     steps:
       - checkout
       - run:
-          name: Gate branch and check user feature contract
+          name: Verify exact standalone branch and source boundary
           command: |
             set -eu
-            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-port-20261104"
-            test "$(uname -m)" = "x86_64"
-            grep -q '^ID=ubuntu' /etc/os-release
-            grep -q '^VERSION_ID="22.04"' /etc/os-release
-            python3 -m py_compile fm1/karma/apply_port.py fm1/karma/verify_port.py fm1/karma/pack_eureka_frames.py fm1/karma/pack_eureka_vq_candidate.py fm1/karma/test_vq_selector_integrity.py scripts/materialize_miyako_eureka_video.py fm1/karma/prepare_fwsc_version.py fm1/karma/verify_fwsc_version.py fm1/karma/test_fwsc_version.py fm1/karma/test_source_closure.py fm1/check_contract.py
-            python3 fm1/check_contract.py
-            python3 fm1/karma/test_source_closure.py
-            python3 fm1/karma/test_fwsc_version.py
+            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-standalone-20261106"
+            python3 -m py_compile fm1/native/verify_standalone.py fm1/native/test_pipeline_contract.py
+            python3 fm1/native/verify_standalone.py
+            python3 fm1/native/test_pipeline_contract.py
       - run:
-          name: Install build prerequisites
+          name: Host compile and exercise actual MIYAKO native control source
           command: |
             set -eu
-            sudo apt-get update
-            sudo apt-get install -y git curl xz-utils gcc g++ python3-pip python3-venv libtinfo5
-            # The four media-independent harnesses compile before video processing.
-            for source in fm1/karma/test_engine.c fm1/karma/test_stress.c fm1/karma/test_boot_ui.c fm1/karma/test_panel_nav.c; do
-              cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only "$source"
-            done
-            # The three DOT/VQ harnesses require a VQ header. Temporarily
-            # declare ONLY its interface to compile the REAL sources before
-            # 576-frame encoding; never package this syntax-only declaration.
-            test ! -e fm1/karma/mi_eureka_vq_frames.h
-            trap 'rm -f fm1/karma/mi_eureka_vq_frames.h' EXIT
-            printf '%s\n' \
-              '#ifndef MI_EUREKA_VQ_FRAMES_H' \
-              '#define MI_EUREKA_VQ_FRAMES_H' \
-              '#include <stdint.h>' \
-              '#define MI_EUREKA_ASSET_COUNT 576u' \
-              '#define MI_EUREKA_ASSET_W 128u' \
-              '#define MI_EUREKA_ASSET_H 78u' \
-              '#define MI_EUREKA_ASSET_BYTES 4992u' \
-              '#define MI_EUREKA_ASSET_BPP 4u' \
-              '#define MI_EUREKA_ASSET_COLORS 16u' \
-              '#define MI_EUREKA_VQ_TILE_COUNT 320u' \
-              '#define MI_EUREKA_DECODED_CRC32 0u' \
-              'extern const uint16_t mi_eureka_vq_palette[16][16];' \
-              'extern const uint8_t mi_eureka_vq_tilebook[16][256][16];' \
-              'extern const uint8_t mi_eureka_vq_maps[576][320];' \
-              '#endif' > fm1/karma/mi_eureka_vq_frames.h
-            for source in fm1/karma/test_dot_ui.c fm1/karma/test_eureka_video.c fm1/karma/test_eureka_vq_decoder.c; do
-              cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only "$source"
-            done
-            rm -f fm1/karma/mi_eureka_vq_frames.h
-            trap - EXIT
-            python3 -m venv /home/circleci/.venv-fm1
-            /home/circleci/.venv-fm1/bin/python -m pip install --disable-pip-version-check "Pillow==10.4.0" "numpy==1.26.4"
-            /home/circleci/.venv-fm1/bin/python -c "from PIL import Image; print('Pillow available')" 
-            /home/circleci/.venv-fm1/bin/python fm1/karma/test_vq_selector_integrity.py
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie                -fsanitize=address,undefined -fno-sanitize-recover=all                fm1/native/mi_control.c fm1/native/test_mi_control.c                -o /tmp/miyako_fm1_control_test
+            /tmp/miyako_fm1_control_test
       - run:
-          name: Restore 576 original JPEGs, pack RGB565 tile VQ and report advisory PSNR
+          name: Record actual readiness stage; do not package a fake firmware
           command: |
             set -eu
-            python3 scripts/materialize_miyako_eureka_video.py
             mkdir -p fm1-dist
-            /home/circleci/.venv-fm1/bin/python fm1/karma/pack_eureka_vq_candidate.py \
-              Resources/miyako_eureka_frames.pack \
-              fm1/karma/mi_eureka_vq_frames.h \
-              --preview fm1-dist/eureka-vq-preview.png --min-psnr-db 26.0
-            test -s fm1/karma/mi_eureka_vq_frames.h
-            test -s fm1-dist/eureka-vq-preview.png
-            grep -q 'MI_EUREKA_ASSET_COUNT 576u' fm1/karma/mi_eureka_vq_frames.h
-            grep -q 'MI_EUREKA_ASSET_COLORS 16u' fm1/karma/mi_eureka_vq_frames.h
-            grep -q 'MI_EUREKA_ASSET_BPP 4u' fm1/karma/mi_eureka_vq_frames.h
-            grep -q 'MI_EUREKA_VQ_TILE_COUNT 320u' fm1/karma/mi_eureka_vq_frames.h
-            grep -q 'MI_EUREKA_DECODED_CRC32' fm1/karma/mi_eureka_vq_frames.h
-            grep -Fq 'mi_eureka_vq_palette[16][16]' fm1/karma/mi_eureka_vq_frames.h
-      - run:
-          name: Native C regression of all 576 VQ frames, RGB565 drawing and audio reactive playback (ASan non-PIE)
-          command: |
-            set -eu
-            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_eureka_video fm1/karma/test_eureka_video.c
-            /tmp/miyako_eureka_video
-            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_vq_decoder fm1/karma/test_eureka_vq_decoder.c
-            /tmp/miyako_vq_decoder
-      - run:
-          name: Host-side MIYAKO C audio smoke test with sanitizers (ASan non-PIE)
-          command: |
-            set -eu
-            cc -std=c99 -O1 -g -Wall -Wextra -fno-pie -no-pie -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_host fm1/karma/test_engine.c -lm
-            /tmp/miyako_host
-            cc -std=c99 -O1 -g -Wall -Wextra -fno-pie -no-pie -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_dot fm1/karma/test_dot_ui.c -lm
-            /tmp/miyako_dot
-            cc -std=c99 -O1 -g -Wall -Wextra -fno-pie -no-pie -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_stress fm1/karma/test_stress.c -lm
-            /tmp/miyako_stress
-            cc -std=c99 -O1 -g -Wall -Wextra -fno-pie -no-pie -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_boot fm1/karma/test_boot_ui.c
-            /tmp/miyako_boot
-            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/miyako_panel fm1/karma/test_panel_nav.c
-            /tmp/miyako_panel
-      - run:
-          name: Retrieve pinned KARMA FM-1 sources
-          command: |
-            set -eu
-            git clone https://github.com/eatyourgreensstudio-dotcom/karma-fm1.git fm1-karma
-            cd fm1-karma
-            git checkout --detach "$KARMA_PIN"
-            test "$(git rev-parse HEAD)" = "$KARMA_PIN"
-            # The pinned upstream build.sh has no executable permission in CI.
-            # Verify POSIX shell syntax before the expensive SDK install.
-            test -f build.sh
-            sh -n build.sh
-      - run:
-          name: Patch MIYAKO-only full screen and audit native hardware mappings
-          command: |
-            set -eu
-            python3 fm1/karma/apply_port.py fm1-karma
-            python3 fm1/karma/verify_port.py fm1-karma
-      - run:
-          name: Set fresh M-UPGRADE numeric identity using CircleCI build number
-          command: |
-            set -eu
-            test -n "${CIRCLE_BUILD_NUM:-}"
-            python3 fm1/karma/prepare_fwsc_version.py fm1-karma/tools/build.py \
-              fm1-dist/FWSC_VERSION.txt --build-number "$CIRCLE_BUILD_NUM"
-            grep -Eq '^FWSC_PRODUCT=FM-1_9[0-9][0-9]$' fm1-dist/FWSC_VERSION.txt
-            test -s fm1-dist/FWSC_VERSION.txt
-      - run:
-          name: Install JieLi toolchain and AC79 SDK
-          command: |
-            set -eu
-            cd fm1-karma
-            sh tools/get_toolchain.sh
-            git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$AC79_SDK"
-            test -x "$JIELI_TOOLCHAIN/pi32v2/bin/clang"
-            test -f "$AC79_SDK/cpu/wl82/tools/uboot.boot"
-            test -f "$AC79_SDK/cpu/wl82/tools/cfg_tool.bin"
-            test -f "$AC79_SDK/cpu/wl82/tools/cfg/eq_cfg_hw.bin"
-            printf '%s  %s\n' \
-              4e3b4c220dc96641cb5a723f41e68ce41d5261ae9434bb33fbd7f2c59976ded4 "$AC79_SDK/cpu/wl82/tools/uboot.boot" \
-              276579954f076886a6a7694f65dc71c034a63a2c204b76749065c0ac7b010d1b "$AC79_SDK/cpu/wl82/tools/cfg_tool.bin" \
-              41167491bffed4651750719c973d2758adeb9021a5670d02d6a53c85ed80ea7d "$AC79_SDK/cpu/wl82/tools/cfg/eq_cfg_hw.bin" | sha256sum --check --status
-      - run:
-          name: Build MIYAKO FM-1 preview firmware and validate image
-          command: |
-            set -eu
-            cd fm1-karma
-            # Invoke through POSIX sh; do not require the upstream +x file bit.
-            sh ./build.sh
-            test -s build/felucca.bin
-            test -s build/loader/ota.bin
-            test -s build/felucca.fwsc
-            python3 -c 'from pathlib import Path; p=Path("build/felucca.bin"); n=p.stat().st_size; assert 0<n<=0x8DFBC, f"FM-1 app slot exceeded: {n} bytes"; print(f"PASS: app image {n} of 581564 bytes")'
-            mkdir -p ../fm1-dist
-            cp build/felucca.fwsc ../fm1-dist/MIYAKO-FM1-PREVIEW.fwsc
-            python3 ../fm1/karma/verify_fwsc_version.py \
-              ../fm1-dist/FWSC_VERSION.txt ../fm1-dist/MIYAKO-FM1-PREVIEW.fwsc \
-              build/felucca.bin build/loader/loader.bin
-            cd ../fm1-dist
-            sha256sum * > SHA256SUMS
+            printf '%s\n'               'MIYAKO FM-1 standalone native preflight only'               'PASS here is NOT firmware compile, FWSC, or physical device verification.'               'Missing: real MIYAKO audio/FX implementation, all required visual media,'               'independent FM-1 HAL and startup/boot/update, target linker, hardware tests.'               > fm1-dist/READINESS.txt
+            test ! -e fm1-dist/MIYAKO-FM1-PREVIEW.fwsc
       - store_artifacts:
           path: fm1-dist
           destination: fm1
@@ -180,7 +43,7 @@ workflows:
   fm1_manual:
     when: << pipeline.parameters.run_build >>
     jobs:
-      - fm1_firmware:
+      - fm1_standalone_preflight:
           filters:
             branches:
-              only: feature/fm1-miyako-port-20261104
+              only: feature/fm1-miyako-standalone-20261106
