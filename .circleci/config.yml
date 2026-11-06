@@ -87,6 +87,12 @@ jobs:
             /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
             test -x /tmp/fm1-base/miyako/build/host/miyako_host
             /tmp/fm1-base/miyako/build/host/miyako_host fm1/native/host_smoke.txt fm1-dist
+            /tmp/fm1-base/miyako/build/host/miyako_host fm1/native/host_fx_preview.txt fm1-dist
+            test -s fm1-dist/MIYAKO_HOME.png
+            test -s fm1-dist/MIYAKO_FX.png
+            test -s fm1-dist/MIYAKO_EFFECTS_VIDEO.png
+            test -s fm1-dist/MIYAKO_FX_PREVIEW.wav
+            test "$(stat -c %s fm1-dist/MIYAKO_FX_PREVIEW.wav)" -gt 10000
       - run:
           name: Install pinned JieLi compiler and minimum AC79 packaging inputs
           command: |
