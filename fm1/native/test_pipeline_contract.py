@@ -37,6 +37,13 @@ for forbidden in (
     assert forbidden not in ci, f"legacy implementation in native CI: {forbidden}"
 assert ci.count("workflows:") == 1
 assert ci.count("when: << pipeline.parameters.run_build >>") == 1
+# CircleCI expands <<...>> even in YAML block-scalar scripts. Only this
+# valid workflow parameter marker may remain; unescaped shell here-documents
+# cause configuration failure before ANY job or project test can execute.
+assert "<<" not in ci.replace("<< pipeline.parameters.run_build >>", ""), (
+    "CircleCI 2.1 unclosed << tag: replace shell here-documents with printf"
+)
+assert "printf '%s\\n'" in ci, "README must use a CircleCI-safe printf"
 assert re.search(r"^\s+only: feature/fm1-miyako-no-eureka-20261106\s*$", ci, re.M)
 assert "/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako" in ci
 assert "test_media_crc.c" in ci
