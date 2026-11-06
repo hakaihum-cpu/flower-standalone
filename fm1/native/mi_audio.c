@@ -221,20 +221,11 @@ static float lfo_value(unsigned wave,float phase)
     if(wave==3u)return phase<0.5f?1.f:-1.f;
     return sin01(phase);
 }
-static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
+static float fx_stage(mi_audio_t *a,const mi_state_t *s,
+                      unsigned mode,unsigned wet_knob,float dry,float *smooth)
 {
-    unsigned mode=s->fx;
-    float target=mode==MI_FX_OFF?0.f:s->wet/127.f;
+    float target=mode==MI_FX_OFF?0.f:(float)wet_knob/127.f;
     float wet=dry;
-    if(mode>=MI_FX_COUNT)mode=MI_FX_OFF;
-    if(mode!=a->last_mode){
-        if(mode==MI_FX_EUREKA||mode==MI_FX_DELAY||
-           a->last_mode==MI_FX_EUREKA||a->last_mode==MI_FX_DELAY)
-            mi_fx_dsp_reset_shared(&native_fx);
-        a->wr=a->valid=a->phase=a->segment=0;
-        a->wet_current=0.f;
-        a->last_mode=(uint8_t)mode;
-    }
     if(mode==MI_FX_REEL){
         float wow_depth=s->fx_options[MI_FX_REEL][0]/127.f;
         float flutter_depth=s->fx_options[MI_FX_REEL][1]/127.f;
@@ -251,13 +242,36 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
         }
         a->ring[a->wr&(MI_NATIVE_RING-1u)]=(int16_t)(clampf(dry,-1.f,1.f)*32767.f);
         ++a->wr;if(a->valid<MI_NATIVE_RING)++a->valid;
-    }else if(mode==MI_FX_EUREKA||mode==MI_FX_DREAMY||mode==MI_FX_DELAY||
-              mode==MI_FX_REVERB||mode==MI_FX_CHORUS){
+    }else if(mode!=MI_FX_OFF&&mode<MI_FX_COUNT){
         wet=mi_fx_dsp_process(&native_fx,mode,dry,a->sample_rate,
-            s->fx_options[mode][0],s->fx_options[mode][1]);
+                             s->fx_options[mode][0],s->fx_options[mode][1]);
     }else target=0.f;
-    a->wet_current+=(target-a->wet_current)*0.001f;
-    return dry+(wet-dry)*a->wet_current;
+    *smooth+=(target-*smooth)*0.001f;
+    return clampf(dry+(wet-dry)*(*smooth),-1.f,1.f);
+}
+static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
+{
+    unsigned first=s->fx<MI_FX_COUNT?s->fx:MI_FX_OFF;
+    unsigned second=s->fx2<MI_FX_COUNT?s->fx2:MI_FX_OFF;
+    unsigned prev_shared,new_shared;
+    if(!mi_fx_pair_supported(first,second))second=MI_FX_OFF;
+    if(first!=a->last_mode||second!=a->last_mode2){
+        prev_shared=a->last_mode==MI_FX_DELAY||a->last_mode==MI_FX_EUREKA?
+                    a->last_mode:
+                    a->last_mode2==MI_FX_DELAY||a->last_mode2==MI_FX_EUREKA?
+                    a->last_mode2:MI_FX_OFF;
+        new_shared=first==MI_FX_DELAY||first==MI_FX_EUREKA?first:
+                   second==MI_FX_DELAY||second==MI_FX_EUREKA?second:MI_FX_OFF;
+        if(prev_shared!=new_shared)
+            mi_fx_dsp_reset_shared(&native_fx);
+        if((first==MI_FX_REEL||second==MI_FX_REEL)!=
+           (a->last_mode==MI_FX_REEL||a->last_mode2==MI_FX_REEL))
+            a->wr=a->valid=a->phase=a->segment=0u;
+        a->last_mode=(uint8_t)first;a->last_mode2=(uint8_t)second;
+        a->wet_current=0.f;a->wet_current2=0.f;
+    }
+    dry=fx_stage(a,s,first,s->wet,dry,&a->wet_current);
+    return fx_stage(a,s,second,s->wet2,dry,&a->wet_current2);
 }
 void mi_audio_rec_request(mi_audio_t *a,unsigned command)
 {
