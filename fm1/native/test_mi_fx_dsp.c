@@ -40,6 +40,20 @@ int main(void)
         if(i>18000u && out>peak)peak=out;
     }
     assert(peak>0.01f); /* DREAMY must no longer be a dry bypass. */
-    puts("PASS: MIYAKO native DREAMY, delay, chorus and reverb bounded FX responses");
+    /* EUREKA: two seconds at 14.7kHz from existing DELAY memory. */
+    mi_fx_dsp_reset_shared(&p);
+    assert(p.eureka_valid==0u && p.delay_valid==0u);
+    peak=0.f;
+    for(i=0;i<110000u;i++){
+        float dry=(i%400u)<200u?0.65f:-0.65f;
+        float out=mi_fx_dsp_process(&p,MI_FX_EUREKA,dry,44100.f,30,75);
+        assert(out>=-1.f&&out<=1.f);
+        if(i>32000u && out>peak)peak=out;
+    }
+    assert(p.eureka_valid==29400u);
+    assert(peak>0.02f);
+    mi_fx_dsp_reset_shared(&p);
+    assert(p.eureka_valid==0u && p.delay_valid==0u);
+    puts("PASS: EUREKA 2sec shared ring, DREAMY, DELAY, CHORUS, REVERB");
     return 0;
 }
