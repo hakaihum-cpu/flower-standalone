@@ -2,7 +2,50 @@
 """Fail-closed post-patch verifier. Does not claim target build or sound test."""
 from pathlib import Path
 import sys
+import re
 from native_guard import forbidden_dependencies, selftest as guard_selftest
+
+
+def verify_compiled_source_closure(src: Path):
+    """Traverse actual .c includes from felucca.c; fail if omitted DSP leaks in.
+
+    #251 reached JieLi clang because PHYS/ELEM/PRISM were deleted from
+    engines.c, but their consumers in voice.c/gen_seq.c/ui_op.c survived.
+    Checking just engines.c, or native host smoke tests, cannot catch that.
+    """
+    removed_units = {"eng_phys.c", "eng_elem.c", "eng_prism.c",
+                     "eng_acid.c", "cloud.c"}
+    removed_symbols = re.compile(
+        r"\b(?:ENG_PHYS|ENG_ELEM|ENG_PRISM|"
+        r"phys_poly|elem_poly|prism_poly|EM_BOUNCE|EM_PICK|"
+        r"prism_model|PRM_[A-Z0-9_]+|"
+        r"pr_harm_[A-Za-z0-9_]*|pr_fold_[A-Za-z0-9_]*|"
+        r"pr_wave_[A-Za-z0-9_]*)\b"
+    )
+    visited = set()
+    remaining = ["felucca.c"]
+    while remaining:
+        name = remaining.pop()
+        if name in visited:
+            continue
+        visited.add(name)
+        if name in removed_units:
+            raise RuntimeError(f"Forbidden DSP source is still compiled: {name}")
+        path = src / name
+        if not path.is_file():
+            raise RuntimeError(f"Transitive C include is missing: {name}")
+        raw = path.read_text(encoding="utf-8")
+        # Comments must not count as active engine references or includes.
+        cleaned = re.sub(r"/\*[\s\S]*?\*/|//[^\n]*", "", raw)
+        refs = sorted(set(removed_symbols.findall(cleaned)))
+        if refs:
+            raise RuntimeError(f"Disabled engine symbol(s) in {name}: {refs}")
+        remaining.extend(re.findall(r'(?m)^\s*#include\s+"([^"]+\.c)"',
+                                    cleaned))
+    if len(visited) < 30:
+        raise RuntimeError(f"Source include traversal unexpectedly short: {len(visited)}")
+    print(f"PASS #251 dependency closure: {len(visited)} C units reachable from felucca.c")
+
 
 def main():
     if len(sys.argv) != 2:
@@ -15,6 +58,7 @@ def main():
               "ui_vis.c", "mi_boot_anim.c", "splash.c", "ui_input.c", "mi_panel_nav.c", "mi_full_ui.c",
               "mi_eureka_video.c", "mi_eureka_vq_decoder.c", "mi_eureka_vq_frames.h")}
     guard_selftest()
+    verify_compiled_source_closure(src)
     checks = {
         "Plaits C++ linker inputs excluded": (
             'plx = []  # MIYAKO: no Plaits C++ model objects'
