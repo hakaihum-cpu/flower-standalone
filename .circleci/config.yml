@@ -116,7 +116,9 @@ jobs:
             set -eu
             sudo apt-get update
             sudo apt-get install -y xz-utils libtinfo5
-            sh /tmp/fm1-base/tools/get_toolchain.sh /home/circleci/.jieli
+            # Exact, hash-verified JieLi pi32v2 release. The upstream unpinned
+            # curl-to-tar endpoint timed out in #267; do not invoke it.
+            sh fm1/native/tools/install_jieli_toolchain.sh /home/circleci/.jieli
             git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
               https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$AC79_SDK"
             test -x "$JIELI_TOOLCHAIN/pi32v2/bin/clang"
