@@ -38,5 +38,21 @@ for file in source_paths:
             raise SystemExit(f"FAIL: nonnative local include {header} in {file}")
         if not relative.is_file() and header not in GENERATED_MEDIA_HEADERS:
             raise SystemExit(f"FAIL: missing native header {header} in {file}")
+# The JieLi pi32v2 target compiler has <stdint.h> but no hosted
+# <string.h>/<stdio.h>/<stdlib.h>/<math.h> libc headers. This error previously
+# surfaced only after the expensive 144-frame VQ stage; fail it at step 1.
+allowed_target_headers = {"stdint.h", "stddef.h", "stdbool.h", "limits.h"}
+target_files = source_paths + sorted(NATIVE.glob("*.h"))
+for file in target_files:
+    body = file.read_text(encoding="utf-8")
+    for header in re.findall(r'#\\s*include\\s*<([^>]+)>', body):
+        if header not in allowed_target_headers:
+            raise SystemExit(
+                f"FAIL: {file.relative_to(ROOT)} imports unavailable JieLi "
+                f"freestanding header <{header}>; use mi_memory.h or platform APIs"
+            )
+if not (NATIVE / "mi_memory.h").is_file():
+    raise SystemExit("FAIL: native freestanding MIYAKO zero/compare API missing")
+print("PASS: no hosted libc includes in target firmware units or local headers")
 print(f"PASS: {len(source_paths)} native MIYAKO source unit(s), no external framework units")
 print("SOURCE-ONLY PASS: platform provided by pinned fm1-base; complete MIYAKO DSP, target link and physical tests require separate validation")
