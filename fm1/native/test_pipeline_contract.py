@@ -129,10 +129,22 @@ id_patch = (root / "fm1/native/tools/set_miyako_product_id.py").read_text(encodi
 assert 'TARGET = "FM-1_931"' in id_patch
 assert 'OLD = \'    PRODUCT = prefix + "00"\'' in id_patch
 assert 'NEW = \'    PRODUCT = prefix + "31"' in id_patch
-# One source of truth: inspect all *literal* package identity assertions
-# in THIS contract. An obsolete FM-1_9100 assertion previously conflicted
-# with the correct FM-1_931 check and killed the CI before any build.
-actual_product = re.search(r'^TARGET = "(FM-1_[0-9]+)"
+# Check the package product ID against the actual pinned build patch,
+# rather than maintaining two contradictory hard-coded CI expectations.
+actual_product = re.search(r'^TARGET = "(FM-1_[0-9]+)"', id_patch, re.M)
+assert actual_product, "FM-1 product version must exist in the build patch"
+expected_product = actual_product.group(1)
+assert len(expected_product.split("_")[1]) == 3, (
+    "M-UPGRADE accepts only three numeric product/version digits"
+)
+assert "--product " + expected_product in ci
+# Prevent repeats of the stale assertion that stopped the prior pipeline.
+for n, line in enumerate(Path(__file__).read_text(encoding="utf-8").splitlines(), 1):
+    if line.strip().startswith("assert ") and "--product FM-1_" in line and " in ci" in line:
+        assert expected_product in line, (
+            f"conflicting product-ID assertion at line {n}: {line.strip()}"
+        )
+assert 'set_miyako_product_id.py --base /tmp/fm1-base' in ci
 assert ci.index('set_miyako_product_id.py') < ci.index('tools/build.py /tmp/fm1-base/miyako --host')
 assert "FM-1_9100" not in ci
 assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_931') >= 1
