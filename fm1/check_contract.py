@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Static preflight before the explicit CircleCI FM-1 build. No target build here."""
 from pathlib import Path
+import re
 
 root = Path(__file__).resolve().parent.parent
 engine = (root / "fm1" / "karma" / "eng_miyako.c").read_text(encoding="utf-8")
@@ -16,10 +17,34 @@ boot = (root / "fm1" / "karma" / "mi_boot_anim.c").read_text(encoding="utf-8")
 splash = (root / "fm1" / "karma" / "mi_splash.c").read_text(encoding="utf-8")
 manifest = (root / "fm1" / "PORT_MANIFEST.md").read_text(encoding="utf-8")
 ci = (root / ".circleci" / "config.yml").read_text(encoding="utf-8")
+host_engine = (root / "fm1" / "karma" / "test_engine.c").read_text(encoding="utf-8")
+host_boot = (root / "fm1" / "karma" / "test_boot_ui.c").read_text(encoding="utf-8")
 
 def require(ok, why):
     if not ok:
         raise SystemExit(f"FAIL {why}")
+
+# Compare with the pinned KARMA core.h parameter-format enum (16 entries).
+# #247 failed because the host test declared F_ENUM/F_PCT but omitted F_INT.
+# Never count a comment or a documentation-only mention as a declaration.
+expected_formats = (
+    'F_INT', 'F_PCT', 'F_BIPCT', 'F_TIME', 'F_LFOHZ', 'F_CUTOFF',
+    'F_DB', 'F_SEMI', 'F_ENUM', 'F_BPM', 'F_NOTE', 'F_ONOFF',
+    'F_OCT', 'F_STEPS', 'F_SWING', 'F_FILT',
+)
+enum_match = re.search(r'\\benum\\s*\\{\\s*(F_INT\\b[^}]+)\\}', host_engine, re.S)
+require(enum_match is not None, "host engine parameter format enum missing")
+actual_formats = re.findall(r'\\bF_[A-Z][A-Z0-9_]*\\b', enum_match.group(1))
+require(tuple(actual_formats) == expected_formats,
+        f"host engine format IDs must match pinned KARMA: {actual_formats}")
+required_formats = set(re.findall(r'\\bF_[A-Z][A-Z0-9_]*\\b', engine))
+require(required_formats.issubset(set(actual_formats)),
+        f"host engine lacks format IDs used by MIYAKO: {sorted(required_formats - set(actual_formats))}")
+require('#define FELUCCA_VERSION "MIYAKO FM1 P2"' in host_boot and
+        'FELUCCA_VERSION' in splash,
+        "host boot test must define native MIYAKO firmware version")
+require('cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only' in ci,
+        "CI must compile all host C harnesses before expensive video conversion")
 
 for token in ('"SINE"', '"SAW"', '"SQR"', '"PULSE"', '"REEL"', '"EUREKA"', '"CRUSH"',
               'ENG_MIYAKO', 'miyako_note_on', 'miyako_render', 'miyako_post',
