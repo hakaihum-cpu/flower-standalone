@@ -222,3 +222,21 @@ void app_frame(void)
  if(message_until&&plat_ms()>=message_until){message_until=0;redraw=1;}
  if(redraw){draw();redraw=0;}
 }
+#ifdef PLAT_HOST
+int app_expect(const char *what,int *got)
+{
+ if(!strcmp(what,"view")) *got=(int)state.view;
+ else if(!strcmp(what,"fx")) *got=(int)state.fx;
+ else if(!strcmp(what,"wave")) *got=(int)state.wave;
+ else if(!strcmp(what,"octave")) *got=(int)state.octave;
+ else if(!strcmp(what,"preset")) *got=(int)state.preset;
+ else if(!strcmp(what,"slot")) *got=(int)state.project_slot;
+ else if(!strcmp(what,"active")) {
+    unsigned i;int n=0;
+    for(i=0;i<MI_NATIVE_POLY;i++)if(audio.v[i].active)n++;
+    *got=n;
+ }
+ else return 0;
+ return 1;
+}
+#endif
