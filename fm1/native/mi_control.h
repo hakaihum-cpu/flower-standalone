@@ -33,6 +33,7 @@ typedef struct {
     uint8_t fx_options[MI_FX_COUNT][2];
     uint8_t env[4], lfo[4], arp[4], seq[4];
     int16_t global[4]; /* BPM 40..240, SWING 0..100, TUNE -50..50, CLOCK 0..2 */
+    uint8_t fx2, wet2, fx_slot; /* independent FX B, toggle slot via FX button */
     uint8_t project_slot; /* 1..4; persistent storage provided by the FM-1 HAL */
     int8_t octave;       /* -3..+3 */
     uint8_t playing, recording, save_armed;
@@ -51,6 +52,8 @@ const char *mi_arp_mode_name(unsigned mode);
 const char *mi_lfo_wave_name(unsigned wave);
 const char *mi_view_name(mi_view_t view);
 const char *mi_fx_name(mi_fx_t effect);
+/* Two serial FX, but no duplicate processor or shared DELAY/EUREKA ring. */
+int mi_fx_pair_supported(unsigned first,unsigned second);
 const char *mi_param_name(const mi_state_t *s, unsigned knob);
 int32_t mi_param_value(const mi_state_t *s, unsigned knob);
 #endif
