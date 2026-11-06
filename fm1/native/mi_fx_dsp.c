@@ -31,8 +31,9 @@ static float sine(float x)
 void mi_fx_dsp_reset_shared(mi_fx_dsp_t *p)
 {
     if(!p)return;
-    mi_memzero(delay_memory,sizeof delay_memory);
-    p->delay_write=0u;
+    /* O(1): never clear 64 KiB in the audio interrupt. Validity guards
+     * prevent stale samples from DELAY/EUREKA being played back. */
+    p->delay_write=0u;p->delay_valid=0u;
     p->eureka_write=0u;p->eureka_valid=0u;
     p->eureka_decimate=0u;
     p->eureka_sum=0.f;p->eureka_phase=0.f;p->eureka_filter=0.f;
@@ -52,6 +53,7 @@ void mi_fx_dsp_init(mi_fx_dsp_t *p)
     if(!p)return;
     mi_memzero(p,sizeof(*p));
     mi_fx_dsp_reset_shared(p);
+    mi_memzero(delay_memory,sizeof delay_memory);
     mi_memzero(chorus_memory,sizeof chorus_memory);
     mi_memzero(reverb_memory,sizeof reverb_memory);
     mi_memzero(dreamy_memory,sizeof dreamy_memory);
@@ -146,10 +148,12 @@ float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
         if(n<2u)n=2u;
         if(n>=MI_DELAY_N)n=MI_DELAY_N-1u;
         uint32_t pos=p->delay_write&(MI_DELAY_N-1u);
-        float delayed=read16(delay_memory[(p->delay_write-n)&(MI_DELAY_N-1u)]);
+        float delayed=p->delay_valid>n?
+            read16(delay_memory[(p->delay_write-n)&(MI_DELAY_N-1u)]):0.f;
         float feedback=0.85f*(p2/127.f);
         delay_memory[pos]=quant(dry+delayed*feedback);
         ++p->delay_write;
+        if(p->delay_valid<MI_DELAY_N)++p->delay_valid;
         return bounded(delayed,-1.f,1.f);
     }
     if(mode==MI_FX_CHORUS) {
