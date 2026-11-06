@@ -106,6 +106,19 @@ jobs:
               /tmp/fm1-base/miyako/mi_eureka_vq_frames.h
             /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
             test -x /tmp/fm1-base/miyako/build/host/miyako_host
+            # Actual UI/MIDI/FX/REC integration tests on the host before
+            # 720-frame VQ. Stub frames are accepted ONLY for this preflight,
+            # with all screenshots/audio kept outside fm1-dist.
+            mkdir -p /tmp/mi-host-preflight
+            /tmp/fm1-base/miyako/build/host/miyako_host fm1/native/host_smoke.txt /tmp/mi-host-preflight
+            /tmp/fm1-base/miyako/build/host/miyako_host fm1/native/host_fx_preview.txt /tmp/mi-host-preflight
+            /tmp/fm1-base/miyako/build/host/miyako_host fm1/native/host_eureka_preview.txt /tmp/mi-host-preflight
+            test -s /tmp/mi-host-preflight/MIYAKO_RECORDER.png
+            test -s /tmp/mi-host-preflight/MIYAKO_EUREKA_VIDEO.png
+            test -s /tmp/mi-host-preflight/MIYAKO_FX_DUAL.png
+            /tmp/mi-video-venv/bin/python fm1/native/tools/check_host_wav.py /tmp/mi-host-preflight/MIYAKO_FX_PREVIEW.wav
+            /tmp/mi-video-venv/bin/python fm1/native/tools/check_eureka_wav.py /tmp/mi-host-preflight/MIYAKO_EUREKA_AUDIO.wav
+            rm -rf /tmp/mi-host-preflight
             test "$(grep -c 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB 1' \
               /tmp/fm1-base/miyako/mi_effects_vq_frames.h)" -eq 1
             test "$(grep -c 'MI_EUREKA_MEDIA_PREFLIGHT_STUB 1' \
