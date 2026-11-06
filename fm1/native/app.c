@@ -16,7 +16,7 @@
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
 #define GREY RGB(218,213,202)
-#define SAVED_MAGIC 0x4D493131u
+#define SAVED_MAGIC 0x4D493132u /* MI12: effects enum changed when EUREKA was deferred */
 typedef struct {
  uint32_t magic;
  mi_state_t state;
