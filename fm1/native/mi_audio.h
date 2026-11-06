@@ -23,6 +23,7 @@ typedef struct {
      * Arp runs on the audio sample clock, not the UI frame clock. */
     uint32_t held_keys[4];
     uint8_t held_velocity[128];
+    uint8_t held_refs[128]; /* USB and local key overlaps cannot cancel early */
     uint8_t arp_mode, arp_dir, arp_note, arp_sounding, held_total;
     uint16_t arp_pos;
     uint32_t arp_clock, arp_gate_clock, arp_random;
