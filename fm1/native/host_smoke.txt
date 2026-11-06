@@ -81,8 +81,11 @@ shot MIYAKO_EUREKA_VIDEO.png
 midi USB 80 45 00
 tap FX
 expect view 2
+# A=EUREKA (6): B must skip DELAY (3), because they share RAM.
+# Three physical detents select REVERB (4), not DELAY (3).
 tap FX
 expect fx_slot 1
-turn K1 4
+turn K1 3
+expect fx 6
 expect fx2 4
 shot MIYAKO_FX_DUAL.png
