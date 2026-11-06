@@ -229,8 +229,12 @@ for filename, (removed_names, result_anchor) in shared_edits.items():
             any(result_anchor in new for old, new in edits),
             f"#251 incomplete removed-engine reference closure in {filename}")
 require('"#251 omitted-engine dependency closure"' in verifier and
-        '"voice.c", "gen_seq.c", "ui_op.c"' in verifier,
-        "#251 native post-patch verifier must check every shared C consumer")
+        '"voice.c", "gen_seq.c", "ui_op.c"' in verifier and
+        "verify_compiled_source_closure(src)" in verifier and
+        'remaining = ["felucca.c"]' in verifier and
+        'removed_symbols = re.compile(' in verifier and
+        'Transitive C include is missing' in verifier,
+        "#251 post-patch verifier must audit all compiled C includes, not just three known failures")
 require('plx_anchor = "    plx = build_plx()"' in patcher and
         'no Plaits C++ model objects' in patcher and
         'Plaits C++ linker inputs excluded' in verifier,
