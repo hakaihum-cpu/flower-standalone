@@ -116,6 +116,14 @@ for target in list((root / "fm1/native").glob("mi_*.c")) + [
             f"target still calls unavailable hosted libc: {target.name}"
         )
 assert (root / "fm1/native/mi_memory.h").is_file()
+# The FWSC package identity and app-visible release/version text are
+# separate fields. Neither is permitted to be empty or implicit "DEV".
+manifest = (root / "fm1/native/fm1.toml").read_text(encoding="utf-8")
+app_header = (root / "fm1/native/app.h").read_text(encoding="utf-8")
+assert 'id_prefix = "FM-1_91"' in manifest
+assert '#define APP_VERSION "0.1.0-DEV"' in app_header
+assert 'APP_TAGLINE "NATIVE TRIAL"' in app_header
+assert "--product FM-1_9100" in ci
 # Root issue from the current build log: fm1-base's own mmio_check()
 # correctly rejects a volatile pointer cast outside the BSP, even though
 # generic C compilation and our previous custom checks happily passed it.
