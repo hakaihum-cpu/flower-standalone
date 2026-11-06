@@ -1,3 +1,4 @@
 # Allowlist for the emerging MIYAKO native application sources.
 # This is NOT a complete firmware build manifest, and must not be used to package FWSC.
 fm1/native/mi_control.c
+fm1/native/mi_audio.c
