@@ -16,7 +16,7 @@ def main() -> None:
     ap.add_argument("application", type=Path)
     ap.add_argument("loader", type=Path)
     ap.add_argument("--base", type=Path, required=True)
-    ap.add_argument("--product", default="FM-1_9100")
+    ap.add_argument("--product", default="FM-1_931")
     a = ap.parse_args()
     sys.path.insert(0, str(a.base / "tools"))
     import fm1_install  # pylint: disable=import-outside-toplevel
@@ -31,6 +31,10 @@ def main() -> None:
     product, logical, digest = fm1_install.load_package(str(a.package), force=False)
     assert product == a.product, (
         f"wrong device identity: {product!r}; expected {a.product!r}")
+    # M-UPGRADE rejected the old custom FM-1_9100 trial identity.
+    # Check the three-digit identifier actually embedded in the package.
+    assert product.startswith("FM-1_") and len(product.split("_", 1)[1]) == 3, (
+        f"unexpected package model/version markers: {product!r}")
     assert digest == hashlib.sha256(raw).digest(), "package hash mismatch"
     assert b"FELUCCA-LOADER-1" in raw, "missing update-loader marker"
     # Every byte must round-trip the same identity-marker removal used
