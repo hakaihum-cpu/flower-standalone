@@ -269,7 +269,7 @@ static void draw(void)
          }
      }else if(state.view==MI_FX){
          cv_text(12,52,&FONT_B,mi_fx_name((mi_fx_t)state.fx),YELLOW);
-         if(state.fx>MI_FX_EUREKA)
+         if(state.fx==MI_FX_DREAMY)
              cv_text(12,81,&FONT_XS,"AUDIO DSP PENDING",GREY);
      }else{
          cv_text(12,54,&FONT_B,mi_view_name(state.view),YELLOW);
