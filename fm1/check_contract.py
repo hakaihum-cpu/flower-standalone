@@ -258,6 +258,15 @@ require((root / "fm1" / "karma" / "prepare_fwsc_version.py").is_file() and
 require(ci.count('<<') == 1 and ci.count('>>') == 1 and
         'when: << pipeline.parameters.run_build >>' in ci,
         "Unclosed or unexpected CircleCI angle tag; do not use shell heredocs")
+# #250: the upstream build.sh is a valid POSIX shell script but is not
+# executable in this checkout. Direct ./build.sh raises exit status 126.
+# Always check and invoke it through sh; preserve the upstream checkout.
+require(ci.count('            sh ./build.sh') == 1 and
+        ci.count('            sh -n build.sh') == 1 and
+        not re.search(r'(?m)^\\s*\\./build\\.sh(?:\\s|$)', ci) and
+        ci.index('sh -n build.sh') < ci.index('sh ./build.sh') and
+        ci.index('sh ./build.sh') < ci.index('test -s build/felucca.bin'),
+        "FM-1 build.sh must be run with POSIX sh; upstream executable bit is absent (#250)")
 require('when: << pipeline.parameters.run_build >>' in ci, "manual parameter guard missing")
 require('default: false' in ci, "CI default must be false")
 require('only: feature/fm1-miyako-port-20261104' in ci, "branch guard missing")
