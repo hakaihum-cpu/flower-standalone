@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# FM-1 screen reader vocabulary used by fm1-base tools/gen_words.py.
+# Development URL: the generated JSON must be published separately before
+# screen-reader support is declared complete.
+# url: https://raw.githubusercontent.com/hakaihum-cpu/flower-standalone/feature/fm1-miyako-no-eureka-20261106/fm1/native/web/words/
+MIYAKO	MIYAKO
+OSC	oscillator
+SINE	sine wave
+SQUARE	square wave
+PULSE	pulse wave
+SAW	sawtooth wave
+REEL	reel
+DREAMY	dreamy
+CHORUS	chorus
+VIDEO	video
+CRUSH	bit crusher
+LEVEL	level
+WET	wet level
+SAVE	save
