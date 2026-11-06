@@ -210,84 +210,175 @@ static void mi_media_decode(unsigned frame)
  }
  mi_media_prior=(int16_t)frame;
 }
-static void mi_media_draw(void)
+/* Draw each 120-row LCD half separately. SEL displays only the full-width
+ * original animation (128x78 -> 240x146) centered at y=47, with no labels
+ * or hidden FX parameter values. No source pixels are cropped or stretched.
+ */
+static void mi_media_draw_half(unsigned half)
 {
- uint32_t y,x;
- int frame=video.effects_frame;
- if(frame<0)return;
- mi_media_decode((unsigned)frame);
- for(y=0;y<MI_EFFECTS_ASSET_H;y++){
-     x=0;
-     while(x<MI_EFFECTS_ASSET_W){
-         unsigned b=y*MI_EFFECTS_ASSET_W+x;
-         unsigned idx=(x&1u)?(mi_media_pixels[b>>1]&15u):(mi_media_pixels[b>>1]>>4);
-         unsigned start=x++,end;
-         if(idx==0u)continue;
-         while(x<MI_EFFECTS_ASSET_W){
-             b=y*MI_EFFECTS_ASSET_W+x;
-             unsigned j=(x&1u)?(mi_media_pixels[b>>1]&15u):(mi_media_pixels[b>>1]>>4);
-             if(j!=idx)break;
-             ++x;
-         }
-         end=x;
-         {
-             int32_t x0=24+(int32_t)(start*3u/2u);
-             int32_t x1=24+(int32_t)(end*3u/2u);
-             int32_t y0=(int32_t)(y*3u/2u);
-             int32_t y1=(int32_t)((y+1u)*3u/2u);
-             if(x1>x0&&y1>y0)
-                 cv_rect(x0,y0,x1-x0,y1-y0,mi_media_palette[idx]);
-         }
-     }
- }
+    unsigned sy;
+    int frame=video.effects_frame;
+    const int32_t shift=(int32_t)half*120;
+    if(frame<0)return;
+    mi_media_decode((unsigned)frame);
+    for(sy=0;sy<MI_EFFECTS_ASSET_H;sy++){
+        int32_t absolute_y0=47+(int32_t)(sy*146u/MI_EFFECTS_ASSET_H);
+        int32_t absolute_y1=47+(int32_t)((sy+1u)*146u/MI_EFFECTS_ASSET_H);
+        int32_t y0=absolute_y0-shift,y1=absolute_y1-shift;
+        unsigned x=0;
+        uint32_t row=sy*(MI_EFFECTS_ASSET_W/2u);
+        if(y0<0)y0=0;
+        if(y1>120)y1=120;
+        if(y1<=y0)continue;
+        while(x<MI_EFFECTS_ASSET_W){
+            unsigned at=row+(x>>1);
+            unsigned idx=(x&1u)?(mi_media_pixels[at]&15u):(mi_media_pixels[at]>>4);
+            unsigned from=x++,to;
+            if(idx==0u)continue;
+            while(x<MI_EFFECTS_ASSET_W){
+                at=row+(x>>1);
+                unsigned j=(x&1u)?(mi_media_pixels[at]&15u):(mi_media_pixels[at]>>4);
+                if(j!=idx)break;
+                ++x;
+            }
+            to=x;
+            {
+                int32_t dx0=(int32_t)(from*240u/MI_EFFECTS_ASSET_W);
+                int32_t dx1=(int32_t)(to*240u/MI_EFFECTS_ASSET_W);
+                if(dx1>dx0)cv_rect(dx0,y0,dx1-dx0,y1-y0,mi_media_palette[idx]);
+            }
+        }
+    }
+}
+static void mi_graph_env(void)
+{
+    int32_t base=96,peak=40;
+    int32_t sustain=base-(base-peak)*(int32_t)state.env[2]/127;
+    int32_t a=20+(int32_t)state.env[0]/4;
+    int32_t d=20+(int32_t)state.env[1]/4;
+    int32_t r=20+(int32_t)state.env[3]/4;
+    int32_t x0=12,x1=x0+a,x2=x1+d,x3=228-r;
+    if(x3<x2+12)x3=x2+12;
+    cv_line(12,base,228,base,DIM);
+    cv_line(x0,base,x1,peak,YELLOW);
+    cv_line(x1,peak,x2,sustain,YELLOW);
+    cv_line(x2,sustain,x3,sustain,YELLOW);
+    cv_line(x3,sustain,228,base,YELLOW);
+    cv_text(12,104,&FONT_XS,"A",GREY);
+    cv_text(x1,104,&FONT_XS,"D",GREY);
+    cv_text(x2,104,&FONT_XS,"S",GREY);
+    cv_text(x3,104,&FONT_XS,"R",GREY);
+}
+static float mi_lfo_graph_value(unsigned wave,float p)
+{
+    if(wave==1u)return p<0.5f?4.f*p-1.f:3.f-4.f*p;
+    if(wave==2u)return 2.f*p-1.f;
+    if(wave==3u)return p<0.5f?1.f:-1.f;
+    /* Zero-crossing 1-period curved waveform, no libm dependency. */
+    if(p<0.5f){
+        float q=p*2.f;
+        return 4.f*q*(1.f-q);
+    }else{
+        float q=(p-0.5f)*2.f;
+        return -4.f*q*(1.f-q);
+    }
+}
+static void mi_graph_lfo(void)
+{
+    unsigned x;
+    float cycles=1.f+(float)state.lfo[0]/50.f;
+    int32_t amp=12+(int32_t)state.lfo[2]*22/127;
+    int32_t prior=75;
+    cv_line(12,75,229,75,DIM);
+    for(x=12;x<228;x++){
+        float p=((float)(x-12)*cycles)/216.f;
+        p-=(float)(int)p;
+        int32_t y=75-(int32_t)(mi_lfo_graph_value(state.lfo[1],p)*(float)amp);
+        if(x>12)cv_line((int32_t)x-1,prior,(int32_t)x,y,YELLOW);
+        prior=y;
+    }
+}
+static void mi_graph_arp(void)
+{
+    unsigned x;
+    unsigned mode=state.arp[0];
+    for(x=0;x<8u;x++){
+        int32_t h=mode==2u?(int32_t)(8u-x)*5:
+                  mode==3u?(int32_t)((x<4u?x:7u-x)+1u)*10:
+                  (int32_t)(x+1u)*5;
+        cv_rect(18+(int32_t)x*27,98-h,18,h,mode?YELLOW:DIM);
+    }
 }
 static void draw(void)
 {
- uint32_t i,now=plat_ms();
- char val[16];
- cv_begin(240,120,C_BLACK);
- if(state.view==MI_VIDEO){
-     mi_media_draw();
- }else{
-     cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
-     cv_text(140,10,&FONT_XS,mi_view_name(state.view),GREY);
-     cv_rect(8,31,224,1,DIM);
-     if(now<message_until){
-         cv_text(12,50,&FONT_B,line_a,YELLOW);
-         cv_text(12,76,&FONT_XS,line_b,GREY);
-     }else if(state.view==MI_OSC||state.view==MI_HOME){
-         int32_t prior=80;
-         for(i=0;i<224;i++){
-             float p=(float)(i%112u)/112.f;
-             float value=state.wave==0?(p<0.5f?4.f*p*(1.f-2.f*p):-(4.f*(p-0.5f)*(2.f-2.f*p))):
-                 state.wave==1?(2.f*p-1.f):
-                 state.wave==2?(p<0.5f?1.f:-1.f):
-                 (p<0.05f+0.9f*state.width/127.f?1.f:-1.f);
-             int32_t y=76-(int32_t)(value*26.f);
-             if(i)cv_line((int32_t)(i+7u),prior,(int32_t)(i+8u),y,YELLOW);
-             prior=y;
-         }
-     }else if(state.view==MI_FX){
-         cv_text(12,52,&FONT_B,mi_fx_name((mi_fx_t)state.fx),YELLOW);
-         if(state.fx==MI_FX_DREAMY)
-             cv_text(12,81,&FONT_XS,"AUDIO DSP PENDING",GREY);
-     }else{
-         cv_text(12,54,&FONT_B,mi_view_name(state.view),YELLOW);
-     }
- }
- cv_blit(0,0);
+    uint32_t i,now=plat_ms();
+    char val[16];
+    if(state.view==MI_VIDEO){
+        /* Both LCD halves are image-only: never draw labels/values/footers. */
+        cv_begin(240,120,C_BLACK);
+        mi_media_draw_half(0);
+        cv_blit(0,0);
+        cv_begin(240,120,C_BLACK);
+        mi_media_draw_half(1);
+        cv_blit(0,120);
+        return;
+    }
 
- cv_begin(240,120,C_BLACK);
- cv_rect(8,9,224,1,DIM);
- for(i=0;i<4u;i++){
-     int32_t x=8+(int32_t)i*58;
-     cv_text(x,24,&FONT_XS,mi_param_name(&state,i),GREY);
-     number(mi_param_value(&state,i),val);
-     cv_text(x,49,&FONT_B,val,YELLOW);
- }
- cv_text(8,87,&FONT_XS,"MIYAKO FM-1 / NATIVE PREVIEW",DIM);
- cv_text(8,104,&FONT_XS,"NOT FULL MIYAKO DSP",DIM);
- cv_blit(0,120);
+    cv_begin(240,120,C_BLACK);
+    cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
+    cv_text(140,10,&FONT_XS,mi_view_name(state.view),GREY);
+    cv_rect(8,31,224,1,DIM);
+    if(now<message_until){
+        cv_text(12,50,&FONT_B,line_a,YELLOW);
+        cv_text(12,76,&FONT_XS,line_b,GREY);
+    }else if(state.view==MI_OSC||state.view==MI_HOME){
+        int32_t prior=80;
+        cv_text(12,35,&FONT_XS,mi_wave_name(state.wave),GREY);
+        for(i=0;i<224;i++){
+            float p=(float)(i%112u)/112.f;
+            float value=state.wave==0?(p<0.5f?4.f*p*(1.f-2.f*p):-(4.f*(p-0.5f)*(2.f-2.f*p))):
+                state.wave==1?(2.f*p-1.f):
+                state.wave==2?(p<0.5f?1.f:-1.f):
+                (p<0.05f+0.9f*state.width/127.f?1.f:-1.f);
+            int32_t y=76-(int32_t)(value*26.f);
+            if(i)cv_line((int32_t)(i+7u),prior,(int32_t)(i+8u),y,YELLOW);
+            prior=y;
+        }
+    }else if(state.view==MI_FX){
+        cv_text(12,52,&FONT_B,mi_fx_name((mi_fx_t)state.fx),YELLOW);
+    }else if(state.view==MI_ENV){
+        mi_graph_env();
+    }else if(state.view==MI_LFO){
+        mi_graph_lfo();
+    }else if(state.view==MI_ARP){
+        mi_graph_arp();
+        cv_text(12,38,&FONT_XS,mi_arp_mode_name(state.arp[0]),GREY);
+    }else{
+        cv_text(12,54,&FONT_B,mi_view_name(state.view),YELLOW);
+    }
+    cv_blit(0,0);
+
+    cv_begin(240,120,C_BLACK);
+    cv_rect(8,9,224,1,DIM);
+    for(i=0;i<4u;i++){
+        int32_t x=8+(int32_t)i*58;
+        cv_text(x,24,&FONT_XS,mi_param_name(&state,i),GREY);
+        if((state.view==MI_OSC||state.view==MI_HOME)&&i==0u)
+            textcpy(val,mi_wave_name(state.wave),sizeof val);
+        else if(state.view==MI_LFO&&i==1u)
+            textcpy(val,mi_lfo_wave_name(state.lfo[1]),sizeof val);
+        else if(state.view==MI_LFO&&i==3u)
+            textcpy(val,state.lfo[3]==0u?"PITCH":
+                         state.lfo[3]==1u?"PWM":"AMP",sizeof val);
+        else if(state.view==MI_ARP&&i==0u)
+            textcpy(val,mi_arp_mode_name(state.arp[0]),sizeof val);
+        else if(state.view==MI_ARP&&i==1u){
+            static const char *const rates[]={"1/4","1/8","1/16","1/32"};
+            textcpy(val,rates[state.arp[1]<=3u?state.arp[1]:3u],sizeof val);
+        }else number(mi_param_value(&state,i),val);
+        cv_text(x,49,&FONT_S,val,YELLOW);
+    }
+    cv_blit(0,120);
 }
 void app_ui_init(void)
 {
