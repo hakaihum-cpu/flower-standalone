@@ -14,6 +14,8 @@ required = (
     "fm1/native/verify_standalone.py",
     "fm1/native/test_mi_control.c",
     "fm1/native/test_mi_audio.c",
+    "fm1/native/test_mi_video.c",
+    "mi_video.c",
 )
 for item in required:
     assert item in ci, f"missing mandatory CircleCI gate: {item}"
