@@ -82,4 +82,15 @@ assert "mi_fx_dsp.c fm1/native/test_mi_audio.c" in ci
 assert "MIYAKO_HOME.png" in ci and "MIYAKO_FX.png" in ci
 assert "MIYAKO_EFFECTS_VIDEO.png" in ci
 assert "--base /tmp/fm1-base --product FM-1_9100" in ci
+# Approved on 2026-11-06: no 26dB (or other arbitrary numeric) image
+# quality gate may block a trial .fwsc. PSNR is measured and reported only.
+vq = (root / "fm1/native/tools/pack_effects_vq_candidate.py").read_text(encoding="utf-8")
+assert "--min-psnr-db" not in vq
+assert "min(worst) <" not in vq
+assert "mandatory" not in vq.lower()
+assert "raise SystemExit" in vq  # frame-count / source integrity still fail closed
+assert "CANDIDATE: RGB565 16 colours" in vq
+assert "decoded_crc32 = zlib.crc32(pixels, decoded_crc32)" in vq
+assert "write_candidate(a.output_header, palettes, books, maps, decoded_crc32)" in vq
+assert "PSNR is a non-blocking visual quality metric" in vq
 print("PASS: manual no-EUREKA FM-1 firmware pipeline with original EFFECTS video and native FX")
