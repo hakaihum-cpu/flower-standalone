@@ -17,8 +17,14 @@
 #define P_E6 6
 #define P_E7 7
 #define ENGI_ACID 14u
-#define F_ENUM 1
-#define F_PCT 2
+/* Must match the format enum in pinned KARMA firmware/src/core.h.
+ * A host-only stub with different numbers or missing F_INT hides failures. */
+enum {
+    F_INT, F_PCT, F_BIPCT, F_TIME, F_LFOHZ, F_CUTOFF, F_DB, F_SEMI, F_ENUM,
+    F_BPM, F_NOTE, F_ONOFF, F_OCT, F_STEPS, F_SWING, F_FILT
+};
+_Static_assert(F_INT == 0 && F_PCT == 1 && F_ENUM == 8 && F_FILT == 15,
+               "Host parameter enum no longer matches pinned KARMA");
 #define NVOICE 8
 #define NELEM(a) (sizeof(a) / sizeof((a)[0]))
 #define FX(a,b,c,d) .fx={(a)+1,(b)+1,(c)+1,(d)+1}
