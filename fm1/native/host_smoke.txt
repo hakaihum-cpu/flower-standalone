@@ -3,11 +3,12 @@
 master 4096
 expect view 0
 expect wave 0
+shot MIYAKO_HOME.png
 expect fx 0
-key 16 down 120
+key 25 down 120
 wait 200
 expect active >0
-key 16 up
+key 25 up
 wait 150
 tap EDIT
 expect view 1
@@ -17,8 +18,10 @@ tap FX
 expect view 2
 turn K1 1
 expect fx 1
+shot MIYAKO_FX.png
 tap SEL
 expect view 3
+shot MIYAKO_EFFECTS_VIDEO.png
 expect fx 1
 tap HOME
 expect view 0
