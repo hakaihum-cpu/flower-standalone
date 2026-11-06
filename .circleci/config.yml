@@ -115,6 +115,11 @@ jobs:
             test -s /tmp/fm1-base/miyako/build/miyako.bin
             test -s /tmp/fm1-base/miyako/build/loader/ota.bin
             test -s /tmp/fm1-base/miyako/build/miyako.fwsc
+            /tmp/mi-video-venv/bin/python fm1/native/tools/verify_fwsc.py \
+              /tmp/fm1-base/miyako/build/miyako.fwsc \
+              /tmp/fm1-base/miyako/build/miyako.bin \
+              /tmp/fm1-base/miyako/build/loader/ota.bin \
+              --base /tmp/fm1-base --product FM-1_9100
             cp /tmp/fm1-base/miyako/build/miyako.fwsc fm1-dist/MIYAKO-FM1-NATIVE-DEV.fwsc
             cat > fm1-dist/README_BEFORE_INSTALL.txt <<'EOF'
             MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE
