@@ -106,8 +106,8 @@ int main(void)
     assert(s.fx==MI_FX_DELAY);
     mi_button(&s,MI_B_FX,9001);
     assert(s.fx_slot==1u);
-    mi_rotate(&s,MI_EN_K1,6); /* skips duplicate DELAY and conflicting EUREKA */
-    assert(s.fx2==MI_FX_CHORUS);
+    mi_rotate(&s,MI_EN_K1,3); /* A=DELAY, skips duplicate DELAY */
+    assert(s.fx2==MI_FX_REVERB);
     assert(mi_fx_pair_supported(s.fx,s.fx2));
     mi_button(&s,MI_B_FX,9002);
     assert(s.fx_slot==0u);
