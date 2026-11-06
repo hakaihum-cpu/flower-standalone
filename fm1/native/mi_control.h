@@ -13,7 +13,7 @@ typedef enum {
 } mi_view_t;
 typedef enum {
     MI_FX_OFF, MI_FX_REEL, MI_FX_DREAMY, MI_FX_DELAY,
-    MI_FX_REVERB, MI_FX_CHORUS, MI_FX_COUNT
+    MI_FX_REVERB, MI_FX_CHORUS, MI_FX_EUREKA, MI_FX_COUNT
 } mi_fx_t;
 typedef enum {
     MI_B_HOME, MI_B_EDIT, MI_B_FX, MI_B_SEL, MI_B_ENV,
