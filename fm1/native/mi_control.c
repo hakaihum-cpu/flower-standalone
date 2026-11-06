@@ -40,7 +40,7 @@ static void apply_preset(mi_state_t *s, unsigned preset)
 void mi_init(mi_state_t *s)
 {
     if (!s) return;
-    mi_memzero(s, 0, sizeof(*s));
+    mi_memzero(s, sizeof(*s));
     s->view = MI_HOME;
     s->width = 64;
     s->level = 100;
