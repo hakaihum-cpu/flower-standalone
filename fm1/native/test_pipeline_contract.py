@@ -46,6 +46,14 @@ for forbidden in (
     assert forbidden not in ci, f"legacy implementation in native CI: {forbidden}"
 assert ci.count("workflows:") == 1
 assert ci.count("when: << pipeline.parameters.run_build >>") == 1
+# #250 was a Permission denied exit 126 on an unexecutable ./build.sh.
+# Call the already-tested upstream build.py with a Python interpreter instead.
+assert "./build.sh" not in ci, "regression #250: executable build.sh permission failure"
+# #251 had dangling KARMA/ACID/PRISM/PHYS engine references after partial deletion.
+native_audit = (root / "fm1/native/verify_standalone.py").read_text(encoding="utf-8")
+for retired in ("ENG_PHYS", "ENG_ELEM", "ENG_PRISM", "EM_BOUNCE",
+                "EM_PICK", "PRM_FOLD", "PRM_WAVE", "PRM_HARM"):
+    assert retired in native_audit, f"regression #251: guard missing {retired}"
 # CircleCI expands <<...>> even in YAML block-scalar scripts. Only this
 # valid workflow parameter marker may remain; unescaped shell here-documents
 # cause configuration failure before ANY job or project test can execute.
