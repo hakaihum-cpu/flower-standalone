@@ -1,0 +1,32 @@
+# Audio path verification in the actual FM-1 host simulator.
+# Listen to artifacts/MIYAKO_FX_PREVIEW.wav once CI has executed.
+master 4096
+tap FX
+expect view 2
+spin K1 3
+expect fx 3
+spin K2 110
+spin K3 65
+spin K4 55
+wav MIYAKO_FX_PREVIEW.wav
+midi USB 90 45 7F
+wait 350
+midi USB 80 45 00
+wait 950
+spin K1 1
+expect fx 4
+spin K3 64
+spin K4 65
+midi USB 90 48 7F
+wait 350
+midi USB 80 48 00
+wait 950
+spin K1 1
+expect fx 5
+spin K3 42
+spin K4 75
+midi USB 90 4C 7F
+wait 350
+midi USB 80 4C 00
+wait 950
+wavstop
