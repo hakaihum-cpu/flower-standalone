@@ -129,6 +129,47 @@ id_patch = (root / "fm1/native/tools/set_miyako_product_id.py").read_text(encodi
 assert 'TARGET = "FM-1_931"' in id_patch
 assert 'OLD = \'    PRODUCT = prefix + "00"\'' in id_patch
 assert 'NEW = \'    PRODUCT = prefix + "31"' in id_patch
+# One source of truth: inspect all *literal* package identity assertions
+# in THIS contract. An obsolete FM-1_9100 assertion previously conflicted
+# with the correct FM-1_931 check and killed the CI before any build.
+actual_product = re.search(r'^TARGET = "(FM-1_[0-9]+)"
+assert ci.index('set_miyako_product_id.py') < ci.index('tools/build.py /tmp/fm1-base/miyako --host')
+assert "FM-1_9100" not in ci
+assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_931') >= 1
+
+# Root issue from the current build log: fm1-base's own mmio_check()
+# correctly rejects a volatile pointer cast outside the BSP, even though
+# generic C compilation and our previous custom checks happily passed it.
+mem = (root / "fm1/native/mi_memory.h").read_text(encoding="utf-8")
+assert "volatile unsigned char *" not in mem
+assert "unsigned char *p = (unsigned char *)destination;" in mem
+# Auditing the ACTUAL pinned fm1-base algorithm (not our imitation) is now
+# required before video VQ. The whole target link must also pass BEFORE VQ
+# using a compiler-only header that must be discarded, not shipped.
+assert "run_upstream_platform_checks.py" in ci
+assert "fm1build.mmio_check()" in (root /
+    "fm1/native/tools/run_upstream_platform_checks.py").read_text()
+assert ci.index("run_upstream_platform_checks.py") < ci.index(
+    "Reconstruct all 144 original MIYAKO EFFECTS source frames")
+assert ci.index("Exercise real FM-1 target compile") < ci.index(
+    "Reconstruct all 144 original MIYAKO EFFECTS source frames")
+assert "rm -rf /tmp/fm1-base/miyako/build" in ci
+assert ci.index("rm -rf /tmp/fm1-base/miyako/build") < ci.index(
+    "Reconstruct all 144 original MIYAKO EFFECTS source frames")
+print("PASS: manual no-EUREKA FM-1 firmware pipeline with original EFFECTS video and native FX")
+, id_patch, re.M)
+assert actual_product, "FM-1 product version is not defined by the build patch"
+expected_product = actual_product.group(1)
+assert len(expected_product.split("_")[1]) == 3, (
+    "M-UPGRADE accepts three numeric product/version digits, not four"
+)
+assert "--product " + expected_product in ci
+source_lines = Path(__file__).read_text(encoding="utf-8").splitlines()
+for n, line in enumerate(source_lines, 1):
+    if line.strip().startswith("assert ") and "--product FM-1_" in line and " in ci" in line:
+        assert expected_product in line, (
+            f"conflicting obsolete product-ID test on line {n}: {line.strip()}"
+        )
 assert 'set_miyako_product_id.py --base /tmp/fm1-base' in ci
 assert ci.index('set_miyako_product_id.py') < ci.index('tools/build.py /tmp/fm1-base/miyako --host')
 assert "FM-1_9100" not in ci
