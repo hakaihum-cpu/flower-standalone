@@ -11,7 +11,8 @@
 #include "mi_control.h"
 #include "mi_audio.h"
 #include "mi_video.h"
-#include "mi_effects_vq_frames.h" /* generated: ALL 144 user-source frames */
+#include "mi_effects_vq_frames.h" /* 144 source frames */
+#include "mi_eureka_vq_frames.h" /* 576 source frames */
 #include "mi_memory.h"
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
@@ -59,6 +60,7 @@ void app_init(void)
  mi_init(&state);
  mi_audio_init(&audio,44100.f);
  mi_video_init(&video,MI_EFFECTS_ASSET_COUNT);
+ mi_video_set_eureka(&video,MI_EUREKA_ASSET_COUNT);
  if(plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved&&
     saved.magic==SAVED_MAGIC&&valid_state(&saved.state)){
      state=saved.state;
@@ -190,16 +192,25 @@ void app_input_only(void){input();}
 static uint8_t mi_media_pixels[MI_EFFECTS_ASSET_BYTES];
 static int16_t mi_media_prior=-1;
 static const uint16_t *mi_media_palette;
-static void mi_media_decode(unsigned frame)
+static uint8_t mi_media_bank=255u;
+static void mi_media_decode(unsigned frame,unsigned eureka)
 {
  unsigned ty,tx,row,at;
  const uint8_t (*book)[16];
  const uint8_t *map;
- if(frame>=MI_EFFECTS_ASSET_COUNT)return;
- if(mi_media_prior==(int16_t)frame)return;
- book=mi_effects_vq_tilebook[frame/36u];
- map=mi_effects_vq_maps[frame];
- mi_media_palette=mi_effects_vq_palette[frame/36u];
+ if(eureka){
+    if(frame>=MI_EUREKA_ASSET_COUNT)return;
+ }else if(frame>=MI_EFFECTS_ASSET_COUNT)return;
+ if(mi_media_prior==(int16_t)frame&&mi_media_bank==eureka)return;
+ if(eureka){
+    book=mi_eureka_vq_tilebook[frame/36u];
+    map=mi_eureka_vq_maps[frame];
+    mi_media_palette=mi_eureka_vq_palette[frame/36u];
+ }else{
+    book=mi_effects_vq_tilebook[frame/36u];
+    map=mi_effects_vq_maps[frame];
+    mi_media_palette=mi_effects_vq_palette[frame/36u];
+ }
  for(ty=0;ty<20u;ty++)for(tx=0;tx<16u;tx++){
     const uint8_t *tile=book[map[ty*16u+tx]];
     for(row=0;row<4u;row++){
@@ -213,6 +224,7 @@ static void mi_media_decode(unsigned frame)
     }
  }
  mi_media_prior=(int16_t)frame;
+ mi_media_bank=(uint8_t)eureka;
 }
 /* Draw each 120-row LCD half separately. SEL displays only the full-width
  * original animation (128x78 -> 240x146) centered at y=47, with no labels
@@ -221,10 +233,11 @@ static void mi_media_decode(unsigned frame)
 static void mi_media_draw_half(unsigned half)
 {
     unsigned sy;
-    int frame=video.effects_frame;
+    unsigned eureka=state.fx==MI_FX_EUREKA;
+    int frame=eureka?video.eureka_frame:video.effects_frame;
     const int32_t shift=(int32_t)half*120;
     if(frame<0)return;
-    mi_media_decode((unsigned)frame);
+    mi_media_decode((unsigned)frame,eureka);
     for(sy=0;sy<MI_EFFECTS_ASSET_H;sy++){
         int32_t absolute_y0=47+(int32_t)(sy*146u/MI_EFFECTS_ASSET_H);
         int32_t absolute_y1=47+(int32_t)((sy+1u)*146u/MI_EFFECTS_ASSET_H);
@@ -431,13 +444,14 @@ void app_frame(void)
  now=plat_ms();
  if(now-video_time>=33u){
      video_time=now;
-     int16_t old_effects=video.effects_frame;
-     mi_video_tick(&video,audio_activity,0);
-     if(state.view==MI_VIDEO && old_effects!=video.effects_frame)
+     int16_t old_effects=video.effects_frame,old_eureka=video.eureka_frame;
+     mi_video_tick(&video,audio_activity,state.fx==MI_FX_EUREKA);
+     if(state.view==MI_VIDEO &&
+       (old_effects!=video.effects_frame||old_eureka!=video.eureka_frame))
+         redraw=1;
+     if(state.view==MI_SEQ && (audio.recorder.recording||audio.recorder.playing))
          redraw=1;
  }
- if(state.view==MI_SEQ && (audio.recorder.recording||audio.recorder.playing))
-      redraw=1;
   state.recording=audio.recorder.recording;
   state.playing=audio.recorder.playing;
   if(message_until&&now>=message_until){message_until=0;redraw=1;}
