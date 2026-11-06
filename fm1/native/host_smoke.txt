@@ -23,6 +23,19 @@ tap SEL
 expect view 3
 shot MIYAKO_EFFECTS_VIDEO.png
 expect fx 1
+tap ENV
+expect view 4
+shot MIYAKO_ENV.png
+tap LFO
+expect view 5
+shot MIYAKO_LFO.png
+tap ARP
+expect view 6
+turn K1 1
+expect arp_mode 1
+shot MIYAKO_ARP.png
+turn K1 -1
+expect arp_mode 0
 tap HOME
 expect view 0
 tap SAVE
