@@ -11,6 +11,7 @@ NATIVE = ROOT / "fm1" / "native"
 MANIFEST = NATIVE / "SOURCE_ALLOWLIST.txt"
 FORBIDDEN_PATH_BITS = ("/karma/", "felucca", "cloud.c", "eng_prism", "eng_elem", "eng_phys")
 FORBIDDEN_SYMBOLS = ("KARMA", "FELUCCA", "ui_input(", "cloud_process(", "ENG_PRISM", "ENG_ELEM")
+GENERATED_MEDIA_HEADERS = {"mi_eureka_vq_frames.h", "mi_effects_vq_frames.h"}
 source_paths = []
 for raw in MANIFEST.read_text(encoding="utf-8").splitlines():
     name = raw.strip()
@@ -33,7 +34,9 @@ for file in source_paths:
             raise SystemExit(f"FAIL: forbidden implementation token {symbol} in {file}")
     for header in re.findall(r'#\s*include\s*"([^"]+)"', body):
         relative = (file.parent / header).resolve()
-        if NATIVE.resolve() not in relative.parents or not relative.is_file():
+        if NATIVE.resolve() not in relative.parents:
             raise SystemExit(f"FAIL: nonnative local include {header} in {file}")
+        if not relative.is_file() and header not in GENERATED_MEDIA_HEADERS:
+            raise SystemExit(f"FAIL: missing native header {header} in {file}")
 print(f"PASS: {len(source_paths)} native MIYAKO source unit(s), no external framework units")
 print("NOT READY: board HAL, MIYAKO DSP/FX, video, flash/boot and FM-1 linking are still missing")
