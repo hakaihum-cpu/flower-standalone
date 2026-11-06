@@ -235,6 +235,11 @@ require('"#251 omitted-engine dependency closure"' in verifier and
         'removed_symbols = re.compile(' in verifier and
         'Transitive C include is missing' in verifier,
         "#251 post-patch verifier must audit all compiled C includes, not just three known failures")
+require((root / "fm1" / "karma" / "test_source_closure.py").is_file() and
+        "python3 fm1/karma/test_source_closure.py" in ci and
+        ci.index("python3 fm1/karma/test_source_closure.py") <
+        ci.index("Install build prerequisites"),
+        "#251 include-graph regression must run before costly CI operations")
 require('plx_anchor = "    plx = build_plx()"' in patcher and
         'no Plaits C++ model objects' in patcher and
         'Plaits C++ linker inputs excluded' in verifier,
