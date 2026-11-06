@@ -120,10 +120,21 @@ assert (root / "fm1/native/mi_memory.h").is_file()
 # separate fields. Neither is permitted to be empty or implicit "DEV".
 manifest = (root / "fm1/native/fm1.toml").read_text(encoding="utf-8")
 app_header = (root / "fm1/native/app.h").read_text(encoding="utf-8")
-assert 'id_prefix = "FM-1_91"' in manifest
+assert 'id_prefix = "FM-1_9"' in manifest
 assert '#define APP_VERSION "0.1.0-DEV"' in app_header
 assert 'APP_TAGLINE "NATIVE TRIAL"' in app_header
-assert "--product FM-1_9100" in ci
+assert "--product FM-1_931" in ci
+# Keep package header marker and running firmware FELUCCA_ID in sync by
+# patching the pinned original builder BEFORE ANY compilation step.
+id_patch = (root / "fm1/native/tools/set_miyako_product_id.py").read_text(encoding="utf-8")
+assert 'TARGET = "FM-1_931"' in id_patch
+assert 'OLD = \'    PRODUCT = prefix + "00"\'' in id_patch
+assert 'NEW = \'    PRODUCT = prefix + "31"' in id_patch
+assert 'set_miyako_product_id.py --base /tmp/fm1-base' in ci
+assert ci.index('set_miyako_product_id.py') < ci.index('tools/build.py /tmp/fm1-base/miyako --host')
+assert "FM-1_9100" not in ci
+assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_931') >= 1
+
 # Root issue from the current build log: fm1-base's own mmio_check()
 # correctly rejects a volatile pointer cast outside the BSP, even though
 # generic C compilation and our previous custom checks happily passed it.
