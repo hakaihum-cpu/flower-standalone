@@ -163,8 +163,11 @@ static void input(void)
          save.state=state;
          save.state.save_armed=0;
          app_say(plat_store_save(OBJ_SETTINGS,&save,sizeof save)==0?"SAVED":"SAVE FAILED","");
-     }else if(action.action==MI_ACTION_PLAY||action.action==MI_ACTION_RECORD)
-         app_say("SEQ/REC","NOT READY");
+     }else if(action.action==MI_ACTION_RECORD){
+         mi_audio_rec_request(&audio,1u);
+    }else if(action.action==MI_ACTION_PLAY){
+         mi_audio_rec_request(&audio,2u);
+    }
  }
  last_buttons=buttons;
  for(i=0;i<NE;i++){
@@ -172,6 +175,7 @@ static void input(void)
      if(steps){mi_rotate(&state,map_encoder(i),steps);redraw=1;}
  }
  plat_glow(1);
+ plat_play_red(audio.recorder.recording!=0u);
  plat_leds((1u<<(state.view==MI_OSC?B_EDIT:
                    state.view==MI_VIDEO?B_SEL:
                    state.view==MI_FX?B_FX:
@@ -309,6 +313,34 @@ static void mi_graph_arp(void)
         cv_rect(18+(int32_t)x*27,98-h,18,h,mode?YELLOW:DIM);
     }
 }
+static void mi_graph_recorder(void)
+{
+    unsigned x;
+    uint32_t count=audio.recorder.count;
+    uint32_t inx=(uint32_t)state.seq[0]*223u/127u;
+    uint32_t outx=(uint32_t)state.seq[1]*223u/127u;
+    cv_text(12,36,&FONT_XS,
+        audio.recorder.recording?"RECORDING":
+        audio.recorder.playing?"LOOP PLAY":"STOPPED",YELLOW);
+    cv_line(8,78,232,78,DIM);
+    for(x=0;x<224u;x++){
+        int8_t mn,mx;
+        int32_t y0,y1;
+        if(x*MI_REC_CAPACITY/224u>=count)break;
+        mi_rec_peak(x,&mn,&mx);
+        y0=78-(int32_t)mx/3;
+        y1=78-(int32_t)mn/3;
+        if(y1<y0)y1=y0;
+        cv_line(8+(int32_t)x,y0,8+(int32_t)x,y1,YELLOW);
+    }
+    cv_line(8+(int32_t)inx,45,8+(int32_t)inx,114,GREY);
+    cv_line(8+(int32_t)outx,45,8+(int32_t)outx,114,GREY);
+    if(audio.recorder.playing){
+        uint32_t cursor=(uint32_t)(audio.recorder.playback_pos*223.f/(float)MI_REC_CAPACITY);
+        if(cursor>223u)cursor=223u;
+        cv_line(8+(int32_t)cursor,45,8+(int32_t)cursor,114,RGB(120,240,140));
+    }
+}
 static void draw(void)
 {
     uint32_t i,now=plat_ms();
@@ -350,6 +382,8 @@ static void draw(void)
         mi_graph_env();
     }else if(state.view==MI_LFO){
         mi_graph_lfo();
+    }else if(state.view==MI_SEQ){
+        mi_graph_recorder();
     }else if(state.view==MI_ARP){
         mi_graph_arp();
         cv_text(12,38,&FONT_XS,mi_arp_mode_name(state.arp[0]),GREY);
@@ -375,6 +409,9 @@ static void draw(void)
         else if(state.view==MI_ARP&&i==1u){
             static const char *const rates[]={"1/4","1/8","1/16","1/32"};
             textcpy(val,rates[state.arp[1]<=3u?state.arp[1]:3u],sizeof val);
+        }else if(state.view==MI_SEQ&&i==2u){
+            static const int semitone[7]={-12,-7,-5,0,5,7,12};
+            number(semitone[state.seq[2]<=6u?state.seq[2]:3u],val);
         }else number(mi_param_value(&state,i),val);
         cv_text(x,49,&FONT_S,val,YELLOW);
     }
@@ -399,7 +436,11 @@ void app_frame(void)
      if(state.view==MI_VIDEO && old_effects!=video.effects_frame)
          redraw=1;
  }
- if(message_until&&now>=message_until){message_until=0;redraw=1;}
+ if(state.view==MI_SEQ && (audio.recorder.recording||audio.recorder.playing))
+      redraw=1;
+  state.recording=audio.recorder.recording;
+  state.playing=audio.recorder.playing;
+  if(message_until&&now>=message_until){message_until=0;redraw=1;}
  if(redraw){draw();redraw=0;}
 }
 #ifdef PLAT_HOST
@@ -413,7 +454,11 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"arp_note")) *got=(int)audio.arp_note;
  else if(mi_streq(what,"arp_sounding")) *got=(int)audio.arp_sounding;
  else if(mi_streq(what,"lfo_wave")) *got=(int)state.lfo[1];
- else if(mi_streq(what,"preset")) *got=(int)state.preset;
+ else if(mi_streq(what,"recording")) *got=(int)audio.recorder.recording;
+  else if(mi_streq(what,"rec_playing")) *got=(int)audio.recorder.playing;
+  else if(mi_streq(what,"rec_samples")) *got=(int)audio.recorder.count;
+  else if(mi_streq(what,"rec_pitch")) *got=(int)state.seq[2];
+  else if(mi_streq(what,"preset")) *got=(int)state.preset;
  else if(mi_streq(what,"slot")) *got=(int)state.project_slot;
  else if(mi_streq(what,"active")) {
     unsigned i;int n=0;
