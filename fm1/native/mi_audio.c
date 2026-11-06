@@ -228,6 +228,9 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
     float wet=dry;
     if(mode>=MI_FX_COUNT)mode=MI_FX_OFF;
     if(mode!=a->last_mode){
+        if(mode==MI_FX_EUREKA||mode==MI_FX_DELAY||
+           a->last_mode==MI_FX_EUREKA||a->last_mode==MI_FX_DELAY)
+            mi_fx_dsp_reset_shared(&native_fx);
         a->wr=a->valid=a->phase=a->segment=0;
         a->wet_current=0.f;
         a->last_mode=(uint8_t)mode;
@@ -248,7 +251,7 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
         }
         a->ring[a->wr&(MI_NATIVE_RING-1u)]=(int16_t)(clampf(dry,-1.f,1.f)*32767.f);
         ++a->wr;if(a->valid<MI_NATIVE_RING)++a->valid;
-    }else if(mode==MI_FX_DREAMY||mode==MI_FX_DELAY||
+    }else if(mode==MI_FX_EUREKA||mode==MI_FX_DREAMY||mode==MI_FX_DELAY||
               mode==MI_FX_REVERB||mode==MI_FX_CHORUS){
         wet=mi_fx_dsp_process(&native_fx,mode,dry,a->sample_rate,
             s->fx_options[mode][0],s->fx_options[mode][1]);
