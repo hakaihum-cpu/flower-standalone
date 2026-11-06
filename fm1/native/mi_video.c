@@ -27,7 +27,7 @@ void mi_video_init(mi_video_t *v,uint16_t effect_count)
     v->effects_rng=0x7E670103u;
     v->eureka_rng=0xA18CE431u;
     v->effect_count=effect_count;
-    v->effects_frame=-1;
+    v->effects_frame=effect_count?0:-1;
     v->eureka_frame=-1;
     v->eureka_clip=-1;
 }
