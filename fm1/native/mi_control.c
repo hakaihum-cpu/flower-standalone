@@ -137,10 +137,16 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
             uint8_t candidate=(uint8_t)limited(mode,d,0,MI_FX_COUNT-1);
             unsigned one=s->fx_slot?s->fx:candidate;
             unsigned two=s->fx_slot?candidate:s->fx2;
-            if(mi_fx_pair_supported(one,two)){
-                if(s->fx_slot)s->fx2=candidate;
-                else s->fx=candidate;
+            int32_t step=d>0?1:-1;
+            while(!mi_fx_pair_supported(one,two) && candidate<MI_FX_COUNT){
+                int32_t next=(int32_t)candidate+step;
+                if(next<0||next>=MI_FX_COUNT)return;
+                candidate=(uint8_t)next;
+                one=s->fx_slot?s->fx:candidate;
+                two=s->fx_slot?candidate:s->fx2;
             }
+            if(s->fx_slot)s->fx2=candidate;
+            else s->fx=candidate;
             return;
         }
         if(k==1)p=s->fx_slot?&s->wet2:&s->wet;
@@ -177,6 +183,8 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     default: break;
     }
     if (p) *p = (uint8_t)limited(*p, d, lo, hi);
+    if(s->view==MI_HOME && !mi_fx_pair_supported(s->fx,s->fx2))
+        s->fx2=MI_FX_OFF;
 }
 mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
 {
