@@ -94,7 +94,7 @@ require('pack_eureka_vq_candidate.py' in ci and
         'test_vq_selector_integrity.py' in ci and
         (root / "fm1" / "karma" / "test_vq_selector_integrity.py").is_file() and
         'final_dist = norms[:, None]' in vq and
-        'for balance in (1.0, 2.0)' in vq and
+        'for balance in (1.0, 2.0, 3.0, 4.0, 6.0):' in vq and
         'frame_balance > 0' in vq,
         "VQ candidate, final-selector integrity or frame-balanced test not wired into CI")
 require('scripts/materialize_miyako_eureka_video.py' in ci and
