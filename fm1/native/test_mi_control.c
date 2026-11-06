@@ -25,9 +25,9 @@ int main(void)
     mi_button(&s, MI_B_FX, 0);
     mi_rotate(&s, MI_EN_K1, 2);
     assert(s.fx == MI_FX_DREAMY);
-    assert(!strcmp(mi_param_name(&s,2),"TBD"));
-    assert(!strcmp(mi_param_name(&s,3),"TBD"));
-    assert(mi_param_value(&s,2) == 0 && mi_param_value(&s,3) == 0);
+    assert(!strcmp(mi_param_name(&s,2),"GRAIN"));
+    assert(!strcmp(mi_param_name(&s,3),"SPACE"));
+    assert(mi_param_value(&s,2) == 64 && mi_param_value(&s,3) == 80);
     mi_button(&s, MI_B_HOME, 0);
     mi_rotate(&s, MI_EN_PRESETS, 1);
     assert(s.preset == 1 && s.wave == 1);
