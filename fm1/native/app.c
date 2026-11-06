@@ -409,6 +409,10 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"fx")) *got=(int)state.fx;
  else if(mi_streq(what,"wave")) *got=(int)state.wave;
  else if(mi_streq(what,"octave")) *got=(int)state.octave;
+ else if(mi_streq(what,"arp_mode")) *got=(int)state.arp[0];
+ else if(mi_streq(what,"arp_note")) *got=(int)audio.arp_note;
+ else if(mi_streq(what,"arp_sounding")) *got=(int)audio.arp_sounding;
+ else if(mi_streq(what,"lfo_wave")) *got=(int)state.lfo[1];
  else if(mi_streq(what,"preset")) *got=(int)state.preset;
  else if(mi_streq(what,"slot")) *got=(int)state.project_slot;
  else if(mi_streq(what,"active")) {
