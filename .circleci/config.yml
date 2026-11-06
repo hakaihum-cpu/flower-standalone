@@ -61,6 +61,14 @@ jobs:
             test -s fm1-dist/EUREKA_VQ_PREVIEW.png
             test -s fm1-dist/EFFECTS_VQ_PREVIEW.png
       - run:
+          name: Verify all 720 original-source frames by independent C decoder CRC
+          command: |
+            set -eu
+            cc -std=c99 -O2 -Wall -Wextra -Werror \
+              -I fm1/native fm1/native/test_media_crc.c \
+              -o /tmp/mi_media_crc_test
+            /tmp/mi_media_crc_test
+      - run:
           name: Compile FM-1 native platform host simulator and exercise UI, MIDI, persistent controls
           command: |
             set -eu
