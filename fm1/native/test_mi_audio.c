@@ -13,7 +13,7 @@ int main(void)
  assert(peaks>1000);
  assert(a.v[0].active && a.v[0].held);
  mi_audio_note_off(&a,69);
- for(i=0;i<16;i++)mi_audio_render(&a,&s,lr,256,4096);
+ for(i=0;i<250;i++)mi_audio_render(&a,&s,lr,256,4096);
  assert(!a.v[0].active);
  s.fx=MI_FX_REEL;s.wet=127;
  mi_audio_note_on(&a,60,120);
@@ -28,7 +28,7 @@ int main(void)
  s.fx=MI_FX_REVERB;
  for(i=0;i<15;i++)mi_audio_render(&a,&s,lr,256,4096);
  assert(a.last_mode==MI_FX_REVERB);
- s.fx=MI_FX_DREAMY; /* untouched until original DSP port is ready */
+ s.fx=MI_FX_DREAMY; /* native dual-grain FX now active */
  for(i=0;i<4;i++)mi_audio_render(&a,&s,lr,256,4096);
  assert(a.last_mode==MI_FX_DREAMY);
  mi_audio_panic(&a);
@@ -47,6 +47,42 @@ int main(void)
  assert(a.v[2].note==69);
  mi_audio_panic(&a);
  for(i=0;i<4;i++)assert(!a.v[i].active);
- puts("PASS: native 4-voice oscillator, Reel/Delay/Reverb/Chorus and honest Dreamy state");
+ /* Arpeggiator must start on first sample and advance at 1/16-note BPM. */
+ mi_init(&s);mi_audio_init(&a,44100.f);
+ s.arp[0]=1;s.arp[1]=2;s.arp[2]=70;s.arp[3]=1;
+ mi_audio_input_on(&a,&s,60,127);
+ mi_audio_input_on(&a,&s,64,90);
+ mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.arp_mode==1 && a.arp_sounding && a.arp_note==60);
+ for(i=0;i<35;i++)mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.arp_note==64);
+ mi_audio_input_off(&a,&s,60);
+ mi_audio_input_off(&a,&s,64);
+ mi_audio_render(&a,&s,lr,256,4096);
+ assert(!a.arp_sounding);
+ /* Down mode starts with the highest held note; switching modes is safe. */
+ s.arp[0]=2;
+ mi_audio_input_on(&a,&s,60,127);
+ mi_audio_input_on(&a,&s,67,127);
+ mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.arp_mode==2&&a.arp_note==67);
+ mi_audio_input_off(&a,&s,60);
+ mi_audio_input_off(&a,&s,67);
+ s.arp[0]=0;
+ mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.arp_mode==0);
+ mi_audio_panic(&a);
+ /* ADSR attack is no longer a fixed 0.002 per sample. */
+ mi_init(&s);mi_audio_init(&a,44100.f);
+ s.env[0]=127;
+ mi_audio_note_on(&a,69,127);
+ mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.v[0].env>0.f && a.v[0].env<0.02f);
+ /* LFO phase advances even with no notes: shared oscillator is live. */
+ s.lfo[0]=90;s.lfo[1]=1;s.lfo[2]=80;
+ float before=a.lfo_phase;
+ mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.lfo_phase!=before);
+ puts("PASS: 4-voice synth ADSR LFO MIDI/keys arpeggiator and native FX");
  return 0;
 }
