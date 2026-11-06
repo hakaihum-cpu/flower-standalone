@@ -2,7 +2,7 @@
 # FM-1 screen reader vocabulary used by fm1-base tools/gen_words.py.
 # Development URL: the generated JSON must be published separately before
 # screen-reader support is declared complete.
-# url: https://raw.githubusercontent.com/hakaihum-cpu/flower-standalone/feature/fm1-miyako-no-eureka-20261106/fm1/native/web/words/
+# url: https://raw.githubusercontent.com/hakaihum-cpu/flower-standalone/feature/fm1-miyako-visual-arp-fx-20261107/fm1/native/web/words/
 MIYAKO	MIYAKO
 OSC	oscillator
 SINE	sine wave
@@ -17,3 +17,26 @@ CRUSH	bit crusher
 LEVEL	level
 WET	wet level
 SAVE	save
+ENV	envelope
+LFO	low frequency oscillator
+ARP	arpeggiator
+ADSR	attack decay sustain release
+ATK	attack
+DEC	decay
+SUS	sustain
+REL	release
+RATE	rate
+DEPTH	depth
+DEST	destination
+TRI	triangle
+UP	up
+DOWN	down
+UPDN	up down
+RND	random
+GRAIN	grain size
+SPACE	space
+PITCH	pitch
+PWM	pulse width
+AMP	amplitude
+GATE	gate duration
+OCT	octaves
