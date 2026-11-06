@@ -3,15 +3,16 @@
  *
  * The firmware compiler supplies <stdint.h>, but does NOT ship libc
  * <string.h>. Never include or depend on hosted string.h in target code.
- * Volatile byte stores keep zeroing independent of a compiler-emitted
- * memset() symbol even under optimisations; only used at init/reset.
+ * This is ordinary RAM, NOT memory-mapped I/O. Never use a volatile
+ * pointer cast: fm1-base's upstream mmio_check() correctly rejects it.
+ * Bare-metal compilation uses -fno-builtin; call sites require no libc.
  */
 #ifndef MI_NATIVE_MEMORY_H
 #define MI_NATIVE_MEMORY_H
 
 static inline void mi_memzero(void *destination, unsigned count)
 {
-    volatile unsigned char *p = (volatile unsigned char *)destination;
+    unsigned char *p = (unsigned char *)destination;
     while (count--) *p++ = 0u;
 }
 
