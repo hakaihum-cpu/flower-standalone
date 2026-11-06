@@ -46,8 +46,8 @@ void mi_init(mi_state_t *s)
     s->level = 100;
     s->global[0] = 90;
     s->project_slot = 1;
-    s->fx_options[MI_FX_EUREKA][0] = 64;
-    s->fx_options[MI_FX_EUREKA][1] = 80;
+    s->fx_options[MI_FX_CHORUS][0] = 64;
+    s->fx_options[MI_FX_CHORUS][1] = 80;
     s->fx_options[MI_FX_REEL][0] = 48;
     s->fx_options[MI_FX_REEL][1] = 45;
     s->env[0] = 4; s->env[1] = 65; s->env[2] = 115; s->env[3] = 45;
