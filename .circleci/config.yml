@@ -14,6 +14,10 @@ jobs:
     environment:
       JIELI_TOOLCHAIN: "/home/circleci/.jieli/toolchain"
       AC79_SDK: "/home/circleci/fw-AC79_AIoT_SDK"
+      # fm1-base's default Barlow TTF requires Pillow libraqm for 'tnum'.
+      # The upstream-shipped Terminus BDF uses the pixel-font path without
+      # any OpenType features/libraqm. Keep this set for ALL build phases.
+      X0X_FONTSET: "terminus"
     steps:
       - checkout
       - run:
@@ -71,6 +75,14 @@ jobs:
                /tmp/fm1-base/miyako/
             test -s /tmp/fm1-base/miyako/words.tsv
             grep -q '^# url: https://' /tmp/fm1-base/miyako/words.tsv
+            # Fail early on fonts: never reach the C build with untested
+            # Pillow Raqm or a missing upstream bitmap asset.
+            test -s /tmp/fm1-base/assets/fonts/ter-u12n.bdf
+            test -s /tmp/fm1-base/assets/fonts/ter-u16b.bdf
+            test "$X0X_FONTSET" = "terminus"
+            /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/gen_font.py \
+              /tmp/mi_font_preflight.h
+            test -s /tmp/mi_font_preflight.h
             python3 fm1/native/tools/compile_only_media_stub.py \
               /tmp/fm1-base/miyako/mi_effects_vq_frames.h
             /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
