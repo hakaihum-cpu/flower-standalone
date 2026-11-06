@@ -20,6 +20,7 @@ static mi_result_t result(mi_action_t a, uint8_t slot)
 static void apply_preset(mi_state_t *s, unsigned preset)
 {
     s->preset = (uint8_t)preset;
+    s->fx2 = MI_FX_OFF; s->fx_slot=0;
     s->wave = (uint8_t)(preset == 1 || preset == 5 ? 1 :
                         preset == 2 ? 2 : preset == 3 ? 3 : 0);
     s->width = (uint8_t)(preset == 3 ? 36 : 64);
@@ -44,6 +45,7 @@ void mi_init(mi_state_t *s)
     s->view = MI_HOME;
     s->width = 64;
     s->level = 100;
+    s->fx2 = MI_FX_OFF; s->wet2=80; s->fx_slot=0;
     s->global[0] = 90;
     s->project_slot = 1;
     s->fx_options[MI_FX_CHORUS][0] = 64;
@@ -73,7 +75,10 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
     switch (b) {
     case MI_B_HOME: view(s, MI_HOME); break;
     case MI_B_EDIT: view(s, MI_OSC); break;
-    case MI_B_FX: view(s, MI_FX); break;
+    case MI_B_FX:
+        if(s->view==MI_FX)s->fx_slot^=1u;
+        else{view(s,MI_FX);s->fx_slot=0;}
+        break;
     case MI_B_SEL:
         /* Visualizer is a view, not an EUREKA sound selector.
          * Leave the selected MIYAKO FX and its WET state untouched.
@@ -126,11 +131,22 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         if (k == 2) p = &s->sub;
         if (k == 3) p = &s->crush;
         break;
-    case MI_FX:
-        if (k == 0) { p = &s->fx; hi = MI_FX_COUNT - 1; }
-        if (k == 1) p = &s->wet;
-        if (k > 1 && s->fx < MI_FX_COUNT) p = &s->fx_options[s->fx][k-2];
+    case MI_FX: {
+        unsigned mode=s->fx_slot?s->fx2:s->fx;
+        if(k==0){
+            uint8_t candidate=(uint8_t)limited(mode,d,0,MI_FX_COUNT-1);
+            unsigned one=s->fx_slot?s->fx:candidate;
+            unsigned two=s->fx_slot?candidate:s->fx2;
+            if(mi_fx_pair_supported(one,two)){
+                if(s->fx_slot)s->fx2=candidate;
+                else s->fx=candidate;
+            }
+            return;
+        }
+        if(k==1)p=s->fx_slot?&s->wet2:&s->wet;
+        if(k>1&&mode<MI_FX_COUNT)p=&s->fx_options[mode][k-2];
         break;
+    }
     case MI_VIDEO:
         /* SEL is a true media-only screen: avoid hidden knob changes. */
         break;
@@ -185,6 +201,15 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
     }
     return result(MI_ACTION_NONE, 0);
 }
+int mi_fx_pair_supported(unsigned first,unsigned second)
+{
+    if(first>=MI_FX_COUNT||second>=MI_FX_COUNT)return 0;
+    if(first==MI_FX_OFF||second==MI_FX_OFF)return 1;
+    if(first==second)return 0;
+    if((first==MI_FX_DELAY&&second==MI_FX_EUREKA)||
+       (first==MI_FX_EUREKA&&second==MI_FX_DELAY))return 0;
+    return 1;
+}
 const char *mi_wave_name(unsigned wave)
 {
     static const char *const names[] = {"SINE","SAW","SQUARE","PULSE"};
@@ -227,12 +252,13 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
     if (s->view == MI_VIDEO) return "";
     if (s->view == MI_FX && k >= 2) {
-        if (s->fx == MI_FX_REEL) return k == 2 ? "WOW" : "FLTR";
-        if (s->fx == MI_FX_DREAMY) return k == 2 ? "GRAIN" : "SPACE";
-        if (s->fx == MI_FX_DELAY) return k == 2 ? "TIME" : "FDBK";
-        if (s->fx == MI_FX_REVERB) return k == 2 ? "DECAY" : "TONE";
-        if (s->fx == MI_FX_CHORUS) return k == 2 ? "RATE" : "DEPTH";
-        if (s->fx == MI_FX_EUREKA) return k == 2 ? "TIME" : "HAZE";
+        unsigned fx=s->fx_slot?s->fx2:s->fx;
+        if (fx == MI_FX_REEL) return k == 2 ? "WOW" : "FLTR";
+        if (fx == MI_FX_DREAMY) return k == 2 ? "GRAIN" : "SPACE";
+        if (fx == MI_FX_DELAY) return k == 2 ? "TIME" : "FDBK";
+        if (fx == MI_FX_REVERB) return k == 2 ? "DECAY" : "TONE";
+        if (fx == MI_FX_CHORUS) return k == 2 ? "RATE" : "DEPTH";
+        if (fx == MI_FX_EUREKA) return k == 2 ? "TIME" : "HAZE";
         /* Other DSP controls are pending source-accurate port; not fabricated. */
         return "TBD";
     }
@@ -247,9 +273,11 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
     case MI_OSC:
         return k == 0 ? s->wave : k == 1 ? s->width : k == 2 ? s->sub : s->crush;
     case MI_VIDEO: return 0;
-    case MI_FX:
-        return k == 0 ? s->fx : k == 1 ? s->wet :
-            (s->fx < MI_FX_COUNT ? s->fx_options[s->fx][k-2] : 0);
+    case MI_FX: {
+        unsigned fx=s->fx_slot?s->fx2:s->fx;
+        return k==0?(int32_t)fx:k==1?(int32_t)(s->fx_slot?s->wet2:s->wet):
+            (fx<MI_FX_COUNT?(int32_t)s->fx_options[fx][k-2]:0);
+    }
     case MI_ENV: return s->env[k];
     case MI_LFO: return s->lfo[k];
     case MI_ARP: return s->arp[k];
