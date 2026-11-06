@@ -46,6 +46,9 @@ typedef struct {
 void mi_init(mi_state_t *s);
 mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms);
 mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t encoder, int32_t steps);
+const char *mi_wave_name(unsigned wave);
+const char *mi_arp_mode_name(unsigned mode);
+const char *mi_lfo_wave_name(unsigned wave);
 const char *mi_view_name(mi_view_t view);
 const char *mi_fx_name(mi_fx_t effect);
 const char *mi_param_name(const mi_state_t *s, unsigned knob);
