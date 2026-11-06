@@ -39,6 +39,15 @@ jobs:
                -o /tmp/miyako_fm1_audio_test
             /tmp/miyako_fm1_audio_test
       - run:
+          name: Test both original MIYAKO visual frame state machines
+          command: |
+            set -eu
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+               -fsanitize=address,undefined -fno-sanitize-recover=all \
+               fm1/native/mi_video.c fm1/native/test_mi_video.c \
+               -o /tmp/miyako_fm1_video_test
+            /tmp/miyako_fm1_video_test
+      - run:
           name: Compile native MIYAKO app against FM-1 platform host simulator
           command: |
             set -eu
@@ -50,6 +59,7 @@ jobs:
             cp fm1/native/app.c fm1/native/app.h fm1/native/fm1.toml \
                fm1/native/mi_control.c fm1/native/mi_control.h \
                fm1/native/mi_audio.c fm1/native/mi_audio.h \
+               fm1/native/mi_video.c fm1/native/mi_video.h \
                /tmp/fm1-base/miyako/
             python3 /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
             test -x /tmp/fm1-base/miyako/build/host/miyako_host
