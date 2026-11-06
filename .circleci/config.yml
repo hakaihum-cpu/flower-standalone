@@ -1,4 +1,4 @@
-# MIYAKO native FM-1 development firmware: NOT the old KARMA-derived firmware.
+# MIYAKO native FM-1 development firmware: no KARMA. EUREKA deferred.
 # Manual ONLY: run_build=true. main and older branches never execute this job.
 version: 2.1
 parameters:
@@ -36,32 +36,30 @@ jobs:
             /tmp/mi_audio_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
+              fm1/native/mi_fx_dsp.c fm1/native/test_mi_fx_dsp.c \
+              -o /tmp/mi_fx_test
+            /tmp/mi_fx_test
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+              -fsanitize=address,undefined -fno-sanitize-recover=all \
               fm1/native/mi_video.c fm1/native/test_mi_video.c \
               -o /tmp/mi_video_test
             /tmp/mi_video_test
       - run:
-          name: Reconstruct every original 576 EUREKA and 144 EFFECTS source frame
+          name: Reconstruct all 144 original MIYAKO EFFECTS source frames
           command: |
             set -eu
-            python3 scripts/materialize_miyako_eureka_video.py
             python3 scripts/materialize_effects_video_pack.py
-            test -s Resources/miyako_eureka_frames.pack
             test -s Resources/effects_video_frames.pack
             mkdir -p fm1-dist
             python3 -m venv /tmp/mi-video-venv
             /tmp/mi-video-venv/bin/pip install --disable-pip-version-check "Pillow==10.4.0" "numpy==1.26.4"
-            /tmp/mi-video-venv/bin/python fm1/native/tools/pack_eureka_vq_candidate.py \
-              Resources/miyako_eureka_frames.pack fm1/native/mi_eureka_vq_frames.h \
-              --preview fm1-dist/EUREKA_VQ_PREVIEW.png
             /tmp/mi-video-venv/bin/python fm1/native/tools/pack_effects_vq_candidate.py \
               Resources/effects_video_frames.pack fm1/native/mi_effects_vq_frames.h \
               --preview fm1-dist/EFFECTS_VQ_PREVIEW.png
-            grep -q 'MI_EUREKA_ASSET_COUNT 576u' fm1/native/mi_eureka_vq_frames.h
             grep -q 'MI_EFFECTS_ASSET_COUNT 144u' fm1/native/mi_effects_vq_frames.h
-            test -s fm1-dist/EUREKA_VQ_PREVIEW.png
             test -s fm1-dist/EFFECTS_VQ_PREVIEW.png
       - run:
-          name: Verify all 720 original-source frames by independent C decoder CRC
+          name: Verify all 144 EFFECTS source frames by independent C decoder CRC
           command: |
             set -eu
             cc -std=c99 -O2 -Wall -Wextra -Werror \
@@ -81,7 +79,7 @@ jobs:
                fm1/native/mi_control.c fm1/native/mi_control.h \
                fm1/native/mi_audio.c fm1/native/mi_audio.h \
                fm1/native/mi_video.c fm1/native/mi_video.h \
-               fm1/native/mi_eureka_vq_frames.h \
+               fm1/native/mi_fx_dsp.c fm1/native/mi_fx_dsp.h \
                fm1/native/mi_effects_vq_frames.h \
                /tmp/fm1-base/miyako/
             /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
@@ -113,9 +111,9 @@ jobs:
             cat > fm1-dist/README_BEFORE_INSTALL.txt <<'EOF'
             MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE
             Built without the KARMA application and DSP.
-            EUREKA and REEL audio use PROVISIONAL native implementations.
-            All 576 EUREKA + 144 EFFECTS original-source frames are included as 16-colour quantised VQ.
-            DREAMY, DELAY, REVERB, CHORUS and the full multi-FX chain remain unimplemented.
+            REEL, DELAY, REVERB and CHORUS DSP are native development implementations.
+            Original 144 EFFECTS frames are encoded as 16-colour VQ; EUREKA omitted by request.
+            DREAMY and the source-accurate multi-FX chain remain unimplemented.
             This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.
             EOF
             (cd fm1-dist && sha256sum *.fwsc > SHA256SUMS)
