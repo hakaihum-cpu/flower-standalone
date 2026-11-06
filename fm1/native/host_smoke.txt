@@ -1,20 +1,34 @@
-# fm1-base host simulator test of the actual standalone app code.
-# Real FM-1 flashing is NOT implied by a successful simulated run.
+# Real FM-1 hardware controls and audio test against the fm1-base simulator.
+# No claim that the original MIYAKO effects and video are complete.
 master 4096
+expect view 0
+expect wave 0
+expect fx 0
 key 16 down 120
 wait 200
+expect active >0
 key 16 up
-wait 50
+wait 150
 tap EDIT
+expect view 1
 turn K1 2
+expect wave 2
 tap FX
+expect view 2
 turn K1 1
+expect fx 1
 tap SEL
-wait 50
+expect view 3
+expect fx 1
 tap HOME
+expect view 0
 tap SAVE
+expect view 9
 tap SAVE
 tap SAVE
 wait 100
 reboot
 wait 100
+expect view 0
+expect wave 2
+expect fx 1
