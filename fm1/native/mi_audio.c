@@ -246,6 +246,15 @@ static float fx_stage(mi_audio_t *a,const mi_state_t *s,
         wet=mi_fx_dsp_process(&native_fx,mode,dry,a->sample_rate,
                              s->fx_options[mode][0],s->fx_options[mode][1]);
     }else target=0.f;
+    /* EUREKA is genuinely wet-only and its history starts empty. Previously
+     * the wet mixer muted a newly played note before the TIME+HAZE history
+     * was available (observed in #266's first-second host WAV).
+     * Keep dry audible until all two crossfade-grain lookbacks are valid. */
+    if(mode==MI_FX_EUREKA &&
+       !mi_fx_dsp_eureka_ready(&native_fx,
+           s->fx_options[MI_FX_EUREKA][0],
+           s->fx_options[MI_FX_EUREKA][1]))
+        target=0.f;
     *smooth+=(target-*smooth)*0.001f;
     return clampf(dry+(wet-dry)*(*smooth),-1.f,1.f);
 }
