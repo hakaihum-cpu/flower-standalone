@@ -88,6 +88,7 @@ void mi_audio_panic(mi_audio_t *a)
     all_voices_off(a);
     mi_memzero(a->held_keys,sizeof a->held_keys);
     mi_memzero(a->held_velocity,sizeof a->held_velocity);
+    mi_memzero(a->held_refs,sizeof a->held_refs);
     a->arp_clock=0;a->arp_gate_clock=0;a->arp_sounding=0;
     a->held_total=0;
 }
@@ -97,15 +98,21 @@ void mi_audio_input_on(mi_audio_t *a,const mi_state_t *s,
                        uint8_t note,uint8_t velocity)
 {
     if(!a||!s||note>=128u)return;
-    if(!(a->held_keys[note>>5]&(1u<<(note&31u))))++a->held_total;
-    a->held_keys[note>>5]|=1u<<(note&31u);
+    if(!a->held_refs[note]){
+        ++a->held_total;
+        a->held_keys[note>>5]|=1u<<(note&31u);
+    }
+    if(a->held_refs[note]<255u)++a->held_refs[note];
     a->held_velocity[note]=velocity?velocity:1u;
     if(s->arp[0]==0u)mi_audio_note_on(a,note,velocity);
 }
 void mi_audio_input_off(mi_audio_t *a,const mi_state_t *s,uint8_t note)
 {
     if(!a||!s||note>=128u)return;
-    if(a->held_keys[note>>5]&(1u<<(note&31u)))--a->held_total;
+    if(!a->held_refs[note])return;
+    --a->held_refs[note];
+    if(a->held_refs[note])return;
+    --a->held_total;
     a->held_keys[note>>5]&=~(1u<<(note&31u));
     a->held_velocity[note]=0;
     if(s->arp[0]==0u)mi_audio_note_off(a,note);
