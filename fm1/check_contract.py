@@ -112,6 +112,17 @@ require('COUNT = 16 * 36' in packer and
         'mi_eureka_vq_frames.h' in patcher and
         'mi_eureka_vq_frames.h' in verifier,
         "16-colour 576-frame VQ renderer/quality checks not fully integrated")
+# #248: GCC ASan can fail at process startup without a memory-error trace
+# in a PIE executable. Keep ASan+UBSan for EVERY host test, but require
+# non-PIE linking consistently (never suppress a sanitizer diagnostic).
+sanitizer_compile = [line.strip() for line in ci.splitlines()
+                     if line.strip().startswith('cc -std=c99') and
+                     '-fsanitize=address,undefined' in line]
+require(len(sanitizer_compile) == 7 and
+        all(' -fno-pie -no-pie -fsanitize=address,undefined' in line
+            and '-fno-sanitize-recover=all' in line
+            for line in sanitizer_compile),
+        "seven host sanitizer executables must remain instrumented and non-PIE")
 require('WARNING: VQ visual quality below advisory' in vq and
         'raise SystemExit(f"FAIL: VQ quality below' not in vq and
         'if min(worst) < a.min_psnr_db:' in vq and
