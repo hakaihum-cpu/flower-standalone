@@ -42,7 +42,7 @@ jobs:
             /home/circleci/.venv-fm1/bin/python -c "from PIL import Image; print('Pillow available')" 
             /home/circleci/.venv-fm1/bin/python fm1/karma/test_vq_selector_integrity.py
       - run:
-          name: Restore all 576 original JPEGs and make actual RGB565 16-colour VQ pack + preview
+          name: Restore 576 original JPEGs, pack RGB565 tile VQ and report advisory PSNR
           command: |
             set -eu
             python3 scripts/materialize_miyako_eureka_video.py
