@@ -48,4 +48,16 @@ for alpha in (1.0, 2.0, 3.0, 4.0, 6.0):
         "frame-balanced VQ numeric overflow at weighting power " + str(alpha))
     chosen = max((baseline, balanced), key=lambda result: (result[3][0], result[3][1]))
     assert chosen[3][0] >= baseline[3][0]
-print("PASS: 6 VQ training paths x 11520 synthetic 8x4 tiles; final dictionary IDs consistent")
+# Deterministic restart must reproduce the *same* dictionary, selectors
+# and worst-frame PSNR, and every restart uses the 8x4 / 256 codec.
+for seed in (2, 5):
+    first = train_clip(indices, palette565, loops=8,
+                       frame_balance=6.0, seed=seed)
+    second = train_clip(indices, palette565, loops=8,
+                        frame_balance=6.0, seed=seed)
+    verify_dictionary_integrity(*first)
+    verify_dictionary_integrity(*second)
+    assert np.array_equal(first[0], second[0])
+    assert np.array_equal(first[1], second[1])
+    assert first[3] == second[3]
+print("PASS: 6 baseline VQ paths and 2 deterministic multi-start paths; codec unchanged")
