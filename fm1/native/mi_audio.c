@@ -5,7 +5,7 @@
  */
 #include "mi_audio.h"
 #include "mi_fx_dsp.h"
-#include <string.h>
+#include "mi_memory.h"
 static mi_fx_dsp_t native_fx;
 static float clampf(float x,float lo,float hi){return x<lo?lo:x>hi?hi:x;}
 static float wrap01(float x){while(x>=1.f)x-=1.f;while(x<0.f)x+=1.f;return x;}
@@ -45,7 +45,7 @@ static float osc(uint8_t wave,float phase,float duty)
 }
 void mi_audio_init(mi_audio_t *a,float rate)
 {
-    memset(a,0,sizeof(*a));
+    mi_memzero(a,0,sizeof(*a));
     a->sample_rate=rate>=8000.f&&rate<=192000.f?rate:44100.f;
     a->rand_state=0x4d495941u;
     mi_fx_dsp_init(&native_fx);
