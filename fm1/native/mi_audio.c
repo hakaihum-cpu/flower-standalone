@@ -50,6 +50,7 @@ void mi_audio_init(mi_audio_t *a,float rate)
     a->rand_state=0x4d495941u;
     a->arp_random=0x50414e5au;
     mi_fx_dsp_init(&native_fx);
+    mi_rec_init(&a->recorder);
     a->last_mode=MI_FX_OFF;
 }
 void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
@@ -91,6 +92,7 @@ void mi_audio_panic(mi_audio_t *a)
     mi_memzero(a->held_refs,sizeof a->held_refs);
     a->arp_clock=0;a->arp_gate_clock=0;a->arp_sounding=0;
     a->held_total=0;
+    mi_rec_stop(&a->recorder);
 }
 /* Keep raw keyboard/midi held notes; arpeggiator and live voice routing
  * share the same source so release cannot leave stuck repeating notes. */
@@ -254,6 +256,11 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
     a->wet_current+=(target-a->wet_current)*0.001f;
     return dry+(wet-dry)*a->wet_current;
 }
+void mi_audio_rec_request(mi_audio_t *a,unsigned command)
+{
+    if(a && (command==1u || command==2u))
+        a->rec_command=(uint8_t)command;
+}
 void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,uint32_t master_q12)
 {
     uint32_t i,k;
@@ -270,6 +277,13 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     release_samples=a->sample_rate*(0.005f+3.f*rel*rel);
     lfo_speed=(0.07f+15.f*(float)s->lfo[0]/127.f)/a->sample_rate;
     arp_sync(a,s);
+    /* UI updates only an 8-bit command; the audio thread owns the samples. */
+    if(a->rec_command){
+        uint8_t cmd=a->rec_command;
+        a->rec_command=0u;
+        if(cmd==1u)mi_rec_toggle_record(&a->recorder);
+        if(cmd==2u)mi_rec_toggle_play(&a->recorder);
+    }
     for(i=0;i<n;i++){
         float sample=0.f,lfo,mod,voice_duty=duty;
         arp_tick(a,s);
@@ -318,6 +332,9 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         }
         sample=clampf(sample,-1.f,1.f);
         sample=effect(a,s,sample);
+        /* Capture is post-FX and pre-master, before clip playback is mixed.
+         * No hidden overdub; REC never recursively records PLAY. */
+        sample=clampf(sample+mi_rec_tick(&a->recorder,sample,s->seq),-1.f,1.f);
         {
             int32_t out=(int32_t)(clampf(sample,-1.f,1.f)*scale);
             lr[2u*i]=out;lr[2u*i+1u]=out;
