@@ -57,6 +57,8 @@ void mi_init(mi_state_t *s)
     s->lfo[0] = 35; s->lfo[1] = 0; s->lfo[2] = 0; s->lfo[3] = 0;
     s->fx_options[MI_FX_DREAMY][0] = 64;
     s->fx_options[MI_FX_DREAMY][1] = 80;
+    /* REC editor: IN=0, OUT=127, pitch=0 semitones, level=100. */
+    s->seq[0]=0;s->seq[1]=127;s->seq[2]=3;s->seq[3]=100;
 }
 static void view(mi_state_t *s, mi_view_t v)
 {
@@ -86,8 +88,8 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
         s->octave = (int8_t)limited(s->octave, -1, -3, 3); break;
     case MI_B_OCT_UP:
         s->octave = (int8_t)limited(s->octave, +1, -3, 3); break;
-    case MI_B_PLAY: return result(MI_ACTION_PLAY, 0);
-    case MI_B_REC: return result(MI_ACTION_RECORD, 0);
+    case MI_B_PLAY: view(s,MI_SEQ);return result(MI_ACTION_PLAY, 0);
+    case MI_B_REC: view(s,MI_SEQ);return result(MI_ACTION_RECORD, 0);
     case MI_B_SAVE:
         if (s->view != MI_SAVE) {
             view(s, MI_SAVE);
@@ -139,7 +141,12 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         if(k==2){lo=10;hi=100;}
         if(k==3){lo=1;hi=4;}
         break;
-    case MI_SEQ: p = &s->seq[k]; break;
+    case MI_SEQ:
+        p=&s->seq[k];
+        if(k==0)hi=s->seq[1]>0u?(int32_t)s->seq[1]-1:0;
+        if(k==1)lo=(int32_t)s->seq[0]+1;
+        if(k==2)hi=6;
+        break;
     case MI_CONFIG: {
         static const int16_t mn[] = {40, 0, -50, 0};
         static const int16_t mx[] = {240, 100, 50, 2};
@@ -195,7 +202,7 @@ const char *mi_view_name(mi_view_t v)
 {
     static const char *const names[] = {
         "HOME", "OSC", "FX", "VIDEO", "ENV", "LFO",
-        "ARP", "SEQ", "CONFIG", "SAVE"
+        "ARP", "RECORDER", "CONFIG", "SAVE"
     };
     return (unsigned)v < MI_VIEW_COUNT ? names[v] : "?";
 }
@@ -212,7 +219,7 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         {"WAVE","MODE","WET","LEVEL"}, {"WAVE","WIDTH","SUB","CRUSH"},
         {"MODE","WET","P3","P4"}, {"MODE","WET","P3","P4"},
         {"ATK","DEC","SUS","REL"}, {"RATE","WAVE","DEPTH","DEST"},
-        {"MODE","RATE","GATE","OCT"}, {"LEN","DIV","SWG","GATE"},
+        {"MODE","RATE","GATE","OCT"}, {"IN","OUT","PITCH","LEVEL"},
         {"BPM","SWING","TUNE","CLOCK"}, {"SLOT","","",""}
     };
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
