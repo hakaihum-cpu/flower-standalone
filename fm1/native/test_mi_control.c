@@ -19,25 +19,25 @@ int main(void)
     assert(s.view == MI_OSC && s.wave == 3);
     mi_button(&s, MI_B_FX, 0);
     mi_rotate(&s, MI_EN_K1, 2);
-    assert(s.fx == MI_FX_EUREKA);
-    assert(!strcmp(mi_param_name(&s,2),"SIZE"));
-    assert(!strcmp(mi_param_name(&s,3),"REPS"));
-    assert(mi_param_value(&s,2) == 64 && mi_param_value(&s,3) == 80);
+    assert(s.fx == MI_FX_DREAMY);
+    assert(!strcmp(mi_param_name(&s,2),"TBD"));
+    assert(!strcmp(mi_param_name(&s,3),"TBD"));
+    assert(mi_param_value(&s,2) == 0 && mi_param_value(&s,3) == 0);
     mi_button(&s, MI_B_HOME, 0);
     mi_rotate(&s, MI_EN_PRESETS, 1);
     assert(s.preset == 1 && s.wave == 1);
     mi_rotate(&s, MI_EN_PRESETS, 4096);
     assert(s.preset == 2); /* physical detent: one preset per event */
     for(i=0;i<4;++i) mi_rotate(&s, MI_EN_PRESETS, 1);
-    assert(s.preset == 5 && s.fx == MI_FX_EUREKA);
+    assert(s.preset == 5 && s.fx == MI_FX_CHORUS);
     s.wet=0;
     mi_button(&s, MI_B_SEL, 12);
-    assert(s.view == MI_VIDEO && s.wet == 0 && s.fx == MI_FX_EUREKA);
+    assert(s.view == MI_VIDEO && s.wet == 0 && s.fx == MI_FX_CHORUS);
     mi_button(&s, MI_B_FX, 13);
-    mi_rotate(&s, MI_EN_K1, 1);
-    assert(s.fx == MI_FX_DREAMY);
+    mi_rotate(&s, MI_EN_K1, -1);
+    assert(s.fx == MI_FX_REVERB);
     mi_button(&s, MI_B_SEL, 14);
-    assert(s.view == MI_VIDEO && s.fx == MI_FX_DREAMY && s.wet == 0);
+    assert(s.view == MI_VIDEO && s.fx == MI_FX_REVERB && s.wet == 0);
     assert(!strcmp(mi_fx_name(MI_FX_REVERB), "REVERB"));
     mi_button(&s, MI_B_GLO, 12);
     mi_rotate(&s, MI_EN_K1, 2000);
@@ -60,7 +60,7 @@ int main(void)
     assert(mi_button(&s, MI_B_REC, 7001).action == MI_ACTION_RECORD);
     for(i=0;i<5;i++) mi_button(&s, MI_B_OCT_DOWN, 7001);
     assert(s.octave == -3);
-    assert(MI_FX_COUNT == 7 && MI_VIEW_COUNT == 10);
+    assert(MI_FX_COUNT == 6 && MI_VIEW_COUNT == 10);
     puts("PASS: independent MIYAKO control mapping and guarded save");
     return 0;
 }
