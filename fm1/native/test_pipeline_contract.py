@@ -205,7 +205,16 @@ assert "lfo_value" in audio
 assert "mode==MI_FX_DREAMY" in fxcode
 assert "mi_wave_name" in controls
 assert "case MI_VIDEO:" in controls
-assert "MI_FX_DREAMY" in audio and "mi_fx_dsp_process" in audio
+# All non-REEL FX, including DREAMY, are routed through one generic
+# native DSP dispatcher. Do not regress to checking a non-existent per-mode
+# branch: that stale assertion caused #263 to fail before any C tests ran.
+assert "mi_fx_dsp_process(&native_fx,mode,dry,a->sample_rate" in audio
+assert "mode!=MI_FX_OFF&&mode<MI_FX_COUNT" in audio
+# The DSP and its host test must both exercise DREAMY, not just name a menu.
+assert "mode==MI_FX_DREAMY" in fxcode
+fx_test = (root / "fm1/native/test_mi_fx_dsp.c").read_text(encoding="utf-8")
+assert "mi_fx_dsp_process(&p,MI_FX_DREAMY" in fx_test
+assert "assert(peak>0.01f)" in fx_test
 own_lines = Path(__file__).read_text(encoding="utf-8").splitlines()
 assert len(own_lines)>100 and own_lines[-1].startswith("print(")
 recorder = (root / "fm1/native/mi_recorder.c").read_text(encoding="utf-8")
