@@ -58,6 +58,12 @@ assert "MI_EUREKA_ASSET_COUNT" not in ci
 # Pillow MUST already be installed in the SAME interpreter before first --host.
 assert ci.index("Install Python font and media dependencies") < ci.index("Host-compile real MIYAKO app")
 assert ci.index("Pillow==10.4.0") < ci.index("Host-compile real MIYAKO app")
+assert ci.count("fm1/native/words.tsv") == 1, (
+    "fm1-base gen_words.py requires words.tsv copied into app directory"
+)
+words = (root / "fm1/native/words.tsv").read_text(encoding="ascii")
+assert any(x.startswith("# url: https://") and x.endswith("/words/")
+           for x in words.splitlines()), "gen_words.py requires a words URL"
 assert "from PIL import Image, ImageDraw, ImageFont" in ci
 assert "python3 /tmp/fm1-base/tools/build.py" not in ci
 assert ci.count("/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py") >= 3
