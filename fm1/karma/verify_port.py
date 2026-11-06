@@ -16,7 +16,8 @@ def verify_compiled_source_closure(src: Path):
     removed_units = {"eng_phys.c", "eng_elem.c", "eng_prism.c",
                      "eng_acid.c", "cloud.c"}
     removed_symbols = re.compile(
-        r"\b(?:ENG_PHYS|ENG_ELEM|ENG_PRISM|"
+        r"\b(?:ENG_ACID|ENG_PHYS|ENG_ELEM|ENG_PRISM|"
+        r"acid_slot_t|prism_slot_t|PHYS_ARENA|PRISM_ARENA|"
         r"phys_poly|elem_poly|prism_poly|EM_BOUNCE|EM_PICK|"
         r"prism_model|PRM_[A-Z0-9_]+|"
         r"pr_harm_[A-Za-z0-9_]*|pr_fold_[A-Za-z0-9_]*|"
