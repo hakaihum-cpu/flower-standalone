@@ -13,6 +13,7 @@ required = (
     "fm1_standalone_preflight",
     "fm1/native/verify_standalone.py",
     "fm1/native/test_mi_control.c",
+    "fm1/native/test_mi_audio.c",
 )
 for item in required:
     assert item in ci, f"missing mandatory CircleCI gate: {item}"
