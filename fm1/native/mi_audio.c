@@ -45,7 +45,7 @@ static float osc(uint8_t wave,float phase,float duty)
 }
 void mi_audio_init(mi_audio_t *a,float rate)
 {
-    mi_memzero(a,0,sizeof(*a));
+    mi_memzero(a,sizeof(*a));
     a->sample_rate=rate>=8000.f&&rate<=192000.f?rate:44100.f;
     a->rand_state=0x4d495941u;
     mi_fx_dsp_init(&native_fx);
