@@ -61,8 +61,7 @@ jobs:
               'extern const uint16_t mi_eureka_vq_palette[16][16];' \
               'extern const uint8_t mi_eureka_vq_tilebook[16][256][16];' \
               'extern const uint8_t mi_eureka_vq_maps[576][320];' \
-              '#endif'
-              > fm1/karma/mi_eureka_vq_frames.h
+              '#endif' > fm1/karma/mi_eureka_vq_frames.h
             for source in fm1/karma/test_dot_ui.c fm1/karma/test_eureka_video.c fm1/karma/test_eureka_vq_decoder.c; do
               cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only "$source"
             done
