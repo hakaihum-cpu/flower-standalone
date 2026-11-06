@@ -1,7 +1,7 @@
 # Independent MIYAKO app on the MPL-2.0 fm1-base hardware layer.
 name = "MIYAKO"
-# M-UPGRADE trial identity: FM-1_931, distinct from current KARMA FM-1_926.
-# fm1-base normally appends "00"; pinned build.py patch changes suffix to "31".
+# New native UI/ARP/FX development identity: FM-1_932 (previous MIYAKO FM-1_931).
+# fm1-base normally appends "00"; pinned build.py patch changes suffix to "32".
 id_prefix = "FM-1_9"
 usb_manufacturer = "MIYAKO"
 usb_product = "MIYAKO FM-1"
