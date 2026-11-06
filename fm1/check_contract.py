@@ -52,7 +52,27 @@ require(all(name in early_loop for name in early_host) and
         'cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only' in ci and
         ci.index(early_loop) < ci.index('pack_eureka_vq_candidate.py \\') and
         ci.index('fm1/karma/test_dot_ui.c -lm') > ci.index('pack_eureka_vq_candidate.py \\'),
-        "CI early syntax gate needs four non-video tests; DOT requires generated VQ data")
+        "CI early syntax gate requires four media-independent host tests")
+host_dot = (root / 'fm1' / 'karma' / 'test_dot_ui.c').read_text(encoding='utf-8')
+video_test = (root / 'fm1' / 'karma' / 'test_eureka_video.c').read_text(encoding='utf-8')
+require('#define C_BLACK 0u' in host_dot and
+        'C_BLACK' in video,
+        "DOT harness must declare C_BLACK used by EUREKA video (#249)")
+video_compile_loop = next((line for line in ci.splitlines()
+                           if 'for source in fm1/karma/test_dot_ui.c' in line), '')
+require(all(name in video_compile_loop for name in
+            ('fm1/karma/test_dot_ui.c', 'fm1/karma/test_eureka_video.c',
+             'fm1/karma/test_eureka_vq_decoder.c')) and
+        "cat > fm1/karma/mi_eureka_vq_frames.h <<'FM1_VQ_SYNTAX_ONLY'" in ci and
+        'extern const uint16_t mi_eureka_vq_palette[16][16];' in ci and
+        'extern const uint8_t mi_eureka_vq_maps[576][320];' in ci and
+        'test ! -e fm1/karma/mi_eureka_vq_frames.h' in ci and
+        'rm -f fm1/karma/mi_eureka_vq_frames.h' in ci and
+        ci.index(video_compile_loop) < ci.index('python3 -m venv') and
+        ci.index('rm -f fm1/karma/mi_eureka_vq_frames.h') <
+        ci.index('python3 -m venv'),
+        "CI must syntax-compile all video/DOT hosts before encoding, then remove fixture")
+
 
 for token in ('"SINE"', '"SAW"', '"SQR"', '"PULSE"', '"REEL"', '"EUREKA"', '"CRUSH"',
               'ENG_MIYAKO', 'miyako_note_on', 'miyako_render', 'miyako_post',
