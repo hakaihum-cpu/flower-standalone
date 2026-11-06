@@ -65,6 +65,14 @@ words = (root / "fm1/native/words.tsv").read_text(encoding="ascii")
 assert any(x.startswith("# url: https://") and x.endswith("/words/")
            for x in words.splitlines()), "gen_words.py requires a words URL"
 assert "from PIL import Image, ImageDraw, ImageFont" in ci
+# fm1-base defaults to Barlow TTF with OpenType tnum features, which fails
+# in CircleCI Pillow builds without libraqm. Use tested bundled BDF fonts.
+assert 'X0X_FONTSET: "terminus"' in ci, (
+    "FM-1 font generator must not require unavailable libraqm"
+)
+assert "assets/fonts/ter-u12n.bdf" in ci and "assets/fonts/ter-u16b.bdf" in ci
+assert ci.index("tools/gen_font.py") < ci.index("tools/build.py /tmp/fm1-base/miyako --host")
+assert "test -s /tmp/mi_font_preflight.h" in ci
 assert "python3 /tmp/fm1-base/tools/build.py" not in ci
 assert ci.count("/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py") >= 3
 assert ci.index("Host-compile real MIYAKO app") < ci.index("Reconstruct all 144 original")
