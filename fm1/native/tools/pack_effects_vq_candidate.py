@@ -269,8 +269,8 @@ def main():
                 chosen, selected = trial, f"frame-balanced {balance:g}"
         # Deterministic multi-start search: local 140-frame source checks
         # showed measurable worst-frame gains without changing the codec.
-        # Only accept a candidate when its measured worst-frame PSNR
-        # improves (tie-break on mean); never relax the 26 dB gate.
+        # Retain the candidate with best observed PSNR; quality is advisory.
+        # The former 26 dB minimum was explicitly withdrawn by the user.
         for seed in (2, 3, 5, 7):
             trial = train_clip(idx, palette, loops=18,
                                frame_balance=6.0, seed=clip * 100 + seed)
