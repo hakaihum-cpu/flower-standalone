@@ -8,6 +8,7 @@
  */
 #include "mi_control.h"
 #include "mi_audio.h"
+#include "mi_video.h"
 #include <string.h>
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
@@ -19,6 +20,8 @@ typedef struct {
 } saved_t;
 static mi_state_t state;
 static mi_audio_t audio;
+static mi_video_t video;
+static volatile float audio_activity;
 static uint32_t last_keys,last_buttons;
 static uint8_t held_note[NKEYS];
 static int redraw;
@@ -52,6 +55,7 @@ void app_init(void)
  saved_t saved;
  mi_init(&state);
  mi_audio_init(&audio,44100.f);
+ mi_video_init(&video,0); /* No fabricated EFFECTS video frames. Set actual count after asset port. */
  if(plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved&&
     saved.magic==SAVED_MAGIC&&valid_state(&saved.state)){
      state=saved.state;
@@ -86,8 +90,16 @@ static void midi_audio_poll(void)
 }
 void app_render(int32_t *lr,uint32_t n,uint32_t master_q12)
 {
+ uint32_t i;
+ int32_t peak=0;
  midi_audio_poll();
  mi_audio_render(&audio,&state,lr,n,master_q12);
+ for(i=0;i<n;i++){
+     int32_t sample=lr[2u*i];
+     if(sample<0)sample=-sample;
+     if(sample>peak)peak=sample;
+ }
+ audio_activity=(float)peak/8388607.f;
 }
 void app_say(const char *a,const char *b)
 {
@@ -218,8 +230,16 @@ void app_ui_init(void)
 }
 void app_frame(void)
 {
+ static uint32_t video_time;
+ uint32_t now;
  input();
- if(message_until&&plat_ms()>=message_until){message_until=0;redraw=1;}
+ now=plat_ms();
+ if(now-video_time>=33u){
+     video_time=now;
+     mi_video_tick(&video,audio_activity,state.fx==MI_FX_EUREKA);
+     if(state.view==MI_VIDEO)redraw=1;
+ }
+ if(message_until&&now>=message_until){message_until=0;redraw=1;}
  if(redraw){draw();redraw=0;}
 }
 #ifdef PLAT_HOST
