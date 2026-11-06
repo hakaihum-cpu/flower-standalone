@@ -7,6 +7,8 @@
 #include <stdint.h>
 typedef struct {
     uint32_t delay_write;
+    uint32_t dreamy_write, dreamy_valid;
+    float dreamy_phase;
     uint32_t chorus_write;
     uint32_t reverb_write[4];
     float chorus_phase;
