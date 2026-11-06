@@ -138,14 +138,14 @@ jobs:
               /tmp/fm1-base/miyako/build/loader/ota.bin \
               --base /tmp/fm1-base --product FM-1_9100
             cp /tmp/fm1-base/miyako/build/miyako.fwsc fm1-dist/MIYAKO-FM1-NATIVE-DEV.fwsc
-            cat > fm1-dist/README_BEFORE_INSTALL.txt <<'EOF'
-            MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE
-            Built without the KARMA application and DSP.
-            REEL, DELAY, REVERB and CHORUS DSP are native development implementations.
-            Original 144 EFFECTS frames are encoded as 16-colour VQ; EUREKA omitted by request.
-            DREAMY and the source-accurate multi-FX chain remain unimplemented.
-            This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.
-            EOF
+            printf '%s\\n' \
+              'MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE' \
+              'Built without the KARMA application and DSP.' \
+              'REEL, DELAY, REVERB and CHORUS DSP are native development implementations.' \
+              'Original 144 EFFECTS frames are encoded as 16-colour VQ; EUREKA omitted by request.' \
+              'DREAMY and the source-accurate multi-FX chain remain unimplemented.' \
+              'This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.' \
+              > fm1-dist/README_BEFORE_INSTALL.txt
             (cd fm1-dist && sha256sum *.fwsc > SHA256SUMS)
       - store_artifacts:
           path: fm1-dist
