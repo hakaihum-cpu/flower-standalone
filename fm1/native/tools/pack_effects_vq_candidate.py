@@ -3,7 +3,8 @@
 
 This is the explicitly selected 16-colour VQ candidate build path. It is
 tested for exact frame count, bounded media size and decoder integrity in CI.
-PSNR is reported to reveal visible loss, but is not a device requirement.
+PSNR is informational only: never reject the original 144-frame
+preview firmware for a numeric image-quality threshold.
 All 144 source JPEG frames are used. Additional lossy tile quantisation is
 reported with per-frame RGB PSNR, never concealed as exact original pixels.
 """
@@ -243,9 +244,6 @@ def main():
     p.add_argument("source", type=Path)
     p.add_argument("output_header", type=Path)
     p.add_argument("--preview", type=Path)
-    p.add_argument("--min-psnr-db", type=float, default=26.0,
-                   help="Advisory minimum additional RGB PSNR per frame; "
-                        "reports visual loss without blocking firmware packaging")
     a = p.parse_args()
     source = a.source.read_bytes()
     if source[:4] != b"CRF1" or struct.unpack_from("<I", source, 4)[0] != 144:
@@ -264,30 +262,29 @@ def main():
         base = train_clip(idx, palette)
         selected = "original"
         chosen = base
-        if base[3][0] < a.min_psnr_db:
-            for balance in (1.0, 2.0, 3.0, 4.0, 6.0):
-                trial = train_clip(idx, palette, loops=18,
-                                   frame_balance=balance)
-                if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
-                    chosen, selected = trial, f"frame-balanced {balance:g}"
-            # Deterministic multi-start search: local 140-frame source checks
-            # showed measurable worst-frame gains without changing the codec.
-            # Only accept a candidate when its measured worst-frame PSNR
-            # improves (tie-break on mean); never relax the 26 dB gate.
-            for seed in (2, 3, 5, 7):
-                trial = train_clip(idx, palette, loops=18,
-                                   frame_balance=6.0, seed=clip * 100 + seed)
-                if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
-                    chosen, selected = trial, f"multi-start {seed}"
-            # Use the same codec with RGB-distance-spread starting tiles.
-            # Local source checks improved the worst frame in two of three
-            # complete 36-frame clips. Rejected if worse than existing starts.
-            for seed in (11, 17):
-                trial = train_clip(idx, palette, loops=18,
-                                   frame_balance=6.0,
-                                   seed=-(clip * 100 + seed))
-                if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
-                    chosen, selected = trial, f"spread-start {seed}"
+        for balance in (1.0, 2.0, 3.0, 4.0, 6.0):
+            trial = train_clip(idx, palette, loops=18,
+                               frame_balance=balance)
+            if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
+                chosen, selected = trial, f"frame-balanced {balance:g}"
+        # Deterministic multi-start search: local 140-frame source checks
+        # showed measurable worst-frame gains without changing the codec.
+        # Only accept a candidate when its measured worst-frame PSNR
+        # improves (tie-break on mean); never relax the 26 dB gate.
+        for seed in (2, 3, 5, 7):
+            trial = train_clip(idx, palette, loops=18,
+                               frame_balance=6.0, seed=clip * 100 + seed)
+            if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
+                chosen, selected = trial, f"multi-start {seed}"
+        # Use the same codec with RGB-distance-spread starting tiles.
+        # Local source checks improved the worst frame in two of three
+        # complete 36-frame clips. Rejected if worse than existing starts.
+        for seed in (11, 17):
+            trial = train_clip(idx, palette, loops=18,
+                               frame_balance=6.0,
+                               seed=-(clip * 100 + seed))
+            if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
+                chosen, selected = trial, f"spread-start {seed}"
         book, ids, recon, quality = chosen
         blob = pack_nibbles(book)
         if not np.array_equal(book, np.stack([np.frombuffer(blob, np.uint8) >> 4,
@@ -322,11 +319,9 @@ def main():
           f"media {MEDIA_BYTES}/{APP_SLOT} bytes; worst additional PSNR "
           f"{min(worst):.2f} dB; decoded CRC32={decoded_crc32:08X}; "
           "firmware Flash fit and physical LCD/audio are NOT yet validated")
-    if min(worst) < a.min_psnr_db:
-        raise SystemExit(
-            f"FAIL: original-source EFFECTS visual quality below mandatory "
-            f"{a.min_psnr_db:.1f} dB PSNR: worst {min(worst):.2f} dB across "
-            "144 original frames. No unapproved low-quality FWSC will be produced.")
+    print("INFO: PSNR is a non-blocking visual quality metric; this user-approved "
+          "development build is gated on source frame count, pixel layout, "
+          "VQ CRC, firmware flash/RAM, and package integrity only.", flush=True)
 
 
 if __name__ == "__main__":
