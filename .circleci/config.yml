@@ -29,11 +29,21 @@ jobs:
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie                -fsanitize=address,undefined -fno-sanitize-recover=all                fm1/native/mi_control.c fm1/native/test_mi_control.c                -o /tmp/miyako_fm1_control_test
             /tmp/miyako_fm1_control_test
       - run:
+          name: Host compile native MIYAKO oscillator and provisional audio FX
+          command: |
+            set -eu
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+               -fsanitize=address,undefined -fno-sanitize-recover=all \
+               fm1/native/mi_control.c fm1/native/mi_audio.c \
+               fm1/native/test_mi_audio.c \
+               -o /tmp/miyako_fm1_audio_test
+            /tmp/miyako_fm1_audio_test
+      - run:
           name: Record actual readiness stage; do not package a fake firmware
           command: |
             set -eu
             mkdir -p fm1-dist
-            printf '%s\n'               'MIYAKO FM-1 standalone native preflight only'               'PASS here is NOT firmware compile, FWSC, or physical device verification.'               'Missing: real MIYAKO audio/FX implementation, all required visual media,'               'independent FM-1 HAL and startup/boot/update, target linker, hardware tests.'               > fm1-dist/READINESS.txt
+            printf '%s\n'               'MIYAKO FM-1 standalone native preflight only'               'PASS here is NOT firmware compile, FWSC, or physical device verification.'               'Missing: original-fidelity MIYAKO FX, all required visual media,'               'independent FM-1 HAL and startup/boot/update, target linker, hardware tests.'               > fm1-dist/READINESS.txt
             test ! -e fm1-dist/MIYAKO-FM1-PREVIEW.fwsc
       - store_artifacts:
           path: fm1-dist
