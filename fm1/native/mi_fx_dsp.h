@@ -6,7 +6,7 @@
 #define MI_NATIVE_FX_DSP_H
 #include <stdint.h>
 typedef struct {
-    uint32_t delay_write;
+    uint32_t delay_write,delay_valid;
     uint32_t eureka_write,eureka_valid;
     uint8_t eureka_decimate;
     float eureka_sum,eureka_phase,eureka_filter;
