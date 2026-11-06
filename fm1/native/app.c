@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Independent MIYAKO FM-1 app using only fm1-base's hardware platform API.
- * This is an INCOMPLETE port. EUREKA and EFFECTS original-source video
- * frame banks are generated at build time (16-colour lossy VQ), but the
- * original full MIYAKO DSP and simultaneous FX routing are still absent.
+ * This is an INCOMPLETE port. The original EFFECTS animation frames are
+ * converted at build time (16-colour lossy VQ). EUREKA is excluded at the
+ * user's request. Full original MIYAKO DSP is not yet present.
  * Do not release this development image as the approved MIYAKO firmware.
  *
  * Compiled inside fm1-base's unity.c after gfx.c and lib/touch.c.
@@ -11,7 +11,6 @@
 #include "mi_control.h"
 #include "mi_audio.h"
 #include "mi_video.h"
-#include "mi_eureka_vq_frames.h" /* generated: ALL 576 user-source frames */
 #include "mi_effects_vq_frames.h" /* generated: ALL 144 user-source frames */
 #include <string.h>
 #define YELLOW RGB(255,209,12)
@@ -184,33 +183,24 @@ void app_input_only(void){input();}
  * No runtime dependency on other firmware or their DSP.
  * Source imagery is perceptually quantised by the build generator: NOT bit-exact.
  */
-static uint8_t mi_media_pixels[MI_EUREKA_ASSET_BYTES];
+static uint8_t mi_media_pixels[MI_EFFECTS_ASSET_BYTES];
 static int16_t mi_media_prior=-1;
-static uint8_t mi_media_is_eureka=0xff;
 static const uint16_t *mi_media_palette;
-static void mi_media_decode(unsigned frame,int eureka)
+static void mi_media_decode(unsigned frame)
 {
  unsigned ty,tx,row,at;
  const uint8_t (*book)[16];
  const uint8_t *map;
- if(eureka){
-     if(frame>=MI_EUREKA_ASSET_COUNT)return;
-     if(mi_media_is_eureka==1&&mi_media_prior==(int16_t)frame)return;
-     book=mi_eureka_vq_tilebook[frame/36u];
-     map=mi_eureka_vq_maps[frame];
-     mi_media_palette=mi_eureka_vq_palette[frame/36u];
- }else{
-     if(frame>=MI_EFFECTS_ASSET_COUNT)return;
-     if(mi_media_is_eureka==0&&mi_media_prior==(int16_t)frame)return;
-     book=mi_effects_vq_tilebook[frame/36u];
-     map=mi_effects_vq_maps[frame];
-     mi_media_palette=mi_effects_vq_palette[frame/36u];
- }
+ if(frame>=MI_EFFECTS_ASSET_COUNT)return;
+ if(mi_media_prior==(int16_t)frame)return;
+ book=mi_effects_vq_tilebook[frame/36u];
+ map=mi_effects_vq_maps[frame];
+ mi_media_palette=mi_effects_vq_palette[frame/36u];
  for(ty=0;ty<20u;ty++)for(tx=0;tx<16u;tx++){
     const uint8_t *tile=book[map[ty*16u+tx]];
     for(row=0;row<4u;row++){
         unsigned y=ty*4u+row;
-        if(y>=MI_EUREKA_ASSET_H)break;
+        if(y>=MI_EFFECTS_ASSET_H)break;
         at=y*64u+tx*4u;
         mi_media_pixels[at]=tile[row*4u];
         mi_media_pixels[at+1u]=tile[row*4u+1u];
@@ -219,26 +209,22 @@ static void mi_media_decode(unsigned frame,int eureka)
     }
  }
  mi_media_prior=(int16_t)frame;
- mi_media_is_eureka=(uint8_t)eureka;
 }
 static void mi_media_draw(void)
 {
  uint32_t y,x;
- int eureka=state.fx==MI_FX_EUREKA;
- int frame=eureka?video.eureka_frame:video.effects_frame;
+ int frame=video.effects_frame;
  if(frame<0)return;
- mi_media_decode((unsigned)frame,eureka);
- /* 128 x 78 shown in a 192 x 117 undistorted viewport.
-  * Contiguous palette runs reduce LCD draw calls. */
- for(y=0;y<MI_EUREKA_ASSET_H;y++){
+ mi_media_decode((unsigned)frame);
+ for(y=0;y<MI_EFFECTS_ASSET_H;y++){
      x=0;
-     while(x<MI_EUREKA_ASSET_W){
-         unsigned b=y*MI_EUREKA_ASSET_W+x;
+     while(x<MI_EFFECTS_ASSET_W){
+         unsigned b=y*MI_EFFECTS_ASSET_W+x;
          unsigned idx=(x&1u)?(mi_media_pixels[b>>1]&15u):(mi_media_pixels[b>>1]>>4);
          unsigned start=x++,end;
          if(idx==0u)continue;
-         while(x<MI_EUREKA_ASSET_W){
-             b=y*MI_EUREKA_ASSET_W+x;
+         while(x<MI_EFFECTS_ASSET_W){
+             b=y*MI_EFFECTS_ASSET_W+x;
              unsigned j=(x&1u)?(mi_media_pixels[b>>1]&15u):(mi_media_pixels[b>>1]>>4);
              if(j!=idx)break;
              ++x;
@@ -255,7 +241,6 @@ static void mi_media_draw(void)
      }
  }
 }
-
 static void draw(void)
 {
  uint32_t i,now=plat_ms();
@@ -318,11 +303,9 @@ void app_frame(void)
  now=plat_ms();
  if(now-video_time>=33u){
      video_time=now;
-     int16_t old_eureka=video.eureka_frame;
      int16_t old_effects=video.effects_frame;
-     mi_video_tick(&video,audio_activity,state.fx==MI_FX_EUREKA);
-     if(state.view==MI_VIDEO &&
-       (old_eureka!=video.eureka_frame||old_effects!=video.effects_frame))
+     mi_video_tick(&video,audio_activity,0);
+     if(state.view==MI_VIDEO && old_effects!=video.effects_frame)
          redraw=1;
  }
  if(message_until&&now>=message_until){message_until=0;redraw=1;}
