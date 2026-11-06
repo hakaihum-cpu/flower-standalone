@@ -9,7 +9,7 @@ required = (
     "version: 2.1",
     "default: false",
     "when: << pipeline.parameters.run_build >>",
-    "only: feature/fm1-miyako-no-eureka-20261106",
+    "only: feature/fm1-miyako-visual-arp-fx-20261107",
     "fm1_native_build",
     "MIYAKO-FM1-NATIVE-DEV.fwsc",
     "MI_EFFECTS_ASSET_COUNT 144u",
@@ -24,6 +24,9 @@ required = (
     "tools/check_host_wav.py",
     "tools/verify_fwsc.py",
     "MIYAKO_FX_PREVIEW.wav",
+    "MIYAKO_ENV.png",
+    "MIYAKO_LFO.png",
+    "MIYAKO_ARP.png",
 )
 for item in required:
     assert item in ci, f"missing mandatory CircleCI gate: {item}"
@@ -44,7 +47,7 @@ assert "<<" not in ci.replace("<< pipeline.parameters.run_build >>", ""), (
     "CircleCI 2.1 unclosed << tag: replace shell here-documents with printf"
 )
 assert "printf '%s\\n'" in ci, "README must use a CircleCI-safe printf"
-assert re.search(r"^\s+only: feature/fm1-miyako-no-eureka-20261106\s*$", ci, re.M)
+assert re.search(r"^\s+only: feature/fm1-miyako-visual-arp-fx-20261107\s*$", ci, re.M)
 assert "/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako" in ci
 assert "test_media_crc.c" in ci
 assert "pack_effects_vq_candidate.py" in ci
@@ -52,7 +55,7 @@ assert "pack_eureka_vq_candidate.py" not in ci
 assert "test -s /tmp/fm1-base/miyako/build/miyako.fwsc" in ci
 assert "scripts/materialize_effects_video_pack.py" in ci
 assert "scripts/materialize_miyako_eureka_video.py" not in ci
-assert "DREAMY and the source-accurate multi-FX" in ci
+assert "Original source-accurate multiple-FX routing remains pending" in ci
 assert "MI_EUREKA_ASSET_COUNT" not in ci
 # fm1-base tools/build.py uses sys.executable for gen_font.py.
 # Pillow MUST already be installed in the SAME interpreter before first --host.
@@ -120,15 +123,15 @@ assert (root / "fm1/native/mi_memory.h").is_file()
 manifest = (root / "fm1/native/fm1.toml").read_text(encoding="utf-8")
 app_header = (root / "fm1/native/app.h").read_text(encoding="utf-8")
 assert 'id_prefix = "FM-1_9"' in manifest
-assert '#define APP_VERSION "0.1.0-DEV"' in app_header
+assert '#define APP_VERSION "0.2.0-DEV"' in app_header
 assert 'APP_TAGLINE "NATIVE TRIAL"' in app_header
-assert "--product FM-1_931" in ci
+assert "--product FM-1_932" in ci
 # Keep package header marker and running firmware FELUCCA_ID in sync by
 # patching the pinned original builder BEFORE ANY compilation step.
 id_patch = (root / "fm1/native/tools/set_miyako_product_id.py").read_text(encoding="utf-8")
-assert 'TARGET = "FM-1_931"' in id_patch
+assert 'TARGET = "FM-1_932"' in id_patch
 assert 'OLD = \'    PRODUCT = prefix + "00"\'' in id_patch
-assert 'NEW = \'    PRODUCT = prefix + "31"' in id_patch
+assert 'NEW = \'    PRODUCT = prefix + "32"' in id_patch
 # Check the package product ID against the actual pinned build patch,
 # rather than maintaining two contradictory hard-coded CI expectations.
 actual_product = re.search(r'^TARGET = "(FM-1_[0-9]+)"', id_patch, re.M)
@@ -147,7 +150,7 @@ for n, line in enumerate(Path(__file__).read_text(encoding="utf-8").splitlines()
 assert 'set_miyako_product_id.py --base /tmp/fm1-base' in ci
 assert ci.index('set_miyako_product_id.py') < ci.index('tools/build.py /tmp/fm1-base/miyako --host')
 assert "FM-1_9100" not in ci
-assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_931') >= 1
+assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_932') >= 1
 
 # Root issue from the current build log: fm1-base's own mmio_check()
 # correctly rejects a volatile pointer cast outside the BSP, even though
@@ -168,4 +171,26 @@ assert ci.index("Exercise real FM-1 target compile") < ci.index(
 assert "rm -rf /tmp/fm1-base/miyako/build" in ci
 assert ci.index("rm -rf /tmp/fm1-base/miyako/build") < ci.index(
     "Reconstruct all 144 original MIYAKO EFFECTS source frames")
-print("PASS: manual no-EUREKA FM-1 firmware pipeline with original EFFECTS video and native FX")
+# Feature coverage: reject a UI-only placebo update to the proven baseline.
+ui = (root / "fm1/native/app.c").read_text(encoding="utf-8")
+audio = (root / "fm1/native/mi_audio.c").read_text(encoding="utf-8")
+fxcode = (root / "fm1/native/mi_fx_dsp.c").read_text(encoding="utf-8")
+controls = (root / "fm1/native/mi_control.c").read_text(encoding="utf-8")
+assert "static void mi_media_draw_half(unsigned half)" in ui
+assert "if(state.view==MI_VIDEO)" in ui and "mi_media_draw_half(1)" in ui
+assert "MIYAKO FM-1 / NATIVE PREVIEW" not in ui
+assert "mi_wave_name(state.wave)" in ui
+assert "mi_graph_env();" in ui and "mi_graph_lfo();" in ui
+assert "mi_graph_arp();" in ui
+assert "mi_audio_input_on(&audio,&state" in ui
+assert "mi_audio_input_off(&audio,&state" in ui
+assert "arp_tick(a,s);" in audio
+assert "held_total" in audio and "release_samples" in audio
+assert "lfo_value" in audio
+assert "mode==MI_FX_DREAMY" in fxcode
+assert "mi_wave_name" in controls
+assert "case MI_VIDEO:" in controls
+assert "MI_FX_DREAMY" in audio and "mi_fx_dsp_process" in audio
+own_lines = Path(__file__).read_text(encoding="utf-8").splitlines()
+assert len(own_lines)>100 and own_lines[-1].startswith("print(")
+print("PASS: manual Phase 2 MIYAKO ARP/ADSR/LFO/DREAMY + fullscreen SEL + 144 EFFECTS video")
