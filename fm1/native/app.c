@@ -9,6 +9,8 @@
 #include "mi_control.h"
 #include "mi_audio.h"
 #include "mi_video.h"
+#include "mi_eureka_vq_frames.h" /* generated: ALL 576 user-source frames */
+#include "mi_effects_vq_frames.h" /* generated: ALL 144 user-source frames */
 #include <string.h>
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
@@ -55,7 +57,7 @@ void app_init(void)
  saved_t saved;
  mi_init(&state);
  mi_audio_init(&audio,44100.f);
- mi_video_init(&video,0); /* No fabricated EFFECTS video frames. Set actual count after asset port. */
+ mi_video_init(&video,MI_EFFECTS_ASSET_COUNT);
  if(plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved&&
     saved.magic==SAVED_MAGIC&&valid_state(&saved.state)){
      state=saved.state;
@@ -175,6 +177,83 @@ static void input(void)
                    state.view==MI_SAVE?B_SAVE:B_HOME))|buttons,keys);
 }
 void app_input_only(void){input();}
+/* Decode all original-source frame slots to bounded 4bpp scratch, using
+ * independent 16-colour palettes for each 36-frame clip.
+ * No runtime dependency on other firmware or their DSP.
+ * Source imagery is perceptually quantised by the build generator: NOT bit-exact.
+ */
+static uint8_t mi_media_pixels[MI_EUREKA_ASSET_BYTES];
+static int16_t mi_media_prior=-1;
+static uint8_t mi_media_is_eureka=0xff;
+static const uint16_t *mi_media_palette;
+static void mi_media_decode(unsigned frame,int eureka)
+{
+ unsigned ty,tx,row,at;
+ const uint8_t (*book)[16];
+ const uint8_t *map;
+ if(eureka){
+     if(frame>=MI_EUREKA_ASSET_COUNT)return;
+     if(mi_media_is_eureka==1&&mi_media_prior==(int16_t)frame)return;
+     book=mi_eureka_vq_tilebook[frame/36u];
+     map=mi_eureka_vq_maps[frame];
+     mi_media_palette=mi_eureka_vq_palette[frame/36u];
+ }else{
+     if(frame>=MI_EFFECTS_ASSET_COUNT)return;
+     if(mi_media_is_eureka==0&&mi_media_prior==(int16_t)frame)return;
+     book=mi_effects_vq_tilebook[frame/36u];
+     map=mi_effects_vq_maps[frame];
+     mi_media_palette=mi_effects_vq_palette[frame/36u];
+ }
+ for(ty=0;ty<20u;ty++)for(tx=0;tx<16u;tx++){
+    const uint8_t *tile=book[map[ty*16u+tx]];
+    for(row=0;row<4u;row++){
+        unsigned y=ty*4u+row;
+        if(y>=MI_EUREKA_ASSET_H)break;
+        at=y*64u+tx*4u;
+        mi_media_pixels[at]=tile[row*4u];
+        mi_media_pixels[at+1u]=tile[row*4u+1u];
+        mi_media_pixels[at+2u]=tile[row*4u+2u];
+        mi_media_pixels[at+3u]=tile[row*4u+3u];
+    }
+ }
+ mi_media_prior=(int16_t)frame;
+ mi_media_is_eureka=(uint8_t)eureka;
+}
+static void mi_media_draw(void)
+{
+ uint32_t y,x;
+ int eureka=state.fx==MI_FX_EUREKA;
+ int frame=eureka?video.eureka_frame:video.effects_frame;
+ if(frame<0)return;
+ mi_media_decode((unsigned)frame,eureka);
+ /* 128 x 78 shown in a 192 x 117 undistorted viewport.
+  * Contiguous palette runs reduce LCD draw calls. */
+ for(y=0;y<MI_EUREKA_ASSET_H;y++){
+     x=0;
+     while(x<MI_EUREKA_ASSET_W){
+         unsigned b=y*MI_EUREKA_ASSET_W+x;
+         unsigned idx=(x&1u)?(mi_media_pixels[b>>1]&15u):(mi_media_pixels[b>>1]>>4);
+         unsigned start=x++,end;
+         if(idx==0u)continue;
+         while(x<MI_EUREKA_ASSET_W){
+             b=y*MI_EUREKA_ASSET_W+x;
+             unsigned j=(x&1u)?(mi_media_pixels[b>>1]&15u):(mi_media_pixels[b>>1]>>4);
+             if(j!=idx)break;
+             ++x;
+         }
+         end=x;
+         {
+             int32_t x0=24+(int32_t)(start*3u/2u);
+             int32_t x1=24+(int32_t)(end*3u/2u);
+             int32_t y0=(int32_t)(y*3u/2u);
+             int32_t y1=(int32_t)((y+1u)*3u/2u);
+             if(x1>x0&&y1>y0)
+                 cv_rect(x0,y0,x1-x0,y1-y0,mi_media_palette[idx]);
+         }
+     }
+ }
+}
+
 static void draw(void)
 {
  uint32_t i,now=plat_ms();
@@ -202,7 +281,7 @@ static void draw(void)
  }else if(state.view==MI_FX||state.view==MI_VIDEO){
      cv_text(12,52,&FONT_B,mi_fx_name((mi_fx_t)state.fx),YELLOW);
      if(state.view==MI_VIDEO)
-         cv_text(12,81,&FONT_XS,"ORIGINAL MEDIA PENDING",GREY);
+         mi_media_draw();
      else if(state.fx>MI_FX_EUREKA)
          cv_text(12,81,&FONT_XS,"AUDIO DSP PENDING",GREY);
  }else{
