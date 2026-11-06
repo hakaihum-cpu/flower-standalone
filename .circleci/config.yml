@@ -24,7 +24,7 @@ jobs:
           name: Verify exact MIYAKO branch and zero KARMA source closure
           command: |
             set -eu
-            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-visual-arp-fx-20261107"
+            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-recorder-eureka-fx-20261107"
             python3 -m compileall -q fm1/native
             python3 -m py_compile fm1/native/verify_standalone.py fm1/native/test_pipeline_contract.py
             python3 fm1/native/verify_standalone.py
@@ -36,7 +36,7 @@ jobs:
             /tmp/mi_control_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
-              fm1/native/mi_control.c fm1/native/mi_audio.c fm1/native/mi_fx_dsp.c fm1/native/test_mi_audio.c \
+              fm1/native/mi_control.c fm1/native/mi_audio.c fm1/native/mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/test_mi_audio.c \
               -o /tmp/mi_audio_test
             /tmp/mi_audio_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
@@ -44,6 +44,11 @@ jobs:
               fm1/native/mi_fx_dsp.c fm1/native/test_mi_fx_dsp.c \
               -o /tmp/mi_fx_test
             /tmp/mi_fx_test
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+              -fsanitize=address,undefined -fno-sanitize-recover=all \
+              fm1/native/mi_recorder.c fm1/native/test_mi_recorder.c \
+              -o /tmp/mi_recorder_test
+            /tmp/mi_recorder_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
               fm1/native/mi_video.c fm1/native/test_mi_video.c \
@@ -73,6 +78,7 @@ jobs:
                fm1/native/mi_audio.c fm1/native/mi_audio.h \
                fm1/native/mi_video.c fm1/native/mi_video.h \
                fm1/native/mi_fx_dsp.c fm1/native/mi_fx_dsp.h \
+               fm1/native/mi_recorder.c fm1/native/mi_recorder.h \
                fm1/native/mi_memory.h \
                /tmp/fm1-base/miyako/
             test -s /tmp/fm1-base/miyako/words.tsv
@@ -81,7 +87,7 @@ jobs:
             # running FM-1 identity, all metadata, and final FWSC markers.
             # The upstream pinned builder defaults to suffix 00.
             python3 fm1/native/tools/set_miyako_product_id.py --base /tmp/fm1-base
-            grep -q 'PRODUCT = prefix + "32"' /tmp/fm1-base/tools/build.py
+            grep -q 'PRODUCT = prefix + "33"' /tmp/fm1-base/tools/build.py
             # Fail early on fonts: never reach the C build with untested
             # Pillow Raqm or a missing upstream bitmap asset.
             test -s /tmp/fm1-base/assets/fonts/ter-u12n.bdf
@@ -96,10 +102,14 @@ jobs:
               --platform /tmp/fm1-base --app /tmp/fm1-base/miyako
             python3 fm1/native/tools/compile_only_media_stub.py \
               /tmp/fm1-base/miyako/mi_effects_vq_frames.h
+            python3 fm1/native/tools/compile_only_media_stub.py \
+              /tmp/fm1-base/miyako/mi_eureka_vq_frames.h
             /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
             test -x /tmp/fm1-base/miyako/build/host/miyako_host
             test "$(grep -c 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB 1' \
               /tmp/fm1-base/miyako/mi_effects_vq_frames.h)" -eq 1
+            test "$(grep -c 'MI_EUREKA_MEDIA_PREFLIGHT_STUB 1' \
+              /tmp/fm1-base/miyako/mi_eureka_vq_frames.h)" -eq 1
       - run:
           name: Install pinned JieLi compiler and minimum AC79 packaging inputs
           command: |
@@ -121,7 +131,7 @@ jobs:
             test -x "$CLC"
             # All four independent MIYAKO native DSP / video objects.
             # Same CPU, FPU, standard, builtin and optimization policy as fm1-base.
-            for unit in mi_fx_dsp.c mi_audio.c mi_control.c mi_video.c; do
+            for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_control.c mi_video.c; do
               "$CLC" -fsyntax-only -std=c99 -Os -mcpu=r3 -mfprev1 -ffp-contract=off \
                 -fno-builtin -Wall -Werror=implicit-function-declaration \
                 -I /tmp/fm1-base/miyako -I /tmp/fm1-base/include \
@@ -135,6 +145,7 @@ jobs:
             set -eu
             test -s /tmp/fm1-base/miyako/mi_effects_vq_frames.h
             grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB' /tmp/fm1-base/miyako/mi_effects_vq_frames.h
+            grep -q 'MI_EUREKA_MEDIA_PREFLIGHT_STUB' /tmp/fm1-base/miyako/mi_eureka_vq_frames.h
             /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako
             test -s /tmp/fm1-base/miyako/build/miyako.fwsc
             # Generated-media stub is intentionally a type checker ONLY.
@@ -156,7 +167,19 @@ jobs:
             grep -q 'MI_EFFECTS_ASSET_COUNT 144u' fm1/native/mi_effects_vq_frames.h
             test -s fm1-dist/EFFECTS_VQ_PREVIEW.png
       - run:
-          name: Verify all 144 EFFECTS source frames by independent C decoder CRC
+          name: Reconstruct all 576 original MIYAKO EUREKA frames
+          command: |
+            set -eu
+            python3 scripts/materialize_miyako_eureka_video.py
+            test -s Resources/miyako_eureka_frames.pack
+            export OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2
+            /tmp/mi-video-venv/bin/python fm1/native/tools/pack_eureka_vq_candidate.py \
+              Resources/miyako_eureka_frames.pack fm1/native/mi_eureka_vq_frames.h \
+              --preview fm1-dist/EUREKA_VQ_PREVIEW.png
+            grep -q 'MI_EUREKA_ASSET_COUNT 576u' fm1/native/mi_eureka_vq_frames.h
+            test -s fm1-dist/EUREKA_VQ_PREVIEW.png
+      - run:
+          name: Verify all 720 EFFECTS and EUREKA original frames by C decoder CRC
           command: |
             set -eu
             cc -std=c99 -O2 -Wall -Wextra -Werror \
@@ -168,8 +191,9 @@ jobs:
           command: |
             set -eu
             test "$(git -C /tmp/fm1-base rev-parse HEAD)" = "e07ebca2dda5fbd3bb40287d1f6083923f9ae999"
-            cp fm1/native/mi_effects_vq_frames.h /tmp/fm1-base/miyako/
-            if grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB' /tmp/fm1-base/miyako/mi_effects_vq_frames.h; then
+            cp fm1/native/mi_effects_vq_frames.h fm1/native/mi_eureka_vq_frames.h /tmp/fm1-base/miyako/
+            if grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB' /tmp/fm1-base/miyako/mi_effects_vq_frames.h || \
+               grep -q 'MI_EUREKA_MEDIA_PREFLIGHT_STUB' /tmp/fm1-base/miyako/mi_eureka_vq_frames.h; then
               echo "FAIL: fake compiler-only media must never reach FWSC" >&2
               exit 1
             fi
@@ -183,6 +207,9 @@ jobs:
             test -s fm1-dist/MIYAKO_ENV.png
             test -s fm1-dist/MIYAKO_LFO.png
             test -s fm1-dist/MIYAKO_ARP.png
+            test -s fm1-dist/MIYAKO_EUREKA_VIDEO.png
+            test -s fm1-dist/MIYAKO_FX_DUAL.png
+            test -s fm1-dist/MIYAKO_RECORDER.png
             test -s fm1-dist/MIYAKO_FX_PREVIEW.wav
             test "$(stat -c %s fm1-dist/MIYAKO_FX_PREVIEW.wav)" -gt 10000
             /tmp/mi-video-venv/bin/python fm1/native/tools/check_host_wav.py fm1-dist/MIYAKO_FX_PREVIEW.wav
@@ -199,14 +226,14 @@ jobs:
               /tmp/fm1-base/miyako/build/miyako.fwsc \
               /tmp/fm1-base/miyako/build/miyako.bin \
               /tmp/fm1-base/miyako/build/loader/ota.bin \
-              --base /tmp/fm1-base --product FM-1_932
+              --base /tmp/fm1-base --product FM-1_933
             cp /tmp/fm1-base/miyako/build/miyako.fwsc fm1-dist/MIYAKO-FM1-NATIVE-DEV.fwsc
             printf '%s\n' \
               'MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE' \
               'Built without the KARMA application and DSP.' \
               'REEL, DREAMY, DELAY, REVERB and CHORUS are native FM-1 DSP implementations.' \
-              'Original 144 EFFECTS frames are encoded as 16-colour VQ; EUREKA omitted by request.' \
-              'Original source-accurate multiple-FX routing remains pending; EUREKA is deferred.' \
+              'Original 144 EFFECTS and 576 EUREKA source frames are 16-colour VQ.' \
+              'REC internal 2s, EUREKA short-buffer 2s, two serial FX with conflict guards.' \
               'This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.' \
               > fm1-dist/README_BEFORE_INSTALL.txt
             (cd fm1-dist && sha256sum *.fwsc > SHA256SUMS)
@@ -221,4 +248,4 @@ workflows:
       - fm1_native_build:
           filters:
             branches:
-              only: feature/fm1-miyako-visual-arp-fx-20261107
+              only: feature/fm1-miyako-recorder-eureka-fx-20261107
