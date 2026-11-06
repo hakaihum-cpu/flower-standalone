@@ -1,0 +1,18 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * MIYAKO FM-1 native FX: no KARMA application, audio or UI code.
+ * Early native processors must not be mistaken for source-faithful JUCE FX.
+ */
+#ifndef MI_NATIVE_FX_DSP_H
+#define MI_NATIVE_FX_DSP_H
+#include <stdint.h>
+typedef struct {
+    uint32_t delay_write;
+    uint32_t chorus_write;
+    uint32_t reverb_write[4];
+    float chorus_phase;
+    float reverb_damp[4];
+} mi_fx_dsp_t;
+void mi_fx_dsp_init(mi_fx_dsp_t *p);
+float mi_fx_dsp_process(mi_fx_dsp_t *p, unsigned mode, float dry,
+                        float sample_rate, unsigned p1, unsigned p2);
+#endif
