@@ -51,6 +51,8 @@ jobs:
             python3 scripts/materialize_effects_video_pack.py
             test -s Resources/effects_video_frames.pack
             mkdir -p fm1-dist
+            sudo apt-get update
+            sudo apt-get install -y python3-venv
             python3 -m venv /tmp/mi-video-venv
             /tmp/mi-video-venv/bin/pip install --disable-pip-version-check "Pillow==10.4.0" "numpy==1.26.4"
             /tmp/mi-video-venv/bin/python fm1/native/tools/pack_effects_vq_candidate.py \
