@@ -12,7 +12,7 @@
 #include "mi_audio.h"
 #include "mi_video.h"
 #include "mi_effects_vq_frames.h" /* generated: ALL 144 user-source frames */
-#include <string.h>
+#include "mi_memory.h"
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
 #define GREY RGB(218,213,202)
@@ -66,7 +66,7 @@ void app_init(void)
      state.playing=state.recording=0;
      state.view=MI_HOME;
  }
- last_keys=last_buttons=0;memset(held_note,0,sizeof held_note);redraw=1;
+ last_keys=last_buttons=0;mi_memzero(held_note,0,sizeof held_note);redraw=1;
  message_until=0;line_a[0]=line_b[0]=0;
 }
 void app_panic(void){mi_audio_panic(&audio);}
@@ -314,13 +314,13 @@ void app_frame(void)
 #ifdef PLAT_HOST
 int app_expect(const char *what,int *got)
 {
- if(!strcmp(what,"view")) *got=(int)state.view;
- else if(!strcmp(what,"fx")) *got=(int)state.fx;
- else if(!strcmp(what,"wave")) *got=(int)state.wave;
- else if(!strcmp(what,"octave")) *got=(int)state.octave;
- else if(!strcmp(what,"preset")) *got=(int)state.preset;
- else if(!strcmp(what,"slot")) *got=(int)state.project_slot;
- else if(!strcmp(what,"active")) {
+ if(mi_streq(what,"view")) *got=(int)state.view;
+ else if(mi_streq(what,"fx")) *got=(int)state.fx;
+ else if(mi_streq(what,"wave")) *got=(int)state.wave;
+ else if(mi_streq(what,"octave")) *got=(int)state.octave;
+ else if(mi_streq(what,"preset")) *got=(int)state.preset;
+ else if(mi_streq(what,"slot")) *got=(int)state.project_slot;
+ else if(mi_streq(what,"active")) {
     unsigned i;int n=0;
     for(i=0;i<MI_NATIVE_POLY;i++)if(audio.v[i].active)n++;
     *got=n;
