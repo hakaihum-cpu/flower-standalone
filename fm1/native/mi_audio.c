@@ -241,13 +241,10 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
         }
         a->ring[a->wr&(MI_NATIVE_RING-1u)]=(int16_t)(clampf(dry,-1.f,1.f)*32767.f);
         ++a->wr;if(a->valid<MI_NATIVE_RING)++a->valid;
-    }else if(mode==MI_FX_DELAY||mode==MI_FX_REVERB||mode==MI_FX_CHORUS){
+    }else if(mode==MI_FX_DREAMY||mode==MI_FX_DELAY||
+              mode==MI_FX_REVERB||mode==MI_FX_CHORUS){
         wet=mi_fx_dsp_process(&native_fx,mode,dry,a->sample_rate,
             s->fx_options[mode][0],s->fx_options[mode][1]);
-    }else if(mode==MI_FX_DREAMY){
-        /* Dreamy requires a separate approved, source-accurate implementation.
-         * No false effect processing or reduced pitch-grain imitation. */
-        target=0.f;
     }else target=0.f;
     a->wet_current+=(target-a->wet_current)*0.001f;
     return dry+(wet-dry)*a->wet_current;
