@@ -21,7 +21,6 @@ static const test_font_t FONT_S={16};
 typedef struct { int16_t p[8]; int32_t peak; } track_t;
 static struct { uint32_t frame; } ui;
 static int32_t cv_oy;
-static uint32_t fm1_ms;
 static unsigned long draws, oob;
 static int32_t clamp(int32_t v,int32_t a,int32_t b){return v<a?a:v>b?b:v;}
 static int32_t sine_i(uint32_t p){return (int32_t)(32767.0*sin((double)p*(6.283185307179586/4294967296.0)));}
