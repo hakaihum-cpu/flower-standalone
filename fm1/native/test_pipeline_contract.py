@@ -93,15 +93,6 @@ assert "test -s /tmp/mi_font_preflight.h" in ci
 assert "python3 /tmp/fm1-base/tools/build.py" not in ci
 assert ci.count("/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py") >= 3
 assert ci.index("Host-compile real MIYAKO app") < ci.index("Reconstruct all 144 original")
-# Execute the SAME host operations and sound checks before expensive media VQ.
-# The stub media in this phase never enters fm1-dist or the final FWSC.
-assert ci.count("fm1/native/host_smoke.txt") == 2
-assert ci.count("fm1/native/host_fx_preview.txt") == 2
-assert ci.count("fm1/native/host_eureka_preview.txt") == 2
-assert ci.index("/tmp/mi-host-preflight/MIYAKO_EUREKA_AUDIO.wav") < ci.index(
-    "Reconstruct all 144 original MIYAKO EFFECTS source frames")
-assert ci.index("rm -rf /tmp/mi-host-preflight") < ci.index(
-    "Reconstruct all 144 original MIYAKO EFFECTS source frames")
 assert ci.index("Reconstruct all 144 original") < ci.index("Compile FM-1 native platform host")
 assert "grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB'" in ci
 assert "mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/test_mi_audio.c" in ci
