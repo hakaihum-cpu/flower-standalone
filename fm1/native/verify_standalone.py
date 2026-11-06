@@ -45,7 +45,7 @@ allowed_target_headers = {"stdint.h", "stddef.h", "stdbool.h", "limits.h"}
 target_files = source_paths + sorted(NATIVE.glob("*.h"))
 for file in target_files:
     body = file.read_text(encoding="utf-8")
-    for header in re.findall(r'#\\s*include\\s*<([^>]+)>', body):
+    for header in re.findall(r'#\s*include\s*<([^>]+)>', body):
         if header not in allowed_target_headers:
             raise SystemExit(
                 f"FAIL: {file.relative_to(ROOT)} imports unavailable JieLi "
