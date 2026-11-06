@@ -1,11 +1,11 @@
 # Independent MIYAKO app on the MPL-2.0 fm1-base hardware layer.
 name = "MIYAKO"
-# New native UI/ARP/FX development identity: FM-1_932 (previous MIYAKO FM-1_931).
-# fm1-base normally appends "00"; pinned build.py patch changes suffix to "32".
+# Phase 3 recorder, EUREKA and FX A/B identity: FM-1_933 (previous FM-1_932).
+# fm1-base normally appends "00"; pinned build.py patch changes suffix to "33".
 id_prefix = "FM-1_9"
 usb_manufacturer = "MIYAKO"
 usb_product = "MIYAKO FM-1"
-o2 = ["mi_control.c", "mi_audio.c", "mi_fx_dsp.c", "mi_video.c"]
+o2 = ["mi_control.c", "mi_audio.c", "mi_fx_dsp.c", "mi_video.c", "mi_recorder.c"]
 ble = false
 ble_central = false
 usb_audio_in = false
