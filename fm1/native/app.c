@@ -66,7 +66,7 @@ void app_init(void)
      state.playing=state.recording=0;
      state.view=MI_HOME;
  }
- last_keys=last_buttons=0;mi_memzero(held_note,0,sizeof held_note);redraw=1;
+ last_keys=last_buttons=0;mi_memzero(held_note,sizeof held_note);redraw=1;
  message_until=0;line_a[0]=line_b[0]=0;
 }
 void app_panic(void){mi_audio_panic(&audio);}
