@@ -46,17 +46,6 @@ static void number(int32_t value,char *out)
  while(n)*out++=tmp[--n];
  *out=0;
 }
-static int valid_state(const mi_state_t *s)
-{
- return (unsigned)s->view<MI_VIEW_COUNT&&s->wave<=3u&&
-        s->fx<MI_FX_COUNT&&s->fx2<MI_FX_COUNT&&s->fx_slot<=1u&&
-        mi_fx_pair_supported(s->fx,s->fx2)&&s->wet2<=127u&&
-        s->seq[0]<s->seq[1]&&s->seq[2]<=6u&&
-        s->width<=127u&&s->sub<=127u&&
-        s->crush<=127u&&s->level<=127u&&s->wet<=127u&&
-        s->project_slot>=1u&&s->project_slot<=4u&&s->preset<=5u&&
-        s->octave>=-3&&s->octave<=3;
-}
 void app_init(void)
 {
  saved_t saved;
@@ -65,7 +54,7 @@ void app_init(void)
  mi_video_init(&video,MI_EFFECTS_ASSET_COUNT);
  mi_video_set_eureka(&video,MI_EUREKA_ASSET_COUNT);
  if(plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved&&
-    saved.magic==SAVED_MAGIC&&valid_state(&saved.state)){
+    saved.magic==SAVED_MAGIC&&mi_state_valid(&saved.state)){
      state=saved.state;
      state.save_armed=0;
      state.playing=state.recording=0;
