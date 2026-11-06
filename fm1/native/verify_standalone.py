@@ -10,7 +10,11 @@ ROOT = Path(__file__).resolve().parents[2]
 NATIVE = ROOT / "fm1" / "native"
 MANIFEST = NATIVE / "SOURCE_ALLOWLIST.txt"
 FORBIDDEN_PATH_BITS = ("/karma/", "felucca", "cloud.c", "eng_prism", "eng_elem", "eng_phys")
-FORBIDDEN_SYMBOLS = ("KARMA", "FELUCCA", "ui_input(", "cloud_process(", "ENG_PRISM", "ENG_ELEM")
+FORBIDDEN_SYMBOLS = ("KARMA", "FELUCCA", "ui_input(", "cloud_process(",
+                     "ENG_PRISM", "ENG_ELEM", "ENG_PHYS",
+                     "EM_BOUNCE", "EM_PICK", "PRM_FOLD", "PRM_WAVE",
+                     "PRM_HARM", "prism_model(", "phys_poly(",
+                     "elem_poly(", "prism_poly(", "pr_harm_")
 GENERATED_MEDIA_HEADERS = {"mi_eureka_vq_frames.h", "mi_effects_vq_frames.h"}
 source_paths = []
 for raw in MANIFEST.read_text(encoding="utf-8").splitlines():
