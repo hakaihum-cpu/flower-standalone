@@ -88,6 +88,27 @@ int main(void)
  float before=a.lfo_phase;
  mi_audio_render(&a,&s,lr,256,4096);
  assert(a.lfo_phase!=before);
- puts("PASS: 4-voice synth ADSR LFO MIDI/keys arpeggiator and native FX");
+ /* Two distinct FX slots run serially, each with its own wet amount. */
+ mi_init(&s);mi_audio_init(&a,44100.f);
+ s.fx=MI_FX_CHORUS;s.wet=120;
+ s.fx2=MI_FX_REVERB;s.wet2=100;
+ mi_audio_note_on(&a,60,127);
+ for(i=0;i<50u;i++)mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.last_mode==MI_FX_CHORUS&&a.last_mode2==MI_FX_REVERB);
+ assert(a.wet_current>0.f&&a.wet_current2>0.f);
+ /* A clip recording command is consumed only on an audio block boundary. */
+ mi_audio_rec_request(&a,1u);
+ mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.recorder.recording && a.recorder.count==128u);
+ mi_audio_rec_request(&a,1u);
+ mi_audio_render(&a,&s,lr,256,4096);
+ assert(!a.recorder.recording && a.recorder.count==128u);
+ mi_audio_rec_request(&a,2u);
+ mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.recorder.playing);
+ mi_audio_rec_request(&a,2u);
+ mi_audio_render(&a,&s,lr,256,4096);
+ assert(!a.recorder.playing);
+ puts("PASS: ADSR LFO ARP serial FX A/B and command-driven internal recorder");
  return 0;
 }
