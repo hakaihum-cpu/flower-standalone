@@ -37,6 +37,11 @@ jobs:
             set -eu
             sudo apt-get update
             sudo apt-get install -y git curl xz-utils gcc g++ python3-pip python3-venv libtinfo5
+            # Catch host declarations/types in all test harnesses BEFORE
+            # installing Python deps, restoring 576 JPEGs or running the SDK.
+            for source in fm1/karma/test_engine.c fm1/karma/test_dot_ui.c fm1/karma/test_stress.c fm1/karma/test_boot_ui.c fm1/karma/test_panel_nav.c; do
+              cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only "$source"
+            done
             python3 -m venv /home/circleci/.venv-fm1
             /home/circleci/.venv-fm1/bin/python -m pip install --disable-pip-version-check "Pillow==10.4.0" "numpy==1.26.4"
             /home/circleci/.venv-fm1/bin/python -c "from PIL import Image; print('Pillow available')" 
