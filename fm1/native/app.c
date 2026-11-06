@@ -20,6 +20,7 @@ typedef struct {
 static mi_state_t state;
 static mi_audio_t audio;
 static uint32_t last_keys,last_buttons;
+static uint8_t held_note[NKEYS];
 static int redraw;
 static char line_a[24],line_b[24];
 static uint32_t message_until;
@@ -58,7 +59,7 @@ void app_init(void)
      state.playing=state.recording=0;
      state.view=MI_HOME;
  }
- last_keys=last_buttons=0;redraw=1;
+ last_keys=last_buttons=0;memset(held_note,0,sizeof held_note);redraw=1;
  message_until=0;line_a[0]=line_b[0]=0;
 }
 void app_panic(void){mi_audio_panic(&audio);}
@@ -104,10 +105,12 @@ static void input(void)
  for(i=0;i<NKEYS;i++){
      bit=1u<<i;
      uint8_t note=(uint8_t)(53+(int)i+12*(int)state.octave);
-     if((keys&bit)&&!(last_keys&bit))
+     if((keys&bit)&&!(last_keys&bit)){
+         held_note[i]=note;
          mi_audio_note_on(&audio,note,(uint8_t)touch_vel(i));
+     }
      if(!(keys&bit)&&(last_keys&bit))
-         mi_audio_note_off(&audio,note);
+         mi_audio_note_off(&audio,held_note[i]);
  }
  if(keys!=last_keys)redraw=1;
  last_keys=keys;
