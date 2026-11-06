@@ -8,7 +8,8 @@
 typedef struct {
     uint32_t delay_write,delay_valid;
     uint32_t eureka_write,eureka_valid;
-    uint8_t eureka_decimate;
+    uint8_t eureka_decimate,eureka_heard;
+    uint32_t eureka_content_valid,eureka_quiet_samples;
     float eureka_sum,eureka_phase,eureka_filter;
     uint32_t dreamy_write, dreamy_valid;
     float dreamy_phase;
@@ -20,8 +21,8 @@ typedef struct {
 void mi_fx_dsp_init(mi_fx_dsp_t *p);
 /* DELAY and EUREKA share one 64-KiB history buffer. */
 void mi_fx_dsp_reset_shared(mi_fx_dsp_t *p);
-/* EUREKA has a wet-only output and must prefill its TIME+HAZE lookback.
- * Until the history is valid, the FX mixer must retain the dry signal. */
+/* EUREKA has a wet-only output. The mixer must keep DRY audible until
+ * history containing an actual note (not pre-roll silence) fills TIME+HAZE. */
 int mi_fx_dsp_eureka_ready(const mi_fx_dsp_t *p, unsigned time, unsigned haze);
 float mi_fx_dsp_process(mi_fx_dsp_t *p, unsigned mode, float dry,
                         float sample_rate, unsigned p1, unsigned p2);
