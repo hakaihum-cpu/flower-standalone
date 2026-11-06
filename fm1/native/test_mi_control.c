@@ -111,6 +111,32 @@ int main(void)
     assert(mi_fx_pair_supported(s.fx,s.fx2));
     mi_button(&s,MI_B_FX,9002);
     assert(s.fx_slot==0u);
-    puts("PASS: REC trim/pitch, 2-slot FX conflicts, EUREKA naming, legacy controls");
+
+    /* Validate real saved-state bounds: corrupted storage must never reach
+     * UI lookup tables, oscillator routing or REC IN/OUT arithmetic. */
+    mi_init(&s);
+    assert(mi_state_valid(&s));
+    s.seq[0]=128u; assert(!mi_state_valid(&s)); s.seq[0]=0u;
+    s.seq[1]=128u; assert(!mi_state_valid(&s)); s.seq[1]=127u;
+    s.seq[0]=127u; assert(!mi_state_valid(&s)); s.seq[0]=0u;
+    s.seq[2]=7u; assert(!mi_state_valid(&s)); s.seq[2]=3u;
+    s.seq[3]=128u; assert(!mi_state_valid(&s)); s.seq[3]=100u;
+    s.env[2]=255u; assert(!mi_state_valid(&s)); s.env[2]=115u;
+    s.lfo[1]=4u; assert(!mi_state_valid(&s)); s.lfo[1]=0u;
+    s.lfo[3]=3u; assert(!mi_state_valid(&s)); s.lfo[3]=0u;
+    s.arp[0]=5u; assert(!mi_state_valid(&s)); s.arp[0]=0u;
+    s.arp[2]=9u; assert(!mi_state_valid(&s)); s.arp[2]=70u;
+    s.arp[3]=0u; assert(!mi_state_valid(&s)); s.arp[3]=1u;
+    s.global[0]=39; assert(!mi_state_valid(&s)); s.global[0]=90;
+    s.global[1]=101; assert(!mi_state_valid(&s)); s.global[1]=0;
+    s.global[2]=51; assert(!mi_state_valid(&s)); s.global[2]=0;
+    s.global[3]=3; assert(!mi_state_valid(&s)); s.global[3]=0;
+    s.fx_options[MI_FX_EUREKA][1]=128u;
+    assert(!mi_state_valid(&s)); s.fx_options[MI_FX_EUREKA][1]=64u;
+    s.fx=MI_FX_DELAY; s.fx2=MI_FX_EUREKA;
+    assert(!mi_state_valid(&s)); s.fx=MI_FX_OFF; s.fx2=MI_FX_OFF;
+    assert(mi_state_valid(&s));
+
+    puts("PASS: REC, FX conflicts, EUREKA, controls, and saved-state corruption bounds");
     return 0;
 }
