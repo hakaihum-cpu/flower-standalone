@@ -5,7 +5,7 @@ int main(void)
 {
  mi_video_t v;
  mi_video_init(&v,120);
- assert(v.effects_frame==-1&&v.eureka_frame==-1);
+ assert(v.effects_frame==0&&v.eureka_frame==-1);
  mi_video_tick(&v,0.f,1);
  int initial=v.eureka_frame;
  assert(initial>=0&&initial<576);
