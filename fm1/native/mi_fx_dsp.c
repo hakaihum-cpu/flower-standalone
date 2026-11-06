@@ -4,7 +4,7 @@
  */
 #include "mi_fx_dsp.h"
 #include "mi_control.h"
-#include <string.h>
+#include "mi_memory.h"
 #define MI_DELAY_N 32768u
 #define MI_CHORUS_N 2048u
 #define MI_REVERB_N 4096u
@@ -28,10 +28,10 @@ static float sine(float x)
 void mi_fx_dsp_init(mi_fx_dsp_t *p)
 {
     if(!p)return;
-    memset(p,0,sizeof(*p));
-    memset(delay_memory,0,sizeof delay_memory);
-    memset(chorus_memory,0,sizeof chorus_memory);
-    memset(reverb_memory,0,sizeof reverb_memory);
+    mi_memzero(p,0,sizeof(*p));
+    mi_memzero(delay_memory,0,sizeof delay_memory);
+    mi_memzero(chorus_memory,0,sizeof chorus_memory);
+    mi_memzero(reverb_memory,0,sizeof reverb_memory);
 }
 float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
                         float sample_rate,unsigned p1,unsigned p2)
