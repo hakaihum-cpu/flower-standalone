@@ -116,4 +116,23 @@ for target in list((root / "fm1/native").glob("mi_*.c")) + [
             f"target still calls unavailable hosted libc: {target.name}"
         )
 assert (root / "fm1/native/mi_memory.h").is_file()
+# Root issue from the current build log: fm1-base's own mmio_check()
+# correctly rejects a volatile pointer cast outside the BSP, even though
+# generic C compilation and our previous custom checks happily passed it.
+mem = (root / "fm1/native/mi_memory.h").read_text(encoding="utf-8")
+assert "volatile unsigned char *" not in mem
+assert "unsigned char *p = (unsigned char *)destination;" in mem
+# Auditing the ACTUAL pinned fm1-base algorithm (not our imitation) is now
+# required before video VQ. The whole target link must also pass BEFORE VQ
+# using a compiler-only header that must be discarded, not shipped.
+assert "run_upstream_platform_checks.py" in ci
+assert "fm1build.mmio_check()" in (root /
+    "fm1/native/tools/run_upstream_platform_checks.py").read_text()
+assert ci.index("run_upstream_platform_checks.py") < ci.index(
+    "Reconstruct all 144 original MIYAKO EFFECTS source frames")
+assert ci.index("Exercise real FM-1 target compile") < ci.index(
+    "Reconstruct all 144 original MIYAKO EFFECTS source frames")
+assert "rm -rf /tmp/fm1-base/miyako/build" in ci
+assert ci.index("rm -rf /tmp/fm1-base/miyako/build") < ci.index(
+    "Reconstruct all 144 original MIYAKO EFFECTS source frames")
 print("PASS: manual no-EUREKA FM-1 firmware pipeline with original EFFECTS video and native FX")
