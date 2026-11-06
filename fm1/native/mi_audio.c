@@ -104,7 +104,8 @@ void mi_audio_input_on(mi_audio_t *a,const mi_state_t *s,
     }
     if(a->held_refs[note]<255u)++a->held_refs[note];
     a->held_velocity[note]=velocity?velocity:1u;
-    if(s->arp[0]==0u)mi_audio_note_on(a,note,velocity);
+    if(s->arp[0]==0u && a->held_refs[note]==1u)
+        mi_audio_note_on(a,note,velocity);
 }
 void mi_audio_input_off(mi_audio_t *a,const mi_state_t *s,uint8_t note)
 {
