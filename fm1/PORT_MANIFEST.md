@@ -71,24 +71,26 @@ engines" are SUPERSEDED; use Git history if their investigations are needed.
   of the two LCD rendering passes draws the same chosen source frame.
   First real frame at rest, change on audio dynamics, random clips on
   attacks/end. No fixed-rate playback on silence.
-- CircleCI's candidate encoder has an additional RGB PSNR per-frame
-  >=26 dB requirement. This is an engineering gate, not proof that
-  faces will be acceptably recognizable. A first-36-frame independent
-  prototype measured about 25.81 dB for frame 0 and visible facial
-  degradation. If the gate fails, firmware build MUST stop.
-  No automatic fallback to 1bpp, fewer frames, downscaled replacement
-  or cartoon art.
+- CircleCI reports worst-frame and average additional RGB PSNR against
+  the 16-colour source, using 26 dB as an ADVISORY visual reference.
+  That number was added by the assistant, not requested by the user
+  or required by FM-1. A lower value is a prominent WARNING and the
+  preview must remain available for visual inspection; it does not
+  prevent a verifiable FWSC from being packaged. Corrupted/missing
+  frames, invalid VQ indices, decoding mismatch, media capacity and
+  linker checks remain HARD failures. No automatic fallback to 1bpp,
+  fewer frames, downscaled replacement or cartoon art.
 
 ## Build and validation
-- Repository hakaihum-cpu/Vstplugin
+- Build repository: hakaihum-cpu/flower-standalone (feature branch; not main).
 - Feature branch feature/fm1-miyako-port-20261104 (NEVER main)
 - Upstream backend pinned at db3cda79359ae914d1e58c0fc96c6ca744e7950e
 - CircleCI MANUAL workflow fm1_manual, job fm1_firmware.
   Pipeline parameter run_build=true is required; default false.
   Never trigger this pipeline on the user's behalf without permission.
 - Before the target compiler: check_contract.py, native audio tests,
-  native EUREKA CRC/bitmap tests, full media preparation, video-quality
-  gate and verify_port.py. App linker must independently fit
+  native EUREKA CRC/bitmap tests, full media preparation, PSNR warning
+  report and verify_port.py. App linker must independently fit
   the 581564-byte app slot, including all code and ROM video.
 - Expected preview artifacts only after successful pipeline:
   fm1-dist/eureka-vq-preview.png and
