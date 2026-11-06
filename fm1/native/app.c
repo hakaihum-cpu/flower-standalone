@@ -63,8 +63,30 @@ void app_init(void)
  message_until=0;line_a[0]=line_b[0]=0;
 }
 void app_panic(void){mi_audio_panic(&audio);}
+/* Read MIDI on the audio callback, as fm1-base's app_render contract expects.
+ * This handles USB MIDI and the FM-1's TRS MIDI IN; radio support can be
+ * enabled independently in the platform configuration later.
+ */
+static void midi_audio_poll(void)
+{
+ uint32_t pkt;
+ int port;
+ while(plat_midi_in(&pkt,&port)){
+     uint8_t status=(uint8_t)(pkt>>8);
+     uint8_t note=(uint8_t)((pkt>>16)&127u);
+     uint8_t velocity=(uint8_t)((pkt>>24)&127u);
+     uint8_t kind=status&0xF0u;
+     (void)port;
+     if(kind==0x90u&&velocity)mi_audio_note_on(&audio,note,velocity);
+     else if(kind==0x80u||(kind==0x90u&&!velocity))
+         mi_audio_note_off(&audio,note);
+     else if(kind==0xB0u&&note==123u)
+         mi_audio_panic(&audio);
+ }
+}
 void app_render(int32_t *lr,uint32_t n,uint32_t master_q12)
 {
+ midi_audio_poll();
  mi_audio_render(&audio,&state,lr,n,master_q12);
 }
 void app_say(const char *a,const char *b)
