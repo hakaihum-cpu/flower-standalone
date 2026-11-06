@@ -66,9 +66,23 @@ int main(void)
     assert(r.action == MI_ACTION_NONE && s.save_armed);
     assert(mi_button(&s, MI_B_PLAY, 7001).action == MI_ACTION_PLAY);
     assert(mi_button(&s, MI_B_REC, 7001).action == MI_ACTION_RECORD);
+    assert(s.view==MI_SEQ);
+    assert(!strcmp(mi_view_name(s.view),"RECORDER"));
+    assert(!strcmp(mi_param_name(&s,0),"IN"));
+    assert(!strcmp(mi_param_name(&s,2),"PITCH"));
+    mi_rotate(&s,MI_EN_K1,24);
+    mi_rotate(&s,MI_EN_K2,-20);
+    mi_rotate(&s,MI_EN_K3,3);
+    assert(s.seq[0]==24&&s.seq[1]==107&&s.seq[2]==6);
+    mi_rotate(&s,MI_EN_K2,-500);
+    assert(s.seq[1]==25);
     for(i=0;i<5;i++) mi_button(&s, MI_B_OCT_DOWN, 7001);
     assert(s.octave == -3);
-    assert(MI_FX_COUNT == 6 && MI_VIEW_COUNT == 10);
+    assert(MI_FX_COUNT == 7 && MI_VIEW_COUNT == 10);
+    assert(!strcmp(mi_fx_name(MI_FX_EUREKA),"EUREKA"));
+    assert(mi_fx_pair_supported(MI_FX_DREAMY,MI_FX_EUREKA));
+    assert(!mi_fx_pair_supported(MI_FX_DELAY,MI_FX_EUREKA));
+    assert(!mi_fx_pair_supported(MI_FX_REVERB,MI_FX_REVERB));
     mi_button(&s,MI_B_ARP,8000);
     mi_rotate(&s,MI_EN_K1,100);
     mi_rotate(&s,MI_EN_K2,100);
@@ -85,6 +99,18 @@ int main(void)
     mi_button(&s,MI_B_ENV,8002);
     assert(!strcmp(mi_param_name(&s,0),"ATK"));
     assert(!strcmp(mi_param_name(&s,3),"REL"));
-    puts("PASS: independent MIYAKO control mapping and guarded save");
+    mi_button(&s,MI_B_FX,9000);
+    assert(s.fx_slot==0u);
+    mi_rotate(&s,MI_EN_K1,-50);
+    mi_rotate(&s,MI_EN_K1,3); /* A=DELAY */
+    assert(s.fx==MI_FX_DELAY);
+    mi_button(&s,MI_B_FX,9001);
+    assert(s.fx_slot==1u);
+    mi_rotate(&s,MI_EN_K1,6); /* skips duplicate DELAY and conflicting EUREKA */
+    assert(s.fx2==MI_FX_CHORUS);
+    assert(mi_fx_pair_supported(s.fx,s.fx2));
+    mi_button(&s,MI_B_FX,9002);
+    assert(s.fx_slot==0u);
+    puts("PASS: REC trim/pitch, 2-slot FX conflicts, EUREKA naming, legacy controls");
     return 0;
 }
