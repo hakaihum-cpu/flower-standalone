@@ -43,8 +43,16 @@ require(required_formats.issubset(set(actual_formats)),
 require('#define FELUCCA_VERSION "MIYAKO FM1 P2"' in host_boot and
         'FELUCCA_VERSION' in splash,
         "host boot test must define native MIYAKO firmware version")
-require('cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only' in ci,
-        "CI must compile all host C harnesses before expensive video conversion")
+early_host = ('fm1/karma/test_engine.c', 'fm1/karma/test_stress.c',
+              'fm1/karma/test_boot_ui.c', 'fm1/karma/test_panel_nav.c')
+early_loop = next((line for line in ci.splitlines()
+                   if 'for source in fm1/karma/test_engine.c' in line), '')
+require(all(name in early_loop for name in early_host) and
+        'fm1/karma/test_dot_ui.c' not in early_loop and
+        'cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only' in ci and
+        ci.index(early_loop) < ci.index('pack_eureka_vq_candidate.py \\') and
+        ci.index('fm1/karma/test_dot_ui.c -lm') > ci.index('pack_eureka_vq_candidate.py \\'),
+        "CI early syntax gate needs four non-video tests; DOT requires generated VQ data")
 
 for token in ('"SINE"', '"SAW"', '"SQR"', '"PULSE"', '"REEL"', '"EUREKA"', '"CRUSH"',
               'ENG_MIYAKO', 'miyako_note_on', 'miyako_render', 'miyako_post',
