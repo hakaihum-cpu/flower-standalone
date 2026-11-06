@@ -65,9 +65,11 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
     case MI_B_EDIT: view(s, MI_OSC); break;
     case MI_B_FX: view(s, MI_FX); break;
     case MI_B_SEL:
+        /* Visualizer is a view, not an EUREKA sound selector.
+         * Leave the selected MIYAKO FX and its WET state untouched.
+         * Animation mode is chosen by the media renderer, not by UI navigation.
+         */
         view(s, MI_VIDEO);
-        s->fx = MI_FX_EUREKA;
-        if (s->wet == 0) s->wet = 95;
         break;
     case MI_B_ENV: view(s, MI_ENV); break;
     case MI_B_LFO: view(s, MI_LFO); break;
