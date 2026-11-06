@@ -38,6 +38,18 @@ void mi_fx_dsp_reset_shared(mi_fx_dsp_t *p)
     p->eureka_decimate=0u;
     p->eureka_sum=0.f;p->eureka_phase=0.f;p->eureka_filter=0.f;
 }
+int mi_fx_dsp_eureka_ready(const mi_fx_dsp_t *p,unsigned time,unsigned haze)
+{
+    if(!p)return 0;
+    if(time>127u)time=127u;
+    if(haze>127u)haze=127u;
+    /* Last grain read can be this far behind the write head. Delay wet
+     * processing until the full lookback is actually captured; EUREKA's
+     * processor itself continues returning wet-only audio. */
+    float seconds=0.10f+1.60f*(float)time/127.f
+                  +0.8f*(0.05f+0.24f*(float)haze/127.f);
+    return (float)p->eureka_valid>seconds*14700.f+2.f;
+}
 static float eu_read(const mi_fx_dsp_t *p,float behind)
 {
     float at=(float)p->eureka_write-behind;
