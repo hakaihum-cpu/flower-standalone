@@ -1,3 +1,8 @@
+> **SUPERSEDED FOR THIS BRANCH (2026-11-06):** The user's later decision
+> defers EUREKA entirely. The authoritative current scope is
+> [SCOPE_AND_BUILD_20261106.md](native/SCOPE_AND_BUILD_20261106.md).
+> This historical document must not reinstate EUREKA or delay the build.
+
 # MIYAKO → M-VAVE FM-1: standalone migration contract
 Date: 2026-11-06
 
