@@ -1,0 +1,15 @@
+# Verify 2-second native EUREKA buffer and audible wet playback on FM-1 host.
+master 4096
+tap FX
+expect view 2
+turn K1 6
+expect fx 6
+turn K2 120
+turn K3 30
+turn K4 75
+wav MIYAKO_EUREKA_AUDIO.wav
+midi USB 90 45 7F
+wait 2200
+midi USB 80 45 00
+wait 800
+wavstop
