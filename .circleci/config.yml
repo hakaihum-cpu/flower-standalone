@@ -20,7 +20,7 @@ jobs:
           name: Verify exact MIYAKO branch and zero KARMA source closure
           command: |
             set -eu
-            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-standalone-20261106"
+            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-no-eureka-20261106"
             python3 -m py_compile fm1/native/verify_standalone.py fm1/native/test_pipeline_contract.py
             python3 fm1/native/verify_standalone.py
             python3 fm1/native/test_pipeline_contract.py
@@ -31,7 +31,7 @@ jobs:
             /tmp/mi_control_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
-              fm1/native/mi_control.c fm1/native/mi_audio.c fm1/native/test_mi_audio.c \
+              fm1/native/mi_control.c fm1/native/mi_audio.c fm1/native/mi_fx_dsp.c fm1/native/test_mi_audio.c \
               -o /tmp/mi_audio_test
             /tmp/mi_audio_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
@@ -128,4 +128,4 @@ workflows:
       - fm1_native_build:
           filters:
             branches:
-              only: feature/fm1-miyako-standalone-20261106
+              only: feature/fm1-miyako-no-eureka-20261106
