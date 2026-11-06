@@ -19,14 +19,20 @@ int main(void)
  mi_audio_note_on(&a,60,120);
  for(i=0;i<15;i++)mi_audio_render(&a,&s,lr,256,4096);
  assert(a.wr>0&&a.valid>0);
- s.fx=MI_FX_EUREKA;
+ s.fx=MI_FX_DELAY;
+ for(i=0;i<150;i++)mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.last_mode==MI_FX_DELAY);
+ s.fx=MI_FX_CHORUS;
  for(i=0;i<15;i++)mi_audio_render(&a,&s,lr,256,4096);
- assert(a.phase>0);
- s.fx=MI_FX_DREAMY; /* MUST NOT render non-existent effect */
+ assert(a.last_mode==MI_FX_CHORUS);
+ s.fx=MI_FX_REVERB;
+ for(i=0;i<15;i++)mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.last_mode==MI_FX_REVERB);
+ s.fx=MI_FX_DREAMY; /* untouched until original DSP port is ready */
  for(i=0;i<4;i++)mi_audio_render(&a,&s,lr,256,4096);
- assert(a.last_mode==MI_FX_OFF);
+ assert(a.last_mode==MI_FX_DREAMY);
  mi_audio_panic(&a);
  for(i=0;i<4;i++)assert(!a.v[i].active);
- puts("PASS: native 4-voice oscillator, Reel/Eureka prototypes and truthful unimplemented FX");
+ puts("PASS: native 4-voice oscillator, Reel/Delay/Reverb/Chorus and honest Dreamy state");
  return 0;
 }
