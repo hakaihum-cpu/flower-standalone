@@ -8,9 +8,11 @@
 #define MI_DELAY_N 32768u
 #define MI_CHORUS_N 2048u
 #define MI_REVERB_N 4096u
+#define MI_DREAM_N 32768u
 static int16_t delay_memory[MI_DELAY_N] __attribute__((section(".pool")));
 static int16_t chorus_memory[MI_CHORUS_N] __attribute__((section(".pool")));
 static int16_t reverb_memory[4][MI_REVERB_N] __attribute__((section(".pool")));
+static int16_t dreamy_memory[MI_DREAM_N] __attribute__((section(".pool")));
 static float bounded(float v,float lo,float hi) {return v<lo?lo:v>hi?hi:v;}
 static int16_t quant(float v){return (int16_t)(bounded(v,-1.f,1.f)*32767.f);}
 static float read16(int16_t v){return (float)v*(1.f/32767.f);}
@@ -32,6 +34,7 @@ void mi_fx_dsp_init(mi_fx_dsp_t *p)
     mi_memzero(delay_memory,sizeof delay_memory);
     mi_memzero(chorus_memory,sizeof chorus_memory);
     mi_memzero(reverb_memory,sizeof reverb_memory);
+    mi_memzero(dreamy_memory,sizeof dreamy_memory);
 }
 float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
                         float sample_rate,unsigned p1,unsigned p2)
@@ -41,6 +44,42 @@ float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
     if(p1>127u)p1=127u;
     if(p2>127u)p2=127u;
     dry=bounded(dry,-1.f,1.f);
+    if(mode==MI_FX_DREAMY) {
+        /* Two staggered, overlap-crossfaded grains from a bounded
+         * 16-bit mono history. Parameters: GRAIN length / SPACE feedback.
+         * Native FM-1 implementation; not a bit-exact JUCE Dreamy model.
+         * At most 64 KiB additional pool memory; no heap or libc. */
+        float size=0.08f+0.44f*(p1/127.f);
+        float grain_samples=size*sample_rate;
+        float ph0=p->dreamy_phase;
+        float ph1=ph0+0.5f;
+        float samples[2],windows[2];
+        uint32_t write=p->dreamy_write&(MI_DREAM_N-1u);
+        unsigned i;
+        if(ph1>=1.f)ph1-=1.f;
+        for(i=0;i<2u;i++){
+            float phase=i==0u?ph0:ph1;
+            float offset=2048.f+phase*grain_samples*0.5f;
+            unsigned delay=(unsigned)offset;
+            float fract=offset-(float)delay;
+            unsigned at=(p->dreamy_write-delay)&(MI_DREAM_N-1u);
+            float a=read16(dreamy_memory[at]);
+            float b=read16(dreamy_memory[(at-1u)&(MI_DREAM_N-1u)]);
+            samples[i]=a+(b-a)*fract;
+            windows[i]=1.f-(phase<0.5f?1.f-2.f*phase:2.f*phase-1.f);
+        }
+        float denom=windows[0]+windows[1];
+        float wet=(samples[0]*windows[0]+samples[1]*windows[1])/
+                  (denom>0.01f?denom:1.f);
+        if(p->dreamy_valid<MI_DREAM_N)++p->dreamy_valid;
+        if(p->dreamy_valid<(uint32_t)(grain_samples+2048.f))wet=0.f;
+        float fb=0.42f*(p2/127.f);
+        dreamy_memory[write]=quant(dry+wet*fb);
+        ++p->dreamy_write;
+        p->dreamy_phase+=1.f/grain_samples;
+        if(p->dreamy_phase>=1.f)p->dreamy_phase-=1.f;
+        return bounded(wet,-1.f,1.f);
+    }
     if(mode==MI_FX_DELAY) {
         /* 40..680 ms; one tap; 0..0.85 feedback */
         float ms=40.f+640.f*(p1/127.f);
