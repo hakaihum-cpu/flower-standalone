@@ -84,7 +84,7 @@ jobs:
                fm1/native/mi_eureka_vq_frames.h \
                fm1/native/mi_effects_vq_frames.h \
                /tmp/fm1-base/miyako/
-            python3 /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
+            /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
             test -x /tmp/fm1-base/miyako/build/host/miyako_host
             /tmp/fm1-base/miyako/build/host/miyako_host fm1/native/host_smoke.txt fm1-dist
       - run:
@@ -105,7 +105,7 @@ jobs:
           command: |
             set -eu
             export JIELI_TOOLCHAIN AC79_SDK
-            python3 /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako
+            /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako
             test -s /tmp/fm1-base/miyako/build/miyako.bin
             test -s /tmp/fm1-base/miyako/build/loader/ota.bin
             test -s /tmp/fm1-base/miyako/build/miyako.fwsc
