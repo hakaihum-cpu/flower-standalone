@@ -93,6 +93,7 @@ jobs:
             test -s fm1-dist/MIYAKO_EFFECTS_VIDEO.png
             test -s fm1-dist/MIYAKO_FX_PREVIEW.wav
             test "$(stat -c %s fm1-dist/MIYAKO_FX_PREVIEW.wav)" -gt 10000
+            /tmp/mi-video-venv/bin/python fm1/native/tools/check_host_wav.py fm1-dist/MIYAKO_FX_PREVIEW.wav
       - run:
           name: Install pinned JieLi compiler and minimum AC79 packaging inputs
           command: |
