@@ -48,3 +48,41 @@ wait 100
 expect view 0
 expect wave 2
 expect fx 1
+# New Phase 3: REC/PLAY, waveform editor, pitch/trim and EUREKA video.
+midi USB 90 45 7F
+tap REC
+expect view 7
+wait 650
+expect rec_samples >10000
+tap REC
+midi USB 80 45 00
+expect recording 0
+shot MIYAKO_RECORDER.png
+turn K1 20
+turn K2 -20
+turn K3 1
+expect rec_pitch 4
+tap PLAY
+wait 120
+expect rec_playing 1
+shot MIYAKO_RECORDER_PLAY.png
+tap PLAY
+wait 40
+expect rec_playing 0
+tap FX
+expect view 2
+turn K1 5
+expect fx 6
+tap SEL
+expect view 3
+midi USB 90 45 7F
+wait 300
+shot MIYAKO_EUREKA_VIDEO.png
+midi USB 80 45 00
+tap FX
+expect view 2
+tap FX
+expect fx_slot 1
+turn K1 4
+expect fx2 4
+shot MIYAKO_FX_DUAL.png
