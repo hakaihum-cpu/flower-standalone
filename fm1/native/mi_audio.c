@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Preliminary native oscillator, REEL and EUREKA audio paths.
- * The EUREKA ring is only 4096 samples, NOT the original Android recorder.
- * DREAMY, DELAY, REVERB, CHORUS and other original MIYAKO FX are not
- * implemented here. This prototype MUST NOT be sold as a completed port.
+ * Native FM-1 oscillator with initial Delay, Reverb and Chorus DSP.
+ * Not all original MIYAKO FX are implemented or fidelity-tested.
+ * EUREKA is not part of this branch, by the user's later instruction.
  */
 #include "mi_audio.h"
+#include "mi_fx_dsp.h"
 #include <string.h>
+static mi_fx_dsp_t native_fx;
 static float clampf(float x,float lo,float hi){return x<lo?lo:x>hi?hi:x;}
 static float wrap01(float x){while(x>=1.f)x-=1.f;while(x<0.f)x+=1.f;return x;}
 static float note_freq(int note)
@@ -47,6 +48,7 @@ void mi_audio_init(mi_audio_t *a,float rate)
     memset(a,0,sizeof(*a));
     a->sample_rate=rate>=8000.f&&rate<=192000.f?rate:44100.f;
     a->rand_state=0x4d495941u;
+    mi_fx_dsp_init(&native_fx);
     a->last_mode=MI_FX_OFF;
 }
 void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
@@ -76,16 +78,15 @@ void mi_audio_panic(mi_audio_t *a)
 static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
 {
     unsigned mode=s->fx;
-    float target=s->wet/127.f;
-    if(mode>MI_FX_EUREKA){mode=MI_FX_OFF;target=0.f;}/* do NOT silently claim DSP for listed modes */
-    if(mode!=a->last_mode){
-        /* deterministic memory reset on a mode change; wet ramps, no stale replay */
-        a->wr=a->valid=a->phase=a->segment=0;
-        a->wet_current=0.f;a->last_mode=(uint8_t)mode;
-    }
+    float target=mode==MI_FX_OFF?0.f:s->wet/127.f;
     float wet=dry;
+    if(mode>=MI_FX_COUNT)mode=MI_FX_OFF;
+    if(mode!=a->last_mode){
+        a->wr=a->valid=a->phase=a->segment=0;
+        a->wet_current=0.f;
+        a->last_mode=(uint8_t)mode;
+    }
     if(mode==MI_FX_REEL){
-        /* moving tape read head with fractional interpolation */
         float wow_depth=s->fx_options[MI_FX_REEL][0]/127.f;
         float flutter_depth=s->fx_options[MI_FX_REEL][1]/127.f;
         a->wow=wrap01(a->wow+0.4f/a->sample_rate);
@@ -101,20 +102,14 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
         }
         a->ring[a->wr&(MI_NATIVE_RING-1u)]=(int16_t)(clampf(dry,-1.f,1.f)*32767.f);
         ++a->wr;if(a->valid<MI_NATIVE_RING)++a->valid;
-    }else if(mode==MI_FX_EUREKA){
-        uint32_t size=256u+(uint32_t)s->fx_options[MI_FX_EUREKA][0]*24u;
-        uint32_t repeats=1u+((uint32_t)s->fx_options[MI_FX_EUREKA][1]>>5);
-        if(a->phase>=size*(repeats+1u))a->phase=0;
-        uint32_t at=a->phase%size;
-        if(a->phase<size)a->ring[at]=(int16_t)(clampf(dry,-1.f,1.f)*32767.f);
-        else{
-            wet=a->ring[at]/32767.f;
-            uint32_t edge=at<size-at-1u?at:size-at-1u;
-            if(edge<32u)wet=dry+(wet-dry)*((float)edge/32.f);
-        }
-        ++a->phase;
-    }
-    if(mode==MI_FX_OFF)target=0.f;
+    }else if(mode==MI_FX_DELAY||mode==MI_FX_REVERB||mode==MI_FX_CHORUS){
+        wet=mi_fx_dsp_process(&native_fx,mode,dry,a->sample_rate,
+            s->fx_options[mode][0],s->fx_options[mode][1]);
+    }else if(mode==MI_FX_DREAMY){
+        /* Dreamy requires a separate approved, source-accurate implementation.
+         * No false effect processing or reduced pitch-grain imitation. */
+        target=0.f;
+    }else target=0.f;
     a->wet_current+=(target-a->wet_current)*0.001f;
     return dry+(wet-dry)*a->wet_current;
 }
