@@ -12,6 +12,8 @@ KARMA may be **read as a technical reference only** for device-specific observat
 - SINE / SAW / SQUARE / PULSE, SUB, WIDTH and CRUSH; preserve four-voice requirement unless the user changes it.
 - Distinct audio FX: EUREKA, REEL, DREAMY, DELAY, REVERB and CHORUS. A new name on a menu is not an implementation. Additional originally approved MIYAKO FX require explicit scope reconciliation, not silent omission.
 - EUREKA audio processing **and** 576 original-source animation frames in 16 colour; no generated or substituted media.
+- **EUREKA is not the only MIYAKO animation**. Audit the original MIYAKO visual modes and user-supplied media before determining the FM-1 media manifest. Preserve the supported animations and interactions across relevant oscillator/effect modes where original source assets and behavior exist. Do not silently reduce the visualizer to EUREKA.
+- VIDEO is a *view*, not an FX selector: navigating to VIDEO must preserve the currently chosen sound effect and wet level. Source-correct visuals are selected independently of the audio FX chain.
 - No silent reduction in DSP, fidelity, frame count, colour, features, buffers or UI controls as a workaround for the device.
 - Remove old KARMA-only synths, sequencer subsystems, menus, project format layers, and dead framework dependencies; use a separate narrowly scoped FM-1 hardware abstraction for LCD, keys/encoders, LEDs, audio I/O, flash and boot/update.
 - Keep main protected and do not trigger any CI/manual build without explicit user authorization.
