@@ -84,9 +84,9 @@ static void midi_audio_poll(void)
      uint8_t velocity=(uint8_t)((pkt>>24)&127u);
      uint8_t kind=status&0xF0u;
      (void)port;
-     if(kind==0x90u&&velocity)mi_audio_note_on(&audio,note,velocity);
+     if(kind==0x90u&&velocity)mi_audio_input_on(&audio,&state,note,velocity);
      else if(kind==0x80u||(kind==0x90u&&!velocity))
-         mi_audio_note_off(&audio,note);
+         mi_audio_input_off(&audio,&state,note);
      else if(kind==0xB0u&&note==123u)
          mi_audio_panic(&audio);
  }
@@ -144,10 +144,10 @@ static void input(void)
      uint8_t note=(uint8_t)(53+(int)i+12*(int)state.octave);
      if((keys&bit)&&!(last_keys&bit)){
          held_note[i]=note;
-         mi_audio_note_on(&audio,note,(uint8_t)touch_vel(i));
+         mi_audio_input_on(&audio,&state,note,(uint8_t)touch_vel(i));
      }
      if(!(keys&bit)&&(last_keys&bit))
-         mi_audio_note_off(&audio,held_note[i]);
+         mi_audio_input_off(&audio,&state,held_note[i]);
  }
  if(keys!=last_keys)redraw=1;
  last_keys=keys;
