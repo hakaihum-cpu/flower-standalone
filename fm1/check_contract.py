@@ -210,6 +210,27 @@ require(any('&ENG_PRISM, &ENG_ELEM, &ENG_ACID, &ENG_JUNO,' in old and
             '&ENG_GONE, &ENG_GONE, &ENG_MIYAKO, &ENG_JUNO,' in new_source
             for old, new_source in engine_ops),
         "Mutable engine table IDs not reserved/replaced by MIYAKO")
+# #251 full translation-unit dependency closure. Removing a source module
+# must remove all its consumers in the unchanged KARMA files too.
+shared_edits = {
+    "voice.c": (("ENG_PHYS", "ENG_ELEM", "ENG_PRISM", "phys_poly(", "elem_poly(", "prism_poly("),
+                "ENGINES[t->engine]->poly"),
+    "gen_seq.c": (("EM_BOUNCE", "EM_PICK"),
+                  "t->p[P_ATK] < 12 && t->p[P_REL] < 40"),
+    "ui_op.c": (("prism_model(", "PRM_FOLD", "PRM_HARM", "PRM_WAVE", "PRM_SWARM", "op_prism_panel("),
+                "op_px = 0;"),
+}
+for filename, (removed_names, result_anchor) in shared_edits.items():
+    edits = native_replacements(filename)
+    require(edits, f"#251 missing shared source patch for {filename}")
+    require(all(any(name in old and name not in new
+                    for old, new in edits)
+                for name in removed_names) and
+            any(result_anchor in new for old, new in edits),
+            f"#251 incomplete removed-engine reference closure in {filename}")
+require('"#251 omitted-engine dependency closure"' in verifier and
+        '"voice.c", "gen_seq.c", "ui_op.c"' in verifier,
+        "#251 native post-patch verifier must check every shared C consumer")
 require('plx_anchor = "    plx = build_plx()"' in patcher and
         'no Plaits C++ model objects' in patcher and
         'Plaits C++ linker inputs excluded' in verifier,
