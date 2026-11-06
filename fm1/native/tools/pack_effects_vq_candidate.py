@@ -320,10 +320,10 @@ def main():
           f"{min(worst):.2f} dB; decoded CRC32={decoded_crc32:08X}; "
           "firmware Flash fit and physical LCD/audio are NOT yet validated")
     if min(worst) < a.min_psnr_db:
-        print(f"WARNING: VQ visual quality below advisory {a.min_psnr_db:.1f}dB: "
-              f"minimum {min(worst):.2f} dB across all original 144 frames. "
-              "Quality is NOT certified; inspect actual video preview. "
-              "All frame-integrity, decoder, flash/RAM and package checks remain mandatory.")
+        raise SystemExit(
+            f"FAIL: original-source EFFECTS visual quality below mandatory "
+            f"{a.min_psnr_db:.1f} dB PSNR: worst {min(worst):.2f} dB across "
+            "144 original frames. No unapproved low-quality FWSC will be produced.")
 
 
 if __name__ == "__main__":
