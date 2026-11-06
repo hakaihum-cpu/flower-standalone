@@ -259,33 +259,34 @@ static void draw(void)
  uint32_t i,now=plat_ms();
  char val[16];
  cv_begin(240,120,C_BLACK);
- cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
- cv_text(140,10,&FONT_XS,mi_view_name(state.view),GREY);
- cv_rect(8,31,224,1,DIM);
- if(now<message_until){
-     cv_text(12,50,&FONT_B,line_a,YELLOW);
-     cv_text(12,76,&FONT_XS,line_b,GREY);
- }else if(state.view==MI_OSC||state.view==MI_HOME){
-     /* UI reflects the selected waveform; this is not an audio capture. */
-     int32_t prior=80;
-     for(i=0;i<224;i++){
-         float p=(float)(i%112u)/112.f;
-         float value=state.wave==0?(p<0.5f?4.f*p*(1.f-2.f*p):-(4.f*(p-0.5f)*(2.f-2.f*p))):
-             state.wave==1?(2.f*p-1.f):
-             state.wave==2?(p<0.5f?1.f:-1.f):
-             (p<0.05f+0.9f*state.width/127.f?1.f:-1.f);
-         int32_t y=76-(int32_t)(value*26.f);
-         if(i)cv_line((int32_t)(i+7u),prior,(int32_t)(i+8u),y,YELLOW);
-         prior=y;
-     }
- }else if(state.view==MI_FX||state.view==MI_VIDEO){
-     cv_text(12,52,&FONT_B,mi_fx_name((mi_fx_t)state.fx),YELLOW);
-     if(state.view==MI_VIDEO)
-         mi_media_draw();
-     else if(state.fx>MI_FX_EUREKA)
-         cv_text(12,81,&FONT_XS,"AUDIO DSP PENDING",GREY);
+ if(state.view==MI_VIDEO){
+     mi_media_draw();
  }else{
-     cv_text(12,54,&FONT_B,mi_view_name(state.view),YELLOW);
+     cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
+     cv_text(140,10,&FONT_XS,mi_view_name(state.view),GREY);
+     cv_rect(8,31,224,1,DIM);
+     if(now<message_until){
+         cv_text(12,50,&FONT_B,line_a,YELLOW);
+         cv_text(12,76,&FONT_XS,line_b,GREY);
+     }else if(state.view==MI_OSC||state.view==MI_HOME){
+         int32_t prior=80;
+         for(i=0;i<224;i++){
+             float p=(float)(i%112u)/112.f;
+             float value=state.wave==0?(p<0.5f?4.f*p*(1.f-2.f*p):-(4.f*(p-0.5f)*(2.f-2.f*p))):
+                 state.wave==1?(2.f*p-1.f):
+                 state.wave==2?(p<0.5f?1.f:-1.f):
+                 (p<0.05f+0.9f*state.width/127.f?1.f:-1.f);
+             int32_t y=76-(int32_t)(value*26.f);
+             if(i)cv_line((int32_t)(i+7u),prior,(int32_t)(i+8u),y,YELLOW);
+             prior=y;
+         }
+     }else if(state.view==MI_FX){
+         cv_text(12,52,&FONT_B,mi_fx_name((mi_fx_t)state.fx),YELLOW);
+         if(state.fx>MI_FX_EUREKA)
+             cv_text(12,81,&FONT_XS,"AUDIO DSP PENDING",GREY);
+     }else{
+         cv_text(12,54,&FONT_B,mi_view_name(state.view),YELLOW);
+     }
  }
  cv_blit(0,0);
 
@@ -315,8 +316,12 @@ void app_frame(void)
  now=plat_ms();
  if(now-video_time>=33u){
      video_time=now;
+     int16_t old_eureka=video.eureka_frame;
+     int16_t old_effects=video.effects_frame;
      mi_video_tick(&video,audio_activity,state.fx==MI_FX_EUREKA);
-     if(state.view==MI_VIDEO)redraw=1;
+     if(state.view==MI_VIDEO &&
+       (old_eureka!=video.eureka_frame||old_effects!=video.effects_frame))
+         redraw=1;
  }
  if(message_until&&now>=message_until){message_until=0;redraw=1;}
  if(redraw){draw();redraw=0;}
