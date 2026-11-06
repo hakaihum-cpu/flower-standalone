@@ -63,11 +63,14 @@ jobs:
             test "$(git -C /tmp/fm1-base rev-parse HEAD)" = "e07ebca2dda5fbd3bb40287d1f6083923f9ae999"
             mkdir -p /tmp/fm1-base/miyako
             cp fm1/native/app.c fm1/native/app.h fm1/native/fm1.toml \
+               fm1/native/words.tsv \
                fm1/native/mi_control.c fm1/native/mi_control.h \
                fm1/native/mi_audio.c fm1/native/mi_audio.h \
                fm1/native/mi_video.c fm1/native/mi_video.h \
                fm1/native/mi_fx_dsp.c fm1/native/mi_fx_dsp.h \
                /tmp/fm1-base/miyako/
+            test -s /tmp/fm1-base/miyako/words.tsv
+            grep -q '^# url: https://' /tmp/fm1-base/miyako/words.tsv
             python3 fm1/native/tools/compile_only_media_stub.py \
               /tmp/fm1-base/miyako/mi_effects_vq_frames.h
             /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
