@@ -54,6 +54,13 @@ assert "scripts/materialize_effects_video_pack.py" in ci
 assert "scripts/materialize_miyako_eureka_video.py" not in ci
 assert "DREAMY and the source-accurate multi-FX" in ci
 assert "MI_EUREKA_ASSET_COUNT" not in ci
+# fm1-base tools/build.py uses sys.executable for gen_font.py.
+# Pillow MUST already be installed in the SAME interpreter before first --host.
+assert ci.index("Install Python font and media dependencies") < ci.index("Host-compile real MIYAKO app")
+assert ci.index("Pillow==10.4.0") < ci.index("Host-compile real MIYAKO app")
+assert "from PIL import Image, ImageDraw, ImageFont" in ci
+assert "python3 /tmp/fm1-base/tools/build.py" not in ci
+assert ci.count("/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py") >= 3
 assert ci.index("Host-compile real MIYAKO app") < ci.index("Reconstruct all 144 original")
 assert ci.index("Reconstruct all 144 original") < ci.index("Compile FM-1 native platform host")
 assert "grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB'" in ci
