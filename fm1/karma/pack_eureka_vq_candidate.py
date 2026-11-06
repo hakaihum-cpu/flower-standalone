@@ -62,13 +62,19 @@ def tile_expand(codebook, ids):
     return codebook[ids].reshape(FRAMES, 20, 16, 4, 8).transpose(0, 1, 3, 2, 4).reshape(FRAMES, PAD_H, WIDTH)
 
 
-def train_clip(original, palette565, loops=6, frame_balance=0.0):
+def train_clip(original, palette565, loops=6, frame_balance=0.0, seed=0):
     """Deterministic RGB-aware K-means; 256 codebook tiles per 36-frame clip."""
     tiles = tile_extract(original)
     unique = np.unique(tiles, axis=0)
     if len(unique) < 2:
         raise ValueError("EUREKA: source clip is unexpectedly static")
-    codebook = unique[np.linspace(0, len(unique) - 1, DICT_SIZE, dtype=np.int32)].copy()
+    if seed and len(unique) >= DICT_SIZE:
+        # Different deterministic starts of the SAME 256-entry 8x4 tile VQ.
+        # The firmware's on-flash codec and every quality gate are unchanged.
+        rng = np.random.default_rng(seed)
+        codebook = unique[rng.choice(len(unique), DICT_SIZE, replace=False)].copy()
+    else:
+        codebook = unique[np.linspace(0, len(unique) - 1, DICT_SIZE, dtype=np.int32)].copy()
     codebook[0] = 0
     pal = rgb_palette(palette565)
     v = pal[tiles].reshape(-1, TILE_PIXELS * 3).astype(np.float32)
@@ -240,6 +246,15 @@ def main():
                                    frame_balance=balance)
                 if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
                     chosen, selected = trial, f"frame-balanced {balance:g}"
+            # Deterministic multi-start search: local 140-frame source checks
+            # showed measurable worst-frame gains without changing the codec.
+            # Only accept a candidate when its measured worst-frame PSNR
+            # improves (tie-break on mean); never relax the 26 dB gate.
+            for seed in (2, 3, 5, 7):
+                trial = train_clip(idx, palette, loops=18,
+                                   frame_balance=6.0, seed=clip * 100 + seed)
+                if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
+                    chosen, selected = trial, f"multi-start {seed}"
         book, ids, recon, quality = chosen
         blob = pack_nibbles(book)
         if not np.array_equal(book, np.stack([np.frombuffer(blob, np.uint8) >> 4,
