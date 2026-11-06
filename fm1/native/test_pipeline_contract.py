@@ -93,4 +93,26 @@ assert "CANDIDATE: RGB565 16 colours" in vq
 assert "decoded_crc32 = zlib.crc32(pixels, decoded_crc32)" in vq
 assert "write_candidate(a.output_header, palettes, books, maps, decoded_crc32)" in vq
 assert "PSNR is a non-blocking visual quality metric" in vq
+# Target-only validation MUST precede the expensive user-video VQ stage.
+assert ci.index("Install pinned JieLi compiler") < ci.index(
+    "Verify freestanding MIYAKO C with the actual JieLi target compiler")
+assert ci.index("Verify freestanding MIYAKO C with the actual JieLi target compiler") < ci.index(
+    "Reconstruct all 144 original MIYAKO EFFECTS source frames")
+assert "for unit in mi_fx_dsp.c mi_audio.c mi_control.c mi_video.c" in ci
+assert "fsyntax-only" in ci and "fno-builtin" in ci
+assert "fm1/native/mi_memory.h" in ci
+# JieLi's pi32v2 toolchain doesn't have hosted libc string.h; scanning
+# every target source+header makes the exact observed error a stage-one fail.
+import re as _re
+for target in list((root / "fm1/native").glob("mi_*.c")) + [
+    root / "fm1/native/app.c",
+] + list((root / "fm1/native").glob("*.h")):
+    body = target.read_text(encoding="utf-8")
+    assert not _re.search(r'#\\s*include\\s*<string\\.h>', body), (
+        f"target imports missing bare-metal string.h: {target.name}"
+    )
+    assert not _re.search(r'(?<![a-zA-Z_])memset\\s*\\(', body), (
+        f"target still calls unavailable hosted memset: {target.name}"
+    )
+assert (root / "fm1/native/mi_memory.h").is_file()
 print("PASS: manual no-EUREKA FM-1 firmware pipeline with original EFFECTS video and native FX")
