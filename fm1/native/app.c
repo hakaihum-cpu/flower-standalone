@@ -34,7 +34,7 @@ static void textcpy(char *dest,const char *src,unsigned limit)
 static void number(int32_t value,char *out)
 {
  char tmp[16];unsigned n=0;uint32_t v;
- if(value<0){*out++='-';v=(uint32_t)(-(int64_t)value);}else v=(uint32_t)value;
+ if(value<0){*out++='-';v=(uint32_t)(-value);}else v=(uint32_t)value;
  do{tmp[n++]=(char)('0'+v%10u);v/=10u;}while(v&&n<15u);
  while(n)*out++=tmp[--n];
  *out=0;
