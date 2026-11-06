@@ -84,6 +84,10 @@ jobs:
             /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/gen_font.py \
               /tmp/mi_font_preflight.h
             test -s /tmp/mi_font_preflight.h
+            # Run the real upstream fm1-base MMIO / BSP policy now,
+            # not a regex approximation after hours of video optimisation.
+            python3 fm1/native/tools/run_upstream_platform_checks.py \
+              --platform /tmp/fm1-base --app /tmp/fm1-base/miyako
             python3 fm1/native/tools/compile_only_media_stub.py \
               /tmp/fm1-base/miyako/mi_effects_vq_frames.h
             /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
@@ -119,6 +123,18 @@ jobs:
               echo "PASS: JieLi pi32v2 freestanding $unit"
             done
             python3 fm1/native/verify_standalone.py
+      - run:
+          name: Exercise real FM-1 target compile, link, and all upstream policy checks before costly video VQ
+          command: |
+            set -eu
+            test -s /tmp/fm1-base/miyako/mi_effects_vq_frames.h
+            grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB' /tmp/fm1-base/miyako/mi_effects_vq_frames.h
+            /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako
+            test -s /tmp/fm1-base/miyako/build/miyako.fwsc
+            # Generated-media stub is intentionally a type checker ONLY.
+            # Do not preserve or publish an installable file containing it.
+            rm -rf /tmp/fm1-base/miyako/build
+            test ! -e /tmp/fm1-base/miyako/build/miyako.fwsc
       - run:
           name: Reconstruct all 144 original MIYAKO EFFECTS source frames
           command: |
