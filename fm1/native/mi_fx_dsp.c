@@ -28,10 +28,10 @@ static float sine(float x)
 void mi_fx_dsp_init(mi_fx_dsp_t *p)
 {
     if(!p)return;
-    mi_memzero(p,0,sizeof(*p));
-    mi_memzero(delay_memory,0,sizeof delay_memory);
-    mi_memzero(chorus_memory,0,sizeof chorus_memory);
-    mi_memzero(reverb_memory,0,sizeof reverb_memory);
+    mi_memzero(p,sizeof(*p));
+    mi_memzero(delay_memory,sizeof delay_memory);
+    mi_memzero(chorus_memory,sizeof chorus_memory);
+    mi_memzero(reverb_memory,sizeof reverb_memory);
 }
 float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
                         float sample_rate,unsigned p1,unsigned p2)
