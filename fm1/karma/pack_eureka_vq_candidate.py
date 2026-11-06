@@ -68,17 +68,36 @@ def train_clip(original, palette565, loops=6, frame_balance=0.0, seed=0):
     unique = np.unique(tiles, axis=0)
     if len(unique) < 2:
         raise ValueError("EUREKA: source clip is unexpectedly static")
-    if seed and len(unique) >= DICT_SIZE:
-        # Different deterministic starts of the SAME 256-entry 8x4 tile VQ.
-        # The firmware's on-flash codec and every quality gate are unchanged.
+    pal = rgb_palette(palette565)
+    v = pal[tiles].reshape(-1, TILE_PIXELS * 3).astype(np.float32)
+    norms = np.einsum("ij,ij->i", v, v)
+    if seed < 0:
+        # RGB-distance-spread starts improve coverage of difficult 8x4 source
+        # tiles. This ONLY chooses a starting dictionary for the same 256
+        # codebook entries and 8-bit selector map; no new codec or artwork.
+        rng = np.random.default_rng(-seed)
+        choices = np.empty(DICT_SIZE, dtype=np.int32)
+        choices[0] = int(rng.integers(0, len(tiles)))
+        closest = np.full(len(tiles), np.inf, dtype=np.float32)
+        for pos in range(1, DICT_SIZE):
+            delta = v - v[choices[pos - 1]]
+            np.minimum(closest, np.einsum("ij,ij->i", delta, delta),
+                       out=closest)
+            total = float(np.sum(closest, dtype=np.float64))
+            if total <= 0:
+                choices[pos] = int(rng.integers(0, len(tiles)))
+            else:
+                position = float(rng.random() * total)
+                choices[pos] = min(int(np.searchsorted(
+                    np.cumsum(closest, dtype=np.float64),
+                    position, side="left")), len(tiles) - 1)
+        codebook = tiles[choices].copy()
+    elif seed and len(unique) >= DICT_SIZE:
         rng = np.random.default_rng(seed)
         codebook = unique[rng.choice(len(unique), DICT_SIZE, replace=False)].copy()
     else:
         codebook = unique[np.linspace(0, len(unique) - 1, DICT_SIZE, dtype=np.int32)].copy()
     codebook[0] = 0
-    pal = rgb_palette(palette565)
-    v = pal[tiles].reshape(-1, TILE_PIXELS * 3).astype(np.float32)
-    norms = np.einsum("ij,ij->i", v, v)
     ids = np.zeros(len(tiles), dtype=np.uint8)
     for _ in range(loops):
         centroids = pal[codebook].reshape(DICT_SIZE, TILE_PIXELS * 3).astype(np.float32)
@@ -255,6 +274,15 @@ def main():
                                    frame_balance=6.0, seed=clip * 100 + seed)
                 if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
                     chosen, selected = trial, f"multi-start {seed}"
+            # Use the same codec with RGB-distance-spread starting tiles.
+            # Local source checks improved the worst frame in two of three
+            # complete 36-frame clips. Rejected if worse than existing starts.
+            for seed in (11, 17):
+                trial = train_clip(idx, palette, loops=18,
+                                   frame_balance=6.0,
+                                   seed=-(clip * 100 + seed))
+                if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
+                    chosen, selected = trial, f"spread-start {seed}"
         book, ids, recon, quality = chosen
         blob = pack_nibbles(book)
         if not np.array_equal(book, np.stack([np.frombuffer(blob, np.uint8) >> 4,
