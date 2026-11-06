@@ -9,6 +9,7 @@
 #define MI_CHORUS_N 2048u
 #define MI_REVERB_N 4096u
 #define MI_DREAM_N 32768u
+#define MI_EUREKA_FRAMES 29400u /* exactly 2 s at 14.7 kHz */
 static int16_t delay_memory[MI_DELAY_N] __attribute__((section(".pool")));
 static int16_t chorus_memory[MI_CHORUS_N] __attribute__((section(".pool")));
 static int16_t reverb_memory[4][MI_REVERB_N] __attribute__((section(".pool")));
@@ -27,11 +28,30 @@ static float sine(float x)
     p=0.775f*p+0.225f*p*p;
     return negative?-p:p;
 }
+void mi_fx_dsp_reset_shared(mi_fx_dsp_t *p)
+{
+    if(!p)return;
+    mi_memzero(delay_memory,sizeof delay_memory);
+    p->delay_write=0u;
+    p->eureka_write=0u;p->eureka_valid=0u;
+    p->eureka_decimate=0u;
+    p->eureka_sum=0.f;p->eureka_phase=0.f;p->eureka_filter=0.f;
+}
+static float eu_read(const mi_fx_dsp_t *p,float behind)
+{
+    float at=(float)p->eureka_write-behind;
+    while(at<0.f)at+=(float)MI_EUREKA_FRAMES;
+    while(at>=(float)MI_EUREKA_FRAMES)at-=(float)MI_EUREKA_FRAMES;
+    uint32_t i=(uint32_t)at;
+    uint32_t j=i+1u<MI_EUREKA_FRAMES?i+1u:0u;
+    float f=at-(float)i;
+    return read16(delay_memory[i])*(1.f-f)+read16(delay_memory[j])*f;
+}
 void mi_fx_dsp_init(mi_fx_dsp_t *p)
 {
     if(!p)return;
     mi_memzero(p,sizeof(*p));
-    mi_memzero(delay_memory,sizeof delay_memory);
+    mi_fx_dsp_reset_shared(p);
     mi_memzero(chorus_memory,sizeof chorus_memory);
     mi_memzero(reverb_memory,sizeof reverb_memory);
     mi_memzero(dreamy_memory,sizeof dreamy_memory);
@@ -44,6 +64,45 @@ float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
     if(p1>127u)p1=127u;
     if(p2>127u)p2=127u;
     dry=bounded(dry,-1.f,1.f);
+    if(mode==MI_FX_EUREKA) {
+        /* Two-second short-buffer Haze adaptation. 14.7 kHz 16-bit
+         * continuous capture; two crossfaded repeat grains with TIME
+         * and HAZE. Wet only. Uses DELAY memory; cannot run with DELAY. */
+        float haze=(float)p2/127.f;
+        float grain=0.05f+0.24f*haze;
+        float history=0.10f+1.60f*(float)p1/127.f;
+        float grain_samples=grain*14700.f;
+        float base=history*14700.f;
+        float ph0=p->eureka_phase,ph1=ph0+0.5f;
+        float wet=0.f,weights=0.f;
+        unsigned k;
+        if(ph1>=1.f)ph1-=1.f;
+        for(k=0;k<2u;k++){
+            float ph=k==0u?ph0:ph1;
+            float behind=base+ph*grain_samples*0.8f;
+            float triangle=ph<0.5f?ph*2.f:(1.f-ph)*2.f;
+            if((float)p->eureka_valid>behind+2.f){
+                wet+=eu_read(p,behind)*triangle;
+                weights+=triangle;
+            }
+        }
+        if(weights>0.01f)wet/=weights;
+        else wet=0.f;
+        /* Gentle haze filter; never introduce an unprocessed wet bleed. */
+        p->eureka_filter+=(wet-p->eureka_filter)*(0.4f-0.3f*haze);
+        wet=bounded(p->eureka_filter,-1.f,1.f);
+        p->eureka_phase+=1.f/(grain*sample_rate);
+        if(p->eureka_phase>=1.f)p->eureka_phase-=1.f;
+        p->eureka_sum+=dry;
+        if(++p->eureka_decimate==3u){
+            delay_memory[p->eureka_write]=quant(p->eureka_sum*(1.f/3.f));
+            p->eureka_sum=0.f;
+            p->eureka_decimate=0u;
+            if(++p->eureka_write==MI_EUREKA_FRAMES)p->eureka_write=0u;
+            if(p->eureka_valid<MI_EUREKA_FRAMES)++p->eureka_valid;
+        }
+        return wet;
+    }
     if(mode==MI_FX_DREAMY) {
         /* Two staggered, overlap-crossfaded grains from a bounded
          * 16-bit mono history. Parameters: GRAIN length / SPACE feedback.
