@@ -19,7 +19,7 @@ typedef struct {
     int16_t ring[MI_NATIVE_RING];
     uint32_t wr, valid, phase, segment, rand_state;
     uint32_t age_counter;
-    uint8_t last_mode;
+    uint8_t last_mode,last_mode2;
     /* Held keys are shared between physical keys and incoming USB/TRS MIDI.
      * Arp runs on the audio sample clock, not the UI frame clock. */
     uint32_t held_keys[4];
@@ -31,7 +31,7 @@ typedef struct {
     float lfo_phase;
     mi_recorder_t recorder;
     volatile uint8_t rec_command;
-    float sample_rate, wow, flutter, wet_current;
+    float sample_rate, wow, flutter, wet_current,wet_current2;
 } mi_audio_t;
 void mi_audio_init(mi_audio_t *a, float sample_rate);
 void mi_audio_note_on(mi_audio_t *a, uint8_t note, uint8_t velocity);
