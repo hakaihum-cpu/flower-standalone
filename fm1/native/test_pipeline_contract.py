@@ -33,7 +33,10 @@ for forbidden in (
 assert ci.count("workflows:") == 1
 assert ci.count("when: << pipeline.parameters.run_build >>") == 1
 assert re.search(r"^\s+only: feature/fm1-miyako-standalone-20261106\s*$", ci, re.M)
-assert "python3 /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako" in ci
+assert "/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako" in ci
+assert "test_media_crc.c" in ci
+assert "pack_effects_vq_candidate.py" in ci
+assert "pack_eureka_vq_candidate.py" in ci
 assert "test -s /tmp/fm1-base/miyako/build/miyako.fwsc" in ci
 assert "scripts/materialize_effects_video_pack.py" in ci
 assert "scripts/materialize_miyako_eureka_video.py" in ci
