@@ -32,4 +32,10 @@ Do not claim a completed standalone firmware until each gate passes:
 The previous KARMA-based link reported ~581,564-byte application budget, 96 KiB RAM and 344,064-byte POOL. These are **preliminary engineering constraints**, not validated native MIYAKO free-space numbers. The original DREAMY implementation keeps ~2.5 seconds of stereo sample history; it cannot be copied wholesale to the FM-1 without a memory design. Do not silently replace it with a short effect and call it DREAMY.
 
 ## Progress status
-This file is a binding design contract, not proof of an FM-1 binary. Standalone control-state code and its host regression test are the first independent extraction step. DSP, device drivers, media renderer, boot/update integration and FWSC have **not** been completed on this branch.
+This file is a binding design contract, not proof of an FM-1 binary. The branch now has:
+- independent FM-1 UI, keyboard/encoder and persistent settings app entrypoints (`fm1/native/app.c`);
+- an independent native **prototype** 4-voice synth plus REEL and EUREKA audio (`mi_audio.c`), not source-fidelity-complete MIYAKO DSP;
+- independent original MIYAKO EFFECTS/EUREKA audio-reactive frame-index algorithms (`mi_video.c`), **not** decoded assets or rendered animations;
+- CircleCI manual-only compile and FM-1 platform host simulator checks. CI has **not** been executed.
+
+Not completed: source-fidelity DREAMY/DELAY/REVERB/CHORUS and other approved audio FX, independent multi-FX routing, EFFECTS and EUREKA media packing/rendering, accurate MIYAKO parameter behavior, target compiler/linker and memory measurement, physical device verification and a full MIYAKO FWSC. It is forbidden to present the provisional app as the completed firmware.
