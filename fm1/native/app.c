@@ -17,7 +17,7 @@
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
 #define GREY RGB(218,213,202)
-#define SAVED_MAGIC 0x4D493132u /* MI12: effects enum changed when EUREKA was deferred */
+#define SAVED_MAGIC 0x4D493133u /* MI13: persistent FX A/B + REC trim controls */
 typedef struct {
  uint32_t magic;
  mi_state_t state;
@@ -49,7 +49,8 @@ static void number(int32_t value,char *out)
 static int valid_state(const mi_state_t *s)
 {
  return (unsigned)s->view<MI_VIEW_COUNT&&s->wave<=3u&&
-        s->fx<MI_FX_COUNT&&s->width<=127u&&s->sub<=127u&&
+        s->fx<MI_FX_COUNT&&s->fx2<MI_FX_COUNT&&s->fx_slot<=1u&&
+        mi_fx_pair_supported(s->fx,s->fx2)&&s->width<=127u&&s->sub<=127u&&
         s->crush<=127u&&s->level<=127u&&s->wet<=127u&&
         s->project_slot>=1u&&s->project_slot<=4u&&s->preset<=5u&&
         s->octave>=-3&&s->octave<=3;
@@ -233,7 +234,7 @@ static void mi_media_decode(unsigned frame,unsigned eureka)
 static void mi_media_draw_half(unsigned half)
 {
     unsigned sy;
-    unsigned eureka=state.fx==MI_FX_EUREKA;
+    unsigned eureka=state.fx==MI_FX_EUREKA||state.fx2==MI_FX_EUREKA;
     int frame=eureka?video.eureka_frame:video.effects_frame;
     const int32_t shift=(int32_t)half*120;
     if(frame<0)return;
@@ -390,7 +391,9 @@ static void draw(void)
             prior=y;
         }
     }else if(state.view==MI_FX){
-        cv_text(12,52,&FONT_B,mi_fx_name((mi_fx_t)state.fx),YELLOW);
+        unsigned mode=state.fx_slot?state.fx2:state.fx;
+        cv_text(12,36,&FONT_XS,state.fx_slot?"FX B":"FX A",GREY);
+        cv_text(12,58,&FONT_B,mi_fx_name((mi_fx_t)mode),YELLOW);
     }else if(state.view==MI_ENV){
         mi_graph_env();
     }else if(state.view==MI_LFO){
@@ -445,7 +448,7 @@ void app_frame(void)
  if(now-video_time>=33u){
      video_time=now;
      int16_t old_effects=video.effects_frame,old_eureka=video.eureka_frame;
-     mi_video_tick(&video,audio_activity,state.fx==MI_FX_EUREKA);
+     mi_video_tick(&video,audio_activity,state.fx==MI_FX_EUREKA||state.fx2==MI_FX_EUREKA);
      if(state.view==MI_VIDEO &&
        (old_effects!=video.effects_frame||old_eureka!=video.eureka_frame))
          redraw=1;
@@ -462,6 +465,8 @@ int app_expect(const char *what,int *got)
 {
  if(mi_streq(what,"view")) *got=(int)state.view;
  else if(mi_streq(what,"fx")) *got=(int)state.fx;
+  else if(mi_streq(what,"fx2")) *got=(int)state.fx2;
+  else if(mi_streq(what,"fx_slot")) *got=(int)state.fx_slot;
  else if(mi_streq(what,"wave")) *got=(int)state.wave;
  else if(mi_streq(what,"octave")) *got=(int)state.octave;
  else if(mi_streq(what,"arp_mode")) *got=(int)state.arp[0];
