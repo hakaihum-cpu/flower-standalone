@@ -57,6 +57,8 @@ void mi_init(mi_state_t *s)
     s->lfo[0] = 35; s->lfo[1] = 0; s->lfo[2] = 0; s->lfo[3] = 0;
     s->fx_options[MI_FX_DREAMY][0] = 64;
     s->fx_options[MI_FX_DREAMY][1] = 80;
+    s->fx_options[MI_FX_EUREKA][0] = 48;
+    s->fx_options[MI_FX_EUREKA][1] = 64;
     /* REC editor: IN=0, OUT=127, pitch=0 semitones, level=100. */
     s->seq[0]=0;s->seq[1]=127;s->seq[2]=3;s->seq[3]=100;
 }
@@ -209,7 +211,7 @@ const char *mi_view_name(mi_view_t v)
 const char *mi_fx_name(mi_fx_t effect)
 {
     static const char *const names[] = {
-        "OFF", "REEL", "DREAMY", "DELAY", "REVERB", "CHORUS"
+        "OFF", "REEL", "DREAMY", "DELAY", "REVERB", "CHORUS", "EUREKA"
     };
     return (unsigned)effect < MI_FX_COUNT ? names[effect] : "?";
 }
@@ -230,6 +232,7 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         if (s->fx == MI_FX_DELAY) return k == 2 ? "TIME" : "FDBK";
         if (s->fx == MI_FX_REVERB) return k == 2 ? "DECAY" : "TONE";
         if (s->fx == MI_FX_CHORUS) return k == 2 ? "RATE" : "DEPTH";
+        if (s->fx == MI_FX_EUREKA) return k == 2 ? "TIME" : "HAZE";
         /* Other DSP controls are pending source-accurate port; not fabricated. */
         return "TBD";
     }
