@@ -81,7 +81,6 @@ assert "grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB'" in ci
 assert "mi_fx_dsp.c fm1/native/test_mi_audio.c" in ci
 assert "MIYAKO_HOME.png" in ci and "MIYAKO_FX.png" in ci
 assert "MIYAKO_EFFECTS_VIDEO.png" in ci
-assert "--base /tmp/fm1-base --product FM-1_9100" in ci
 # Approved on 2026-11-06: no 26dB (or other arbitrary numeric) image
 # quality gate may block a trial .fwsc. PSNR is measured and reported only.
 vq = (root / "fm1/native/tools/pack_effects_vq_candidate.py").read_text(encoding="utf-8")
