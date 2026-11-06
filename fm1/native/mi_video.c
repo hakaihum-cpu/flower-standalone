@@ -3,7 +3,7 @@
  * selection from original 144 user-provided frames; no EUREKA.
  */
 #include "mi_video.h"
-#include <string.h>
+#include "mi_memory.h"
 static uint32_t next_rng(uint32_t *v)
 {
     *v ^= *v << 13;
@@ -14,7 +14,7 @@ static uint32_t next_rng(uint32_t *v)
 void mi_video_init(mi_video_t *v,uint16_t effect_count)
 {
     if(!v)return;
-    memset(v,0,sizeof(*v));
+    mi_memzero(v,0,sizeof(*v));
     v->effects_rng=0x7E670103u;
     v->effect_count=effect_count;
     v->effects_frame=effect_count?0:-1;
