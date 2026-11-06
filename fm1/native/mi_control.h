@@ -54,6 +54,8 @@ const char *mi_view_name(mi_view_t view);
 const char *mi_fx_name(mi_fx_t effect);
 /* Two serial FX, but no duplicate processor or shared DELAY/EUREKA ring. */
 int mi_fx_pair_supported(unsigned first,unsigned second);
+/* Complete saved-settings bounds validation, shared with host C regression. */
+int mi_state_valid(const mi_state_t *s);
 const char *mi_param_name(const mi_state_t *s, unsigned knob);
 int32_t mi_param_value(const mi_state_t *s, unsigned knob);
 #endif
