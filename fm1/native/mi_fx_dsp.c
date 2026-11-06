@@ -35,7 +35,8 @@ void mi_fx_dsp_reset_shared(mi_fx_dsp_t *p)
      * prevent stale samples from DELAY/EUREKA being played back. */
     p->delay_write=0u;p->delay_valid=0u;
     p->eureka_write=0u;p->eureka_valid=0u;
-    p->eureka_decimate=0u;
+    p->eureka_decimate=0u;p->eureka_heard=0u;
+    p->eureka_content_valid=0u;p->eureka_quiet_samples=0u;
     p->eureka_sum=0.f;p->eureka_phase=0.f;p->eureka_filter=0.f;
 }
 int mi_fx_dsp_eureka_ready(const mi_fx_dsp_t *p,unsigned time,unsigned haze)
@@ -48,7 +49,10 @@ int mi_fx_dsp_eureka_ready(const mi_fx_dsp_t *p,unsigned time,unsigned haze)
      * processor itself continues returning wet-only audio. */
     float seconds=0.10f+1.60f*(float)time/127.f
                   +0.8f*(0.05f+0.24f*(float)haze/127.f);
-    return (float)p->eureka_valid>seconds*14700.f+2.f;
+    /* The raw 2-second buffer can be completely full of pre-roll SILENCE:
+     * only samples written after actual input activity count as wet-ready. */
+    return (float)p->eureka_valid>seconds*14700.f+2.f &&
+           (float)p->eureka_content_valid>seconds*14700.f+2.f;
 }
 static float eu_read(const mi_fx_dsp_t *p,float behind)
 {
@@ -79,6 +83,18 @@ float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
     if(p2>127u)p2=127u;
     dry=bounded(dry,-1.f,1.f);
     if(mode==MI_FX_EUREKA) {
+        /* No heap or buffer clears on the audio thread. If playback starts
+         * after idle, require NEW audible samples before enabling wet. Keep
+         * captured audio/tails available for 2 seconds after the last sound. */
+        if(dry>0.001f || dry< -0.001f){
+            p->eureka_heard=1u;
+            p->eureka_quiet_samples=0u;
+        }else if(p->eureka_quiet_samples<88200u){
+            if(++p->eureka_quiet_samples==88200u){
+                p->eureka_heard=0u;
+                p->eureka_content_valid=0u;
+            }
+        }
         /* Two-second short-buffer Haze adaptation. 14.7 kHz 16-bit
          * continuous capture; two crossfaded repeat grains with TIME
          * and HAZE. Wet only. Uses DELAY memory; cannot run with DELAY. */
@@ -114,6 +130,8 @@ float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
             p->eureka_decimate=0u;
             if(++p->eureka_write==MI_EUREKA_FRAMES)p->eureka_write=0u;
             if(p->eureka_valid<MI_EUREKA_FRAMES)++p->eureka_valid;
+            if(p->eureka_heard&&p->eureka_content_valid<MI_EUREKA_FRAMES)
+                ++p->eureka_content_valid;
         }
         return wet;
     }
