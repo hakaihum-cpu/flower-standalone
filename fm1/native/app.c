@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Independent MIYAKO FM-1 app using only fm1-base's hardware platform API.
- * This is an INCOMPLETE port. No original MIYAKO video pack or full FX suite
- * is present. Do not release this build as a finished MIYAKO firmware.
+ * This is an INCOMPLETE port. EUREKA and EFFECTS original-source video
+ * frame banks are generated at build time (16-colour lossy VQ), but the
+ * original full MIYAKO DSP and simultaneous FX routing are still absent.
+ * Do not release this development image as the approved MIYAKO firmware.
  *
  * Compiled inside fm1-base's unity.c after gfx.c and lib/touch.c.
  * mi_control.c and mi_audio.c are separate -O2 units (fm1.toml).
