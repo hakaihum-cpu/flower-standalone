@@ -50,7 +50,9 @@ static int valid_state(const mi_state_t *s)
 {
  return (unsigned)s->view<MI_VIEW_COUNT&&s->wave<=3u&&
         s->fx<MI_FX_COUNT&&s->fx2<MI_FX_COUNT&&s->fx_slot<=1u&&
-        mi_fx_pair_supported(s->fx,s->fx2)&&s->width<=127u&&s->sub<=127u&&
+        mi_fx_pair_supported(s->fx,s->fx2)&&s->wet2<=127u&&
+        s->seq[0]<s->seq[1]&&s->seq[2]<=6u&&
+        s->width<=127u&&s->sub<=127u&&
         s->crush<=127u&&s->level<=127u&&s->wet<=127u&&
         s->project_slot>=1u&&s->project_slot<=4u&&s->preset<=5u&&
         s->octave>=-3&&s->octave<=3;
