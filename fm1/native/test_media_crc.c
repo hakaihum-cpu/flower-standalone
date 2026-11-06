@@ -7,11 +7,17 @@
 #include <stdio.h>
 #include <string.h>
 #include "mi_effects_vq_frames.h"
+#include "mi_eureka_vq_frames.h"
 
 enum { SOURCE_WIDTH = 128, SOURCE_HEIGHT = 78,
        SOURCE_TILE_W = 8, SOURCE_TILE_H = 4, SOURCE_TILE_COLS = 16,
        SOURCE_TILE_ROWS = 20, SOURCE_BYTES = 4992 };
 typedef char audit_effects_frames[(MI_EFFECTS_ASSET_COUNT == 144u) ? 1 : -1];
+typedef char audit_eureka_frames[(MI_EUREKA_ASSET_COUNT == 576u) ? 1 : -1];
+typedef char audit_eureka_geometry[(MI_EUREKA_ASSET_W == SOURCE_WIDTH &&
+    MI_EUREKA_ASSET_H == SOURCE_HEIGHT &&
+    MI_EUREKA_ASSET_BPP == 4u &&
+    MI_EUREKA_ASSET_COLORS == 16u) ? 1 : -1];
 typedef char audit_effects_geometry[(MI_EFFECTS_ASSET_W == SOURCE_WIDTH &&
     MI_EFFECTS_ASSET_H == SOURCE_HEIGHT &&
     MI_EFFECTS_ASSET_BPP == 4u &&
@@ -72,5 +78,9 @@ int main(void)
         &mi_effects_vq_tilebook[0][0][0],
         &mi_effects_vq_maps[0][0],
         MI_EFFECTS_DECODED_CRC32,"EFFECTS")) return 1;
+    if (!check_bank(MI_EUREKA_ASSET_COUNT,16u,
+        &mi_eureka_vq_tilebook[0][0][0],
+        &mi_eureka_vq_maps[0][0],
+        MI_EUREKA_DECODED_CRC32,"EUREKA")) return 1;
     return 0;
 }
