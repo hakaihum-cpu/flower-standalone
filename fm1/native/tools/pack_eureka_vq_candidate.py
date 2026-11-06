@@ -100,7 +100,12 @@ def train_clip(original, palette565, loops=6, frame_balance=0.0, seed=0):
         codebook = unique[np.linspace(0, len(unique) - 1, DICT_SIZE, dtype=np.int32)].copy()
     codebook[0] = 0
     ids = np.zeros(len(tiles), dtype=np.uint8)
-    for _ in range(loops):
+    for iteration in range(loops):
+        # Keep the CircleCI stdout watchdog alive during CPU-heavy RGB VQ.
+        # Progress only: dictionary, tile size and candidate selection do not change.
+        if iteration % 3 == 0:
+            print(f"EUREKA VQ fitting: iteration {iteration+1}/{loops}, "
+                  f"balance={frame_balance:g}, seed={seed}", flush=True)
         centroids = pal[codebook].reshape(DICT_SIZE, TILE_PIXELS * 3).astype(np.float32)
         cnorms = np.einsum("ij,ij->i", centroids, centroids)
         dist = norms[:, None] + cnorms[None, :] - 2 * (v @ centroids.T)
