@@ -32,12 +32,12 @@ expected_formats = (
     'F_DB', 'F_SEMI', 'F_ENUM', 'F_BPM', 'F_NOTE', 'F_ONOFF',
     'F_OCT', 'F_STEPS', 'F_SWING', 'F_FILT',
 )
-enum_match = re.search(r'\\benum\\s*\\{\\s*(F_INT\\b[^}]+)\\}', host_engine, re.S)
+enum_match = re.search(r'\benum\s*\{\s*(F_INT\b[^}]+)\}', host_engine, re.S)
 require(enum_match is not None, "host engine parameter format enum missing")
-actual_formats = re.findall(r'\\bF_[A-Z][A-Z0-9_]*\\b', enum_match.group(1))
+actual_formats = re.findall(r'\bF_[A-Z][A-Z0-9_]*\b', enum_match.group(1))
 require(tuple(actual_formats) == expected_formats,
         f"host engine format IDs must match pinned KARMA: {actual_formats}")
-required_formats = set(re.findall(r'\\bF_[A-Z][A-Z0-9_]*\\b', engine))
+required_formats = set(re.findall(r'\bF_[A-Z][A-Z0-9_]*\b', engine))
 require(required_formats.issubset(set(actual_formats)),
         f"host engine lacks format IDs used by MIYAKO: {sorted(required_formats - set(actual_formats))}")
 require('#define FELUCCA_VERSION "MIYAKO FM1 P2"' in host_boot and
