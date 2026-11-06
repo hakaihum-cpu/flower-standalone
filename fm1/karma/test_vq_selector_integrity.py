@@ -50,7 +50,7 @@ for alpha in (1.0, 2.0, 3.0, 4.0, 6.0):
     assert chosen[3][0] >= baseline[3][0]
 # Deterministic restart must reproduce the *same* dictionary, selectors
 # and worst-frame PSNR, and every restart uses the 8x4 / 256 codec.
-for seed in (2, 5):
+for seed in (2, 5, -11, -17):
     first = train_clip(indices, palette565, loops=8,
                        frame_balance=6.0, seed=seed)
     second = train_clip(indices, palette565, loops=8,
@@ -60,4 +60,4 @@ for seed in (2, 5):
     assert np.array_equal(first[0], second[0])
     assert np.array_equal(first[1], second[1])
     assert first[3] == second[3]
-print("PASS: 6 baseline VQ paths and 2 deterministic multi-start paths; codec unchanged")
+print("PASS: 6 baseline VQ paths and 4 deterministic multi-start paths; codec unchanged")
