@@ -29,4 +29,12 @@ midi USB 90 4C 7F
 wait 350
 midi USB 80 4C 00
 wait 950
+spin K1 -3
+expect fx 2
+spin K3 64
+spin K4 80
+midi USB 90 45 7F
+wait 350
+midi USB 80 45 00
+wait 950
 wavstop
