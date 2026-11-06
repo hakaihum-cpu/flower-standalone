@@ -32,7 +32,13 @@ int main(void)
     assert(s.preset == 5 && s.fx == MI_FX_EUREKA);
     s.wet=0;
     mi_button(&s, MI_B_SEL, 12);
-    assert(s.view == MI_VIDEO && s.wet == 95 && s.fx == MI_FX_EUREKA);
+    assert(s.view == MI_VIDEO && s.wet == 0 && s.fx == MI_FX_EUREKA);
+    mi_button(&s, MI_B_FX, 13);
+    mi_rotate(&s, MI_EN_K1, 1);
+    assert(s.fx == MI_FX_DREAMY);
+    mi_button(&s, MI_B_SEL, 14);
+    assert(s.view == MI_VIDEO && s.fx == MI_FX_DREAMY && s.wet == 0);
+    assert(!strcmp(mi_fx_name(MI_FX_REVERB), "REVERB"));
     mi_button(&s, MI_B_GLO, 12);
     mi_rotate(&s, MI_EN_K1, 2000);
     assert(s.global[0] == 240);
