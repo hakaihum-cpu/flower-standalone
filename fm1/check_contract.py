@@ -63,7 +63,8 @@ video_compile_loop = next((line for line in ci.splitlines()
 require(all(name in video_compile_loop for name in
             ('fm1/karma/test_dot_ui.c', 'fm1/karma/test_eureka_video.c',
              'fm1/karma/test_eureka_vq_decoder.c')) and
-        "cat > fm1/karma/mi_eureka_vq_frames.h <<'FM1_VQ_SYNTAX_ONLY'" in ci and
+        "printf '%s\\n'" in ci and
+        "'#endif' > fm1/karma/mi_eureka_vq_frames.h" in ci and
         'extern const uint16_t mi_eureka_vq_palette[16][16];' in ci and
         'extern const uint8_t mi_eureka_vq_maps[576][320];' in ci and
         'test ! -e fm1/karma/mi_eureka_vq_frames.h' in ci and
@@ -251,6 +252,12 @@ require((root / "fm1" / "karma" / "prepare_fwsc_version.py").is_file() and
         "verify_fwsc_version.py" in ci and
         "FWSC_VERSION.txt" in ci,
         "FWSC CurrentVersion increment/identity verification not wired into CI")
+# CircleCI config v2.1 treats a shell heredoc's unescaped angle markers as
+# pipeline interpolation and rejects the whole workflow before any job starts.
+# The only angle-tag pair allowed is the properly closed manual parameter.
+require(ci.count('<<') == 1 and ci.count('>>') == 1 and
+        'when: << pipeline.parameters.run_build >>' in ci,
+        "Unclosed or unexpected CircleCI angle tag; do not use shell heredocs")
 require('when: << pipeline.parameters.run_build >>' in ci, "manual parameter guard missing")
 require('default: false' in ci, "CI default must be false")
 require('only: feature/fm1-miyako-port-20261104' in ci, "branch guard missing")
