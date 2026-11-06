@@ -148,7 +148,10 @@ float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
         if(n<2u)n=2u;
         if(n>=MI_DELAY_N)n=MI_DELAY_N-1u;
         uint32_t pos=p->delay_write&(MI_DELAY_N-1u);
-        float delayed=p->delay_valid>n?
+        /* At write==n, sample zero is already recorded and is the
+         * first valid delayed output. Strict > skips it forever for a
+         * single impulse, producing no echo (observed in CI #264). */
+        float delayed=p->delay_valid>=n?
             read16(delay_memory[(p->delay_write-n)&(MI_DELAY_N-1u)]):0.f;
         float feedback=0.85f*(p2/127.f);
         delay_memory[pos]=quant(dry+delayed*feedback);
