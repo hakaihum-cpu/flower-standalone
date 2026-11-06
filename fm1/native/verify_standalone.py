@@ -39,4 +39,4 @@ for file in source_paths:
         if not relative.is_file() and header not in GENERATED_MEDIA_HEADERS:
             raise SystemExit(f"FAIL: missing native header {header} in {file}")
 print(f"PASS: {len(source_paths)} native MIYAKO source unit(s), no external framework units")
-print("NOT READY: board HAL, MIYAKO DSP/FX, video, flash/boot and FM-1 linking are still missing")
+print("SOURCE-ONLY PASS: platform provided by pinned fm1-base; complete MIYAKO DSP, target link and physical tests require separate validation")
