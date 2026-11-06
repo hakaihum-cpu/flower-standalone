@@ -1,0 +1,20 @@
+# fm1-base host simulator test of the actual standalone app code.
+# Real FM-1 flashing is NOT implied by a successful simulated run.
+master 4096
+key 16 down 120
+wait 200
+key 16 up
+wait 50
+tap EDIT
+turn K1 2
+tap FX
+turn K1 1
+tap SEL
+wait 50
+tap HOME
+tap SAVE
+tap SAVE
+tap SAVE
+wait 100
+reboot
+wait 100
