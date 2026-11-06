@@ -263,7 +263,7 @@ require(ci.count('<<') == 1 and ci.count('>>') == 1 and
 # Always check and invoke it through sh; preserve the upstream checkout.
 require(ci.count('            sh ./build.sh') == 1 and
         ci.count('            sh -n build.sh') == 1 and
-        not re.search(r'(?m)^\\s*\\./build\\.sh(?:\\s|$)', ci) and
+        not any(line.strip().startswith('./build.sh') for line in ci.splitlines()) and
         ci.index('sh -n build.sh') < ci.index('sh ./build.sh') and
         ci.index('sh ./build.sh') < ci.index('test -s build/felucca.bin'),
         "FM-1 build.sh must be run with POSIX sh; upstream executable bit is absent (#250)")
