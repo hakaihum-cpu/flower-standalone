@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Host compiler ONLY: stand-in declarations, never media and never firmware.
+"""Create strictly compile-only declarations for the two source video packs.
 
-Must write into /tmp/fm1-base/miyako/ ONLY. The real user-supplied
-original EFFECTS pack overwrites this file after successful encoding.
-Fail the target firmware build if this marker persists.
+These are NOT user pictures and MUST NOT be packaged in an installable FWSC.
+The real headers replace BOTH before the final host and JieLi build.
 """
 from pathlib import Path
 import argparse
@@ -11,25 +10,33 @@ import argparse
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("target",type=Path)
-    args=ap.parse_args()
-    path=args.target.resolve()
-    if path.name != "mi_effects_vq_frames.h" or "fm1-base" not in path.parts or "miyako" not in path.parts:
-        raise SystemExit("FAIL: refuse to write a compile-only stub outside FM1 test workspace")
-    if path.exists():
-        raise SystemExit("FAIL: do not replace actual original-source media with test stubs")
-    path.write_text("""/* COMPILER PRECHECK ONLY; ZERO FRAMES ARE NOT USER MEDIA. */
-#define MI_EFFECTS_MEDIA_PREFLIGHT_STUB 1
-#define MI_EFFECTS_ASSET_COUNT 144u
-#define MI_EFFECTS_ASSET_W 128u
-#define MI_EFFECTS_ASSET_H 78u
-#define MI_EFFECTS_ASSET_BYTES 4992u
-#define MI_EFFECTS_ASSET_COLORS 16u
-#define MI_EFFECTS_ASSET_BPP 4u
-static const uint16_t mi_effects_vq_palette[4][16] = {{0}};
-static const uint8_t mi_effects_vq_tilebook[4][256][16] = {{{0}}};
-static const uint8_t mi_effects_vq_maps[144][320] = {{0}};
-""",encoding="ascii")
-    print("Compile-only C header staged. THIS HEADER MUST NEVER BE PACKAGED.")
+    a=ap.parse_args()
+    p=a.target.resolve()
+    if "fm1-base" not in p.parts or "miyako" not in p.parts:
+        raise SystemExit("FAIL: fake media forbidden outside pinned MIYAKO preflight workspace")
+    if p.exists():
+        raise SystemExit("FAIL: never overwrite real media with compiler stubs")
+    if p.name=="mi_effects_vq_frames.h":
+        tag,frames,clips="EFFECTS",144,4
+    elif p.name=="mi_eureka_vq_frames.h":
+        tag,frames,clips="EUREKA",576,16
+    else:
+        raise SystemExit("FAIL: unknown generated video header")
+    prefix=tag.lower()
+    p.write_text(
+        "/* COMPILER PRECHECK ONLY: NO USER MEDIA PRESENT. */\n"
+        f"#define MI_{tag}_MEDIA_PREFLIGHT_STUB 1\n"
+        f"#define MI_{tag}_ASSET_COUNT {frames}u\n"
+        f"#define MI_{tag}_ASSET_W 128u\n"
+        f"#define MI_{tag}_ASSET_H 78u\n"
+        f"#define MI_{tag}_ASSET_BYTES 4992u\n"
+        f"#define MI_{tag}_ASSET_COLORS 16u\n"
+        f"#define MI_{tag}_ASSET_BPP 4u\n"
+        f"static const uint16_t mi_{prefix}_vq_palette[{clips}][16] = {{0}};\n"
+        f"static const uint8_t mi_{prefix}_vq_tilebook[{clips}][256][16] = {{0}};\n"
+        f"static const uint8_t mi_{prefix}_vq_maps[{frames}][320] = {{0}};\n",
+        encoding="ascii")
+    print(f"Compiler-only {tag} types staged; not real source frames.")
 
 if __name__=="__main__":
     main()
