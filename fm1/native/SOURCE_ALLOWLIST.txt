@@ -3,3 +3,4 @@
 fm1/native/mi_control.c
 fm1/native/mi_audio.c
 fm1/native/app.c
+fm1/native/mi_video.c
