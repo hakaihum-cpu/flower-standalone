@@ -8,6 +8,7 @@
 #define APP_SPLASH_RGB RGB(255, 209, 12)
 #define APP_BLOCK 256u
 #define APP_TOUCH
+#define APP_HOST_EXPECT
 enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_NOBJ };
 #define APP_STORE_MAP {0xFC000u, 0xDC000u}
 void app_init(void);
