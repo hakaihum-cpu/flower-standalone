@@ -53,12 +53,15 @@ void mi_audio_init(mi_audio_t *a,float rate)
 }
 void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
 {
-    unsigned i,pick=0;float quiet=2.f;uint32_t oldest=0;
+    unsigned i,pick=0;float quiet=2.f;uint32_t oldest=0xffffffffu;
     for(i=0;i<MI_NATIVE_POLY;i++){
         mi_voice_t *v=&a->v[i];
         if(!v->active){pick=i;break;}
-        if(!v->held&&v->env<quiet){quiet=v->env;pick=i;}
-        else if(v->age>oldest&&quiet>=2.f){oldest=v->age;pick=i;}
+        if(!v->held){
+            if(v->env<quiet){quiet=v->env;pick=i;}
+        }else if(quiet>=2.f&&v->age<oldest){
+            oldest=v->age;pick=i;
+        }
     }
     mi_voice_t *v=&a->v[pick];
     v->note=note;v->vel=velocity?velocity:1;v->active=1;v->held=1;
