@@ -48,6 +48,7 @@ void mi_audio_init(mi_audio_t *a,float rate)
     mi_memzero(a,sizeof(*a));
     a->sample_rate=rate>=8000.f&&rate<=192000.f?rate:44100.f;
     a->rand_state=0x4d495941u;
+    a->arp_random=0x50414e5au;
     mi_fx_dsp_init(&native_fx);
     a->last_mode=MI_FX_OFF;
 }
@@ -66,7 +67,7 @@ void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
     mi_voice_t *v=&a->v[pick];
     v->note=note;v->vel=velocity?velocity:1;v->active=1;v->held=1;
     v->phase=0.f;v->subphase=0.f;v->increment=note_freq(note)/a->sample_rate;
-    v->env=0.f;v->age=++a->age_counter;
+    v->env=0.f;v->env_stage=0;v->release_step=0.f;v->age=++a->age_counter;
 }
 void mi_audio_note_off(mi_audio_t *a,uint8_t note)
 {
@@ -74,9 +75,144 @@ void mi_audio_note_off(mi_audio_t *a,uint8_t note)
     for(i=0;i<MI_NATIVE_POLY;i++)
         if(a->v[i].active&&a->v[i].note==note)a->v[i].held=0;
 }
+static void all_voices_off(mi_audio_t *a)
+{
+    unsigned i;
+    for(i=0;i<MI_NATIVE_POLY;i++){
+        a->v[i].active=0;a->v[i].held=0;a->v[i].env=0.f;
+    }
+}
 void mi_audio_panic(mi_audio_t *a)
 {
-    unsigned i;for(i=0;i<MI_NATIVE_POLY;i++){a->v[i].active=0;a->v[i].held=0;a->v[i].env=0.f;}
+    if(!a)return;
+    all_voices_off(a);
+    mi_memzero(a->held_keys,sizeof a->held_keys);
+    mi_memzero(a->held_velocity,sizeof a->held_velocity);
+    a->arp_clock=0;a->arp_gate_clock=0;a->arp_sounding=0;
+}
+/* Keep raw keyboard/midi held notes; arpeggiator and live voice routing
+ * share the same source so release cannot leave stuck repeating notes. */
+void mi_audio_input_on(mi_audio_t *a,const mi_state_t *s,
+                       uint8_t note,uint8_t velocity)
+{
+    if(!a||!s||note>=128u)return;
+    a->held_keys[note>>5]|=1u<<(note&31u);
+    a->held_velocity[note]=velocity?velocity:1u;
+    if(s->arp[0]==0u)mi_audio_note_on(a,note,velocity);
+}
+void mi_audio_input_off(mi_audio_t *a,const mi_state_t *s,uint8_t note)
+{
+    if(!a||!s||note>=128u)return;
+    a->held_keys[note>>5]&=~(1u<<(note&31u));
+    a->held_velocity[note]=0;
+    if(s->arp[0]==0u)mi_audio_note_off(a,note);
+}
+static unsigned held_count(const mi_audio_t *a)
+{
+    unsigned note,n=0;
+    for(note=0;note<128u;note++)
+        if(a->held_keys[note>>5]&(1u<<(note&31u)))++n;
+    return n;
+}
+static uint8_t held_nth(const mi_audio_t *a,unsigned index)
+{
+    unsigned n;
+    for(n=0;n<128u;n++){
+        if(a->held_keys[n>>5]&(1u<<(n&31u))){
+            if(index==0u)return (uint8_t)n;
+            --index;
+        }
+    }
+    return 0u;
+}
+static void arp_sync(mi_audio_t *a,const mi_state_t *s)
+{
+    unsigned mode=s->arp[0]<=4u?s->arp[0]:0u;
+    if(mode==a->arp_mode)return;
+    all_voices_off(a);
+    a->arp_mode=(uint8_t)mode;
+    a->arp_clock=0;a->arp_gate_clock=0;
+    a->arp_pos=0;a->arp_dir=0;a->arp_sounding=0;
+    if(!mode){
+        unsigned note;
+        for(note=0;note<128u;note++)
+            if(a->held_keys[note>>5]&(1u<<(note&31u)))
+                mi_audio_note_on(a,(uint8_t)note,a->held_velocity[note]);
+    }
+}
+static void arp_tick(mi_audio_t *a,const mi_state_t *s)
+{
+    unsigned n,octaves,total,index,base,octave;
+    uint32_t period,gate;
+    int bpm=s->global[0];
+    if(a->arp_mode==0u)return;
+    if(a->arp_sounding&&a->arp_gate_clock){
+        --a->arp_gate_clock;
+        if(!a->arp_gate_clock){
+            mi_audio_note_off(a,a->arp_note);
+            a->arp_sounding=0;
+        }
+    }
+    n=held_count(a);
+    if(n==0u){
+        if(a->arp_sounding)mi_audio_note_off(a,a->arp_note);
+        a->arp_sounding=0;a->arp_clock=0;a->arp_pos=0;
+        return;
+    }
+    if(a->arp_clock){
+        --a->arp_clock;
+        return;
+    }
+    if(bpm<40)bpm=40;
+    if(bpm>240)bpm=240;
+    octaves=s->arp[3];
+    if(octaves<1u)octaves=1u;
+    if(octaves>4u)octaves=4u;
+    total=n*octaves;
+    period=(uint32_t)(a->sample_rate*60.f/(float)bpm);
+    period>>=(s->arp[1]<=3u?s->arp[1]:3u);
+    if(period<16u)period=16u;
+    gate=period*(uint32_t)(s->arp[2]?s->arp[2]:70u)/100u;
+    if(gate<2u)gate=2u;
+    if(gate>=period)gate=period-1u;
+    if(a->arp_sounding){
+        mi_audio_note_off(a,a->arp_note);
+        a->arp_sounding=0;
+    }
+    if(total==1u)index=0u;
+    else if(a->arp_mode==4u){
+        a->arp_random^=a->arp_random<<13;
+        a->arp_random^=a->arp_random>>17;
+        a->arp_random^=a->arp_random<<5;
+        index=a->arp_random%total;
+    }else if(a->arp_mode==3u){
+        unsigned sequence=2u*(total-1u);
+        unsigned step=a->arp_pos%sequence;
+        index=step<total?step:sequence-step;
+    }else if(a->arp_mode==2u){
+        index=total-1u-a->arp_pos%total;
+    }else{
+        index=a->arp_pos%total;
+    }
+    base=index%n;octave=index/n;
+    {
+        unsigned note=(unsigned)held_nth(a,base)+12u*octave;
+        uint8_t vel=a->held_velocity[held_nth(a,base)];
+        if(note>127u)note=127u;
+        a->arp_note=(uint8_t)note;
+        mi_audio_note_on(a,a->arp_note,vel?vel:100u);
+    }
+    a->arp_sounding=1u;
+    a->arp_gate_clock=gate;
+    a->arp_clock=period-1u;
+    ++a->arp_pos;
+}
+static float lfo_value(unsigned wave,float phase)
+{
+    if(wave==1u)return phase<0.5f?4.f*phase-1.f:3.f-4.f*phase;
+    if(wave==2u)return 2.f*phase-1.f;
+    if(wave==3u)return phase<0.5f?1.f:-1.f;
+    return sin01(phase);
 }
 static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
 {
@@ -119,34 +255,70 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
 void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,uint32_t master_q12)
 {
     uint32_t i,k;
+    float attack_step,decay_step,release_samples,sustain,lfo_speed;
     if(!a||!s||!lr)return;
     float scale=clampf(master_q12/4096.f,0.f,1.f)*clampf(s->level/127.f,0.f,1.f)*5000000.f;
     uint8_t wave=s->wave>3?0:s->wave;
     float duty=0.05f+0.9f*(s->width/127.f);
+    float atk=(float)s->env[0]/127.f,dec=(float)s->env[1]/127.f;
+    float rel=(float)s->env[3]/127.f;
+    sustain=clampf((float)s->env[2]/127.f,0.f,1.f);
+    attack_step=1.f/(a->sample_rate*(0.002f+2.f*atk*atk));
+    decay_step=(1.f-sustain)/(a->sample_rate*(0.005f+2.f*dec*dec));
+    release_samples=a->sample_rate*(0.005f+3.f*rel*rel);
+    lfo_speed=(0.07f+15.f*(float)s->lfo[0]/127.f)/a->sample_rate;
+    arp_sync(a,s);
     for(i=0;i<n;i++){
-        float sample=0.f;
+        float sample=0.f,lfo,mod,voice_duty=duty;
+        arp_tick(a,s);
+        a->lfo_phase=wrap01(a->lfo_phase+lfo_speed);
+        lfo=lfo_value(s->lfo[1],a->lfo_phase);
+        mod=lfo*(float)s->lfo[2]/127.f;
+        if(s->lfo[3]==1u)voice_duty=clampf(duty+mod*0.3f,0.03f,0.97f);
         for(k=0;k<MI_NATIVE_POLY;k++){
             mi_voice_t *v=&a->v[k];
             if(!v->active)continue;
-            float step=v->held?0.002f:-0.0005f;
-            v->env=clampf(v->env+step,0.f,1.f);
-            if(!v->held&&v->env==0.f){v->active=0;continue;}
-            float main=osc(wave,v->phase,duty),sub=sin01(v->subphase);
-            float submix=s->sub/127.f;
-            float value=main*(1.f-submix)+sub*submix;
-            if(s->crush){
-                int bits=16-(int)(s->crush*13u/127u);
-                float levels=(float)(1u<<bits);
-                float quant=(float)(int)(value*levels);
-                value=quant/levels;
+            if(!v->held&&v->env_stage!=3u){
+                v->env_stage=3u;
+                v->release_step=v->env/release_samples;
             }
-            sample+=value*v->env*(v->vel/127.f)*0.18f;
-            v->phase=wrap01(v->phase+v->increment);
-            v->subphase=wrap01(v->subphase+v->increment*0.5f);
+            if(v->env_stage==0u){
+                v->env+=attack_step;
+                if(v->env>=1.f){v->env=1.f;v->env_stage=1u;}
+            }else if(v->env_stage==1u){
+                v->env-=decay_step;
+                if(v->env<=sustain){v->env=sustain;v->env_stage=2u;}
+            }else if(v->env_stage==2u){
+                v->env=sustain;
+            }else{
+                v->env-=v->release_step;
+                if(v->env<=0.f){v->env=0.f;v->active=0u;continue;}
+            }
+            {
+                float main=osc(wave,v->phase,voice_duty),sub=sin01(v->subphase);
+                float submix=s->sub/127.f;
+                float value=main*(1.f-submix)+sub*submix;
+                if(s->crush){
+                    int bits=16-(int)(s->crush*13u/127u);
+                    float levels=(float)(1u<<bits);
+                    float quant=(float)(int)(value*levels);
+                    value=quant/levels;
+                }
+                if(s->lfo[3]==2u)
+                    value*=clampf(1.f-0.5f*(float)s->lfo[2]/127.f*(1.f-lfo),0.f,1.f);
+                sample+=value*v->env*(v->vel/127.f)*0.18f;
+                {
+                    float pitch_mod=s->lfo[3]==0u?clampf(1.f+mod*0.059f,0.8f,1.2f):1.f;
+                    v->phase=wrap01(v->phase+v->increment*pitch_mod);
+                    v->subphase=wrap01(v->subphase+v->increment*0.5f*pitch_mod);
+                }
+            }
         }
         sample=clampf(sample,-1.f,1.f);
         sample=effect(a,s,sample);
-        int32_t out=(int32_t)(clampf(sample,-1.f,1.f)*scale);
-        lr[2u*i]=out;lr[2u*i+1u]=out;
+        {
+            int32_t out=(int32_t)(clampf(sample,-1.f,1.f)*scale);
+            lr[2u*i]=out;lr[2u*i+1u]=out;
+        }
     }
 }
