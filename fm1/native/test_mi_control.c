@@ -14,6 +14,11 @@ int main(void)
     mi_init(&s);
     assert(s.view == MI_HOME && s.wave == 0 && s.fx == MI_FX_OFF);
     assert(!strcmp(mi_param_name(&s,0),"WAVE"));
+    assert(!strcmp(mi_wave_name(0),"SINE"));
+    assert(!strcmp(mi_wave_name(1),"SAW"));
+    assert(!strcmp(mi_wave_name(2),"SQUARE"));
+    assert(!strcmp(mi_wave_name(3),"PULSE"));
+    assert(!strcmp(mi_arp_mode_name(4),"RND"));
     mi_button(&s, MI_B_EDIT, 0);
     mi_rotate(&s, MI_EN_K1, 3);
     assert(s.view == MI_OSC && s.wave == 3);
@@ -33,6 +38,9 @@ int main(void)
     s.wet=0;
     mi_button(&s, MI_B_SEL, 12);
     assert(s.view == MI_VIDEO && s.wet == 0 && s.fx == MI_FX_CHORUS);
+    assert(!strcmp(mi_param_name(&s,0),""));
+    mi_rotate(&s, MI_EN_K1, 60); /* SEL cannot silently change current FX */
+    assert(s.fx == MI_FX_CHORUS);
     mi_button(&s, MI_B_FX, 13);
     mi_rotate(&s, MI_EN_K1, -1);
     assert(s.fx == MI_FX_REVERB);
@@ -61,6 +69,22 @@ int main(void)
     for(i=0;i<5;i++) mi_button(&s, MI_B_OCT_DOWN, 7001);
     assert(s.octave == -3);
     assert(MI_FX_COUNT == 6 && MI_VIEW_COUNT == 10);
+    mi_button(&s,MI_B_ARP,8000);
+    mi_rotate(&s,MI_EN_K1,100);
+    mi_rotate(&s,MI_EN_K2,100);
+    mi_rotate(&s,MI_EN_K3,-100);
+    mi_rotate(&s,MI_EN_K4,100);
+    assert(s.arp[0]==4 && s.arp[1]==3 && s.arp[2]==10 && s.arp[3]==4);
+    assert(!strcmp(mi_param_name(&s,0),"MODE"));
+    assert(!strcmp(mi_param_name(&s,2),"GATE"));
+    mi_button(&s,MI_B_LFO,8001);
+    mi_rotate(&s,MI_EN_K2,20);
+    mi_rotate(&s,MI_EN_K4,20);
+    assert(s.lfo[1]==3 && s.lfo[3]==2);
+    assert(!strcmp(mi_param_name(&s,2),"DEPTH"));
+    mi_button(&s,MI_B_ENV,8002);
+    assert(!strcmp(mi_param_name(&s,0),"ATK"));
+    assert(!strcmp(mi_param_name(&s,3),"REL"));
     puts("PASS: independent MIYAKO control mapping and guarded save");
     return 0;
 }
