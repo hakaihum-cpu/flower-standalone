@@ -218,6 +218,42 @@ int mi_fx_pair_supported(unsigned first,unsigned second)
        (first==MI_FX_EUREKA&&second==MI_FX_DELAY))return 0;
     return 1;
 }
+
+/* Reject corrupted flash state BEFORE the audio thread, UI indexers and
+ * recorder consume parameters. Test this exact predicate as native C. */
+int mi_state_valid(const mi_state_t *s)
+{
+    unsigned i, j;
+    if (!s || (unsigned)s->view >= MI_VIEW_COUNT ||
+        s->wave > 3u || s->width > 127u || s->sub > 127u ||
+        s->crush > 127u || s->level > 127u ||
+        s->fx >= MI_FX_COUNT || s->fx2 >= MI_FX_COUNT ||
+        s->wet > 127u || s->wet2 > 127u || s->fx_slot > 1u ||
+        !mi_fx_pair_supported(s->fx, s->fx2) ||
+        s->preset > 5u || s->project_slot < 1u ||
+        s->project_slot > 4u || s->octave < -3 || s->octave > 3 ||
+        s->seq[0] >= s->seq[1] || s->seq[1] > 127u ||
+        s->seq[2] > 6u || s->seq[3] > 127u ||
+        s->lfo[1] > 3u || s->lfo[3] > 2u ||
+        s->arp[0] > 4u || s->arp[1] > 3u ||
+        s->arp[2] < 10u || s->arp[2] > 100u ||
+        s->arp[3] < 1u || s->arp[3] > 4u ||
+        s->global[0] < 40 || s->global[0] > 240 ||
+        s->global[1] < 0 || s->global[1] > 100 ||
+        s->global[2] < -50 || s->global[2] > 50 ||
+        s->global[3] < 0 || s->global[3] > 2)
+        return 0;
+    for (i = 0; i < 4u; ++i) {
+        if (s->env[i] > 127u || s->lfo[i] > 127u)
+            return 0;
+    }
+    for (i = 0; i < MI_FX_COUNT; ++i)
+        for (j = 0; j < 2u; ++j)
+            if (s->fx_options[i][j] > 127u)
+                return 0;
+    return 1;
+}
+
 const char *mi_wave_name(unsigned wave)
 {
     static const char *const names[] = {"SINE","SAW","SQUARE","PULSE"};
