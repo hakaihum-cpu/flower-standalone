@@ -14,6 +14,7 @@
 #define P_E6 6
 #define P_E7 7
 #define RGB(r,g,b) ((uint16_t)((((r)>>3)<<11)|(((g)>>2)<<5)|((b)>>3)))
+#define C_BLACK 0u
 #define C_WHITE 0xFFFFu
 typedef struct { uint8_t h; } test_font_t;
 static const test_font_t FONT_S={16};
