@@ -119,6 +119,10 @@ jobs:
             cd fm1-karma
             git checkout --detach "$KARMA_PIN"
             test "$(git rev-parse HEAD)" = "$KARMA_PIN"
+            # The pinned upstream build.sh has no executable permission in CI.
+            # Verify POSIX shell syntax before the expensive SDK install.
+            test -f build.sh
+            sh -n build.sh
       - run:
           name: Patch MIYAKO-only full screen and audit native hardware mappings
           command: |
@@ -154,7 +158,8 @@ jobs:
           command: |
             set -eu
             cd fm1-karma
-            ./build.sh
+            # Invoke through POSIX sh; do not require the upstream +x file bit.
+            sh ./build.sh
             test -s build/felucca.bin
             test -s build/loader/ota.bin
             test -s build/felucca.fwsc
