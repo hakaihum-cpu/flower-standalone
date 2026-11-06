@@ -5,6 +5,12 @@
 #include "mi_recorder.h"
 #include "mi_memory.h"
 static int16_t clip[MI_REC_CAPACITY] __attribute__((section(".pool")));
+static int8_t wave_min[224],wave_max[224];
+void mi_rec_peak(unsigned column,int8_t *lo,int8_t *hi)
+{
+    if(lo)*lo=column<224u?wave_min[column]:0;
+    if(hi)*hi=column<224u?wave_max[column]:0;
+}
 static float clamp(float x,float lo,float hi){return x<lo?lo:x>hi?hi:x;}
 int16_t mi_rec_sample(uint32_t i){return i<MI_REC_CAPACITY?clip[i]:0;}
 void mi_rec_init(mi_recorder_t *r){if(r)mi_memzero(r,sizeof(*r));}
@@ -20,6 +26,8 @@ void mi_rec_toggle_record(mi_recorder_t *r)
     r->recording=1u;r->playing=0u;
     r->count=0u;r->write_pos=0u;r->capture_phase=0u;
     r->accumulator=0.f;r->playback_pos=0.f;
+    mi_memzero(wave_min,sizeof wave_min);
+    mi_memzero(wave_max,sizeof wave_max);
 }
 void mi_rec_toggle_play(mi_recorder_t *r)
 {
@@ -43,6 +51,12 @@ float mi_rec_tick(mi_recorder_t *r,float internal_audio,const uint8_t controls[4
         }else{
             float v=clamp((r->accumulator+internal_audio)*0.5f,-1.f,1.f);
             if(r->write_pos<MI_REC_CAPACITY){
+                uint32_t column=r->write_pos*224u/MI_REC_CAPACITY;
+                int32_t amp=(int32_t)(v*110.f);
+                if(amp>110)amp=110;
+                if(amp< -110)amp=-110;
+                if(amp<wave_min[column])wave_min[column]=(int8_t)amp;
+                if(amp>wave_max[column])wave_max[column]=(int8_t)amp;
                 clip[r->write_pos++]=(int16_t)(v*32767.f);
                 r->count=r->write_pos;
             }
@@ -66,11 +80,9 @@ float mi_rec_tick(mi_recorder_t *r,float internal_audio,const uint8_t controls[4
     /* 22.05k sampled clip plays into 44.1k output, preserving 0-semitone time. */
     r->playback_pos+=ratio*0.5f;
     if(r->playback_pos>=(float)last){
-        float length=(float)(last-first);
         r->playback_pos=(float)first+(r->playback_pos-(float)last);
         if(r->playback_pos>=(float)last)
             r->playback_pos=(float)first;
-        (void)length;
     }
     level=clamp((float)controls[3]/127.f,0.f,1.f);
     return clamp(out*level,-1.f,1.f);
