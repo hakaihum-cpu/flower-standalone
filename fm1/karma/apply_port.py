@@ -132,8 +132,9 @@ def main():
     plx_anchor = "    plx = build_plx()"
     if not build_script.is_file() or build_script.read_text(encoding="utf-8").count(plx_anchor) != 1:
         raise RuntimeError("Pinned KARMA build.py Plaits link anchor changed; stop before patch")
-    # Only the approved 576-frame RGB565 16-colour VQ candidate is allowed.
-    # A packer quality failure MUST abort CI before any source edits/build.
+    # Only the agreed 576-frame RGB565 16-colour VQ candidate is allowed.
+    # Missing/corrupt frames, dimensions and decoder errors MUST stop the build.
+    # Visual PSNR is diagnostic, not a FM-1 hardware or firmware requirement.
     packed = HERE / "mi_eureka_vq_frames.h"
     if not packed.is_file():
         raise RuntimeError("EUREKA 576-frame VQ data not generated")
