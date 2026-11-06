@@ -45,6 +45,27 @@ jobs:
               -o /tmp/mi_video_test
             /tmp/mi_video_test
       - run:
+          name: Host-compile real MIYAKO app and native FX BEFORE expensive video encoding
+          command: |
+            set -eu
+            git clone https://github.com/charlesvestal/fm1-base.git /tmp/fm1-base
+            git -C /tmp/fm1-base checkout --detach e07ebca2dda5fbd3bb40287d1f6083923f9ae999
+            git -C /tmp/fm1-base submodule update --init --recursive
+            test "$(git -C /tmp/fm1-base rev-parse HEAD)" = "e07ebca2dda5fbd3bb40287d1f6083923f9ae999"
+            mkdir -p /tmp/fm1-base/miyako
+            cp fm1/native/app.c fm1/native/app.h fm1/native/fm1.toml \
+               fm1/native/mi_control.c fm1/native/mi_control.h \
+               fm1/native/mi_audio.c fm1/native/mi_audio.h \
+               fm1/native/mi_video.c fm1/native/mi_video.h \
+               fm1/native/mi_fx_dsp.c fm1/native/mi_fx_dsp.h \
+               /tmp/fm1-base/miyako/
+            python3 fm1/native/tools/compile_only_media_stub.py \
+              /tmp/fm1-base/miyako/mi_effects_vq_frames.h
+            python3 /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
+            test -x /tmp/fm1-base/miyako/build/host/miyako_host
+            test "$(grep -c 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB 1' \
+              /tmp/fm1-base/miyako/mi_effects_vq_frames.h)" -eq 1
+      - run:
           name: Reconstruct all 144 original MIYAKO EFFECTS source frames
           command: |
             set -eu
@@ -72,18 +93,12 @@ jobs:
           name: Compile FM-1 native platform host simulator and exercise UI, MIDI, persistent controls
           command: |
             set -eu
-            git clone https://github.com/charlesvestal/fm1-base.git /tmp/fm1-base
-            git -C /tmp/fm1-base checkout --detach e07ebca2dda5fbd3bb40287d1f6083923f9ae999
-            git -C /tmp/fm1-base submodule update --init --recursive
             test "$(git -C /tmp/fm1-base rev-parse HEAD)" = "e07ebca2dda5fbd3bb40287d1f6083923f9ae999"
-            mkdir -p /tmp/fm1-base/miyako
-            cp fm1/native/app.c fm1/native/app.h fm1/native/fm1.toml \
-               fm1/native/mi_control.c fm1/native/mi_control.h \
-               fm1/native/mi_audio.c fm1/native/mi_audio.h \
-               fm1/native/mi_video.c fm1/native/mi_video.h \
-               fm1/native/mi_fx_dsp.c fm1/native/mi_fx_dsp.h \
-               fm1/native/mi_effects_vq_frames.h \
-               /tmp/fm1-base/miyako/
+            cp fm1/native/mi_effects_vq_frames.h /tmp/fm1-base/miyako/
+            if grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB' /tmp/fm1-base/miyako/mi_effects_vq_frames.h; then
+              echo "FAIL: fake compiler-only media must never reach FWSC" >&2
+              exit 1
+            fi
             /tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
             test -x /tmp/fm1-base/miyako/build/host/miyako_host
             /tmp/fm1-base/miyako/build/host/miyako_host fm1/native/host_smoke.txt fm1-dist
