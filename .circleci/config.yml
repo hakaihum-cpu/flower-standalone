@@ -1,54 +1,67 @@
-# FM-1 MIYAKO native standalone branch. CI deliberately has NO upstream KARMA checkout.
-# Manual only (run_build=true). This workflow tests native source, NOT flashable FWSC.
+# MIYAKO native FM-1 development firmware: NOT the old KARMA-derived firmware.
+# Manual ONLY: run_build=true. main and older branches never execute this job.
 version: 2.1
-
 parameters:
   run_build:
     type: boolean
     default: false
 
 jobs:
-  fm1_standalone_preflight:
+  fm1_native_build:
     docker:
       - image: cimg/base:2024.08-22.04
     resource_class: medium
+    environment:
+      JIELI_TOOLCHAIN: "/home/circleci/.jieli/toolchain"
+      AC79_SDK: "/home/circleci/fw-AC79_AIoT_SDK"
     steps:
       - checkout
       - run:
-          name: Verify exact standalone branch and source boundary
+          name: Verify exact MIYAKO branch and zero KARMA source closure
           command: |
             set -eu
             test "$CIRCLE_BRANCH" = "feature/fm1-miyako-standalone-20261106"
             python3 -m py_compile fm1/native/verify_standalone.py fm1/native/test_pipeline_contract.py
             python3 fm1/native/verify_standalone.py
             python3 fm1/native/test_pipeline_contract.py
-      - run:
-          name: Host compile and exercise actual MIYAKO native control source
-          command: |
-            set -eu
-            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie                -fsanitize=address,undefined -fno-sanitize-recover=all                fm1/native/mi_control.c fm1/native/test_mi_control.c                -o /tmp/miyako_fm1_control_test
-            /tmp/miyako_fm1_control_test
-      - run:
-          name: Host compile native MIYAKO oscillator and provisional audio FX
-          command: |
-            set -eu
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
-               -fsanitize=address,undefined -fno-sanitize-recover=all \
-               fm1/native/mi_control.c fm1/native/mi_audio.c \
-               fm1/native/test_mi_audio.c \
-               -o /tmp/miyako_fm1_audio_test
-            /tmp/miyako_fm1_audio_test
+              -fsanitize=address,undefined -fno-sanitize-recover=all \
+              fm1/native/mi_control.c fm1/native/test_mi_control.c \
+              -o /tmp/mi_control_test
+            /tmp/mi_control_test
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+              -fsanitize=address,undefined -fno-sanitize-recover=all \
+              fm1/native/mi_control.c fm1/native/mi_audio.c fm1/native/test_mi_audio.c \
+              -o /tmp/mi_audio_test
+            /tmp/mi_audio_test
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+              -fsanitize=address,undefined -fno-sanitize-recover=all \
+              fm1/native/mi_video.c fm1/native/test_mi_video.c \
+              -o /tmp/mi_video_test
+            /tmp/mi_video_test
       - run:
-          name: Test both original MIYAKO visual frame state machines
+          name: Reconstruct every original 576 EUREKA and 144 EFFECTS source frame
           command: |
             set -eu
-            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
-               -fsanitize=address,undefined -fno-sanitize-recover=all \
-               fm1/native/mi_video.c fm1/native/test_mi_video.c \
-               -o /tmp/miyako_fm1_video_test
-            /tmp/miyako_fm1_video_test
+            python3 scripts/materialize_miyako_eureka_video.py
+            python3 scripts/materialize_effects_video_pack.py
+            test -s Resources/miyako_eureka_frames.pack
+            test -s Resources/effects_video_frames.pack
+            mkdir -p fm1-dist
+            python3 -m venv /tmp/mi-video-venv
+            /tmp/mi-video-venv/bin/pip install --disable-pip-version-check "Pillow==10.4.0" "numpy==1.26.4"
+            /tmp/mi-video-venv/bin/python fm1/native/tools/pack_eureka_vq_candidate.py \
+              Resources/miyako_eureka_frames.pack fm1/native/mi_eureka_vq_frames.h \
+              --preview fm1-dist/EUREKA_VQ_PREVIEW.png
+            /tmp/mi-video-venv/bin/python fm1/native/tools/pack_effects_vq_candidate.py \
+              Resources/effects_video_frames.pack fm1/native/mi_effects_vq_frames.h \
+              --preview fm1-dist/EFFECTS_VQ_PREVIEW.png
+            grep -q 'MI_EUREKA_ASSET_COUNT 576u' fm1/native/mi_eureka_vq_frames.h
+            grep -q 'MI_EFFECTS_ASSET_COUNT 144u' fm1/native/mi_effects_vq_frames.h
+            test -s fm1-dist/EUREKA_VQ_PREVIEW.png
+            test -s fm1-dist/EFFECTS_VQ_PREVIEW.png
       - run:
-          name: Compile native MIYAKO app against FM-1 platform host simulator
+          name: Compile FM-1 native platform host simulator and exercise UI, MIDI, persistent controls
           command: |
             set -eu
             git clone https://github.com/charlesvestal/fm1-base.git /tmp/fm1-base
@@ -60,18 +73,44 @@ jobs:
                fm1/native/mi_control.c fm1/native/mi_control.h \
                fm1/native/mi_audio.c fm1/native/mi_audio.h \
                fm1/native/mi_video.c fm1/native/mi_video.h \
+               fm1/native/mi_eureka_vq_frames.h \
+               fm1/native/mi_effects_vq_frames.h \
                /tmp/fm1-base/miyako/
             python3 /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako --host
             test -x /tmp/fm1-base/miyako/build/host/miyako_host
-            mkdir -p fm1-dist
             /tmp/fm1-base/miyako/build/host/miyako_host fm1/native/host_smoke.txt fm1-dist
       - run:
-          name: Record actual readiness stage; do not package a fake firmware
+          name: Install pinned JieLi compiler and minimum AC79 packaging inputs
           command: |
             set -eu
-            mkdir -p fm1-dist
-            printf '%s\n'               'MIYAKO FM-1 standalone native preflight only'               'PASS here is NOT firmware compile, FWSC, or physical device verification.'               'Missing: original-fidelity MIYAKO FX, all required visual media,'               'independent FM-1 HAL and startup/boot/update, target linker, hardware tests.'               > fm1-dist/READINESS.txt
-            test ! -e fm1-dist/MIYAKO-FM1-PREVIEW.fwsc
+            sudo apt-get update
+            sudo apt-get install -y xz-utils libtinfo5
+            sh /tmp/fm1-base/tools/get_toolchain.sh /home/circleci/.jieli
+            git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
+              https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$AC79_SDK"
+            test -x "$JIELI_TOOLCHAIN/pi32v2/bin/clang"
+            test -f "$AC79_SDK/cpu/wl82/tools/uboot.boot"
+            test -f "$AC79_SDK/cpu/wl82/tools/cfg_tool.bin"
+            test -f "$AC79_SDK/cpu/wl82/tools/cfg/eq_cfg_hw.bin"
+      - run:
+          name: Link and validate installable native MIYAKO FM-1 DEVELOPMENT FWSC
+          command: |
+            set -eu
+            export JIELI_TOOLCHAIN AC79_SDK
+            python3 /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako
+            test -s /tmp/fm1-base/miyako/build/miyako.bin
+            test -s /tmp/fm1-base/miyako/build/loader/ota.bin
+            test -s /tmp/fm1-base/miyako/build/miyako.fwsc
+            cp /tmp/fm1-base/miyako/build/miyako.fwsc fm1-dist/MIYAKO-FM1-NATIVE-DEV.fwsc
+            cat > fm1-dist/README_BEFORE_INSTALL.txt <<'EOF'
+            MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE
+            Built without the KARMA application and DSP.
+            EUREKA and REEL audio use PROVISIONAL native implementations.
+            All 576 EUREKA + 144 EFFECTS original-source frames are included as 16-colour quantised VQ.
+            DREAMY, DELAY, REVERB, CHORUS and the full multi-FX chain remain unimplemented.
+            This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.
+            EOF
+            (cd fm1-dist && sha256sum *.fwsc > SHA256SUMS)
       - store_artifacts:
           path: fm1-dist
           destination: fm1
@@ -80,7 +119,7 @@ workflows:
   fm1_manual:
     when: << pipeline.parameters.run_build >>
     jobs:
-      - fm1_standalone_preflight:
+      - fm1_native_build:
           filters:
             branches:
               only: feature/fm1-miyako-standalone-20261106
