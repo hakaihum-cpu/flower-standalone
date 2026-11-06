@@ -12,6 +12,10 @@ int main(void)
     for(i=0;i<36000u;i++) {
         float dry=i==0u?1.f:0.f;
         float out=mi_fx_dsp_process(&p,MI_FX_DELAY,dry,44100.f,0,48);
+        /* CI #264: an impulse MUST appear at the exact 40ms boundary.
+         * delay_valid>n skipped that one and only source sample. */
+        if(i<1764u)assert(out==0.f);
+        if(i==1764u)assert(out>0.99f);
         if(out>peak)peak=out;
     }
     assert(peak>0.6f);
