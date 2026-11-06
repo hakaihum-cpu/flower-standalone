@@ -37,12 +37,37 @@ jobs:
             set -eu
             sudo apt-get update
             sudo apt-get install -y git curl xz-utils gcc g++ python3-pip python3-venv libtinfo5
-            # Catch host declarations/types in the four tests that do NOT
-            # require the generated VQ header, before costly video processing.
-            # DOT/video tests are compiled after generating that header.
+            # The four media-independent harnesses compile before video processing.
             for source in fm1/karma/test_engine.c fm1/karma/test_stress.c fm1/karma/test_boot_ui.c fm1/karma/test_panel_nav.c; do
               cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only "$source"
             done
+            # The three DOT/VQ harnesses require a VQ header. Temporarily
+            # declare ONLY its interface to compile the REAL sources before
+            # 576-frame encoding; never package this syntax-only declaration.
+            test ! -e fm1/karma/mi_eureka_vq_frames.h
+            trap 'rm -f fm1/karma/mi_eureka_vq_frames.h' EXIT
+            cat > fm1/karma/mi_eureka_vq_frames.h <<'FM1_VQ_SYNTAX_ONLY'
+            #ifndef MI_EUREKA_VQ_FRAMES_H
+            #define MI_EUREKA_VQ_FRAMES_H
+            #include <stdint.h>
+            #define MI_EUREKA_ASSET_COUNT 576u
+            #define MI_EUREKA_ASSET_W 128u
+            #define MI_EUREKA_ASSET_H 78u
+            #define MI_EUREKA_ASSET_BYTES 4992u
+            #define MI_EUREKA_ASSET_BPP 4u
+            #define MI_EUREKA_ASSET_COLORS 16u
+            #define MI_EUREKA_VQ_TILE_COUNT 320u
+            #define MI_EUREKA_DECODED_CRC32 0u
+            extern const uint16_t mi_eureka_vq_palette[16][16];
+            extern const uint8_t mi_eureka_vq_tilebook[16][256][16];
+            extern const uint8_t mi_eureka_vq_maps[576][320];
+            #endif
+            FM1_VQ_SYNTAX_ONLY
+            for source in fm1/karma/test_dot_ui.c fm1/karma/test_eureka_video.c fm1/karma/test_eureka_vq_decoder.c; do
+              cc -std=c99 -Wall -Wextra -Werror=implicit-function-declaration -fsyntax-only "$source"
+            done
+            rm -f fm1/karma/mi_eureka_vq_frames.h
+            trap - EXIT
             python3 -m venv /home/circleci/.venv-fm1
             /home/circleci/.venv-fm1/bin/python -m pip install --disable-pip-version-check "Pillow==10.4.0" "numpy==1.26.4"
             /home/circleci/.venv-fm1/bin/python -c "from PIL import Image; print('Pillow available')" 
