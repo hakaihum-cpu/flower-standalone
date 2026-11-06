@@ -24,8 +24,9 @@ void mi_video_init(mi_video_t *v,uint16_t effect_count)
 void mi_video_set_eureka(mi_video_t *v,uint16_t count)
 {
     if(!v)return;
-    v->eureka_count=count;
-    v->eureka_frame=count?0:-1;
+    /* Exact complete clips only: avoid random modulo by zero. */
+    v->eureka_count=(count>=36u&&count%36u==0u)?count:0u;
+    v->eureka_frame=v->eureka_count?0:-1;
 }
 void mi_video_tick(mi_video_t *v,float activity,int eureka_mode)
 {
