@@ -51,12 +51,17 @@ int main(void)
  mi_init(&s);mi_audio_init(&a,44100.f);
  s.arp[0]=1;s.arp[1]=2;s.arp[2]=70;s.arp[3]=1;
  mi_audio_input_on(&a,&s,60,127);
+ mi_audio_input_on(&a,&s,60,127); /* same note from USB + physical key */
  mi_audio_input_on(&a,&s,64,90);
+ assert(a.held_total==2);
  mi_audio_render(&a,&s,lr,256,4096);
  assert(a.arp_mode==1 && a.arp_sounding && a.arp_note==60);
  for(i=0;i<35;i++)mi_audio_render(&a,&s,lr,256,4096);
  assert(a.arp_note==64);
  mi_audio_input_off(&a,&s,60);
+ assert(a.held_total==2); /* still held by second input */
+ mi_audio_input_off(&a,&s,60);
+ assert(a.held_total==1);
  mi_audio_input_off(&a,&s,64);
  mi_audio_render(&a,&s,lr,256,4096);
  assert(!a.arp_sounding);
