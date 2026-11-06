@@ -22,7 +22,7 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 import numpy as np
 from PIL import Image, ImageOps
 
-from pack_eureka_frames import clip_pixels
+from mi_palette import clip_pixels
 
 WIDTH, HEIGHT = 128, 78
 PAD_H = 80
