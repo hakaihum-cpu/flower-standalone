@@ -4,7 +4,7 @@
  * This is not yet a complete or flashable firmware.
  */
 #include "mi_control.h"
-#include <string.h>
+#include "mi_memory.h"
 static int32_t limited(int32_t value, int32_t steps, int32_t lo, int32_t hi)
 {
     if (steps > 4096) steps = 4096;
@@ -40,7 +40,7 @@ static void apply_preset(mi_state_t *s, unsigned preset)
 void mi_init(mi_state_t *s)
 {
     if (!s) return;
-    memset(s, 0, sizeof(*s));
+    mi_memzero(s, 0, sizeof(*s));
     s->view = MI_HOME;
     s->width = 64;
     s->level = 100;
