@@ -76,6 +76,7 @@ jobs:
             sudo apt-get install -y python3-venv
             python3 -m venv /tmp/mi-video-venv
             /tmp/mi-video-venv/bin/pip install --disable-pip-version-check "Pillow==10.4.0" "numpy==1.26.4"
+            export OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2
             /tmp/mi-video-venv/bin/python fm1/native/tools/pack_effects_vq_candidate.py \
               Resources/effects_video_frames.pack fm1/native/mi_effects_vq_frames.h \
               --preview fm1-dist/EFFECTS_VQ_PREVIEW.png
