@@ -91,6 +91,35 @@ jobs:
             test "$(grep -c 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB 1' \
               /tmp/fm1-base/miyako/mi_effects_vq_frames.h)" -eq 1
       - run:
+          name: Install pinned JieLi compiler and minimum AC79 packaging inputs
+          command: |
+            set -eu
+            sudo apt-get update
+            sudo apt-get install -y xz-utils libtinfo5
+            sh /tmp/fm1-base/tools/get_toolchain.sh /home/circleci/.jieli
+            git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
+              https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$AC79_SDK"
+            test -x "$JIELI_TOOLCHAIN/pi32v2/bin/clang"
+            test -f "$AC79_SDK/cpu/wl82/tools/uboot.boot"
+            test -f "$AC79_SDK/cpu/wl82/tools/cfg_tool.bin"
+            test -f "$AC79_SDK/cpu/wl82/tools/cfg/eq_cfg_hw.bin"
+      - run:
+          name: Verify freestanding MIYAKO C with the actual JieLi target compiler BEFORE video conversion
+          command: |
+            set -eu
+            CLC="$JIELI_TOOLCHAIN/pi32v2/bin/clang"
+            test -x "$CLC"
+            # All four independent MIYAKO native DSP / video objects.
+            # Same CPU, FPU, standard, builtin and optimization policy as fm1-base.
+            for unit in mi_fx_dsp.c mi_audio.c mi_control.c mi_video.c; do
+              "$CLC" -fsyntax-only -std=c99 -Os -mcpu=r3 -mfprev1 -ffp-contract=off \
+                -fno-builtin -Wall -Werror=implicit-function-declaration \
+                -I /tmp/fm1-base/miyako -I /tmp/fm1-base/include \
+                "/tmp/fm1-base/miyako/$unit"
+              echo "PASS: JieLi pi32v2 freestanding $unit"
+            done
+            python3 fm1/native/verify_standalone.py
+      - run:
           name: Reconstruct all 144 original MIYAKO EFFECTS source frames
           command: |
             set -eu
@@ -132,19 +161,6 @@ jobs:
             test -s fm1-dist/MIYAKO_FX_PREVIEW.wav
             test "$(stat -c %s fm1-dist/MIYAKO_FX_PREVIEW.wav)" -gt 10000
             /tmp/mi-video-venv/bin/python fm1/native/tools/check_host_wav.py fm1-dist/MIYAKO_FX_PREVIEW.wav
-      - run:
-          name: Install pinned JieLi compiler and minimum AC79 packaging inputs
-          command: |
-            set -eu
-            sudo apt-get update
-            sudo apt-get install -y xz-utils libtinfo5
-            sh /tmp/fm1-base/tools/get_toolchain.sh /home/circleci/.jieli
-            git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
-              https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$AC79_SDK"
-            test -x "$JIELI_TOOLCHAIN/pi32v2/bin/clang"
-            test -f "$AC79_SDK/cpu/wl82/tools/uboot.boot"
-            test -f "$AC79_SDK/cpu/wl82/tools/cfg_tool.bin"
-            test -f "$AC79_SDK/cpu/wl82/tools/cfg/eq_cfg_hw.bin"
       - run:
           name: Link and validate installable native MIYAKO FM-1 DEVELOPMENT FWSC
           command: |
