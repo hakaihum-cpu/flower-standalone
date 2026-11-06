@@ -51,6 +51,12 @@ void mi_init(mi_state_t *s)
     s->fx_options[MI_FX_REEL][0] = 48;
     s->fx_options[MI_FX_REEL][1] = 45;
     s->env[0] = 4; s->env[1] = 65; s->env[2] = 115; s->env[3] = 45;
+    /* ARP disabled at start; 1/16 note gate 70%, one octave. */
+    s->arp[0] = 0; s->arp[1] = 2; s->arp[2] = 70; s->arp[3] = 1;
+    /* LFO off unless depth is raised. Wave 0=sine, target 0=pitch. */
+    s->lfo[0] = 35; s->lfo[1] = 0; s->lfo[2] = 0; s->lfo[3] = 0;
+    s->fx_options[MI_FX_DREAMY][0] = 64;
+    s->fx_options[MI_FX_DREAMY][1] = 80;
 }
 static void view(mi_state_t *s, mi_view_t v)
 {
@@ -117,14 +123,22 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         if (k == 3) p = &s->crush;
         break;
     case MI_FX:
-    case MI_VIDEO:
         if (k == 0) { p = &s->fx; hi = MI_FX_COUNT - 1; }
         if (k == 1) p = &s->wet;
         if (k > 1 && s->fx < MI_FX_COUNT) p = &s->fx_options[s->fx][k-2];
         break;
+    case MI_VIDEO:
+        /* SEL is a true media-only screen: avoid hidden knob changes. */
+        break;
     case MI_ENV: p = &s->env[k]; break;
-    case MI_LFO: p = &s->lfo[k]; break;
-    case MI_ARP: p = &s->arp[k]; break;
+    case MI_LFO: p = &s->lfo[k]; if(k==1)hi=3; if(k==3)hi=2; break;
+    case MI_ARP:
+        p = &s->arp[k];
+        if(k==0)hi=4;
+        if(k==1)hi=3;
+        if(k==2){lo=10;hi=100;}
+        if(k==3){lo=1;hi=4;}
+        break;
     case MI_SEQ: p = &s->seq[k]; break;
     case MI_CONFIG: {
         static const int16_t mn[] = {40, 0, -50, 0};
@@ -162,6 +176,21 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
     }
     return result(MI_ACTION_NONE, 0);
 }
+const char *mi_wave_name(unsigned wave)
+{
+    static const char *const names[] = {"SINE","SAW","SQUARE","PULSE"};
+    return wave<4u?names[wave]:"?";
+}
+const char *mi_arp_mode_name(unsigned mode)
+{
+    static const char *const names[] = {"OFF","UP","DOWN","UPDN","RND"};
+    return mode<5u?names[mode]:"?";
+}
+const char *mi_lfo_wave_name(unsigned wave)
+{
+    static const char *const names[] = {"SINE","TRI","SAW","SQUARE"};
+    return wave<4u?names[wave]:"?";
+}
 const char *mi_view_name(mi_view_t v)
 {
     static const char *const names[] = {
@@ -182,13 +211,15 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
     static const char *const names[MI_VIEW_COUNT][4] = {
         {"WAVE","MODE","WET","LEVEL"}, {"WAVE","WIDTH","SUB","CRUSH"},
         {"MODE","WET","P3","P4"}, {"MODE","WET","P3","P4"},
-        {"ATK","DEC","SUS","REL"}, {"RATE","WAVE","PHS","FADE"},
-        {"MODE","RATE","OCT","GATE"}, {"LEN","DIV","SWG","GATE"},
+        {"ATK","DEC","SUS","REL"}, {"RATE","WAVE","DEPTH","DEST"},
+        {"MODE","RATE","GATE","OCT"}, {"LEN","DIV","SWG","GATE"},
         {"BPM","SWING","TUNE","CLOCK"}, {"SLOT","","",""}
     };
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
-    if ((s->view == MI_FX || s->view == MI_VIDEO) && k >= 2) {
+    if (s->view == MI_VIDEO) return "";
+    if (s->view == MI_FX && k >= 2) {
         if (s->fx == MI_FX_REEL) return k == 2 ? "WOW" : "FLTR";
+        if (s->fx == MI_FX_DREAMY) return k == 2 ? "GRAIN" : "SPACE";
         if (s->fx == MI_FX_DELAY) return k == 2 ? "TIME" : "FDBK";
         if (s->fx == MI_FX_REVERB) return k == 2 ? "DECAY" : "TONE";
         if (s->fx == MI_FX_CHORUS) return k == 2 ? "RATE" : "DEPTH";
@@ -205,7 +236,8 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
         return k == 0 ? s->wave : k == 1 ? s->fx : k == 2 ? s->wet : s->level;
     case MI_OSC:
         return k == 0 ? s->wave : k == 1 ? s->width : k == 2 ? s->sub : s->crush;
-    case MI_FX: case MI_VIDEO:
+    case MI_VIDEO: return 0;
+    case MI_FX:
         return k == 0 ? s->fx : k == 1 ? s->wet :
             (s->fx < MI_FX_COUNT ? s->fx_options[s->fx][k-2] : 0);
     case MI_ENV: return s->env[k];
