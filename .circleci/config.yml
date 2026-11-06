@@ -138,7 +138,7 @@ jobs:
               /tmp/fm1-base/miyako/build/loader/ota.bin \
               --base /tmp/fm1-base --product FM-1_9100
             cp /tmp/fm1-base/miyako/build/miyako.fwsc fm1-dist/MIYAKO-FM1-NATIVE-DEV.fwsc
-            printf '%s\\n' \
+            printf '%s\n' \
               'MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE' \
               'Built without the KARMA application and DSP.' \
               'REEL, DELAY, REVERB and CHORUS DSP are native development implementations.' \
