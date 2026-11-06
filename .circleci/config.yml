@@ -24,7 +24,7 @@ jobs:
           name: Verify exact MIYAKO branch and zero KARMA source closure
           command: |
             set -eu
-            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-no-eureka-20261106"
+            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-visual-arp-fx-20261107"
             python3 -m py_compile fm1/native/verify_standalone.py fm1/native/test_pipeline_contract.py
             python3 fm1/native/verify_standalone.py
             python3 fm1/native/test_pipeline_contract.py
@@ -80,7 +80,7 @@ jobs:
             # running FM-1 identity, all metadata, and final FWSC markers.
             # The upstream pinned builder defaults to suffix 00.
             python3 fm1/native/tools/set_miyako_product_id.py --base /tmp/fm1-base
-            grep -q 'PRODUCT = prefix + "31"' /tmp/fm1-base/tools/build.py
+            grep -q 'PRODUCT = prefix + "32"' /tmp/fm1-base/tools/build.py
             # Fail early on fonts: never reach the C build with untested
             # Pillow Raqm or a missing upstream bitmap asset.
             test -s /tmp/fm1-base/assets/fonts/ter-u12n.bdf
@@ -179,6 +179,9 @@ jobs:
             test -s fm1-dist/MIYAKO_HOME.png
             test -s fm1-dist/MIYAKO_FX.png
             test -s fm1-dist/MIYAKO_EFFECTS_VIDEO.png
+            test -s fm1-dist/MIYAKO_ENV.png
+            test -s fm1-dist/MIYAKO_LFO.png
+            test -s fm1-dist/MIYAKO_ARP.png
             test -s fm1-dist/MIYAKO_FX_PREVIEW.wav
             test "$(stat -c %s fm1-dist/MIYAKO_FX_PREVIEW.wav)" -gt 10000
             /tmp/mi-video-venv/bin/python fm1/native/tools/check_host_wav.py fm1-dist/MIYAKO_FX_PREVIEW.wav
@@ -195,14 +198,14 @@ jobs:
               /tmp/fm1-base/miyako/build/miyako.fwsc \
               /tmp/fm1-base/miyako/build/miyako.bin \
               /tmp/fm1-base/miyako/build/loader/ota.bin \
-              --base /tmp/fm1-base --product FM-1_931
+              --base /tmp/fm1-base --product FM-1_932
             cp /tmp/fm1-base/miyako/build/miyako.fwsc fm1-dist/MIYAKO-FM1-NATIVE-DEV.fwsc
             printf '%s\n' \
               'MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE' \
               'Built without the KARMA application and DSP.' \
-              'REEL, DELAY, REVERB and CHORUS DSP are native development implementations.' \
+              'REEL, DREAMY, DELAY, REVERB and CHORUS are native FM-1 DSP implementations.' \
               'Original 144 EFFECTS frames are encoded as 16-colour VQ; EUREKA omitted by request.' \
-              'DREAMY and the source-accurate multi-FX chain remain unimplemented.' \
+              'Original source-accurate multiple-FX routing remains pending; EUREKA is deferred.' \
               'This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.' \
               > fm1-dist/README_BEFORE_INSTALL.txt
             (cd fm1-dist && sha256sum *.fwsc > SHA256SUMS)
@@ -217,4 +220,4 @@ workflows:
       - fm1_native_build:
           filters:
             branches:
-              only: feature/fm1-miyako-no-eureka-20261106
+              only: feature/fm1-miyako-visual-arp-fx-20261107
