@@ -39,6 +39,19 @@ jobs:
                -o /tmp/miyako_fm1_audio_test
             /tmp/miyako_fm1_audio_test
       - run:
+          name: Compile native MIYAKO app against FM-1 platform host simulator
+          command: |
+            set -eu
+            git clone https://github.com/charlesvestal/fm1-base.git /tmp/fm1-base
+            git -C /tmp/fm1-base checkout --detach e07ebca2dda5fbd3bb40287d1f6083923f9ae999
+            git -C /tmp/fm1-base submodule update --init --recursive
+            test "$(git -C /tmp/fm1-base rev-parse HEAD)" = "e07ebca2dda5fbd3bb40287d1f6083923f9ae999"
+            python3 /tmp/fm1-base/tools/build.py "$PWD/fm1/native" --host
+            test -x fm1/native/build/host/miyako_host
+            mkdir -p fm1-dist
+            fm1/native/build/host/miyako_host fm1/native/host_smoke.txt fm1-dist
+            test -s fm1/native/build/host/miyako_host
+      - run:
           name: Record actual readiness stage; do not package a fake firmware
           command: |
             set -eu
