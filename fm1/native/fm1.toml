@@ -1,0 +1,16 @@
+# Independent MIYAKO app on the MPL-2.0 fm1-base hardware layer.
+name = "MIYAKO"
+id_prefix = "FM-1_91"
+usb_manufacturer = "MIYAKO"
+usb_product = "MIYAKO FM-1"
+o2 = ["mi_control.c", "mi_audio.c"]
+ble = false
+ble_central = false
+usb_audio_in = false
+usb_audio_out = false
+repo = "https://github.com/hakaihum-cpu/flower-standalone"
+licence = "GPL-3.0-only"
+credits = "MIYAKO native application with fm1-base / felucca-bsp hardware support (MPL-2.0)"
+author = "MIYAKO"
+description = "Native MIYAKO FM-1 development firmware. NOT a complete MIYAKO port."
+tags = ["synth", "utility"]
