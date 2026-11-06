@@ -18,3 +18,6 @@ void app_ui_init(void);
 void app_frame(void);
 void app_input_only(void);
 void app_say(const char *a, const char *b);
+#ifdef PLAT_HOST
+int app_expect(const char *what, int *got);
+#endif
