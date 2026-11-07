@@ -421,6 +421,8 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         static const char *const multi[4]={"WAVE","OSC","DETUNE","LEVEL"};
         return multi[k];
     }
+    if(s->view==MI_OSC&&s->wave==3u&&s->osc_page==0u&&k==1u)
+        return "PWIDTH";
     if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI&&s->osc_page==0u&&k==0u)
         return "WAVE1";
     if (s->view==MI_OSC && s->osc_page==1u){
