@@ -24,6 +24,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from mi_palette import clip_pixels
+from black_frame_guard import replace_black_frames
 
 WIDTH, HEIGHT = 128, 78
 PAD_H = 80
@@ -286,6 +287,11 @@ def main():
             if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
                 chosen, selected = trial, f"spread-start {seed}"
         book, ids, recon, quality = chosen
+        # Keep source clip/codec intact. Blank source or decoded frames reuse
+        # only the closest nonblank selector map from this same 36-frame clip.
+        replaced = replace_black_frames(idx, recon, ids, palette, "EFFECTS", clip)
+        if replaced:
+            print("INFO: VQ PSNR selection metric precedes blank-frame replacement", flush=True)
         blob = pack_nibbles(book)
         if not np.array_equal(book, np.stack([np.frombuffer(blob, np.uint8) >> 4,
             np.frombuffer(blob, np.uint8) & 15], axis=-1).reshape(256, 32)):

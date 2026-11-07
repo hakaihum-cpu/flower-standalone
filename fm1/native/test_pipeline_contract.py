@@ -126,6 +126,7 @@ assert "mandatory" not in vq.lower()
 assert "raise SystemExit" in vq  # frame-count / source integrity still fail closed
 assert "CANDIDATE: RGB565 16 colours" in vq
 assert "decoded_crc32 = zlib.crc32(pixels, decoded_crc32)" in vq
+assert 'replace_black_frames(idx, recon, ids, palette, "EFFECTS", clip)' in vq
 assert "write_candidate(a.output_header, palettes, books, maps, decoded_crc32)" in vq
 assert "PSNR is a non-blocking visual quality metric" in vq
 eureka_vq = (root / "fm1/native/tools/pack_eureka_vq_candidate.py").read_text(encoding="utf-8")
@@ -133,6 +134,11 @@ assert "--min-psnr-db" not in eureka_vq
 assert "min(worst) <" not in eureka_vq
 assert "MI_EUREKA_ASSET_COUNT 576u" in eureka_vq
 assert "decoded_crc32 = zlib.crc32(pixels, decoded_crc32)" in eureka_vq
+assert 'replace_black_frames(idx, recon, ids, palette, "EUREKA", clip)' in eureka_vq
+assert "test_black_frame_guard.py" in ci
+assert ci.index("test_black_frame_guard.py") < ci.index("Reconstruct all 144 original")
+assert "visible<32u" in (root / "fm1/native/test_media_crc.c").read_text()
+assert (root / "fm1/native/tools/black_frame_guard.py").is_file()
 assert ci.index("Reconstruct all 144 original MIYAKO EFFECTS") < ci.index(
     "Reconstruct all 576 original MIYAKO EUREKA")
 assert ci.index("Reconstruct all 576 original MIYAKO EUREKA") < ci.index(

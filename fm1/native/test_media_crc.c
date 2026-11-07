@@ -35,6 +35,7 @@ static uint32_t crc_update(uint32_t crc, const uint8_t *src, unsigned count)
 }
 
 static uint32_t check_bank(unsigned frames, unsigned clip_count,
+                           const uint16_t *palettes,
                            const uint8_t *books, const uint8_t *maps,
                            uint32_t reference, const char *name)
 {
@@ -59,6 +60,27 @@ static uint32_t check_bank(unsigned frames, unsigned clip_count,
                 }
             }
         }
+        /* CRC integrity alone does not detect fully black output.
+         * Verify the actual rendered 16-colour RGB565 pixels. */
+        {
+            unsigned visible=0u, yy, xx;
+            for(yy=0u;yy<SOURCE_HEIGHT;yy++)
+                for(xx=0u;xx<SOURCE_WIDTH;xx++){
+                    unsigned packed=result[yy*(SOURCE_WIDTH/2u)+(xx>>1u)];
+                    unsigned index=(xx&1u)?(packed&15u):(packed>>4u);
+                    uint16_t rgb=palettes[clip*16u+index];
+                    if(index!=0u &&
+                       (((rgb>>11u)&31u)>=4u ||
+                        ((rgb>>5u)&63u)>=7u ||
+                        (rgb&31u)>=4u))
+                        visible++;
+                }
+            if(visible<32u){
+                fprintf(stderr,"FAIL %s frame %u: black VQ frame (%u visible pixels)\n",
+                        name,frame,visible);
+                return 0u;
+            }
+        }
         crc=crc_update(crc,result,sizeof result);
     }
     crc ^= 0xffffffffu;
@@ -75,10 +97,12 @@ static uint32_t check_bank(unsigned frames, unsigned clip_count,
 int main(void)
 {
     if (!check_bank(MI_EFFECTS_ASSET_COUNT,4u,
+        &mi_effects_vq_palette[0][0],
         &mi_effects_vq_tilebook[0][0][0],
         &mi_effects_vq_maps[0][0],
         MI_EFFECTS_DECODED_CRC32,"EFFECTS")) return 1;
     if (!check_bank(MI_EUREKA_ASSET_COUNT,16u,
+        &mi_eureka_vq_palette[0][0],
         &mi_eureka_vq_tilebook[0][0][0],
         &mi_eureka_vq_maps[0][0],
         MI_EUREKA_DECODED_CRC32,"EUREKA")) return 1;
