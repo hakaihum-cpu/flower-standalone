@@ -18,6 +18,8 @@ typedef struct {
     float dreamy_pitch_cache;
     float dreamy_filter; /* suppress sharp grain-boundary clicks */
     uint8_t dreamy_last_pitch;
+    uint32_t crush_hold_counter;
+    float crush_held;
     uint32_t chorus_write;
     uint32_t reverb_write[4];
     float chorus_phase;
@@ -26,6 +28,7 @@ typedef struct {
 void mi_fx_dsp_init(mi_fx_dsp_t *p);
 /* DELAY and EUREKA share one 64-KiB history buffer. */
 void mi_fx_dsp_reset_shared(mi_fx_dsp_t *p);
+void mi_fx_dsp_reset_grain(mi_fx_dsp_t *p);
 /* EUREKA has a wet-only output. The mixer must keep DRY audible until
  * history containing an actual note (not pre-roll silence) fills TIME+HAZE. */
 int mi_fx_dsp_eureka_ready(const mi_fx_dsp_t *p, unsigned time, unsigned haze);
