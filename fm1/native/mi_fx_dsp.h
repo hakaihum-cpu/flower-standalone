@@ -11,8 +11,12 @@ typedef struct {
     uint8_t eureka_decimate,eureka_heard;
     uint32_t eureka_content_valid,eureka_quiet_samples;
     float eureka_sum,eureka_phase,eureka_filter;
+    float eureka_pitch_cache;
+    uint8_t eureka_last_pitch;
     uint32_t dreamy_write, dreamy_valid;
     float dreamy_phase;
+    float dreamy_pitch_cache;
+    uint8_t dreamy_last_pitch;
     uint32_t chorus_write;
     uint32_t reverb_write[4];
     float chorus_phase;
