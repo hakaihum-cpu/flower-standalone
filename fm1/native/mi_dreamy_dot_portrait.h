@@ -1,0 +1,18 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Unmodified original MIYAKO DOT Dreamy 60x46 2-bit portrait.
+ * Source: hakaihum-cpu/Vstplugin / Source/MiyakoPixelMotion.h
+ *         initPortrait(), branch feature/miyako-ep-sampler-16part-20261030.
+ * 690 bytes decoded by the same original base64-to-2bit method.
+ * This is the ORIGINAL procedural DOT Dreamy portrait, NOT a substitute
+ * for the separate flower_embedded_atlas.png Dreamy ensemble.
+ */
+#ifndef MI_DREAMY_DOT_PORTRAIT_H
+#define MI_DREAMY_DOT_PORTRAIT_H
+#define MI_DREAMY_DOT_W 60u
+#define MI_DREAMY_DOT_H 46u
+#define MI_DREAMY_DOT_BYTES 690u
+static const char mi_dreamy_dot_portrait_b64[]=
+    "AAAAAAAAABAAUmpAAAEAAAAAAAAAABAAkmqAEAEAAAAAAAAAAJABhmqAEAEAAAAAAAAEAYACSiqQEAEAAAAAAAAIAkAGVWqkYAEAAAAAAAAUCQAaqaqgpAQAAAAAAAgQaVqpqqppqAQAAAAAAChGqVVVqqqGqBQAAAAAACWmZEAKqqqhFBAAAAAAAKalVpaqqqqqkFAAAAAAAaqValWqqqqmpEAAAAAAAqqqppVqqqpVoUAAAAAABqqqVAGaqqmQJQAAAAAABqqlQABqqqZABQAAAAAACqqpAGJqqqkJAAAAABZAGqqQUGKqqqkFhAAAAGaQKqqlWQKqqqpglAAAAJCkKqqqpkaqqqpRVAAAAJppKqqqVVmqqqqWlAAAAJkKKqqqaqmaqqqqVAAAAKlVaWppllWqqqqlVAAAAKlFWpqqmZWmqqaZlAAAAKZFmqqqmapqpqmphAAAAGZKpqqqlmplpqppRAAAABqmqqqplmpqlappRAAAAAqRqqqplqpqpqlZSAAAAAGqqqqplllqlqWlSAAAAABqqqqZlqmppqqlRAAAAAAaWpallqZaqqlpUAAAAAAACVaqlqVllpVpUAAAAAAAAqqpllVllpWlUAAAAAAABaqqllWlpValQAAAAAAABmapllVqWqZpQAAAAAAABVqpllVqpVWlAAAAAAAAAlGallWqlqalAAAAAAAAAVRlllaqmGZVAAAAAAAAAFYFmlWqapWFAAAAAAAAAJWRWlWqZWZFAAAAAAAAAKVkCVapamoBAAAAAAAAAKpVRVWllqgBAAAAAAAAAaqVlgaWlqAAQAAAAAAABZqlVUBZVkAAQAAAAAAACZppVVUBVAAEQAAAAAAABKqmlVVAAAAEQAAAAAAAABVVQAAAAAAAAAAAAAAABUABUAEVVVVVVAAE";
+typedef char mi_dreamy_dot_source_size[
+  sizeof(mi_dreamy_dot_portrait_b64)-1u==920u?1:-1];
+#endif
