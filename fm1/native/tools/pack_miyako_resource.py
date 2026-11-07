@@ -14,6 +14,9 @@ from pathlib import Path
 
 EXPECTED_SHA256 = "429f2aa8f561079481c3b60562ef3f88e2f5abd044a446eca1b1ebe1c6bc11ee"
 EXPECTED_BYTES = 92928
+ADDITIONAL_BYTES = 26592
+TOTAL_BYTES = EXPECTED_BYTES + ADDITIONAL_BYTES
+ADDITIONAL_SHA256 = "7cf48b59c60028829c0d7db6f49a2e52750d3d49b7da33943cba2599d18344ca"
 MAX_RESOURCE_SECTORS = 69
 SECTOR_BYTES = 4096
 RESOURCE_HEADER_BYTES = 32
@@ -37,6 +40,7 @@ def array(source: str, name: str, expected: int, unit: int) -> bytes:
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("source_header", type=Path)
+    p.add_argument("additional_header", type=Path)
     p.add_argument("resource_payload", type=Path)
     args = p.parse_args()
     source = args.source_header.read_text(encoding="ascii")
@@ -47,14 +51,26 @@ def main() -> None:
     digest = hashlib.sha256(result).hexdigest()
     if len(result) != EXPECTED_BYTES or digest != EXPECTED_SHA256:
         raise SystemExit("FAIL: existing MIYAKO image payload changed; refuse resource")
+    # The additional two approved contact sheets use exactly the same
+    # 16-colour RGB565 palette/8x4 tilebook/selector map representation.
+    additional = args.additional_header.read_text(encoding="ascii")
+    new_palettes = array(additional, "mi_new_vq_palette", 4 * 16, 2)
+    new_books = array(additional, "mi_new_vq_tilebook", 4 * 256 * 16, 1)
+    new_maps = array(additional, "mi_new_vq_maps", 140 * 72, 1)
+    extra = new_palettes + new_books + new_maps
+    if len(extra) != ADDITIONAL_BYTES or hashlib.sha256(extra).hexdigest() != ADDITIONAL_SHA256:
+        raise SystemExit("FAIL: any of 140 additional approved frames were changed")
+    result += extra
+    if len(result) != TOTAL_BYTES:
+        raise SystemExit("FAIL: resource payload size differs from expected 628 frames")
     # The existing app store object begins at 0xDC000, the resource region
     # ends immediately before it: [0x97000, 0xDC000), 69 sectors.
     if RESOURCE_HEADER_BYTES + len(result) > MAX_RESOURCE_SECTORS * SECTOR_BYTES:
         raise SystemExit("FAIL: MIYAKO resources overlap saved user settings")
     args.resource_payload.parent.mkdir(parents=True, exist_ok=True)
     args.resource_payload.write_bytes(result)
-    print(f"PASS: 488 original photo tiles -> FM1 standard resource payload "
-          f"{len(result)} B, SHA-256={digest}")
+    print(f"PASS: 488 preserved + 140 newly supplied photo tiles -> FM1 standard resource payload "
+          f"{len(result)} B, original SHA-256={digest}, new SHA-256={ADDITIONAL_SHA256}")
 
 
 if __name__ == "__main__":
