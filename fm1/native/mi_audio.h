@@ -32,6 +32,7 @@ typedef struct {
     mi_recorder_t recorder;
     volatile uint8_t rec_command;
     float sample_rate, wow, flutter, wet_current,wet_current2;
+    float rec_monitor_mix; /* existing wet-smoothing approach for REC monitor */
 } mi_audio_t;
 void mi_audio_init(mi_audio_t *a, float sample_rate);
 void mi_audio_note_on(mi_audio_t *a, uint8_t note, uint8_t velocity);
