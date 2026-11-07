@@ -473,8 +473,12 @@ static void mi_dreamy_dot_pixel(unsigned half,int32_t px,int32_t py,
     top=py+(int32_t)((unsigned)y*(unsigned)size/65u)-(int32_t)half*120;
     bottom=py+(int32_t)((unsigned)(y+1)*(unsigned)size/65u)-(int32_t)half*120;
     if(bottom<=0||top>=120)return;
+    if(top<0)top=0;
+    if(bottom>120)bottom=120;
     left=px+(int32_t)((unsigned)x*(unsigned)size/65u);
     right=px+(int32_t)((unsigned)(x+1)*(unsigned)size/65u);
+    if(left<0)left=0;
+    if(right>240)right=240;
     if(right>left&&bottom>top)cv_rect(left,top,right-left,bottom-top,color);
 }
 static void mi_dreamy_dot_draw_half(unsigned half,int32_t px,int32_t py,
@@ -486,7 +490,12 @@ static void mi_dreamy_dot_draw_half(unsigned half,int32_t px,int32_t py,
     const uint16_t dim=RGB(128,103,30);
     mi_dreamy_dot_unpack();
     if(!mi_dreamy_dot_ready)return;
-    cv_rect(px,py-(int32_t)half*120,size,size,RGB(17,16,11));
+    {   /* Clip the square's background to the active 120-row LCD half. */
+        int32_t top=py-(int32_t)half*120,bottom=top+size;
+        if(top<0)top=0;
+        if(bottom>120)bottom=120;
+        if(bottom>top)cv_rect(px,top,size,bottom-top,RGB(17,16,11));
+    }
     for(y=0u;y<MI_DREAMY_DOT_H;y++)
         for(x=0u;x<MI_DREAMY_DOT_W;x++){
             unsigned k=y*MI_DREAMY_DOT_W+x;
