@@ -17,6 +17,8 @@ void mi_rec_toggle_record(mi_recorder_t *r);
 void mi_rec_toggle_play(mi_recorder_t *r);
 float mi_rec_tick(mi_recorder_t *r,float internal_audio,const uint8_t controls[4]);
 void mi_rec_stop(mi_recorder_t *r);
+/* Discard the clip without scanning 88 KiB of PCM in the audio callback. */
+void mi_rec_clear(mi_recorder_t *r);
 int16_t mi_rec_sample(uint32_t sample);
 /* Precomputed 224-bin waveform envelope; UI does no full-clip scans. */
 void mi_rec_peak(unsigned column,int8_t *lo,int8_t *hi);
