@@ -1,11 +1,11 @@
-name: Digitone PG84 EUREKA YELLOW + CPU GUARD (PG79 protected)
+name: Digitone PG85 1152 VIDEO + 3 FX (EUREKA AUDIO REMOVED)
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/fix/digitone-eureka-overload-guard-yellow-20261107'
+    if: github.ref == 'refs/heads/feature/digitone-1152-video-no-eureka-audio-20261107'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -24,18 +24,24 @@ jobs:
           curl -fL --retry 3 -o _firmware/stock.zip 'https://www.elektron.se/wp-content/uploads/2026/10/Digitone_and_Digitone_Keys_OS1.44_dist.zip'
           unzip -p _firmware/stock.zip Digitone_and_Digitone_Keys_OS1.44.syx > _firmware/stock.syx
           echo 'd4f200d04484333d82822db7744e6484d0def8f2db8ddf55ee2b780cc13c9659  _firmware/stock.syx' | sha256sum -c -
-      - name: Reconstruct 576 supplied-source EUREKA tile frames using unchanged HYBRID04 codec
+      - name: Reconstruct and verify BOTH approved 576-frame banks, merge to 1152
         run: |
           set -euo pipefail
+          python3 scripts/materialize_frame_pack.py
+          python3 ports/digitone_eureka576/prepare.py Resources/eureka_frames.pack \
+            ports/digitone_eureka576/original_frames.bin \
+            --seek ports/digitone_eureka576/original_seek.bin
+          echo '43cfac794ccd53d4f174806412773b7933537cc2928a21809dbd3fba983d64c2  ports/digitone_eureka576/original_frames.bin' | sha256sum -c -
+          test "$(stat -c '%s' ports/digitone_eureka576/original_seek.bin)" -eq 98688
           python3 ports/digitone_eureka576/prepare_user_tiles.py
-          sha256sum ports/digitone_eureka576/frames.bin
-          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -gt 0
-          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -lt 589824
-          test "$(stat -c '%s' ports/digitone_eureka576/seek.bin)" -eq 98688
-          test -s ports/digitone_eureka576/eureka_lcd_preview.png
           python3 ports/digitone_eureka576/tests/verify_user_tiles.py
           echo 'bd7577db4d789f3a6b5bbae819cd6f5d5604eb4851d0dcf0d7f6a2ac67d4a411  ports/digitone_eureka576/frames.bin' | sha256sum -c -
-          echo '1866938edb4abef475e01e20ffa8a096122637882369173b3c65585476fa8b6d  ports/digitone_eureka576/seek.bin' | sha256sum -c -
+          python3 ports/digitone_eureka576/prepare_1152.py
+          python3 ports/digitone_eureka576/tests/verify_1152.py
+          test "$(stat -c '%s' ports/digitone_eureka576/reference.bin)" -eq 1179648
+          test "$(stat -c '%s' ports/digitone_eureka576/seek.bin)" -eq 197376
+          test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -lt 1179648
+          test -s ports/digitone_eureka576/eureka_lcd_preview.png
           (
             cd ports/digitone_eureka576
             gcc -std=c11 -Wall -Wextra -Werror -Wconversion -O1 -g \
@@ -142,7 +148,7 @@ jobs:
           assert 'memset(' not in d and 'malloc(' not in d
           print('PASS: audio insert isolated from EUREKA display')
           PY
-      - name: Preflight all four exclusive FX DSP and UI (host only)
+      - name: Preflight THREE audio FX and ensure no Eureka audio remains
         run: |
           set -euo pipefail
           gcc -DRACK_HOST_TEST -std=c11 -O1 -g -Wall -Wextra -Werror -Wconversion \
@@ -159,29 +165,28 @@ jobs:
           j=json.loads((r/'mod.json').read_text())
           menu=[x for x in j['contribute'] if x['to']=='core_menu']
           audio=[x for x in j['contribute'] if x['to']=='core_audio']
-          assert len(menu)==5 and len(audio)==1, 'one owner and five menu entries'
-          assert j['resources']['regions'][0]['lo']=='0x47900000'
-          assert j['resources']['regions'][0]['hi']=='0x47B00000'
+          assert j['version']=='0.2.0'
+          assert len(menu)==4 and len(audio)==1
+          assert [x['relocs'][0][2] for x in menu]==[
+              'sym:rack_menu_granular','sym:rack_menu_reel',
+              'sym:rack_menu_crush','sym:rack_menu_off']
+          assert 'regions' not in j['resources']  # free 2MiB bulk capture claim
           assert j['sources']==['granular.c','rack_audio.c','rack_ui.c','digitone_fx_pages.c']
-          d=(r/'rack_audio.c').read_text()
-          u=(r/'rack_ui.c').read_text()
-          g=(r/'granular.c').read_text()
-          p=(r/'digitone_fx_pages.c').read_text()
-          assert 'struct core_audio_owner rack_owner={0,rack_render,CORE_AUDIO_INSERT};' in u
-          assert 'rack_audio_render(out,in,active)' in u
-          assert 'rack_granular_render(out,in)' in u
-          assert 'haze_host_memory' in d and 'haze_primed' in d
-          assert 'reel_frame' in d and 'crush_frame' in d and 'haze_frame' in d
-          assert 'rack_granular_set' in g and 'rack_granular_cc' in g
-          assert 'dnfx_page_count' in p and 'haze' not in j['id'].lower()
-          assert 'KEY_STEP1' in u and 'KEY_STEP16' in u and 'return 0;' in u
-          assert 'rack_fading' in u and 'rack_ramp' in u
-          assert 'CORE_AUDIO_MUTE_VOICES' not in u
-          assert 'void eureka576_draw' in Path('ports/digitone_eureka576/eureka576.c').read_text()
-          assert 'workflow_dispatch:' in Path('.github/workflows/build-digitone-eureka576.yml').read_text()
-          print('PASS: four FX descriptors, single master insert, video separation, source gates')
+          contents='\n'.join((r/n).read_text() for n in j['sources']+['digitone_fx_pages.h'])
+          for forbidden in ('DNFX_EUREKA','haze_','EUREKA_LEN','EUREKA_BULK',
+                            'rack_menu_eureka','menu_eureka','eureka_subtitle'):
+              assert forbidden not in contents, forbidden
+          assert 'struct core_audio_owner rack_owner={0,rack_render,CORE_AUDIO_INSERT};' in contents
+          assert 'CORE_AUDIO_MUTE_VOICES' not in contents
+          v=Path('ports/digitone_eureka576/eureka576.c').read_text()
+          assert '#define E576_COUNT 1152u' in v
+          assert '#define E576_SEEK_COUNT 192u' in v
+          assert '_Static_assert(E576_CLIPS == 32u' in v
+          assert 'E576_KEY_STEP1 26' in v and 'E576_KEY_STEP16 41' in v
+          assert 'eureka576_stock_midi_down' in v
+          print('PASS: 3 FX, 4 menus, zero Eureka audio, 1152-video and stock keys')
           PY
-      - name: Preflight new FX rack UI and stereo DSP stress with sanitizers
+      - name: Preflight retained FX rack UI and stereo DSP stress with sanitizers
         run: |
           set -euo pipefail
           RACK=ports/digitone_fx_rack
@@ -196,8 +201,8 @@ jobs:
             -o /tmp/digitone_rack_stress
           /tmp/digitone_rack_stress
           rm /tmp/digitone_rack_ui /tmp/digitone_rack_stress
-          echo 'PASS: linked UI/Granular, original keys preserved, 11.52M DSP samples UBSan+ASan'
-      - name: Verify optimized DSP math against old PG80 output
+          echo 'PASS: linked UI/Granular, original keys preserved, 7.68M retained DSP samples UBSan+ASan'
+      - name: Verify Reel LUT and Bitcrusher math against former implementation
         run: |
           set -euo pipefail
           RACK=ports/digitone_fx_rack
@@ -221,7 +226,7 @@ jobs:
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_eureka576" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           python3 -m elekloader.sdk.build "$GITHUB_WORKSPACE/ports/digitone_fx_rack" --stock "$GITHUB_WORKSPACE/_firmware/stock.syx"
           VISUAL_MOD="$GITHUB_WORKSPACE/ports/digitone_eureka576/out/eureka576-2.1.elemod"
-          RACK_MOD="$GITHUB_WORKSPACE/ports/digitone_fx_rack/out/digitone-fx-rack-0.1.0.elemod"
+          RACK_MOD="$GITHUB_WORKSPACE/ports/digitone_fx_rack/out/digitone-fx-rack-0.2.0.elemod"
           test -s "$VISUAL_MOD"
           test -s "$RACK_MOD"
           CORE="$GITHUB_WORKSPACE/_firmware/core.elemod"
@@ -234,11 +239,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$RACK_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_FX_RACK_EUREKA_GUARD_YELLOW_PG84_TRIAL.syx" \
-            --version PG84
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_1152_VIDEO_3FX_PG85_TRIAL.syx" \
+            --version PG85
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_FX_RACK_EUREKA_GUARD_YELLOW_PG84_TRIAL.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_1152_VIDEO_3FX_PG85_TRIAL.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$RACK_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -250,7 +255,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-EUREKA-GUARD-YELLOW-PG84-TRIAL
+          name: Digitone-OS1.44-1152-VIDEO-3FX-PG85-TRIAL
           path: _release/
           if-no-files-found: error
           retention-days: 30
