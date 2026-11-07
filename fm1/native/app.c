@@ -11,6 +11,7 @@
 #include "mi_control.h"
 #include "mi_audio.h"
 #include "mi_video.h"
+#include "mi_tile_atlas.h"
 #include "mi_effects_vq_frames.h" /* 144 source frames */
 #include "mi_eureka_vq_frames.h" /* 576 source frames */
 #include "mi_memory.h"
@@ -28,6 +29,12 @@ static mi_video_t video;
 static volatile float audio_activity;
 static uint32_t last_keys,last_buttons,rec_pressed_at;
 static uint8_t rec_long_done;
+/* Visual selection is independent of audio FX or the saved sound preset.
+ * 0=AUTO, 1..6=all six supplied photo sheets, 7=EFFECTS, 8=EUREKA. */
+static uint8_t visual_choice,visual_last_mode=255u,visual_cooldown;
+static uint16_t visual_tile;
+static float visual_last_activity;
+static uint32_t visual_rng=0x6d697961u,visual_generation;
 static uint8_t held_note[NKEYS];
 static int redraw;
 static char line_a[24],line_b[24];
@@ -62,6 +69,9 @@ void app_init(void)
      state.view=MI_HOME;
  }
  last_keys=last_buttons=rec_pressed_at=0u;rec_long_done=0u;
+ visual_choice=0u;visual_last_mode=255u;visual_cooldown=0u;
+ visual_rng=0x6d697961u;visual_generation=0u;
+ visual_last_activity=0.f;visual_tile=0u;
  mi_memzero(held_note,sizeof held_note);redraw=1;
  message_until=0;line_a[0]=line_b[0]=0;
 }
@@ -189,7 +199,16 @@ static void input(void)
  last_buttons=buttons;
  for(i=0;i<NE;i++){
      steps=plat_enc((int)i);
-     if(steps){mi_rotate(&state,map_encoder(i),steps);redraw=1;}
+     if(steps){
+         if(i==EN_SELECT&&(state.view==MI_FX||state.view==MI_VIDEO)){
+             int32_t next=(int32_t)visual_choice+(steps>0?1:-1);
+             if(next<0)next=8;
+             if(next>8)next=0;
+             visual_choice=(uint8_t)next;
+             visual_last_mode=255u; /* force new bank selection */
+         }else mi_rotate(&state,map_encoder(i),steps);
+         redraw=1;
+     }
  }
  plat_glow(1);
  plat_play_red(audio.recorder.recording!=0u);
