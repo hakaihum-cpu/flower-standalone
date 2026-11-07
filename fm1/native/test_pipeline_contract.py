@@ -264,7 +264,7 @@ assert "expect osc2_wave 2" in (root / "fm1/native/host_smoke.txt").read_text()
 # FX SELECT restores page navigation; only SEL changes photo banks.
 assert 'if(i==EN_SELECT&&state.view==MI_VIDEO)' in ui
 assert 'if(i==EN_SELECT&&(state.view==MI_FX||state.view==MI_VIDEO))' not in ui
-assert '"PRESET:PAGE"' in ui
+assert '"PRESET:P1/2"' in ui
 assert "turn SELECT 1\nexpect view 3\ntap HOME" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "mi_graph_env();" in ui and "mi_graph_lfo();" in ui
 assert "mi_graph_arp();" in ui
