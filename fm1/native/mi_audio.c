@@ -68,7 +68,8 @@ void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
     }
     mi_voice_t *v=&a->v[pick];
     v->note=note;v->vel=velocity?velocity:1;v->active=1;v->held=1;
-    v->phase=0.f;v->subphase=0.f;v->increment=note_freq(note)/a->sample_rate;
+    v->phase=0.f;v->phase2=0.f;v->subphase=0.f;
+    v->increment=note_freq(note)/a->sample_rate;
     v->env=0.f;v->env_stage=0;v->release_step=0.f;v->age=++a->age_counter;
 }
 void mi_audio_note_off(mi_audio_t *a,uint8_t note)
@@ -295,6 +296,20 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     if(!a||!s||!lr)return;
     float scale=clampf(master_q12/4096.f,0.f,1.f)*clampf(s->level/127.f,0.f,1.f)*5000000.f;
     uint8_t wave=s->wave>3?0:s->wave;
+    uint8_t wave2=s->osc2_wave>3?0:s->osc2_wave;
+    /* OSC2 tuning = octave (-2..+2) and +/-50 cents fine detune.
+     * Bounded 2nd-order exp approximation, no freestanding libm needed. */
+    const float fine=((int)s->osc2_detune-64)*(0.5f/64.f);
+    const float ln2x=fine*0.05776226505f;
+    float osc2_ratio=1.f+ln2x+0.5f*ln2x*ln2x;
+    float osc2_mix=(float)s->osc2_level/127.f*0.5f;
+    switch(s->osc2_octave){
+    case 0u:osc2_ratio*=0.25f;break;
+    case 1u:osc2_ratio*=0.5f;break;
+    case 3u:osc2_ratio*=2.f;break;
+    case 4u:osc2_ratio*=4.f;break;
+    default:break;
+    }
     float duty=0.05f+0.9f*(s->width/127.f);
     float atk=(float)s->env[0]/127.f,dec=(float)s->env[1]/127.f;
     float rel=(float)s->env[3]/127.f;
@@ -341,7 +356,10 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
             {
                 float main=osc(wave,v->phase,voice_duty),sub=sin01(v->subphase);
                 float submix=s->sub/127.f;
-                float value=main*(1.f-submix)+sub*submix;
+                float base=main*(1.f-submix)+sub*submix;
+                float second=osc(wave2,v->phase2,voice_duty);
+                /* OSC2=0 retains the previous OSC1/SUB blend. */
+                float value=base*(1.f-osc2_mix)+second*osc2_mix;
                 if(s->crush){
                     int bits=16-(int)(s->crush*13u/127u);
                     float levels=(float)(1u<<bits);
@@ -354,6 +372,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                 {
                     float pitch_mod=s->lfo[3]==0u?clampf(1.f+mod*0.059f,0.8f,1.2f):1.f;
                     v->phase=wrap01(v->phase+v->increment*pitch_mod);
+                    v->phase2=wrap01(v->phase2+v->increment*osc2_ratio*pitch_mod);
                     v->subphase=wrap01(v->subphase+v->increment*0.5f*pitch_mod);
                 }
             }
