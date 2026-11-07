@@ -18,6 +18,18 @@
 #define APP_HOST_EXPECT
 enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_NOBJ };
 #define APP_STORE_MAP {0xFC000u, 0xDC000u}
+/* Standard fm1-base resource area, [0x97000,0xDC000), excludes the
+ * 0xDC000 settings A/B pair and the existing 0xFC000 save region. */
+#define APP_RES_BASE 0x97000u
+#define APP_RES_SECTORS 69u
+#define APP_BACKUP_OBJS {OBJ_SETTINGS}
+#define APP_BACKUP_MAGIC 0x4D493134u
+#define APP_BACKUP_VERSION 1u
+#define APP_BACKUP_WHAT "restores your saved MIYAKO settings"
+int app_backup_playing(void);
+void app_backup_flush(void);
+void app_backup_hold(int on);
+void app_backup_restored(void);
 void app_init(void);
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12);
 void app_panic(void);
