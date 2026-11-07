@@ -600,6 +600,11 @@ static void draw(void)
 {
     uint32_t i,now=plat_ms();
     char val[16];
+    if(state.view==MI_FX){
+        mi_fx_draw_half(0u);
+        mi_fx_draw_half(1u);
+        return;
+    }
     if(state.view==MI_VIDEO){
         /* Both LCD halves are image-only: never draw labels/values/footers. */
         cv_begin(240,120,C_BLACK);
@@ -689,9 +694,11 @@ void app_frame(void)
  if(now-video_time>=33u){
      video_time=now;
      int16_t old_effects=video.effects_frame,old_eureka=video.eureka_frame;
-     mi_video_tick(&video,audio_activity,state.fx==MI_FX_EUREKA||state.fx2==MI_FX_EUREKA);
-     if(state.view==MI_VIDEO &&
-       (old_effects!=video.effects_frame||old_eureka!=video.eureka_frame))
+     unsigned visual_changed=mi_visual_step(audio_activity);
+     mi_video_tick(&video,audio_activity,mi_visual_mode()==7u);
+     if((state.view==MI_VIDEO||state.view==MI_FX) &&
+        (visual_changed||old_effects!=video.effects_frame||
+         old_eureka!=video.eureka_frame))
          redraw=1;
      if(state.view==MI_SEQ && (audio.recorder.recording||audio.recorder.playing))
          redraw=1;
