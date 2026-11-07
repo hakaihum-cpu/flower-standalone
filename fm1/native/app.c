@@ -145,11 +145,6 @@ static void midi_audio_poll(void)
      uint8_t velocity=(uint8_t)((pkt>>24)&127u);
      uint8_t kind=status&0xF0u;
      (void)port;
-     if(status==0xf8u||status==0xfau||status==0xfbu||status==0xfcu){
-         /* USB/TRS MIDI realtime: 24 PPQN, 192 pulses = two 4/4 bars. */
-         mi_rec_midi_realtime(&audio.recorder,status);
-         continue;
-     }
      if(kind==0x90u&&velocity)mi_audio_input_on(&audio,&state,note,velocity);
      else if(kind==0x80u||(kind==0x90u&&!velocity))
          mi_audio_input_off(&audio,&state,note);
@@ -213,9 +208,7 @@ static void input(void)
  keys=touch_keys();
  for(i=0;i<NKEYS;i++){
      bit=1u<<i;
-     uint8_t note=state.wave==MI_WAVE_FMDRUM?
-                       (uint8_t)(53u+i):
-                       (uint8_t)(53+(int)i+12*(int)state.octave);
+     uint8_t note=(uint8_t)(53+(int)i+12*(int)state.octave);
      if((keys&bit)&&!(last_keys&bit)){
          held_note[i]=note;
          mi_audio_input_on(&audio,&state,note,(uint8_t)touch_vel(i));
@@ -388,26 +381,13 @@ static int mi_visual_photo_bank(unsigned mode)
 static unsigned mi_visual_step(float activity)
 {
     int changed=0;
-    int full_random=0;
     unsigned mode;
     int photo_bank;
-    /* SEL AUTO: 70% of note attacks advance the normal bank playlist,
-     * 30% bypass it entirely and pick one of ALL 628 original photo frames.
-     * The user's manually pinned SELECT bank is always respected. */
+    /* Rotate the normal SEL AUTO bank ONLY at audible note attacks.
+     * All six user sheets plus original EFFECTS/EUREKA are in this cycle. */
     if(state.view==MI_VIDEO&&visual_choice==0u &&
        activity>0.012f&&activity>visual_last_activity*1.5f+0.004f){
-        uint32_t r;
-        visual_rng^=visual_rng<<13;
-        visual_rng^=visual_rng>>17;
-        visual_rng^=visual_rng<<5;
-        r=visual_rng;
-        if(r%10u<3u){
-            /* Mode 0..5 -> photo banks 0..5, 9..10 -> banks 6..7. */
-            unsigned bank=(unsigned)((r/10u)%MI_TILE_BANKS);
-            normal_visual_bank=(uint8_t)(bank<6u?bank:bank+3u);
-            full_random=1;
-        }else
-            normal_visual_bank=(uint8_t)((normal_visual_bank+1u)%11u);
+        normal_visual_bank=(uint8_t)((normal_visual_bank+1u)%11u);
         visual_last_mode=255u;
         changed=1;
     }
@@ -415,25 +395,14 @@ static unsigned mi_visual_step(float activity)
     photo_bank=mi_visual_photo_bank(mode);
     if(mode!=visual_last_mode){
         visual_last_mode=(uint8_t)mode;
-        if(photo_bank>=0 && !full_random)
-            visual_tile=mi_tile_bank_first[photo_bank];
+        if(photo_bank>=0)visual_tile=mi_tile_bank_first[photo_bank];
         visual_cooldown=0u;
         visual_last_activity=0.f;
         ++visual_generation;
         changed=1;
     }
-    if(full_random){
-        /* Global random selection ignores bank boundaries, not the source
-         * assets. This is a true 628-way image choice, not just bank shuffle. */
-        visual_rng^=visual_rng<<13;
-        visual_rng^=visual_rng>>17;
-        visual_rng^=visual_rng<<5;
-        visual_tile=(uint16_t)(visual_rng%MI_TILE_COUNT);
-        visual_cooldown=activity>0.15f?3u:5u;
-        ++visual_generation;
-        changed=1;
-    }else if(visual_cooldown)--visual_cooldown;
-    if(!full_random && photo_bank>=0 && activity>0.003f &&
+    if(visual_cooldown)--visual_cooldown;
+    if(photo_bank>=0 && activity>0.003f &&
        (activity>visual_last_activity*1.28f+0.0015f||!visual_cooldown)){
         unsigned count=mi_tile_bank_count[photo_bank],next;
         visual_rng^=visual_rng<<13;
@@ -915,7 +884,6 @@ static void draw(void)
     cv_begin(240,120,C_BLACK);
     cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
     cv_text(140,10,&FONT_XS,
-            state.view==MI_HOME?mi_wave_name(state.wave):
             state.view==MI_OSC?(state.osc_page?"OSC2":"OSC1"):
             mi_view_name(state.view),GREY);
     cv_rect(8,31,224,1,DIM);
@@ -929,14 +897,8 @@ static void draw(void)
                            state.view==MI_OSC&&state.osc_page?
                            state.osc2_wave:state.wave;
         cv_text(12,35,&FONT_XS,
-            state.wave==MI_WAVE_FMDRUM?
-             (audio.drum_last_pad>=27u?"FMDRUM":
-              audio.drum_last_pad%6u==0u?"KICK":
-              audio.drum_last_pad%6u==1u?"SNARE":
-              audio.drum_last_pad%6u==2u?"HH-C":
-              audio.drum_last_pad%6u==3u?"HH-O":
-              audio.drum_last_pad%6u==4u?"CRASH":"TOM-L"):
-             mi_wave_name(show_wave),GREY);
+                state.view==MI_HOME&&state.wave==MI_WAVE_MULTI?
+                "MULTI":mi_wave_name(show_wave),GREY);
         /* Live pre-FX OSC audio waveform (SINE/SAW/SQUARE/PULSE). */
         {
             uint32_t head=audio.osc_scope_head;
@@ -975,16 +937,13 @@ static void draw(void)
     for(i=0;i<4u;i++){
         int32_t x=8+(int32_t)i*58;
         cv_text(x,24,&FONT_XS,mi_param_name(&state,i),GREY);
-        if((state.view==MI_OSC&&i==0u)||
-           (state.view==MI_HOME&&(i==0u||
-              (state.wave==MI_WAVE_MULTI&&i==2u))))
-            textcpy(val,mi_wave_name(
-                state.view==MI_OSC?
-                    (state.osc_page?state.osc2_wave:
-                     state.wave==MI_WAVE_MULTI?state.osc1_wave:state.wave):
-                i==0u?state.wave:
-                    (state.osc_page?state.osc2_wave:state.osc1_wave)
-                ),sizeof val);
+        if((state.view==MI_OSC||state.view==MI_HOME)&&i==0u)
+            textcpy(val,mi_wave_name(state.view==MI_OSC?
+                  (state.osc_page?state.osc2_wave:
+                   state.wave==MI_WAVE_MULTI?state.osc1_wave:state.wave):
+                   (state.wave==MI_WAVE_MULTI?
+                    (state.osc_page?state.osc2_wave:state.osc1_wave):
+                    state.wave)),sizeof val);
         else if(state.view==MI_HOME&&state.wave==MI_WAVE_MULTI&&i==1u)
             textcpy(val,state.osc_page?"OSC2":"OSC1",sizeof val);
         else if(state.view==MI_LFO&&i==1u)

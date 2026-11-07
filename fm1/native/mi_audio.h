@@ -16,10 +16,6 @@ typedef struct {
     uint32_t age;
 } mi_voice_t;
 typedef struct {
-    float phase,mod,env,decay,pitch,pitch_decay,base,ratio,index,noise_mix,vel,prev_noise;
-    uint8_t active,type;
-} mi_drum_voice_t;
-typedef struct {
     mi_voice_t v[MI_NATIVE_POLY];
     int16_t ring[MI_NATIVE_RING];
     uint32_t wr, valid, phase, segment, rand_state;
@@ -43,9 +39,6 @@ typedef struct {
     volatile uint32_t osc_scope_head;
     volatile uint8_t osc_scope_active;
     uint8_t osc_scope_selected, osc_scope_stride;
-    mi_drum_voice_t drums[MI_NATIVE_POLY];
-    uint32_t drum_rng;
-    uint8_t drum_last_pad,previous_engine;
 } mi_audio_t;
 void mi_audio_init(mi_audio_t *a, float sample_rate);
 void mi_audio_note_on(mi_audio_t *a, uint8_t note, uint8_t velocity);

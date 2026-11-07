@@ -51,76 +51,6 @@ static float sin01(float phase)
     y=0.775f*y+0.225f*y*y;
     return neg?-y:y;
 }
-/* Six FM drum timbres, 4 complete kits + 3 variations over 27 keys.
- * Each voice is an original phase-modulated sine carrier with an
- * independently evolving sine modulator and optional noise transient. */
-static void drum_trigger(mi_audio_t *a,unsigned pad,unsigned velocity)
-{
-    static const float base[6]={48.f,171.f,3650.f,3130.f,1940.f,76.f};
-    static const float tune[6]={9.f,21.f,169.f,155.f,142.f,12.f};
-    static const float ratio[6]={1.5f,2.76f,1.4142f,2.13f,1.618f,1.72f};
-    static const float index[6]={0.16f,0.38f,0.62f,0.67f,0.74f,0.25f};
-    static const float noise[6]={0.03f,0.61f,0.38f,0.35f,0.47f,0.05f};
-    static const float duration[6]={0.38f,0.24f,0.10f,0.49f,1.17f,0.34f};
-    unsigned i,type,var,best=0u;
-    float minimum=2.f;
-    mi_drum_voice_t *v;
-    if(!a||pad>=27u)return;
-    type=pad%6u;var=pad/6u;
-    if(type==2u)for(i=0;i<MI_NATIVE_POLY;i++)
-        if(a->drums[i].active&&a->drums[i].type==3u)
-            a->drums[i].active=0u; /* close hat chokes open hat */
-    for(i=0;i<MI_NATIVE_POLY;i++){
-        if(!a->drums[i].active){best=i;break;}
-        if(a->drums[i].env<minimum){
-            minimum=a->drums[i].env;best=i;
-        }
-    }
-    v=&a->drums[best];
-    v->active=1u;v->type=(uint8_t)type;
-    v->phase=0.f;v->mod=0.f;v->env=1.f;v->prev_noise=0.f;
-    v->base=base[type]+tune[type]*(float)var;
-    v->ratio=ratio[type]+0.091f*(float)var;
-    v->index=index[type]*(0.72f+0.13f*(float)var);
-    v->noise_mix=noise[type];
-    v->vel=clampf((float)velocity/127.f,0.f,1.f);
-    v->decay=clampf(1.f-6.4f/(a->sample_rate*duration[type]*
-                   (0.72f+0.14f*(float)var)),0.f,1.f);
-    v->pitch=type==0u?3.3f:type==5u?1.7f:0.15f;
-    v->pitch_decay=clampf(1.f-5.f/(a->sample_rate*
-                        (0.018f+0.004f*(float)var)),0.f,1.f);
-    a->drum_last_pad=(uint8_t)pad;
-}
-static float drum_render(mi_audio_t *a)
-{
-    unsigned i;
-    float sum=0.f;
-    for(i=0;i<MI_NATIVE_POLY;i++){
-        mi_drum_voice_t *v=&a->drums[i];
-        float f,carrier,modulation,noisy=0.f;
-        if(!v->active)continue;
-        f=clampf(v->base*(1.f+v->pitch),15.f,a->sample_rate*0.43f);
-        v->phase=wrap01(v->phase+f/a->sample_rate);
-        v->mod=wrap01(v->mod+f*v->ratio/a->sample_rate);
-        modulation=sin01(v->mod);
-        carrier=sin01(v->phase+v->index*v->env*modulation);
-        if(v->noise_mix>0.f){
-            float raw;
-            a->drum_rng^=a->drum_rng<<13;
-            a->drum_rng^=a->drum_rng>>17;
-            a->drum_rng^=a->drum_rng<<5;
-            raw=((float)((int32_t)(a->drum_rng>>16)-32768)/32768.f);
-            noisy=clampf(raw-v->prev_noise*0.8f,-1.f,1.f);
-            v->prev_noise=raw;
-        }
-        sum+=(carrier*(1.f-v->noise_mix)+noisy*v->noise_mix)*
-             v->env*v->vel*0.27f;
-        v->env*=v->decay;
-        v->pitch*=v->pitch_decay;
-        if(v->env<0.0004f)v->active=0u;
-    }
-    return clampf(sum,-1.f,1.f);
-}
 static float osc(uint8_t wave,float phase,float duty)
 {
     switch(wave){
@@ -135,9 +65,6 @@ void mi_audio_init(mi_audio_t *a,float rate)
     mi_memzero(a,sizeof(*a));
     a->sample_rate=rate>=8000.f&&rate<=192000.f?rate:44100.f;
     a->rand_state=0x4d495941u;
-    a->drum_rng=0x4452554du;
-    a->drum_last_pad=255u;
-    a->previous_engine=255u;
     a->arp_random=0x50414e5au;
     mi_fx_dsp_init(&native_fx);
     mi_rec_init(&a->recorder);
@@ -176,7 +103,6 @@ static void all_voices_off(mi_audio_t *a)
 }
 void mi_audio_panic(mi_audio_t *a)
 {
-    unsigned i;
     if(!a)return;
     all_voices_off(a);
     mi_memzero(a->held_keys,sizeof a->held_keys);
@@ -185,7 +111,6 @@ void mi_audio_panic(mi_audio_t *a)
     a->arp_clock=0;a->arp_gate_clock=0;a->arp_sounding=0;
     a->held_total=0;
     mi_rec_stop(&a->recorder);
-    for(i=0;i<MI_NATIVE_POLY;i++)a->drums[i].active=0u;
 }
 /* Keep raw keyboard/midi held notes; arpeggiator and live voice routing
  * share the same source so release cannot leave stuck repeating notes. */
@@ -193,10 +118,6 @@ void mi_audio_input_on(mi_audio_t *a,const mi_state_t *s,
                        uint8_t note,uint8_t velocity)
 {
     if(!a||!s||note>=128u)return;
-    if(s->wave==MI_WAVE_FMDRUM){
-        if(note>=53u&&note<80u)drum_trigger(a,note-53u,velocity);
-        return;
-    }
     if(!a->held_refs[note]){
         ++a->held_total;
         a->held_keys[note>>5]|=1u<<(note&31u);
@@ -209,7 +130,6 @@ void mi_audio_input_on(mi_audio_t *a,const mi_state_t *s,
 void mi_audio_input_off(mi_audio_t *a,const mi_state_t *s,uint8_t note)
 {
     if(!a||!s||note>=128u)return;
-    if(s->wave==MI_WAVE_FMDRUM)return;
     if(!a->held_refs[note])return;
     --a->held_refs[note];
     if(a->held_refs[note])return;
@@ -439,14 +359,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     decay_step=(1.f-sustain)/(a->sample_rate*(0.005f+2.f*dec*dec));
     release_samples=a->sample_rate*(0.005f+3.f*rel*rel);
     lfo_speed=(0.07f+15.f*(float)s->lfo[0]/127.f)/a->sample_rate;
-    if(a->previous_engine!=s->wave){
-        if(s->wave==MI_WAVE_FMDRUM)all_voices_off(a);
-        else if(a->previous_engine==MI_WAVE_FMDRUM)
-            for(k=0;k<MI_NATIVE_POLY;k++)a->drums[k].active=0u;
-        a->previous_engine=s->wave;
-    }
-    if(s->wave!=MI_WAVE_FMDRUM)arp_sync(a,s);
-    mi_rec_config(&a->recorder,a->sample_rate,(unsigned)s->global[0]);
+    arp_sync(a,s);
     /* UI updates only an 8-bit command; the audio thread owns the samples. */
     if(a->rec_command){
         uint8_t cmd=a->rec_command;
@@ -457,12 +370,12 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     }
     for(i=0;i<n;i++){
         float sample=0.f,osc_capture=0.f,lfo,mod,voice_duty=duty;
-        if(s->wave!=MI_WAVE_FMDRUM)arp_tick(a,s);
+        arp_tick(a,s);
         a->lfo_phase=wrap01(a->lfo_phase+lfo_speed);
         lfo=lfo_value(s->lfo[1],a->lfo_phase);
         mod=lfo*(float)s->lfo[2]/127.f;
         if(s->lfo[3]==1u)voice_duty=clampf(duty+mod*0.3f,0.03f,0.97f);
-        for(k=0;k<MI_NATIVE_POLY&&s->wave!=MI_WAVE_FMDRUM;k++){
+        for(k=0;k<MI_NATIVE_POLY;k++){
             mi_voice_t *v=&a->v[k];
             if(!v->active)continue;
             if(!v->held&&v->env_stage!=3u){
@@ -513,10 +426,6 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                     v->subphase=wrap01(v->subphase+v->increment*0.5f*pitch_mod);
                 }
             }
-        }
-        if(s->wave==MI_WAVE_FMDRUM){
-            sample=drum_render(a);
-            osc_capture=sample;
         }
         /* Display-only snapshot of REAL generated oscillator PCM. */
         a->osc_scope[a->osc_scope_head&(MI_OSC_SCOPE_SAMPLES-1u)]=

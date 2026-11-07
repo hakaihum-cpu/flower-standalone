@@ -259,19 +259,16 @@ assert "MIYAKO_OSC_LIVE_SINE.png" in ci
 assert "expect osc_scope_active 1" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "state.osc_page" in ui and "state.osc2_wave" in ui
 # HOME MULTI uses an actual selected OSC1/OSC2 waveform.
-assert "state.view==MI_HOME?mi_wave_name(state.wave)" in ui
+assert "mi_wave_name(state.view==MI_OSC?" in ui
 assert "state.wave==MI_WAVE_MULTI" in ui
 assert "state.osc1_wave" in ui
-# HOME OSC mode is visible and separate from the selected MULTI waveform.
-assert "if(k==0){p=&s->wave;hi=MI_WAVE_FMDRUM;}" in controls
+# HOME MULTI K1 edits the selected oscillator waveform instead of WAVE=4.
 assert "p=s->osc_page?&s->osc2_wave:&s->osc1_wave;" in controls
-assert 's->osc_page?"WAVE2":names[k]' in controls
-assert '"OSC","WIDTH","SUB","LEVEL"' in controls
-assert 'state.view==MI_HOME?mi_wave_name(state.wave)' in ui
+assert 's->osc_page?"WAVE2":multi[k]' in controls
 assert 'mi_streq(what,"osc1_wave")' in ui
 assert 'mi_streq(what,"osc2_wave")' in ui
-assert "turn K3 1\nexpect osc1_wave 3" in (root / "fm1/native/host_smoke.txt").read_text()
-assert "turn K3 2\nexpect osc2_wave 2" in (root / "fm1/native/host_smoke.txt").read_text()
+assert "expect osc1_wave 3" in (root / "fm1/native/host_smoke.txt").read_text()
+assert "expect osc2_wave 2" in (root / "fm1/native/host_smoke.txt").read_text()
 # FX SELECT restores page navigation; only SEL changes photo banks.
 assert 'if(i==EN_SELECT&&state.view==MI_VIDEO)' in ui
 assert 'if(i==EN_SELECT&&(state.view==MI_FX||state.view==MI_VIDEO))' not in ui
@@ -286,9 +283,6 @@ assert "held_total" in audio and "release_samples" in audio
 assert "lfo_value" in audio
 assert "mode==MI_FX_DREAMY" in fxcode
 assert "mi_wave_name" in controls
-assert '"FMDRUM"' in controls
-assert 'MI_WAVE_FMDRUM' in audio and 'drum_trigger(a,note-53u,velocity)' in audio
-assert 'audio.drum_last_pad>=27u' in ui
 assert "case MI_VIDEO:" in controls
 # All non-REEL FX, including DREAMY, are routed through one generic
 # native DSP dispatcher. Do not regress to checking a non-existent per-mode
@@ -324,16 +318,11 @@ assert "mi_atlas_byte" not in ui  # no per-pixel base64 decode in rendering
 assert "s->wave==MI_WAVE_MULTI" in audio and "osc2_mix" in audio
 assert "s->fx_page=0u;" in controls
 assert "s->fx_page^=1u;" in controls
-assert "MIDI two-bar endpoint" in (root / "fm1/native/test_mi_recorder.c").read_text()
-assert "MI_REC_RATE 8000u" in (root / "fm1/native/mi_recorder.h").read_text()
-assert "MI_REC_CAPACITY 192000u" in (root / "fm1/native/mi_recorder.h").read_text()
-assert "mi_rec_midi_realtime(&audio.recorder,status)" in ui
-assert "mi_rec_config(&a->recorder" in audio
-assert "MI_REC_CLOCK_TICKS 192u" in (root / "fm1/native/mi_recorder.h").read_text()
+assert "REC stop and 2-second limit auto-play" in (root / "fm1/native/test_mi_recorder.c").read_text()
 assert "mi_soft_limit(sample)" in audio
 assert "p->dreamy_filter+=" in fxcode
 assert "r->overdubbing=1u" in recorder
-assert "r->overdubbing&&r->count>=4u" in recorder
+assert "r->overdubbing && r->count>=4u" in recorder
 # Upstream fm1-base's existing CRC-checked separate resource installer,
 # explicitly approved for integrated animation; user data sectors stay intact.
 resource_header = (root / "fm1/native/mi_resource_media.h").read_text()
