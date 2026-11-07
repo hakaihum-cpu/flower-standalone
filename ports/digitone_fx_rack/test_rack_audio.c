@@ -51,19 +51,5 @@ int main(void)
     rack_state[DNFX_REEL].value[0][4]=127u;
     rack_audio_render(out,in,DNFX_REEL);
     check(out[0]!=in[0]);
-    rack_state[DNFX_EUREKA].value[0][0]=100u;
-    rack_state[DNFX_EUREKA].value[0][1]=64u;
-    rack_state[DNFX_EUREKA].value[0][2]=64u;
-    rack_state[DNFX_EUREKA].value[0][3]=64u;
-    rack_state[DNFX_EUREKA].value[0][4]=10u;
-    rack_state[DNFX_EUREKA].value[0][7]=1u;
-    rack_state[DNFX_EUREKA].value[1][0]=1u;
-    rack_state[DNFX_EUREKA].value[1][7]=1u;
-    rack_audio_reset(DNFX_EUREKA);
-    for(k=0u;k<190u;++k) {
-        fill(in,13000*65536);
-        rack_audio_render(out,in,DNFX_EUREKA);
-    }
-    check(out[0]!=0);
     return 0;
 }

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * Host sanitizer stress: all three new effects, extremes, changing controls.
+ * Host sanitizer stress: two retained effects, extremes, changing controls.
  * Requires -DRACK_HOST_TEST and -fsanitize=address,undefined.
  */
 #include "rack.h"
@@ -13,7 +13,7 @@ int main(void)
 {
     int32_t in[64],out[64];
     uint64_t checks=0;
-    for(int mode=DNFX_EUREKA;mode<=DNFX_CRUSH;++mode) {
+    for(int mode=DNFX_REEL;mode<=DNFX_CRUSH;++mode) {
         for(int pass=0;pass<5;pass++) {
             rack_audio_reset(mode);
             for(int blk=0;blk<12000;blk++) {
@@ -27,11 +27,6 @@ int main(void)
                     if(mode==DNFX_CRUSH) {
                         s->value[0][0]=(uint8_t)(4u+next()%13u);
                         s->value[0][1]=(uint8_t)(1u+next()%32u);
-                    }
-                    if(mode==DNFX_EUREKA) {
-                        s->value[0][7]=(uint8_t)(next()%3u);
-                        s->value[1][0]=(uint8_t)(next()%3u);
-                        s->value[1][1]=(uint8_t)(next()%3u);
                     }
                 }
                 for(int i=0;i<64;i++)
@@ -51,7 +46,7 @@ int main(void)
             }
         }
     }
-    printf("PASS rack DSP stress: %llu samples, 3 FX modes x 5 ranges\n",
+    printf("PASS rack DSP stress: %llu samples, 2 FX modes x 5 ranges\n",
            (unsigned long long)checks);
     return 0;
 }

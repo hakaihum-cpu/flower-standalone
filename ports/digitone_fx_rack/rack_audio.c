@@ -184,7 +184,6 @@ void rack_audio_reset(int mode)
 {
     unsigned i,j;
     if(mode==DNFX_REEL) {
-    } else if(mode==DNFX_REEL) {
         rack_audio_prepare_reel(rack_state[DNFX_REEL].value[0][0]);
         reel_head=reel_wow=reel_flutter=0u;
         for(i=0;i<2u;++i) {

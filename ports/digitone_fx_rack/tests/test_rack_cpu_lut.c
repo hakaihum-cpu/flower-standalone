@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * CPU optimization regression for Reel, Eureka soft clip, and Bitcrusher.
+ * CPU optimization regression for Reel soft clip and Bitcrusher.
  * Host-only: no SYX generation. Compile with -DRACK_HOST_TEST, -Werror,
  * and -fsanitize=address,undefined, then compare with legacy math.
  */
@@ -41,16 +41,6 @@ int main(void)
             if(diff>max_error) max_error=diff;
             ++checked;
             expect(diff<=120); /* <=0.4% of full scale, bounded interpolation */
-        }
-    }
-    for(unsigned v=0u;v<2u;++v) {
-        const int16_t *table=v?haze_soft_og:haze_soft_standard;
-        uint32_t drivefixed=v?422u:333u;
-        for(int32_t x=-32768;x<=32767;++x) {
-            int32_t diff=tape_lookup(x,table)-legacy_tape(x,drivefixed);
-            if(diff<0) diff=-diff;
-            expect(diff<=120);
-            ++checked;
         }
     }
     /* Changing WOW or FLUTTER without DRIVE must update the modulation
