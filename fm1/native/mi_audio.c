@@ -296,14 +296,17 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     float attack_step,decay_step,release_samples,sustain,lfo_speed;
     if(!a||!s||!lr)return;
     float scale=clampf(master_q12/4096.f,0.f,1.f)*clampf(s->level/127.f,0.f,1.f)*5000000.f;
-    uint8_t wave=s->wave>3?0:s->wave;
+    uint8_t wave=s->wave==MI_WAVE_MULTI?s->osc1_wave:
+                 s->wave>3u?0u:s->wave;
     uint8_t wave2=s->osc2_wave>3?0:s->osc2_wave;
     /* OSC2 tuning = octave (-2..+2) and +/-50 cents fine detune.
      * Bounded 2nd-order exp approximation, no freestanding libm needed. */
     const float fine=((int)s->osc2_detune-64)*(0.5f/64.f);
     const float ln2x=fine*0.05776226505f;
     float osc2_ratio=1.f+ln2x+0.5f*ln2x*ln2x;
-    float osc2_mix=(float)s->osc2_level/127.f*0.5f;
+    /* OSC2 is active ONLY when HOME WAVE explicitly selects MULTI. */
+    float osc2_mix=s->wave==MI_WAVE_MULTI?
+                   (float)s->osc2_level/127.f*0.5f:0.f;
     switch(s->osc2_octave){
     case 0u:osc2_ratio*=0.25f;break;
     case 1u:osc2_ratio*=0.5f;break;
@@ -377,7 +380,8 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                 {
                     float pitch_mod=s->lfo[3]==0u?clampf(1.f+mod*0.059f,0.8f,1.2f):1.f;
                     v->phase=wrap01(v->phase+v->increment*pitch_mod);
-                    v->phase2=wrap01(v->phase2+v->increment*osc2_ratio*pitch_mod);
+                    if(osc2_mix>0.f)
+                        v->phase2=wrap01(v->phase2+v->increment*osc2_ratio*pitch_mod);
                     v->subphase=wrap01(v->subphase+v->increment*0.5f*pitch_mod);
                 }
             }
@@ -385,7 +389,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         sample=clampf(sample,-1.f,1.f);
         sample=effect(a,s,sample);
         /* Capture is post-FX and pre-master, before clip playback is mixed.
-         * No hidden overdub; REC never recursively records PLAY. */
+         * REC OVERDUB adds only this live bus to the existing stored clip. */
         sample=clampf(sample+mi_rec_tick(&a->recorder,sample,s->seq),-1.f,1.f);
         {
             int32_t out=(int32_t)(clampf(sample,-1.f,1.f)*scale);
