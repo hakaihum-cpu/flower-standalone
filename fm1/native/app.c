@@ -533,12 +533,34 @@ static void mi_dreamy_dot_unpack(void)
 /* 65 cells across matches the original MiyakoPixelMotion 720-square scene
  * (60x46 portrait, centered at 2,9). Direct rectangles mirror the original
  * nearest-neighbour JUCE drawing and retain the original source aspect. */
+/* SEL K1 GLITCH / K2 TILE transform existing source pixels;
+ * K3/K4 shift X/Y. No new mode, frames or decoder. */
+static void mi_visual_map(unsigned *sx,unsigned *sy,unsigned width,unsigned height)
+{
+    unsigned tile=audio.video_effective[1],tear=audio.video_effective[0];
+    if(tile){
+        unsigned grid=2u+tile*6u/127u;
+        unsigned cellw=(width+grid-1u)/grid;
+        unsigned cellh=(height+grid-1u)/grid;
+        unsigned gx=*sx/cellw,gy=*sy/cellh;
+        unsigned pattern=(gx*17u+gy*23u+visual_generation)%7u;
+        if(pattern==2u||pattern==5u)*sx=(*sx+cellw/2u)%width;
+        if(pattern==3u)*sy=(*sy+cellh/2u)%height;
+    }
+    if(tear&&((*sy*23u+visual_generation*7u)&127u)<tear/3u)
+        *sx=(*sx+tear/2u+visual_generation%11u)%width;
+}
 static void mi_dreamy_dot_pixel(unsigned half,int32_t px,int32_t py,
                                int32_t size,int32_t clip_left,
                                int x,int y,uint16_t color)
 {
     int32_t top,bottom,left,right;
     if(x<0||y<0||x>=65||y>=65)return;
+    {
+        unsigned xx=(unsigned)x,yy=(unsigned)y;
+        mi_visual_map(&xx,&yy,65u,65u);
+        x=(int)xx;y=(int)yy;
+    }
     top=py+(int32_t)((unsigned)y*(unsigned)size/65u)-(int32_t)half*120;
     bottom=py+(int32_t)((unsigned)(y+1)*(unsigned)size/65u)-(int32_t)half*120;
     if(bottom<=0||top>=120)return;
@@ -559,6 +581,8 @@ static void mi_dreamy_dot_draw_half(unsigned half,int32_t px,int32_t py,
     const uint16_t dim=RGB(128,103,30);
     mi_dreamy_dot_unpack();
     if(!mi_dreamy_dot_ready)return;
+    px+=((int32_t)audio.video_effective[2]-64)/4;
+    py+=((int32_t)audio.video_effective[3]-64)/4;
     {   /* Clip the square's background to the active 120-row LCD half. */
         int32_t top=py-(int32_t)half*120,bottom=top+size;
         if(top<0)top=0;
@@ -608,6 +632,11 @@ static unsigned mi_photo_index(unsigned sy,unsigned sx)
     unsigned v=mi_photo_pixels[sy*(MI_TILE_SIDE/2u)+(sx>>1)];
     return (sx&1u)?v&15u:v>>4;
 }
+static unsigned mi_photo_visual_index(unsigned sy,unsigned sx)
+{
+    mi_visual_map(&sx,&sy,MI_TILE_SIDE,MI_TILE_SIDE);
+    return mi_photo_index(sy,sx);
+}
 static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
                               int32_t size,int32_t clip_left,float activity)
 {
@@ -615,6 +644,8 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
     uint32_t resource_length=0u;
     unsigned sy;
     (void)activity;
+    px+=((int32_t)audio.video_effective[2]-64)/4;
+    py+=((int32_t)audio.video_effective[3]-64)/4;
     if(visual_tile>=MI_TILE_COUNT||
        !plat_res(&resource_length)||
        resource_length<MI_TILE_DATA_BYTES){
@@ -634,9 +665,9 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
         unsigned sx=0u;
         if(bottom<=0||top>=120)continue;
         while(sx<MI_TILE_SIDE){
-            unsigned first=sx,idx=mi_photo_index(sy,sx);
+            unsigned first=sx,idx=mi_photo_visual_index(sy,sx);
             ++sx;
-            while(sx<MI_TILE_SIDE&&mi_photo_index(sy,sx)==idx)++sx;
+            while(sx<MI_TILE_SIDE&&mi_photo_visual_index(sy,sx)==idx)++sx;
             if(idx){
                 int32_t x0=px+(int32_t)(first*(unsigned)size/MI_TILE_SIDE);
                 int32_t x1=px+(int32_t)(sx*(unsigned)size/MI_TILE_SIDE);
@@ -648,6 +679,14 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
 }
 /* Original 144 + 576 VQ frame banks remain available alongside photo tiles.
  * The original encoding is 128x78; its aspect is not distorted here. */
+static unsigned mi_media_visual_index(unsigned sy,unsigned sx)
+{
+    unsigned at;
+    mi_visual_map(&sx,&sy,MI_EFFECTS_ASSET_W,MI_EFFECTS_ASSET_H);
+    at=sy*(MI_EFFECTS_ASSET_W/2u)+(sx>>1u);
+    return (sx&1u)?(mi_media_pixels[at]&15u):
+                    (mi_media_pixels[at]>>4u);
+}
 static void mi_media_draw_scaled_half(unsigned half,int32_t px,int32_t py,
                                       int32_t width,int32_t height,
                                       int32_t clip_left,int eureka)
@@ -656,22 +695,20 @@ static void mi_media_draw_scaled_half(unsigned half,int32_t px,int32_t py,
     int frame=eureka?video.eureka_frame:video.effects_frame;
     int32_t shift=(int32_t)half*120;
     if(frame<0)return;
+    px+=((int32_t)audio.video_effective[2]-64)/4;
+    py+=((int32_t)audio.video_effective[3]-64)/4;
     mi_media_decode((unsigned)frame,(unsigned)eureka);
     for(sy=0;sy<MI_EFFECTS_ASSET_H;sy++){
         int32_t y0=py+(int32_t)(sy*(unsigned)height/MI_EFFECTS_ASSET_H)-shift;
         int32_t y1=py+(int32_t)((sy+1u)*(unsigned)height/MI_EFFECTS_ASSET_H)-shift;
         unsigned x=0;
-        uint32_t row=sy*(MI_EFFECTS_ASSET_W/2u);
         if(y1<=0||y0>=120)continue;
         while(x<MI_EFFECTS_ASSET_W){
-            unsigned at=row+(x>>1);
-            unsigned idx=(x&1u)?(mi_media_pixels[at]&15u):(mi_media_pixels[at]>>4);
+            unsigned idx=mi_media_visual_index(sy,x);
             unsigned first=x++,last;
             if(idx==0u)continue;
             while(x<MI_EFFECTS_ASSET_W){
-                at=row+(x>>1);
-                if(((x&1u)?(mi_media_pixels[at]&15u):
-                              (mi_media_pixels[at]>>4))!=idx)break;
+                if(mi_media_visual_index(sy,x)!=idx)break;
                 ++x;
             }
             last=x;
