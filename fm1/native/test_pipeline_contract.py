@@ -202,7 +202,11 @@ controls = (root / "fm1/native/mi_control.c").read_text(encoding="utf-8")
 assert "static void mi_media_draw_half(unsigned half)" in ui
 assert "if(state.view==MI_VIDEO)" in ui and "mi_media_draw_half(1)" in ui
 assert "MIYAKO FM-1 / NATIVE PREVIEW" not in ui
-assert "mi_wave_name(state.wave)" in ui
+# FM-1 OSC page displays OSC1 or OSC2, never the obsolete OSC1-only
+# expression that caused a source-contract false failure before host tests.
+assert "mi_wave_name(show_wave)" in ui
+assert "state.osc_page" in ui and "state.osc2_wave" in ui
+assert "mi_wave_name(state.view==MI_OSC&&state.osc_page?" in ui
 assert "mi_graph_env();" in ui and "mi_graph_lfo();" in ui
 assert "mi_graph_arp();" in ui
 assert "mi_audio_input_on(&audio,&state" in ui
