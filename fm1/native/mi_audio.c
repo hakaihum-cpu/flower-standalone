@@ -439,6 +439,15 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
                    second==MI_FX_DELAY||second==MI_FX_EUREKA?second:MI_FX_OFF;
         if(prev_shared!=new_shared)
             mi_fx_dsp_reset_shared(&native_fx);
+        {
+            unsigned prev_grain=(a->last_mode==MI_FX_DREAMY||
+                                  a->last_mode2==MI_FX_DREAMY)?1u:
+                                 (a->last_mode==MI_FX_PITCHSHIFT||
+                                  a->last_mode2==MI_FX_PITCHSHIFT)?2u:0u;
+            unsigned new_grain=(first==MI_FX_DREAMY||second==MI_FX_DREAMY)?1u:
+                               (first==MI_FX_PITCHSHIFT||second==MI_FX_PITCHSHIFT)?2u:0u;
+            if(prev_grain!=new_grain)mi_fx_dsp_reset_grain(&native_fx);
+        }
         if((first==MI_FX_REEL||second==MI_FX_REEL)!=
            (a->last_mode==MI_FX_REEL||a->last_mode2==MI_FX_REEL))
             a->wr=a->valid=a->phase=a->segment=0u;
@@ -466,20 +475,27 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     uint32_t i,k;
     uint8_t scope_selected,scope_audible=0u;
     float attack_step,decay_step,release_samples,sustain,lfo_speed;
+    mi_state_t snapshot;
+    const mi_state_t *rs;
     if(!a||!s||!lr)return;
-    float scale=clampf(master_q12/4096.f,0.f,1.f)*clampf(s->level/127.f,0.f,1.f)*5000000.f;
-    uint8_t wave=s->wave==MI_WAVE_MULTI?s->osc1_wave:
-                 s->wave>3u?0u:s->wave;
-    uint8_t wave2=s->osc2_wave>3?0:s->osc2_wave;
+    snapshot=*s;
+    if(s->lfo[2] && s->lfo[3]>=3u)
+        apply_lfo_destination(&snapshot,s->lfo[3],
+            lfo_value(s->lfo[1],a->lfo_phase)*(float)s->lfo[2]/127.f);
+    rs=&snapshot;
+    float scale=clampf(master_q12/4096.f,0.f,1.f)*clampf(rs->level/127.f,0.f,1.f)*5000000.f;
+    uint8_t wave=rs->wave==MI_WAVE_MULTI?rs->osc1_wave:
+                 rs->wave>3u?0u:rs->wave;
+    uint8_t wave2=rs->osc2_wave>3?0:rs->osc2_wave;
     /* OSC2 tuning = octave (-2..+2) and +/-50 cents fine detune.
      * Bounded 2nd-order exp approximation, no freestanding libm needed. */
-    const float fine=((int)s->osc2_detune-64)*(0.5f/64.f);
+    const float fine=((int)rs->osc2_detune-64)*(0.5f/64.f);
     const float ln2x=fine*0.05776226505f;
     float osc2_ratio=1.f+ln2x+0.5f*ln2x*ln2x;
     /* OSC2 is active ONLY when HOME WAVE explicitly selects MULTI. */
-    float osc2_mix=s->wave==MI_WAVE_MULTI?
-                   (float)s->osc2_level/127.f*0.5f:0.f;
-    switch(s->osc2_octave){
+    float osc2_mix=rs->wave==MI_WAVE_MULTI?
+                   (float)rs->osc2_level/127.f*0.5f:0.f;
+    switch(rs->osc2_octave){
     case 0u:osc2_ratio*=0.25f;break;
     case 1u:osc2_ratio*=0.5f;break;
     case 3u:osc2_ratio*=2.f;break;
@@ -487,7 +503,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     default:break;
     }
     /* Select the oscillator currently being edited. */
-    scope_selected=(uint8_t)(s->wave==MI_WAVE_MULTI&&s->osc_page!=0u);
+    scope_selected=(uint8_t)(rs->wave==MI_WAVE_MULTI&&rs->osc_page!=0u);
     if(a->osc_scope_selected!=scope_selected){
         mi_memzero(a->osc_scope,sizeof a->osc_scope);
         a->osc_scope_selected=scope_selected;
@@ -506,15 +522,17 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
             a->osc_scope_stride=(uint8_t)step;
         }else a->osc_scope_stride=1u;
     }
-    float duty=0.05f+0.9f*(s->width/127.f);
-    float atk=(float)s->env[0]/127.f,dec=(float)s->env[1]/127.f;
-    float rel=(float)s->env[3]/127.f;
-    sustain=clampf((float)s->env[2]/127.f,0.f,1.f);
+    float duty=0.05f+0.9f*(rs->width/127.f);
+    float atk=(float)rs->env[0]/127.f,dec=(float)rs->env[1]/127.f;
+    float rel=(float)rs->env[3]/127.f;
+    sustain=clampf((float)rs->env[2]/127.f,0.f,1.f);
     attack_step=1.f/(a->sample_rate*(0.002f+2.f*atk*atk));
     decay_step=(1.f-sustain)/(a->sample_rate*(0.005f+2.f*dec*dec));
     release_samples=a->sample_rate*(0.005f+3.f*rel*rel);
-    lfo_speed=(0.07f+15.f*(float)s->lfo[0]/127.f)/a->sample_rate;
-    arp_sync(a,s);
+    lfo_speed=(0.07f+15.f*(float)rs->lfo[0]/127.f)/a->sample_rate;
+    mi_rec_configure(&a->recorder,(unsigned)rs->global[0],rs->rec_bars,
+                     a->sample_rate,a->rendered_samples);
+    arp_sync(a,rs);
     /* UI updates only an 8-bit command; the audio thread owns the samples. */
     if(a->rec_command){
         uint8_t cmd=a->rec_command;
@@ -525,14 +543,19 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     }
     for(i=0;i<n;i++){
         float sample=0.f,osc_capture=0.f,lfo,mod,voice_duty=duty;
-        arp_tick(a,s);
+        arp_tick(a,rs);
         a->lfo_phase=wrap01(a->lfo_phase+lfo_speed);
-        lfo=lfo_value(s->lfo[1],a->lfo_phase);
-        mod=lfo*(float)s->lfo[2]/127.f;
-        if(s->lfo[3]==1u)voice_duty=clampf(duty+mod*0.3f,0.03f,0.97f);
+        lfo=lfo_value(rs->lfo[1],a->lfo_phase);
+        mod=lfo*(float)rs->lfo[2]/127.f;
+        if(rs->lfo[3]==1u)voice_duty=clampf(duty+mod*0.3f,0.03f,0.97f);
         for(k=0;k<MI_NATIVE_POLY;k++){
             mi_voice_t *v=&a->v[k];
             if(!v->active)continue;
+            if(v->drum_type){
+                float drum=drum_sample(a,rs,v);
+                sample+=drum;osc_capture+=drum*0.6f;
+                continue;
+            }
             if(!v->held&&v->env_stage!=3u){
                 v->env_stage=3u;
                 v->release_step=v->env/release_samples;
@@ -551,7 +574,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
             }
             {
                 float main=osc(wave,v->phase,voice_duty),sub=sin01(v->subphase);
-                float submix=s->sub/127.f;
+                float submix=rs->sub/127.f;
                 float base=main*(1.f-submix)+sub*submix;
                 float value=base;
                 /* No unnecessary second waveform evaluation when OSC2 is off.
@@ -564,17 +587,17 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                 }
                 if(!scope_selected)osc_capture+=main*(1.f-osc2_mix)*
                     v->env*(v->vel/127.f)*0.18f;
-                if(s->crush){
-                    int bits=16-(int)(s->crush*13u/127u);
+                if(rs->crush){
+                    int bits=16-(int)(rs->crush*13u/127u);
                     float levels=(float)(1u<<bits);
                     float quant=(float)(int)(value*levels);
                     value=quant/levels;
                 }
-                if(s->lfo[3]==2u)
-                    value*=clampf(1.f-0.5f*(float)s->lfo[2]/127.f*(1.f-lfo),0.f,1.f);
+                if(rs->lfo[3]==2u)
+                    value*=clampf(1.f-0.5f*(float)rs->lfo[2]/127.f*(1.f-lfo),0.f,1.f);
                 sample+=value*v->env*(v->vel/127.f)*0.18f;
                 {
-                    float pitch_mod=s->lfo[3]==0u?clampf(1.f+mod*0.059f,0.8f,1.2f):1.f;
+                    float pitch_mod=rs->lfo[3]==0u?clampf(1.f+mod*0.059f,0.8f,1.2f):1.f;
                     v->phase=wrap01(v->phase+v->increment*pitch_mod);
                     if(osc2_mix>0.f)
                         v->phase2=wrap01(v->phase2+v->increment*osc2_ratio*pitch_mod);
@@ -588,13 +611,22 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         ++a->osc_scope_head;
         if(osc_capture>0.0003f||osc_capture< -0.0003f)
             scope_audible=1u;
+        if(rs->filter_cutoff<127u){
+            float cut=(float)rs->filter_cutoff/127.f;
+            float alpha=0.004f+0.88f*cut*cut;
+            float fb=(float)rs->filter_resonance/127.f*0.72f;
+            float x=sample-fb*(a->filter_b-a->filter_a);
+            a->filter_a+=(x-a->filter_a)*alpha;
+            a->filter_b+=(a->filter_a-a->filter_b)*alpha;
+            sample=a->filter_b;
+        }else{a->filter_a=sample;a->filter_b=sample;}
         sample=mi_soft_limit(sample);
-        sample=effect(a,s,sample);
+        sample=effect(a,rs,sample);
         /* Existing FX wet-smoothing principle: crossfade the recorder monitor
          * in/out over milliseconds. Simply adding two full-scale signals
          * clipped during layered playback and caused sharp transitions. */
         {
-            float monitored=mi_rec_tick(&a->recorder,sample,s->seq);
+            float monitored=mi_rec_tick(&a->recorder,sample,rs->seq);
             float target=a->recorder.playing?1.f:0.f;
             a->rec_monitor_mix+=(target-a->rec_monitor_mix)*0.0015f;
             sample=mi_soft_limit(sample*(1.f-0.5f*a->rec_monitor_mix)+
@@ -606,4 +638,5 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         }
     }
     a->osc_scope_active=scope_audible;
+    a->rendered_samples+=n;
 }
