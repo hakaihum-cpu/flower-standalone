@@ -49,9 +49,25 @@ int main(void)
     assert(r.playback_pos<(float)((r.count-1u)*30u/127u+1u));
     mi_rec_toggle_play(&r);
     assert(!r.playing);
+    /* Second REC adds a new layer; it must NEVER clear the first clip. */
+    edits[0]=0u;edits[1]=127u;edits[2]=3u;edits[3]=100u;
+    int16_t old10=mi_rec_sample(10),old40=mi_rec_sample(40);
     mi_rec_toggle_record(&r);
-    assert(r.recording&&r.count==0u&&!r.playing);
+    assert(r.recording&&r.overdubbing&&r.count==MI_REC_CAPACITY&&r.playing);
+    for(i=0;i<40u;i++){
+        float monitored=mi_rec_tick(&r,0.1f,edits);
+        assert(monitored>=-1.f&&monitored<=1.f);
+    }
+    assert(r.count==MI_REC_CAPACITY);
+    assert(mi_rec_sample(10)!=old10); /* new layer actually added */
+    assert(mi_rec_sample(40)==old40); /* untouched future samples preserved */
+    mi_rec_toggle_record(&r);
+    assert(!r.recording&&!r.overdubbing&&r.playing);
+    mi_rec_clear(&r);
+    assert(r.count==0u&&!r.recording&&!r.overdubbing&&!r.playing);
+    mi_rec_toggle_record(&r);
+    assert(r.recording&&!r.overdubbing&&r.count==0u);
     mi_rec_stop(&r);
-    puts("PASS: 2-sec 22.05k mono REC/PLAY waveform IN/OUT and 7 semitone rates");
+    puts("PASS: loop monitor, real REC overdub, long-press CLEAR command, pitch/trim");
     return 0;
 }
