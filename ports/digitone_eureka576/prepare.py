@@ -162,7 +162,7 @@ def decode(data, n):
 
 def build_seek(frames, encoded):
     """58 exact decoded keyframes plus LE offsets to the next compressed record."""
-    if len(frames) != EXPECTED:
+    if len(frames) not in (EXPECTED, EXPECTED * 2):
         raise ValueError("invalid seek frame count")
     pos = 0
     output = bytearray()
@@ -176,9 +176,9 @@ def build_seek(frames, encoded):
         if i % 6 == 0:
             output.extend(struct.pack("<I", pos))
             output.extend(frame)
-    if pos != len(encoded) or len(output) != ((EXPECTED + 5) // 6) * 1028:
+    if pos != len(encoded) or len(output) != ((len(frames) + 5) // 6) * 1028:
         raise ValueError("seek table malformed")
-    for i in range(EXPECTED):
+    for i in range(len(frames)):
         slot = (i // 6) * 1028
         cursor, = struct.unpack_from("<I", output, slot)
         previous = bytearray(output[slot + 4:slot + 1028])
