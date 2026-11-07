@@ -259,7 +259,7 @@ assert "MIYAKO_OSC_LIVE_SINE.png" in ci
 assert "expect osc_scope_active 1" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "state.osc_page" in ui and "state.osc2_wave" in ui
 # HOME MULTI uses an actual selected OSC1/OSC2 waveform.
-assert "mi_wave_name(state.view==MI_OSC?" in ui
+assert "state.view==MI_HOME?mi_wave_name(state.wave)" in ui
 assert "state.wave==MI_WAVE_MULTI" in ui
 assert "state.osc1_wave" in ui
 # HOME OSC mode is visible and separate from the selected MULTI waveform.
