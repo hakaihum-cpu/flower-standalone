@@ -259,12 +259,12 @@ assert "MIYAKO_OSC_LIVE_SINE.png" in ci
 assert "expect osc_scope_active 1" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "state.osc_page" in ui and "state.osc2_wave" in ui
 # HOME MULTI uses an actual selected OSC1/OSC2 waveform.
-assert "mi_wave_name(state.view==MI_OSC?" in ui
+assert "mi_wave_name(state.view==MI_HOME?" in ui
 assert "state.wave==MI_WAVE_MULTI" in ui
 assert "state.osc1_wave" in ui
-# HOME MULTI K1 edits the selected oscillator waveform instead of WAVE=4.
-assert "p=s->osc_page?&s->osc2_wave:&s->osc1_wave;" in controls
-assert 's->osc_page?"WAVE2":multi[k]' in controls
+# HOME K1 shows program MULTI; OSC waveforms are edited within OSC pages.
+assert "s->wave==MI_WAVE_MULTI&&s->osc_page<2u" in controls
+assert 'static const char *const multi[4]={"WAVE","OSC","DETUNE","LEVEL"};' in controls
 assert 'mi_streq(what,"osc1_wave")' in ui
 assert 'mi_streq(what,"osc2_wave")' in ui
 assert "expect osc1_wave 3" in (root / "fm1/native/host_smoke.txt").read_text()
@@ -278,7 +278,7 @@ assert "mi_graph_env();" in ui and "mi_graph_lfo();" in ui
 assert "mi_graph_arp();" in ui
 assert "mi_audio_input_on(&audio,&state" in ui
 assert "mi_audio_input_off(&audio,&state" in ui
-assert "arp_tick(a,s);" in audio
+assert "arp_tick(a,rs);" in audio
 assert "held_total" in audio and "release_samples" in audio
 assert "lfo_value" in audio
 assert "mode==MI_FX_DREAMY" in fxcode
@@ -302,6 +302,14 @@ own_lines = Path(__file__).read_text(encoding="utf-8").splitlines()
 assert len(own_lines)>100 and own_lines[-1].startswith("print(")
 recorder = (root / "fm1/native/mi_recorder.c").read_text(encoding="utf-8")
 assert "MI_REC_CAPACITY" in recorder and "mi_rec_tick" in recorder
+# Expanded ③..⑫ require full real control/audio paths, never a UI-only stub.
+assert "MI_WAVE_FMDRUM" in controls and "drum_on(a,s" in audio
+assert "mi_rec_external_tick" in audio and "MI_REC_CAPACITY" in recorder
+assert "MI_FX_BITCRUSH" in fxcode and "MI_FX_PITCHSHIFT" in fxcode
+assert "mi_lfo_dest_name" in controls and "apply_lfo_destination" in audio
+assert "mi_visual_map(&sx,&sy" in ui and "mi_visual_photo_bank" in ui
+assert "next=visual_rng%10u<3u?" in ui
+assert "filter_cutoff" in controls and "a->filter_a+=" in audio
 # Current user requirements: original animation into normal SEL (not FX-only),
 # no newly invented video codec or new CircleCI workflow; multi-OSC and overdub.
 atlas = (root / "fm1/native/mi_tile_atlas.h").read_text(encoding="utf-8")
@@ -315,14 +323,14 @@ assert "if(state.fx==MI_FX_OFF&&state.fx2==MI_FX_OFF)" in ui
 assert "static const uint8_t mi_photo_vq_maps[488][72]" in atlas
 assert "mi_photo_vq_tilebook" in atlas and "mi_photo_vq_palette" in atlas
 assert "mi_atlas_byte" not in ui  # no per-pixel base64 decode in rendering
-assert "s->wave==MI_WAVE_MULTI" in audio and "osc2_mix" in audio
+assert "rs->wave==MI_WAVE_MULTI" in audio and "osc2_mix" in audio
 assert "s->fx_page=0u;" in controls
 assert "s->fx_page^=1u;" in controls
-assert "REC stop and 2-second limit auto-play" in (root / "fm1/native/test_mi_recorder.c").read_text()
+assert "REC manual stop, adaptive 2/4 bars, 192 MIDI ticks" in (root / "fm1/native/test_mi_recorder.c").read_text()
 assert "mi_soft_limit(sample)" in audio
 assert "p->dreamy_filter+=" in fxcode
 assert "r->overdubbing=1u" in recorder
-assert "r->overdubbing && r->count>=4u" in recorder
+assert "r->overdubbing&&r->count>=4u" in recorder
 # Upstream fm1-base's existing CRC-checked separate resource installer,
 # explicitly approved for integrated animation; user data sectors stay intact.
 resource_header = (root / "fm1/native/mi_resource_media.h").read_text()
