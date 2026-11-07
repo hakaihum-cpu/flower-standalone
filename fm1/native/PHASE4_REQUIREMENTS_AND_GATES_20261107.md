@@ -32,6 +32,33 @@ FM-1作業ブランチ:
 - **実ソーステスト合格**: `mi_video.c`・`mi_video.h`・`mi_memory.h`・`test_mi_video.c`をGitHub blob SHAと照合してローカルの同一性を確認し、GCC/Clang双方でC99 `-Wall -Wextra -Werror -fsanitize=address,undefined` を実行。無音／一定入力停止、動的クリップ遷移、FX状態分離を含むテストがPASS。
 - その他の元映像は、GitHub内で所在を確認しただけで現行FM-1には未移植。既存の方法で素材の完全性と対象フレーム数を確認し、**容量不足なら独自の保存機構を勝手に採用せず保留**。
 
+## 2026-11-07 FM-1標準リソースの使用承認
+
+ユーザーより既存の `fm1-base` リソース領域の利用許可あり。
+`main`は変更せず、既存の単一CircleCI手動ジョブを維持。ビルド未実施。
+
+- `fm1.toml`: `backup=true`、`resources="miyako_media.bin"`。
+- `app.h`: `APP_RES_BASE=0x97000`、`APP_RES_SECTORS=69`。
+  領域 `[0x97000,0xDC000)`、既存の保存先 `0xDC000` と
+  `0xFC000` には重ならない。使用可能容量282,624バイト（公式リソース
+  ヘッダー32バイトを含む）。
+- 収録済み488画像のRGB565 VQデータ**92,928バイト**を再圧縮せず、
+  コンパイル時C配列から標準リソースへ移す実装を反映。
+  SHA-256 `429f2aa8f561079481c3b60562ef3f88e2f5abd044a446eca1b1ebe1c6bc11ee`。
+  `plat_res()` でUI側から参照し、音声処理からは参照しない。
+- 既存CircleCIの同一ジョブで
+  `MIYAKO-FM1-NATIVE-DEV.fwsc` と
+  `MIYAKO-FM1-NATIVE-DEV-res.bin` をセットで検証・出力する。
+  `-res.bin` は`fm1-base` が提供するリソースインストール用ファイル。
+- **現段階ではCLOUDS/KNOWING/TWILIGHT等の未移植素材はリソースに
+  まだ含まれていない。** 元素材が非公開の `Vstplugin`、対象
+  `flower-standalone` は公開リポジトリであるため、素材を公開リポジトリ
+  に転記するか秘密保持されたCI読み取り権限を使うか、扱いを確定するまで
+  勝手に公開しない。
+- 単体データ範囲・マップ：92928+32=92960バイトで282624バイト以内。
+  元ヘッダーの14パレット、14×256タイル、488×72マップ数を照合。
+  **実際のFWSC最終リンクと公式リソースインストールは未検証。**
+
 ## フラッシュ容量の条件
 
 現在、既存EFFECTS 144枚=62,592 bytes、EUREKA 576枚=250,368 bytes、提供488枚のVQ=92,928 bytes。
