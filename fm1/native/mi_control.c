@@ -356,8 +356,8 @@ int mi_state_valid(const mi_state_t *s)
 
 const char *mi_wave_name(unsigned wave)
 {
-    static const char *const names[] = {"SINE","SAW","SQUARE","PULSE","MULTI"};
-    return wave<=MI_WAVE_MULTI?names[wave]:"?";
+    static const char *const names[] = {"SINE","SAW","SQUARE","PULSE","MULTI","FMDRUM"};
+    return wave<=MI_WAVE_FMDRUM?names[wave]:"?";
 }
 const char *mi_arp_mode_name(unsigned mode)
 {
@@ -368,6 +368,13 @@ const char *mi_lfo_wave_name(unsigned wave)
 {
     static const char *const names[] = {"SINE","TRI","SAW","SQUARE"};
     return wave<4u?names[wave]:"?";
+}
+const char *mi_lfo_dest_name(unsigned dest)
+{
+    static const char *const names[MI_LFO_DEST_COUNT]={
+        "PITCH","PWM","AMP","SUB","CRUSH","CUTOFF","RES","OSC2 MIX","DETUNE","LEVEL","ATK","DEC","SUS","REL","FXA WET","FXA P1","FXA P2","FXB WET","FXB P1","FXB P2","DR TONE","DR DEC","DR COLOR","DR LEVEL","GLITCH","TILE","XSHIFT","YSHIFT","REC IN","REC OUT","REC PITCH","REC LEVEL","ARP RATE","ARP GATE","ARP OCT","BPM","SWING","TUNE","FXA PITCH","FXA REV","FXA SPREAD","FXA FDBK","FXB PITCH","FXB REV","FXB SPREAD","FXB FDBK","OSC2 OCT","OSC1 WAVE","OSC2 WAVE","OSC WAVE","FXA MODE","FXB MODE","ARP MODE","LFO RATE","LFO WAVE","LFO DEPTH","CLOCK","REC BARS"
+    };
+    return dest<MI_LFO_DEST_COUNT?names[dest]:"?";
 }
 const char *mi_view_name(mi_view_t v)
 {
@@ -380,7 +387,8 @@ const char *mi_view_name(mi_view_t v)
 const char *mi_fx_name(mi_fx_t effect)
 {
     static const char *const names[] = {
-        "OFF", "REEL", "DREAMY", "DELAY", "REVERB", "CHORUS", "EUREKA"
+        "OFF","REEL","DREAMY","DELAY","REVERB","CHORUS",
+        "EUREKA","BITCRUSH","PITCHSHIFT"
     };
     return (unsigned)effect < MI_FX_COUNT ? names[effect] : "?";
 }
@@ -394,14 +402,25 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         {"BPM","SWING","TUNE","CLOCK"}, {"SLOT","","",""}
     };
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
-    if (s->view == MI_VIDEO) return "";
-    if(s->view==MI_HOME&&s->wave==MI_WAVE_MULTI){
-        static const char *const multi[4]={"WAVE1","OSC","DETUNE","LEVEL"};
-        return k==0u&&s->osc_page?"WAVE2":multi[k];
+    if(s->view==MI_VIDEO){
+        static const char *const v[4]={"GLITCH","TILE","XSHIFT","YSHIFT"};
+        return v[k];
     }
-    if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI&&!s->osc_page&&k==0u)
+    if(s->view==MI_OSC&&s->osc_page==2u){
+        static const char *const f[4]={"CUTOFF","RES","LEVEL","CRUSH"};
+        return f[k];
+    }
+    if(s->view==MI_OSC&&s->wave==MI_WAVE_FMDRUM){
+        static const char *const d[4]={"TONE","DECAY","COLOR","D LEVEL"};
+        return d[k];
+    }
+    if(s->view==MI_HOME&&s->wave==MI_WAVE_MULTI){
+        static const char *const multi[4]={"WAVE","OSC","DETUNE","LEVEL"};
+        return multi[k];
+    }
+    if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI&&s->osc_page==0u&&k==0u)
         return "WAVE1";
-    if (s->view==MI_OSC && s->osc_page){
+    if (s->view==MI_OSC && s->osc_page==1u){
         static const char *const osc2_names[4]={"WAVE2","DETUNE","MIX2","OCT2"};
         return osc2_names[k];
     }
@@ -421,6 +440,8 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         if (fx == MI_FX_REVERB) return k == 2 ? "DECAY" : "TONE";
         if (fx == MI_FX_CHORUS) return k == 2 ? "RATE" : "DEPTH";
         if (fx == MI_FX_EUREKA) return k == 2 ? "TIME" : "HAZE";
+        if (fx == MI_FX_BITCRUSH) return k == 2 ? "BITS" : "HOLD";
+        if (fx == MI_FX_PITCHSHIFT) return k == 2 ? "PITCH" : "GRAIN";
         /* Other DSP controls are pending source-accurate port; not fabricated. */
         return "TBD";
     }
@@ -434,21 +455,24 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
         if(s->wave==MI_WAVE_MULTI){
             /* Return signed values explicitly: DETUNE may be negative and
              * MI_WAVE_MULTI is an unsigned macro (4u). */
-            if(k==0u)return (int32_t)(s->osc_page?
-                                      s->osc2_wave:s->osc1_wave);
+            if(k==0u)return MI_WAVE_MULTI;
             if(k==1u)return (int32_t)s->osc_page;
             if(k==2u)return (int32_t)s->osc2_detune-64;
             return (int32_t)s->level;
         }
         return k==0?s->wave:k==1?s->fx:k==2?s->wet:s->level;
     case MI_OSC:
-        if(s->osc_page)
+        if(s->osc_page==2u)return k==0?s->filter_cutoff:
+            k==1?s->filter_resonance:k==2?s->level:s->crush;
+        if(s->wave==MI_WAVE_FMDRUM)return k==0?s->drum_tone:
+            k==1?s->drum_decay:k==2?s->drum_color:s->drum_level;
+        if(s->osc_page==1u)
             return k==0?s->osc2_wave:
                    k==1?(int32_t)s->osc2_detune-64:
                    k==2?s->osc2_level:(int32_t)s->osc2_octave-2;
         return k==0?(s->wave==MI_WAVE_MULTI?s->osc1_wave:s->wave):
                k==1?s->width:k==2?s->sub:s->crush;
-    case MI_VIDEO: return 0;
+    case MI_VIDEO: return s->video_params[k];
     case MI_FX: {
         unsigned fx=s->fx_slot?s->fx2:s->fx;
         if(s->fx_page && (fx==MI_FX_DREAMY||fx==MI_FX_EUREKA))
