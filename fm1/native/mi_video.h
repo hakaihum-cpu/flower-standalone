@@ -9,6 +9,10 @@ typedef struct {
     uint16_t eureka_count;
     int16_t eureka_frame;
     uint8_t eureka_cooldown;
+    /* Ported from MIYAKO VisualizerComponent::setAudioActivity:
+     * source 36-frame playhead and independent EUREKA audio envelope. */
+    int16_t eureka_clip;
+    float eureka_previous,eureka_playhead;
     uint16_t effect_count;
     int16_t effects_frame;
     float effects_previous;
