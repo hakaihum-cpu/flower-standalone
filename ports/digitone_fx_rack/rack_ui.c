@@ -96,8 +96,6 @@ void rack_show_page(void) {if(rack_active>=0) rack_ui_open=1u;}
 void rack_hide_page(void) {rack_ui_open=0u;}
 static void menu_granular(void *b,void *e,int t)
 {(void)b;(void)e;(void)t;rack_choose(DNFX_GRANULAR);}
-static void menu_eureka(void *b,void *e,int t)
-{(void)b;(void)e;(void)t;rack_choose(DNFX_EUREKA);}
 static void menu_reel(void *b,void *e,int t)
 {(void)b;(void)e;(void)t;rack_choose(DNFX_REEL);}
 static void menu_crush(void *b,void *e,int t)
@@ -105,7 +103,6 @@ static void menu_crush(void *b,void *e,int t)
 static void menu_off(void *b,void *e,int t)
 {(void)b;(void)e;(void)t;rack_choose(-1);}
 const struct core_menu_item rack_menu_granular={"GRANULAR",menu_granular,0,0};
-const struct core_menu_item rack_menu_eureka={"EUREKA FX",menu_eureka,0,0};
 const struct core_menu_item rack_menu_reel={"REEL",menu_reel,0,0};
 const struct core_menu_item rack_menu_crush={"BITCRUSH",menu_crush,0,0};
 const struct core_menu_item rack_menu_off={"FX OFF",menu_off,0,0};
@@ -119,7 +116,7 @@ void rack_render(int32_t *out,const int32_t *in)
     rack_prev_start=entered;
     if(active==DNFX_GRANULAR)
         rack_granular_render(out,in);
-    else if(active>=DNFX_EUREKA && active<DNFX_COUNT)
+    else if(active>=DNFX_REEL && active<DNFX_COUNT)
         rack_audio_render(out,in,active);
     else {
         for(i=0u;i<64u;++i) out[i]=in[i];
@@ -203,7 +200,7 @@ void rack_tick(void *ctrl)
     } else if(rack_pause) --rack_pause;
     else if((pending=rack_pending)!=-2) {
         if(pending==DNFX_GRANULAR) rack_granular_reset();
-        else if(pending>=DNFX_EUREKA && pending<DNFX_COUNT)
+        else if(pending>=DNFX_REEL && pending<DNFX_COUNT)
             rack_audio_reset(pending);
         rack_active=pending;
         rack_pending=-2;
