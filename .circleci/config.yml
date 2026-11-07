@@ -250,6 +250,8 @@ jobs:
               'Built without the KARMA application and DSP.' \
               'REEL, DREAMY, DELAY, REVERB and CHORUS are native FM-1 DSP implementations.' \
               'Original 144 EFFECTS and 576 EUREKA source frames are 16-colour VQ.' \
+              'Install MIYAKO-FM1-NATIVE-DEV-res.bin with the matching FWSC using the fm1-base installer.' \
+              'The separate resource holds 488 original user-image tiles (same 16-colour VQ).' \
               'REC internal 2s, EUREKA short-buffer 2s, two serial FX with conflict guards.' \
               'This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.' \
               > fm1-dist/README_BEFORE_INSTALL.txt
