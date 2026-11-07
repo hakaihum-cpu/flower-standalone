@@ -194,6 +194,13 @@ int main(void)
     assert(s.osc_page==1u);
     mi_rotate(&s,MI_EN_K3,10); /* HOME WET now edits DETUNE */
     assert(s.osc2_detune==74u&&mi_param_value(&s,2)==10);
+    /* HOME/MULTI values remain signed for negative DETUNE values. */
+    assert(mi_param_value(&s,0)==(int32_t)MI_WAVE_MULTI);
+    assert(mi_param_value(&s,1)==1);
+    assert(mi_param_value(&s,3)==(int32_t)s.level);
+    s.osc2_detune=0u;
+    assert(mi_param_value(&s,2)==-64);
+    s.osc2_detune=74u;
     mi_button(&s,MI_B_EDIT,9300);
     assert(s.view==MI_OSC&&s.osc_page==1u);
     mi_rotate(&s,MI_EN_K1,1); /* OSC2 wave only */
