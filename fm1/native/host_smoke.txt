@@ -126,6 +126,7 @@ expect view 2
 turn K1 1
 expect fx 2
 expect fx_page 0
+shot MIYAKO_FX_DREAMY_LARGE.png
 turn PRESET 1
 expect fx_page 1
 turn PRESET 1
@@ -141,6 +142,7 @@ shot MIYAKO_EUREKA_VIDEO.png
 midi USB 80 45 00
 tap FX
 expect view 2
+shot MIYAKO_FX_EUREKA_LARGE.png
 # A=EUREKA (6): B must skip DELAY (3), because they share RAM.
 # Two detents select DREAMY on P1, next detent skips DELAY to REVERB.
 tap FX

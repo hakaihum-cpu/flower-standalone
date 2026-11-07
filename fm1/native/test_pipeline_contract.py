@@ -173,15 +173,15 @@ assert (root / "fm1/native/mi_memory.h").is_file()
 manifest = (root / "fm1/native/fm1.toml").read_text(encoding="utf-8")
 app_header = (root / "fm1/native/app.h").read_text(encoding="utf-8")
 assert 'id_prefix = "FM-1_9"' in manifest
-assert '#define APP_VERSION "0.3.3-DEV"' in app_header
+assert '#define APP_VERSION "0.3.4-DEV"' in app_header
 assert 'APP_TAGLINE "NATIVE TRIAL"' in app_header
-assert "--product FM-1_936" in ci
+assert "--product FM-1_937" in ci
 # Keep package header marker and running firmware FELUCCA_ID in sync by
 # patching the pinned original builder BEFORE ANY compilation step.
 id_patch = (root / "fm1/native/tools/set_miyako_product_id.py").read_text(encoding="utf-8")
-assert 'TARGET = "FM-1_936"' in id_patch
+assert 'TARGET = "FM-1_937"' in id_patch
 assert 'OLD = \'    PRODUCT = prefix + "00"\'' in id_patch
-assert 'NEW = \'    PRODUCT = prefix + "36"' in id_patch
+assert 'NEW = \'    PRODUCT = prefix + "37"' in id_patch
 # Check the package product ID against the actual pinned build patch,
 # rather than maintaining two contradictory hard-coded CI expectations.
 actual_product = re.search(r'^TARGET = "(FM-1_[0-9]+)"', id_patch, re.M)
@@ -200,7 +200,7 @@ for n, line in enumerate(Path(__file__).read_text(encoding="utf-8").splitlines()
 assert 'set_miyako_product_id.py --base /tmp/fm1-base' in ci
 assert ci.index('set_miyako_product_id.py') < ci.index('tools/build.py /tmp/fm1-base/miyako --host')
 assert "FM-1_9100" not in ci
-assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_936') >= 1
+assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_937') >= 1
 
 # Root issue from the current build log: fm1-base's own mmio_check()
 # correctly rejects a volatile pointer cast outside the BSP, even though
@@ -373,22 +373,35 @@ assert "7cf48b59c60028829c0d7db6f49a2e52750d3d49b7da33943cba2599d18344ca" in res
 assert "mi_new_two_sheets_vq.h" in ci
 assert "mi_new_vq_maps[140][72]" in (root / "fm1/native/mi_new_two_sheets_vq.h").read_text()
 assert "mi_visual_photo_bank(mode)" in ui
-# Never sacrifice over half a person/scene to meet a height-fill suggestion.
-# All original 48x48 photos and 128x78 video must FIT in right x=123..239.
-assert "mi_tile_draw_half(half,123,62,116,123,audio_activity)" in ui
-assert "mi_dreamy_dot_draw_half(half,123,62,116,123)" in ui
-assert "mi_media_draw_scaled_half(half,123,84,116,71,123,mode==7u)" in ui
-assert "mi_video_vfx_half(half,123,84,116,71,audio_activity)" in ui
-assert "mi_tile_draw_half(half,61,0,240,123" not in ui
-assert "mi_media_draw_scaled_half(half,-15,0,393,240,123" not in ui
+assert "MIYAKO_FX_DREAMY_LARGE.png" in ci
+assert "MIYAKO_FX_EUREKA_LARGE.png" in ci
+assert "shot MIYAKO_FX_DREAMY_LARGE.png" in (root / "fm1/native/host_smoke.txt").read_text()
+assert "shot MIYAKO_FX_EUREKA_LARGE.png" in (root / "fm1/native/host_smoke.txt").read_text()
+# All user photo/EUREKA/DREAMY FX media is enlarged above all four knobs.
+# Reject the old cropped right-hand 116px panel and artificial scanlines.
+assert "mi_tile_draw_half(half,40,18,160,0,audio_activity)" in ui
+assert "mi_dreamy_dot_draw_half(half,40,18,160,0)" in ui
+assert "mi_media_draw_scaled_half(half,0,25,240,146,0,mode==7u)" in ui
+assert "mi_fx_dial(half,181,183,3u)" in ui
+assert "mi_fx_dial(half,121,183,2u)" in ui
+assert "mi_video_vfx_half" not in ui
+assert "int32_t tear=0" not in ui
+assert "mi_tile_draw_half(half,123,62,116,123" not in ui
+assert "mi_media_draw_scaled_half(half,123,84,116,71" not in ui
 assert "if(x<clip_left)" in ui and "mi_image_rect(" in ui
-assert "mi_photo_neutral_rgb(rgb)" in ui
+assert "mi_photo_reference_rgb(rgb)" in ui
+assert "mi_user_reference_rgb565[16]" in ui
 for source in ("mi_palette.py", "pack_eureka_frames.py"):
     color_source = (root / "fm1/native/tools" / source).read_text()
     assert "ImageStat" in color_source and "blue_lut" in color_source
     assert "ImageFilter.UnsharpMask" in color_source
     assert "gain = min(1.10," in color_source
     assert "** 0.86" in color_source
+    assert "from mi_reference_palette import reference_pixels" in color_source
+ref_palette = (root / "fm1/native/tools/mi_reference_palette.py").read_text()
+assert "REFERENCE_RGB = (" in ref_palette
+assert "REFERENCE_565" in ref_palette
+assert "Image.Dither.NONE" in ref_palette
 
 assert "fm1/native/mi_tile_atlas.h \\" not in ci, (
     "no duplicate 93 KB photo C table in the actual target app")

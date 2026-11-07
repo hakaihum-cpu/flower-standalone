@@ -12,6 +12,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mi_palette import clip_pixels as effects_palette
 from pack_eureka_frames import clip_pixels as eureka_palette
 from mi_reference_palette import REFERENCE_565
+import re
+
+# The embedded resource-photo renderer and both video encoders MUST use
+# the SAME real palette extracted from the supplied 16-color reference.
+app_source = (Path(__file__).resolve().parents[1] / "app.c").read_text()
+ref_match = re.search(
+    r"mi_user_reference_rgb565\[16\]\s*=\s*\{([^}]+)\}", app_source,
+    re.S,
+)
+assert ref_match, "C renderer is missing the actual reference palette"
+ref_c = tuple(int(v, 16) for v in re.findall(r"0x([0-9a-fA-F]{4})u", ref_match.group(1)))
+assert ref_c == REFERENCE_565 and len(set(ref_c)) == 16, (
+    "C photo palette must match Python EFFECTS/EUREKA palette exactly"
+)
 
 W, H = 128, 78
 # Varying luminance, colors and high-contrast contours, no face synthesis.
