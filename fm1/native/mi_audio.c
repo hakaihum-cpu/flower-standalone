@@ -284,7 +284,7 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
 }
 void mi_audio_rec_request(mi_audio_t *a,unsigned command)
 {
-    if(a && (command==1u || command==2u))
+    if(a && (command==1u || command==2u || command==3u))
         a->rec_command=(uint8_t)command;
 }
 void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,uint32_t master_q12)
@@ -309,6 +309,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         a->rec_command=0u;
         if(cmd==1u)mi_rec_toggle_record(&a->recorder);
         if(cmd==2u)mi_rec_toggle_play(&a->recorder);
+        if(cmd==3u)mi_rec_clear(&a->recorder);
     }
     for(i=0;i<n;i++){
         float sample=0.f,lfo,mod,voice_duty=duty;
