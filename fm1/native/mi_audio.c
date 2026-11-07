@@ -358,9 +358,13 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                 float main=osc(wave,v->phase,voice_duty),sub=sin01(v->subphase);
                 float submix=s->sub/127.f;
                 float base=main*(1.f-submix)+sub*submix;
-                float second=osc(wave2,v->phase2,voice_duty);
-                /* OSC2=0 retains the previous OSC1/SUB blend. */
-                float value=base*(1.f-osc2_mix)+second*osc2_mix;
+                float value=base;
+                /* No unnecessary second waveform evaluation when OSC2 is off.
+                 * Preserve the previous OSC1/SUB output exactly by default. */
+                if(osc2_mix>0.f){
+                    float second=osc(wave2,v->phase2,voice_duty);
+                    value=base*(1.f-osc2_mix)+second*osc2_mix;
+                }
                 if(s->crush){
                     int bits=16-(int)(s->crush*13u/127u);
                     float levels=(float)(1u<<bits);
