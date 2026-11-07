@@ -80,6 +80,7 @@ jobs:
                fm1/native/mi_fx_dsp.c fm1/native/mi_fx_dsp.h \
                fm1/native/mi_recorder.c fm1/native/mi_recorder.h \
                fm1/native/mi_memory.h fm1/native/mi_tile_atlas.h \
+               fm1/native/mi_dreamy_dot_portrait.h \
                /tmp/fm1-base/miyako/
             test -s /tmp/fm1-base/miyako/words.tsv
             grep -q '^# url: https://' /tmp/fm1-base/miyako/words.tsv
