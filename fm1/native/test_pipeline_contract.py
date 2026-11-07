@@ -256,6 +256,26 @@ assert "s->wave==MI_WAVE_MULTI" in audio and "osc2_mix" in audio
 assert "s->fx_page=(candidate==MI_FX_DREAMY||" in controls
 assert "r->overdubbing=1u" in recorder
 assert "r->overdubbing && r->count>=4u" in recorder
+# Upstream fm1-base's existing CRC-checked separate resource installer,
+# explicitly approved for integrated animation; user data sectors stay intact.
+resource_header = (root / "fm1/native/mi_resource_media.h").read_text()
+resource_packer = (root / "fm1/native/tools/pack_miyako_resource.py").read_text()
+assert 'backup = true' in manifest
+assert 'resources = "miyako_media.bin"' in manifest
+assert 'APP_RES_BASE 0x97000u' in app_header
+assert 'APP_RES_SECTORS 69u' in app_header
+assert 'APP_STORE_MAP {0xFC000u, 0xDC000u}' in app_header
+assert 'APP_BACKUP_OBJS {OBJ_SETTINGS}' in app_header
+assert 'MI_TILE_VQ_MAP_OFFSET 57792u' in resource_header
+assert 'MI_TILE_DATA_BYTES 92928u' in resource_header
+assert '#include "mi_resource_media.h"' in ui and 'plat_res(&length)' in ui
+assert "mi_resource_media.h" in ci
+assert "pack_miyako_resource.py" in ci
+assert 'MIYAKO-FM1-NATIVE-DEV-res.bin' in ci
+assert 'expect media_ready 1' in (root / "fm1/native/host_smoke.txt").read_text()
+assert "429f2aa8f561079481c3b60562ef3f88e2f5abd044a446eca1b1ebe1c6bc11ee" in resource_packer
+assert "fm1/native/mi_tile_atlas.h \\" not in ci, (
+    "no duplicate 93 KB photo C table in the actual target app")
 assert "rec_overdub" in ui and "rec_overdub 1" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "mi_audio_rec_request(&audio,1u)" in ui
 assert "mi_audio_rec_request(&audio,2u)" in ui
