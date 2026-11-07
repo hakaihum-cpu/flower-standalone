@@ -7,7 +7,7 @@
  */
 #include <stdint.h>
 #include "digitone-mk1/core3.h"
-#define E576_COUNT 576u
+#define E576_COUNT 1152u
 #define E576_FRAME_BYTES 1024u
 #define E576_KEY_MIDI 2
 #define E576_KEY_YES 13
@@ -84,12 +84,12 @@ static void eureka576_stock_midi_down(void *brain,void *ev)
 /* Video-only random sequence state; no changes to audio or sound parameters. */
 #define E576_SEEK_ENTRY 1028u
 #define E576_SEEK_EVERY 6u
-#define E576_SEEK_COUNT 96u
+#define E576_SEEK_COUNT 192u
 #define E576_STEP_TIME 5400000u
 #define E576_CLIP_FRAMES 36u
 #define E576_CLIPS (E576_COUNT / E576_CLIP_FRAMES)
 #define E576_QUEUE_SIZE 32u
-_Static_assert(E576_CLIPS == 16u, "16 separate EUREKA scenes");
+_Static_assert(E576_CLIPS == 32u, "32 separate EUREKA scenes");
 static uint32_t eureka576_rng=0x534a5531u;
 static uint32_t eureka576_effect, eureka576_speed, eureka576_until, eureka576_reverse;
 static uint32_t eureka576_stutter_start, eureka576_stutter_span, eureka576_stutter_step;
@@ -166,8 +166,8 @@ static int eureka576_next(void)
     eureka576_readpos=end;
     return 1;
 }
-/* Checkpoints are 96 snapshots at frame 0,6,...570.
- * Restore any of 576 frames by decoding no more than five XOR deltas. */
+/* Checkpoints are 192 snapshots at frame 0,6,...1146.
+ * Restore any of 1152 frames by decoding no more than five XOR deltas. */
 static int eureka576_seek(uint32_t frame)
 {
     const uint8_t *s=eureka576_seek_table;
@@ -229,7 +229,7 @@ void eureka576_voice_on(int32_t voice, int32_t track, void *event)
     eureka576_event_times[tail]=fw_timeline;
     eureka576_event_tail=next;
 }
-/* The original 576 frames are sixteen independent 36-frame scenes.
+/* The combined 1152 frames are thirty-two independent 36-frame scenes.
  * Pick a DIFFERENT scene, so cuts never merely jump within one scene
  * or step to the next scene in chronological order. */
 static int eureka576_random_scene(void)
@@ -367,7 +367,7 @@ void eureka576_tick(void *ctrl)
         eureka576_scrub_seen=eureka576_cc_scrub;
         if(eureka576_enabled && eureka576_scrub_seen!=0u) {
             uint32_t index=
-                ((uint32_t)(eureka576_scrub_seen-1u)*575u)/126u;
+                ((uint32_t)(eureka576_scrub_seen-1u)*(E576_COUNT-1u))/126u;
             if(!eureka576_seek(index)) eureka576_enabled=0u;
         }
     }
@@ -453,7 +453,7 @@ void eureka576_tick(void *ctrl)
 /* Real A-D controls for all six pages; the stock synth never receives
  * the encoder event while a dedicated EUREKA page is open. */
 static const uint8_t eureka576_param_max[E576_PARAM_PAGES][E576_PARAM_KNOBS]={
-    {15u,100u,1u,3u},
+    {31u,100u,1u,3u},
     {127u,1u,127u,127u},
     {2u,100u,4u,127u},
     {127u,127u,16u,16u},
