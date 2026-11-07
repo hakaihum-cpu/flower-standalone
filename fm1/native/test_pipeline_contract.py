@@ -290,6 +290,12 @@ assert 'MIYAKO-FM1-NATIVE-DEV-res.bin' in ci
 assert 'expect media_ready 1' in (root / "fm1/native/host_smoke.txt").read_text()
 assert 'MIYAKO_ADDED_SHEET1.png' in (root / "fm1/native/host_smoke.txt").read_text()
 assert 'MIYAKO_ADDED_SHEET2.png' in (root / "fm1/native/host_smoke.txt").read_text()
+# Host "turn" emits individual detents; DREAMY/EUREKA auto-switch K1 to
+# PITCH. Check the already-supported PRESET page toggle in smoke tests.
+host_smoke = (root / "fm1/native/host_smoke.txt").read_text()
+assert "turn K1 1\nexpect fx 2\nturn PRESET 1\nturn K1 4\nexpect fx 6" in host_smoke
+assert "turn K1 2\nexpect fx2 2\nturn PRESET 1\nturn K1 1\nexpect fx 6\nexpect fx2 4" in host_smoke
+assert "turn K1 5\nexpect fx 6" not in host_smoke
 assert "429f2aa8f561079481c3b60562ef3f88e2f5abd044a446eca1b1ebe1c6bc11ee" in resource_packer
 assert "7cf48b59c60028829c0d7db6f49a2e52750d3d49b7da33943cba2599d18344ca" in resource_packer
 assert "mi_new_two_sheets_vq.h" in ci

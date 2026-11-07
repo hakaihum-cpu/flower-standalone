@@ -94,7 +94,12 @@ wait 40
 expect rec_playing 0
 tap FX
 expect view 2
-turn K1 5
+# Each "turn" is delivered as individual detents. DREAMY selects PITCH page,
+# so PRESET must return K1 to MODE before selecting EUREKA.
+turn K1 1
+expect fx 2
+turn PRESET 1
+turn K1 4
 expect fx 6
 tap SEL
 expect view 3
@@ -105,10 +110,14 @@ midi USB 80 45 00
 tap FX
 expect view 2
 # A=EUREKA (6): B must skip DELAY (3), because they share RAM.
-# Three physical detents select REVERB (4), not DELAY (3).
+# Two detents select DREAMY (PITCH page); switch back to MODE before
+# the third detent, which must skip DELAY and select REVERB.
 tap FX
 expect fx_slot 1
-turn K1 3
+turn K1 2
+expect fx2 2
+turn PRESET 1
+turn K1 1
 expect fx 6
 expect fx2 4
 shot MIYAKO_FX_DUAL.png

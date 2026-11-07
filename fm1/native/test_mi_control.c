@@ -182,6 +182,31 @@ int main(void)
     mi_button(&s,MI_B_FX,9201);
     assert(s.fx_slot==1u&&s.fx_page==0u);
 
+    /* Host "turn" delivers each detent separately, unlike a steps batch.
+     * DREAMY auto-opens PITCH; PRESET returns K1 to MODE. Both FX slots
+     * must support EUREKA and the compatible REVERB. */
+    mi_init(&s);
+    s.fx=MI_FX_REEL;
+    mi_button(&s,MI_B_FX,9250);
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.fx==MI_FX_DREAMY && s.fx_page==1u);
+    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.fx_page==0u);
+    for(i=0;i<4u;i++)mi_rotate(&s,MI_EN_K1,1);
+    assert(s.fx==MI_FX_EUREKA && s.fx_page==1u);
+    mi_button(&s,MI_B_SEL,9251);
+    mi_button(&s,MI_B_FX,9252); /* return from SEL to slot A */
+    mi_button(&s,MI_B_FX,9253); /* switch from A to B */
+    assert(s.fx_slot==1u && s.fx_page==0u);
+    mi_rotate(&s,MI_EN_K1,1);
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.fx2==MI_FX_DREAMY && s.fx_page==1u);
+    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.fx_page==0u);
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.fx==MI_FX_EUREKA && s.fx2==MI_FX_REVERB);
+    assert(mi_fx_pair_supported(s.fx,s.fx2));
+
     /* HOME WAVE MULTI must genuinely expose two editable oscillators. */
     mi_init(&s);
     mi_rotate(&s,MI_EN_K1,4);
