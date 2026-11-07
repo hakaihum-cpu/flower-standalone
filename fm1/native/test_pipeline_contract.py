@@ -247,7 +247,7 @@ assert '#include "mi_dreamy_dot_portrait.h"' in ui
 assert "MI_DREAMY_DOT_BYTES 690u" in dot
 assert "mi_dreamy_dot_draw_half(half,0,0,240)" in ui
 assert "mi_tape_dot_draw_half(half,0,0,240)" in ui
-assert "visual_choice+steps)%11" in ui and "normal_visual_bank+1u)%10u" in ui
+assert "visual_choice+steps)%13" in ui and "normal_visual_bank+1u)%12u" in ui
 assert "if(state.fx==MI_FX_OFF&&state.fx2==MI_FX_OFF)" in ui
 assert "static const uint8_t mi_photo_vq_maps[488][72]" in atlas
 assert "mi_photo_vq_tilebook" in atlas and "mi_photo_vq_palette" in atlas
@@ -267,13 +267,22 @@ assert 'APP_RES_SECTORS 69u' in app_header
 assert 'APP_STORE_MAP {0xFC000u, 0xDC000u}' in app_header
 assert 'APP_BACKUP_OBJS {OBJ_SETTINGS}' in app_header
 assert 'MI_TILE_VQ_MAP_OFFSET 57792u' in resource_header
-assert 'MI_TILE_DATA_BYTES 92928u' in resource_header
+assert 'MI_TILE_NEW_MAP_OFFSET 109440u' in resource_header
+assert 'MI_TILE_COUNT 628u' in resource_header
+assert 'MI_TILE_BANKS 8u' in resource_header
+assert 'MI_TILE_DATA_BYTES 119520u' in resource_header
 assert '#include "mi_resource_media.h"' in ui and 'plat_res(&length)' in ui
 assert "mi_resource_media.h" in ci
 assert "pack_miyako_resource.py" in ci
 assert 'MIYAKO-FM1-NATIVE-DEV-res.bin' in ci
 assert 'expect media_ready 1' in (root / "fm1/native/host_smoke.txt").read_text()
+assert 'MIYAKO_ADDED_SHEET1.png' in (root / "fm1/native/host_smoke.txt").read_text()
+assert 'MIYAKO_ADDED_SHEET2.png' in (root / "fm1/native/host_smoke.txt").read_text()
 assert "429f2aa8f561079481c3b60562ef3f88e2f5abd044a446eca1b1ebe1c6bc11ee" in resource_packer
+assert "7cf48b59c60028829c0d7db6f49a2e52750d3d49b7da33943cba2599d18344ca" in resource_packer
+assert "mi_new_two_sheets_vq.h" in ci
+assert "mi_new_vq_maps[140][72]" in (root / "fm1/native/mi_new_two_sheets_vq.h").read_text()
+assert "mi_visual_photo_bank(mode)" in ui
 assert "fm1/native/mi_tile_atlas.h \\" not in ci, (
     "no duplicate 93 KB photo C table in the actual target app")
 assert "rec_overdub" in ui and "rec_overdub 1" in (root / "fm1/native/host_smoke.txt").read_text()
