@@ -253,6 +253,8 @@ jobs:
               fm1-dist/MIYAKO_PHOTO_RESOURCE_RESTORED.png \
               fm1-dist/MIYAKO_PHOTO_RESOURCE.png
             test -s fm1-dist/MIYAKO_FX_DUAL.png
+            test -s fm1-dist/MIYAKO_OSC_SILENCE.png
+            test -s fm1-dist/MIYAKO_OSC_LIVE_SINE.png
             test -s fm1-dist/MIYAKO_FX_DREAMY_LARGE.png
             test -s fm1-dist/MIYAKO_FX_EUREKA_LARGE.png
             test -s fm1-dist/MIYAKO_RECORDER.png

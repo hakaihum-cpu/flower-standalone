@@ -249,6 +249,14 @@ assert "MIYAKO FM-1 / NATIVE PREVIEW" not in ui
 # FM-1 OSC page displays OSC1 or OSC2, never the obsolete OSC1-only
 # expression that caused a source-contract false failure before host tests.
 assert "mi_wave_name(show_wave)" in ui
+assert "audio.osc_scope[idx]" in ui
+assert "osc_scope_last_active=active;" in ui
+assert "float p=(float)(i%112u)/112.f;" not in ui
+assert "osc_capture+=main" in audio and "osc_capture+=second" in audio
+assert "++a->osc_scope_head;" in audio
+assert "a->osc_scope_active=scope_audible;" in audio
+assert "MIYAKO_OSC_LIVE_SINE.png" in ci
+assert "expect osc_scope_active 1" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "state.osc_page" in ui and "state.osc2_wave" in ui
 # HOME MULTI uses an actual selected OSC1/OSC2 waveform.
 assert "mi_wave_name(state.view==MI_OSC?" in ui

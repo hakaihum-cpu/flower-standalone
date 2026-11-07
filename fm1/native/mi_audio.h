@@ -9,6 +9,7 @@
 #include "mi_recorder.h"
 #define MI_NATIVE_POLY 8
 #define MI_NATIVE_RING 4096
+#define MI_OSC_SCOPE_SAMPLES 1024u /* 1KiB oscilloscope audio ring */
 typedef struct {
     uint8_t note, active, held, vel, env_stage;
     float phase, phase2, subphase, increment, env, release_step;
@@ -33,6 +34,11 @@ typedef struct {
     volatile uint8_t rec_command;
     float sample_rate, wow, flutter, wet_current,wet_current2;
     float rec_monitor_mix; /* existing wet-smoothing approach for REC monitor */
+    /* Audio writer/UI reader: actual pre-FX voice output, never UI sine. */
+    int8_t osc_scope[MI_OSC_SCOPE_SAMPLES];
+    volatile uint32_t osc_scope_head;
+    volatile uint8_t osc_scope_active;
+    uint8_t osc_scope_selected, osc_scope_stride;
 } mi_audio_t;
 void mi_audio_init(mi_audio_t *a, float sample_rate);
 void mi_audio_note_on(mi_audio_t *a, uint8_t note, uint8_t velocity);

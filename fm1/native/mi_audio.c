@@ -309,6 +309,7 @@ void mi_audio_rec_request(mi_audio_t *a,unsigned command)
 void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,uint32_t master_q12)
 {
     uint32_t i,k;
+    uint8_t scope_selected,scope_audible=0u;
     float attack_step,decay_step,release_samples,sustain,lfo_speed;
     if(!a||!s||!lr)return;
     float scale=clampf(master_q12/4096.f,0.f,1.f)*clampf(s->level/127.f,0.f,1.f)*5000000.f;
@@ -330,6 +331,26 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     case 4u:osc2_ratio*=4.f;break;
     default:break;
     }
+    /* Select the oscillator currently being edited. */
+    scope_selected=(uint8_t)(s->wave==MI_WAVE_MULTI&&s->osc_page!=0u);
+    if(a->osc_scope_selected!=scope_selected){
+        mi_memzero(a->osc_scope,sizeof a->osc_scope);
+        a->osc_scope_selected=scope_selected;
+    }
+    {
+        float inc=0.f;
+        for(k=0;k<MI_NATIVE_POLY;k++)if(a->v[k].active){
+            inc=a->v[k].increment;
+            break;
+        }
+        if(scope_selected)inc*=osc2_ratio;
+        if(inc>0.f){
+            unsigned step=(unsigned)(2.f/(224.f*inc));
+            if(step<1u)step=1u;
+            if(step>4u)step=4u;
+            a->osc_scope_stride=(uint8_t)step;
+        }else a->osc_scope_stride=1u;
+    }
     float duty=0.05f+0.9f*(s->width/127.f);
     float atk=(float)s->env[0]/127.f,dec=(float)s->env[1]/127.f;
     float rel=(float)s->env[3]/127.f;
@@ -348,7 +369,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         if(cmd==3u)mi_rec_clear(&a->recorder);
     }
     for(i=0;i<n;i++){
-        float sample=0.f,lfo,mod,voice_duty=duty;
+        float sample=0.f,osc_capture=0.f,lfo,mod,voice_duty=duty;
         arp_tick(a,s);
         a->lfo_phase=wrap01(a->lfo_phase+lfo_speed);
         lfo=lfo_value(s->lfo[1],a->lfo_phase);
@@ -383,7 +404,11 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                 if(osc2_mix>0.f){
                     float second=osc(wave2,v->phase2,voice_duty);
                     value=base*(1.f-osc2_mix)+second*osc2_mix;
+                    if(scope_selected)osc_capture+=second*osc2_mix*
+                        v->env*(v->vel/127.f)*0.18f;
                 }
+                if(!scope_selected)osc_capture+=main*(1.f-osc2_mix)*
+                    v->env*(v->vel/127.f)*0.18f;
                 if(s->crush){
                     int bits=16-(int)(s->crush*13u/127u);
                     float levels=(float)(1u<<bits);
@@ -402,6 +427,12 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                 }
             }
         }
+        /* Display-only snapshot of REAL generated oscillator PCM. */
+        a->osc_scope[a->osc_scope_head&(MI_OSC_SCOPE_SAMPLES-1u)]=
+            (int8_t)(clampf(osc_capture*4.f,-1.f,1.f)*127.f);
+        ++a->osc_scope_head;
+        if(osc_capture>0.0003f||osc_capture< -0.0003f)
+            scope_audible=1u;
         sample=mi_soft_limit(sample);
         sample=effect(a,s,sample);
         /* Existing FX wet-smoothing principle: crossfade the recorder monitor
@@ -419,4 +450,5 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
             lr[2u*i]=out;lr[2u*i+1u]=out;
         }
     }
+    a->osc_scope_active=scope_audible;
 }

@@ -38,6 +38,7 @@ static mi_state_t state;
 static mi_audio_t audio;
 static mi_video_t video;
 static volatile float audio_activity;
+static uint8_t osc_scope_last_active;
 static uint32_t last_keys,last_buttons,rec_pressed_at;
 static uint8_t rec_long_done;
 static uint8_t backup_hold;
@@ -106,6 +107,7 @@ void app_init(void)
  state.playing=state.recording=0;
  state.view=MI_HOME;
  state.osc_page=0u;
+ osc_scope_last_active=0u;
  last_keys=last_buttons=rec_pressed_at=0u;rec_long_done=0u;
  visual_choice=0u;visual_last_mode=255u;visual_cooldown=0u;
  visual_rng=0x6d697961u;visual_generation=0u;
@@ -897,15 +899,20 @@ static void draw(void)
         cv_text(12,35,&FONT_XS,
                 state.view==MI_HOME&&state.wave==MI_WAVE_MULTI?
                 "MULTI":mi_wave_name(show_wave),GREY);
-        for(i=0;i<224;i++){
-            float p=(float)(i%112u)/112.f;
-            float value=show_wave==0?(p<0.5f?4.f*p*(1.f-2.f*p):-(4.f*(p-0.5f)*(2.f-2.f*p))):
-                show_wave==1?(2.f*p-1.f):
-                show_wave==2?(p<0.5f?1.f:-1.f):
-                (p<0.05f+0.9f*state.width/127.f?1.f:-1.f);
-            int32_t y=76-(int32_t)(value*26.f);
-            if(i)cv_line((int32_t)(i+7u),prior,(int32_t)(i+8u),y,YELLOW);
-            prior=y;
+        /* Live pre-FX OSC audio waveform (SINE/SAW/SQUARE/PULSE). */
+        {
+            uint32_t head=audio.osc_scope_head;
+            unsigned stride=audio.osc_scope_stride;
+            if(stride<1u||stride>4u)stride=1u;
+            cv_line(8,76,232,76,DIM);
+            for(i=0;i<224u;i++){
+                uint32_t idx=(head-1u-(223u-i)*stride)&
+                             (MI_OSC_SCOPE_SAMPLES-1u);
+                int32_t y=76-(int32_t)audio.osc_scope[idx]*24/127;
+                if(i)cv_line((int32_t)i+7,prior,
+                             (int32_t)i+8,y,YELLOW);
+                prior=y;
+            }
         }
     }else if(state.view==MI_FX){
         unsigned mode=state.fx_slot?state.fx2:state.fx;
@@ -988,6 +995,11 @@ void app_frame(void)
          redraw=1;
      if(state.view==MI_SEQ && (audio.recorder.recording||audio.recorder.playing))
          redraw=1;
+     if(state.view==MI_OSC||state.view==MI_HOME){
+         uint8_t active=audio.osc_scope_active;
+         if(active||osc_scope_last_active)redraw=1;
+         osc_scope_last_active=active;
+     }else osc_scope_last_active=0u;
  }
   state.recording=audio.recorder.recording;
   state.playing=audio.recorder.playing;
@@ -1007,6 +1019,7 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"osc_page")) *got=(int)state.osc_page;
  else if(mi_streq(what,"osc1_wave")) *got=(int)state.osc1_wave;
  else if(mi_streq(what,"osc2_wave")) *got=(int)state.osc2_wave;
+ else if(mi_streq(what,"osc_scope_active")) *got=(int)audio.osc_scope_active;
  else if(mi_streq(what,"octave")) *got=(int)state.octave;
  else if(mi_streq(what,"arp_mode")) *got=(int)state.arp[0];
  else if(mi_streq(what,"arp_note")) *got=(int)audio.arp_note;

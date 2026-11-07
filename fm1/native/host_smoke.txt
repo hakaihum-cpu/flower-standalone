@@ -4,6 +4,17 @@ master 4096
 expect view 0
 expect wave 0
 shot MIYAKO_HOME.png
+tap EDIT
+expect view 1
+expect osc_scope_active 0
+shot MIYAKO_OSC_SILENCE.png
+midi USB 90 45 7F
+wait 100
+expect osc_scope_active 1
+shot MIYAKO_OSC_LIVE_SINE.png
+midi USB 80 45 00
+tap HOME
+expect view 0
 expect fx 0
 key 25 down 120
 wait 200

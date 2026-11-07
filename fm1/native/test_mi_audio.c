@@ -113,6 +113,26 @@ int main(void)
  mi_audio_rec_request(&a,2u);
  mi_audio_render(&a,&s,lr,256,4096);
  assert(a.recorder.playing);
+ /* Test captured PCM, silence, and selected MULTI OSC2. */
+ {
+   unsigned nonzero=0u;
+   mi_init(&s);mi_audio_init(&a,44100.f);
+   s.wave=0u;s.env[0]=0u;s.env[1]=0u;s.env[2]=127u;
+   mi_audio_render(&a,&s,lr,256,4096);
+   assert(!a.osc_scope_active&&a.osc_scope_head==256u);
+   mi_audio_note_on(&a,69,127);
+   for(i=0;i<8u;i++)mi_audio_render(&a,&s,lr,256,4096);
+   assert(a.osc_scope_active&&a.osc_scope_head==9u*256u);
+   for(i=0;i<MI_OSC_SCOPE_SAMPLES;i++)if(a.osc_scope[i])++nonzero;
+   assert(nonzero>150u);
+   s.wave=MI_WAVE_MULTI;s.osc1_wave=0u;s.osc2_wave=2u;
+   s.osc_page=1u;s.osc2_level=127u;
+   mi_audio_render(&a,&s,lr,256,4096);
+   assert(a.osc_scope_selected==1u&&a.osc_scope_active);
+   mi_audio_panic(&a);
+   mi_audio_render(&a,&s,lr,256,4096);
+   assert(!a.osc_scope_active);
+ }
  /* OSC2 changes actual PCM while preserving the selected polyphony. */
  {
    int32_t first_old,first_new;
