@@ -183,7 +183,11 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
         if(ph1>=1.f)ph1-=1.f;
         for(i=0;i<2u;i++){
             float phase=i==0u?ph0:ph1;
-            float offset=base+(phase-0.5f)*grain_samples*sweep;
+            /* SPREAD offsets the two overlapping heads in opposite
+             * directions, creating audible texture even at neutral pitch. */
+            float spread=grain_samples*(0.01f+0.09f*density/127.f);
+            float offset=base+(phase-0.5f)*grain_samples*sweep+
+                         (i==0u?-spread:spread);
             unsigned at,delay;
             float fract,a,b,weight;
             if(offset<2.f)offset=2.f;
