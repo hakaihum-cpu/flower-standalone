@@ -11,7 +11,7 @@
 #define MI_NATIVE_RING 4096
 typedef struct {
     uint8_t note, active, held, vel, env_stage;
-    float phase, subphase, increment, env, release_step;
+    float phase, phase2, subphase, increment, env, release_step;
     uint32_t age;
 } mi_voice_t;
 typedef struct {
