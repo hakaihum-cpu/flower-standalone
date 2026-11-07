@@ -12,7 +12,7 @@
 #include "mi_control.h"
 #include "mi_audio.h"
 #include "mi_video.h"
-#include "mi_tile_atlas.h"
+#include "mi_resource_media.h"
 #include "mi_dreamy_dot_portrait.h"
 #include "mi_effects_vq_frames.h" /* 144 source frames */
 #include "mi_eureka_vq_frames.h" /* 576 source frames */
@@ -401,19 +401,35 @@ static unsigned mi_visual_step(float activity)
  * performer actually switches frame, so animation cannot cause redundant
  * full-frame decompression in both LCD halves. */
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
-static const uint16_t *mi_photo_palette;
+static uint16_t mi_photo_palette[16];
 static int16_t mi_photo_cached=-1;
 static void mi_photo_decode(unsigned frame)
 {
-    unsigned clip,ty,tx,row,col;
+    uint32_t length=0u;
+    const uint8_t *res;
+    unsigned clip,ty,tx,row,col,i;
     if(frame>=MI_TILE_COUNT||mi_photo_cached==(int16_t)frame)return;
+    /* Standard fm1-base CRC-checked resource area; NEVER access it on the
+     * audio callback. Without the separate resource install, no fake frames. */
+    res=plat_res(&length);
+    if(!res||length<MI_TILE_DATA_BYTES){
+        mi_photo_cached=-1;
+        return;
+    }
     clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
     if(clip>=MI_TILE_VQ_CLIPS)return;
-    mi_photo_palette=mi_photo_vq_palette[clip];
+    for(i=0u;i<16u;i++){
+        unsigned off=MI_TILE_VQ_PALETTE_OFFSET+clip*32u+i*2u;
+        mi_photo_palette[i]=(uint16_t)((uint16_t)res[off]|
+                                      ((uint16_t)res[off+1u]<<8));
+    }
     for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
         for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
-            unsigned id=mi_photo_vq_maps[frame][ty*MI_TILE_VQ_COLS+tx];
-            const uint8_t *tile=mi_photo_vq_tilebook[clip][id];
+            unsigned id=res[MI_TILE_VQ_MAP_OFFSET+
+                            frame*MI_TILE_VQ_MAP_STRIDE+
+                            ty*MI_TILE_VQ_COLS+tx];
+            const uint8_t *tile=res+MI_TILE_VQ_BOOK_OFFSET+
+                                clip*4096u+id*16u;
             for(row=0u;row<4u;row++)
                 for(col=0u;col<4u;col++){
                     unsigned at=(ty*4u+row)*(MI_TILE_SIDE/2u)+tx*4u+col;
@@ -604,6 +620,7 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
     unsigned sy;
     if(visual_tile>=MI_TILE_COUNT)return;
     mi_photo_decode((unsigned)visual_tile);
+    if(mi_photo_cached!=(int16_t)visual_tile)return;
     for(sy=0u;sy<MI_TILE_SIDE;sy++){
         int32_t top=py+(int32_t)(sy*(unsigned)size/MI_TILE_SIDE)-shift;
         int32_t bottom=py+(int32_t)((sy+1u)*(unsigned)size/MI_TILE_SIDE)-shift;
