@@ -1,86 +1,44 @@
-# MIYAKO全アニメーションの元素材・FM-1移植進捗
+# MIYAKO → FM-1 通常SELアニメーション・素材台帳
 
-更新日2026-11-07。元のMIYAKOリポジトリ
-`hakaihum-cpu/Vstplugin@feature/miyako-ep-sampler-16part-20261030`。
-FM-1版 `hakaihum-cpu/flower-standalone@feature/fm1-miyako-recorder-eureka-fx-20261107`。
+更新: 2026-11-07。現行の仕様①〜⑧は `PHASE4_REQUIREMENTS_AND_GATES_20261107.md` のみを基準とする。本書は画像素材の所在・範囲の記録で、新しい仕様を定義しない。
 
-**⑦の確定定義：収録したアニメーションは通常SEL画面で使用する。**
-FXプレビューは同じ画像の副次的な使用先であり、FXがOFFでも通常SELに
-戻れる。通常SELのSELECTで**10バンク**を手動固定できる。
+## 通常SELにソース実装済み（実機は未確認）
 
-## ソース実装済み（実機未確認）
+| 内容 | 収録／取り扱い |
+| --- | --- |
+| ユーザー提供6シート | **488コマ**（81+64+100+81+81+81）。このうち、今回改めて添付された**白黒人物3シート**は既に収録済み。重複収録しない |
+| 今回添付された黄系シート2枚 | **各10列×7行、70コマずつ、計140コマ**。画像の黒い枠線を検出して切り出した。元画像は今回ユーザーが添付した2枚のみ |
+| 写真・イラストの統合 | **全628コマ、8シート**。48×48、16色RGB565、8×4タイル・256コードブックの従来EFFECTS VQ。元488コマは変更せず、140コマを追加。通常SEL AUTOとSELECTで使用 |
+| EFFECTS | 元の144フレーム、ソース実装済み |
+| EUREKA | 元の16×36=576フレーム、音に連動するクリップ再生をソース実装済み |
+| DREAMY DOT | 元 `MiyakoPixelMotion.h` の60×46ドット原画と手続き描画をソース実装済み |
+| TAPE DOT | 元 `MiyakoPixelMotion.h` のリール／スポーク手続き描画をソース実装済み |
 
-- **488枚**（6枚のユーザー提供シート: 81+64+100+81+81+81）。
-  各48×48正方形、16色RGB565・8×4タイル256コードブックVQ。
-  元のEFFECTSと同一のパレット・タイルブック・フレームマップ配列方式。
-  映像データは92,928 bytes。古い32×32・1bit形式は使わない。
-  元画像からの生成は非可逆だが、元の488箇所を省略していない。
-- **EFFECTS**: 元の144フレーム、収録済み（62,592 bytes）。
-- **TAPE DOT**：元の `Source/MiyakoPixelMotion.h` の `Scene::Tape` にある
-  65×65 DOT格子、2つのリール、60点の円、3本の回転スポーク、カセットレール。
-  同じ24Hz DOT時計と既存LCD描画を使用。追加の画像アセットなし。
-- **DREAMY DOT**：元の `Source/MiyakoPixelMotion.h` の
-  `initPortrait()` 原画60×46ドット・2ビット（デコード690 bytes）、
-  `Scene::Dreamy` の涙・粒子ストリーム、24Hzタイマー進行を通常SELに実装。
-  原画Base64（920文字）は元ソースと**完全一致**。
-  これは `Resources/flower_embedded_atlas.png` の人物アニメーションと
-  **異なり**、後者はまだ未移植。
-- **EUREKA**: 元の16クリップ×36フレーム = 576枚（250,368 bytes）。
-  元の `VisualizerComponent::setAudioActivity` の音量変化に連動する
-  同一クリップ内進行、必要時のみクリップ切替、無音・一定音量で静止
-  する方式を移植し、GitHubとbyte-for-byte一致したCソースを使った
-  GCC/Clang ASan/UBSanテストに合格。
-- 6タイル群、EFFECTS、EUREKA、DREAMY DOT、TAPE DOTは**通常SELのAUTO再生対象**。
-  SELECTで10バンクを切替可能。FXプレビュー専用ではない。
+これらは**通常SELの計12バンク**。元のEFFECTS/EUREKA等の映像番号は保持し、今回の2シートを新規の画像群として追加。FX専用の追加ではない。**FM-1実機表示・動作は未検証**。
 
-## 未移植
+## 今回の指示で移植を取りやめたもの
 
-下表のTOP／SCENES／CRUSH／SAMPLER／TWILIGHT／KNOWING／CLOUDS DOT／
-元のDREAMYの別画像アトラス／EP動画は、元のGitHub上で存在を確認しているだけで、
-現行FM-1の実行イメージには**収録されていない**。未収録素材に対して
-再生可能とする空のメニューや仮データを作らない。
+- **CLOUDS DOT**：移植しない（元 `Android/clouds_dot_frames.b64`）。
+- **KNOWING**：移植しない（元 `Android/knowing_frames.b64`）。
+- この2つに代わり、今回添付された**5枚すべて**を使用する。既存収録の白黒3枚を保持し、黄系2枚を追加。非公開リポジトリの素材取得用CI認証はこの対応には必要ない。
 
-## Original image and animation categories
+## 今回の作業対象外・未移植の元MIYAKO素材
 
-| Source bank | Primary original source | Original content / behavior | FM-1 today |
-| --- | --- | --- | --- |
-| TOP/PREVIEW | `Android/resources.b64` Resources/frames; `Source/VisualizerComponent.*` | 56-frame lazy-loaded preview set; fallback 7x8 spritesheet | Absent as a separate bank |
-| Six SCENES | `Android/resources.b64` Resources/scenes/{window,tears,ground,corridor,mind,nobody} | Six distinct scene image banks | Absent |
-| CRUSH | `Android/resources.b64` Resources/crush | Separate crush images and interval playback | Absent |
-| SAMPLER | `Android/resources.b64` Resources/sampler | Sampler playhead/region responsive images | Absent |
-| TWILIGHT | `Android/resources.b64` Resources/sampler_twilight | Base, double, shadow, face, home, park, rooftop, far, gap, overlook, absence image sets; activity/scene state | Absent |
-| EFFECTS | `Resources/effects_video_chunks`, `Source/VisualizerComponent.cpp` | 144 original images, onset-reactive random frames | **通常SELに収録済み** 144-frame 16-colour VQ |
-| EUREKA | `Resources/eureka_*_frame_chunks`, `Source/VisualizerComponent.cpp` | 16 clips x 36 = 576 original frames, audio-triggered, not free-running | **通常SELに収録済み** 576-frame 16-colour VQ、元のクリップ進行を移植 |
-| KNOWING | `Android/knowing_frames.b64`, `Source/KnowingVisualMotion.h` | 140 supplied JPGs composed with displaced tiles/eyes/hair as a performance-dependent effect | Absent |
-| CLOUDS DOT | `Android/clouds_dot_frames.b64`, `Source/MiyakoDigitaktPage.h` | Dedicated DOT image sequence | Absent |
-| DREAMY visual（ensemble） | `Resources/flower_embedded_atlas.png`, `Source/PluginEditor.cpp` FlowerAnimationComponent | Procedural character/ensemble motion from provided atlas | **未移植**。ただし `MiyakoPixelMotion.h` の別系統 DREAMY DOT 原画＋涙の手続き的アニメーションは通常SELに移植済み |
-| EP-SAMPLER videos | `AndroidAssets/EP/*.mp4`, `Source/MiyakoEpVideoReader.h` | At least drums, pianica/accordion, saxophone, wood bass, xylophone background clips | Absent |
-| DOT/VFX procedural | `Source/MiyakoPixelMotion.h`, `Source/VisualizerComponent.cpp` | Yellow DOT, performance reactive glitch, tiles, noise, jitter, scanline, RGB shift, pixelation, ghost, flicker, zoom, etc. | Absent |
-| KNOWING-related eye / graphics | `Source/KnowingVisualMotion.h`, `Source/EyeKnobAtlas.h` | Procedural overlays using provided image/atlas, no synthetic source replacement | Absent |
+TWILIGHT、TOP/SCENES、CRUSH、SAMPLER、DREAMYの別画像アトラス、EP動画など。これらを移植済みと表現しない。依頼がないのに新しい操作モード・圧縮方式を追加しない。
 
-## Confirmed resource scale and boundaries
+## 現行リソース容量と一致検証
 
-- FM-1 installable application slot: **581,564 B** (`fm1-base/tools/fm1pkg_make.py` APP_SLOT = `0x8DFBC`).
-- Existing 144 EFFECTS VQ images: **62,592 B** media.
-- Existing 576 EUREKA VQ images: **250,368 B** media.
-- 現在の収録済み映像合計（元EFFECTS + EUREKA + ユーザー提供488枚）: **405,888 B**。残り **175,676 B** にアプリコード・フォント等が必要。元MIYAKOの全素材が収まると判断したわけではない。
-- Original Android embedded resources: 49 x 600,000 plus 344,144 characters in `Android/resources.b64` (~22.3 MB decoded bytes, before any recoding); source must be reconstructed and classified before claims about each bank.
-- Original `Android/knowing_frames.b64`: 1,677,036 encoded characters (~1.26 MB decoded bytes).
-- Original `Android/clouds_dot_frames.b64`: 2,479,688 encoded characters (~1.86 MB decoded bytes).
-- EP MP4s are additional assets. Embedded frames / original zip sources are not equivalent to a ready-to-link FM-1 16-colour image bank.
+| 内容 | サイズ |
+| --- | ---: |
+| 既存488タイルのVQ | 92,928 B |
+| 新規140タイルのVQ | 26,592 B |
+| `miyako_media.bin` | **119,520 B** |
+| `fm1-base`標準の32Bヘッダー込み `-res.bin` | **119,552 B** |
+| 使用許可済みリソース領域 | 69×4096 = 282,624 B |
 
-## Mandatory porting rules
+- 元データSHA256: `429f2aa8f561079481c3b60562ef3f88e2f5abd044a446eca1b1ebe1c6bc11ee`
+- 追加データSHA256: `7cf48b59c60028829c0d7db6f49a2e52750d3d49b7da33943cba2599d18344ca`
+- 新規2シートの枠線座標、70+70タイル数、既存VQの4パレット／4辞書／140×72マップの長さ・ハッシュを確認。生成した140コマの復号画像を目視確認。
+- CircleCIを使わずローカルGCCで追加のVQソースヘッダーを構文検査。フルFM-1ソースのJieLiリンク、FWSC、実機音声/UIはまだ検証していない。
 
-1. **Do not claim all animation banks are integrated** until every original bank is present, selectable, correctly sequenced and physically validated. A registry/menu stub is not integration.
-2. Preserve source images from the original MIYAKO repository. Do not use generated or substituted frames or silently drop frames/clips. DREAMY DOTは原画690 bytesを保全し元の動きを移植済み。大きな別アトラスは未移植。
-3. Aspect ratios: 488枚の正方形原画像は48×48として正方形のまま表示。元のEFFECTS/EUREKAは128×78で、それぞれ元の縦横比を保持。
-4. **One shared selector** shall allow explicit bank selection independent of audio FX: SELECT/knob navigation for bank, SEL to show media; a sound FX selection must not silently replace the user's visual bank.
-5. Allow separate *AUTO* routing keyed to FX/instrument for live performance, plus a manual fixed-bank override. DREAMY's procedural ensemble is distinct from EUREKA's 576 source frames.
-6. Port original motion semantics (time/onset-driven/random/current-frame/tile events), not only the still images.
-7. Implement VFX as shader-equivalent **native pixel/tile operations on the provided images**, not AI-generated replacements. Performance-reactive randomness must stop on silence when its source mode requires it.
-8. Source-only/host simulation does not establish target link feasibility. Prove app image byte counts, free flash partitions and safe data-access semantics before changing any FM-1 flash layout or installation packaging.
-9. No new build tools or CircleCI runs without permission. Do not modify main. Preserve known-good branch baseline.
-
-## Blocking gap
-
-**All-bank standalone playback is not yet demonstrated on FM-1.** The original asset bank size is much greater than the current firmware app slot. Retaining every source frame at the original fidelity cannot be promised from current evidence. A safe, capacity-checked storage strategy is required, not a fake success badge or hidden frame omission.
+関連実装: `mi_new_two_sheets_vq.h`、`mi_resource_media.h`、`app.c`、`tools/pack_miyako_resource.py`、`.circleci/config.yml`。
