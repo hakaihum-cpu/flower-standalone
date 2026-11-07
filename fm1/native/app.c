@@ -1020,8 +1020,7 @@ void app_frame(void)
      else video.eureka_previous=0.f; /* original source disabled gate */
      if((mode==8u||mode==9u)&&(state.view==MI_VIDEO||state.view==MI_FX)){
          /* Original Dreamy DOT clock is 24 Hz; FM-1 redraw tick is 30 Hz. */
-         visual_dot_phase+=0.8f;
-         if(visual_dot_phase>10000.f)visual_dot_phase=0.f;
+         visual_dot_phase+=0.8f; /* no non-source periodic restart */
          redraw=1;
      }
      if((state.view==MI_VIDEO||state.view==MI_FX) &&
