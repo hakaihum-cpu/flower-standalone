@@ -21,6 +21,11 @@ expect fx 1
 shot MIYAKO_FX.png
 tap SEL
 expect view 3
+# Standard fm1-base resource has to be present before the user-photo bank.
+expect media_ready 1
+turn SELECT 1
+shot MIYAKO_PHOTO_RESOURCE.png
+turn SELECT -1
 shot MIYAKO_EFFECTS_VIDEO.png
 expect fx 1
 tap ENV
