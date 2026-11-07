@@ -15,7 +15,7 @@ void mi_video_init(mi_video_t *v,uint16_t effect_count)
 {
     if(!v)return;
     mi_memzero(v,sizeof(*v));
-    v->effects_rng=0x7E670103u;
+    v->effects_rng=0x45464658u; /* MIYAKO original EFFECTS seed */
     v->eureka_rng=0x4555524bu;
     v->eureka_clip=-1; /* first source clip selected only on first tick */
     v->eureka_frame=-1;
