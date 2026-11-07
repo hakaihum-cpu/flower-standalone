@@ -65,6 +65,47 @@ checks are present in the source; target ABI has not been independently linked.
 of a stale-source assertion failure. No additional CircleCI test job or build
 was started.
 
+## 2026-11-07 most recent hardware feedback — ①〜⑧ (supersedes earlier task numbering)
+
+Source branch `feature/fm1-miyako-recorder-eureka-fx-20261107`. This is **not a release**;
+the fixes below are in committed source, not validated on the actual FM-1.
+No CircleCI/GitHub Actions build was triggered.
+
+| ID | Confirmed user requirement | Latest source code result | Acceptance / remaining hard gate |
+| --- | --- | --- | --- |
+| ① | Overall audio crackles/breaks up | Reduced unnecessary video CPU use: removed per-byte base64 decode and switched back to the **exact existing EFFECTS** compile-time RGB565 VQ palette/codebook/map arrays. This only addresses a potential video/UI load source. | **NOT FIXED/VERIFIED.** Need device XRUN/CPU/PCM comparison FX OFF, DREAMY, EUREKA, dual FX and simultaneous animation. No root cause established. |
+| ② | FX: eliminate PREVIEW/AUTO/EUREKA/VHS labels; maximize right picture | All captions/metadata removed from image region; 116×116 source-square photo preview at x123, y62, four controls left. No extra PRESETS text. | Target LCD render visual check pending. |
+| ③ | DREAMY/EUREKA PITCH/other physical params discoverable | FX K1 MODE selection of DREAMY/EUREKA automatically opens PITCH/REVERSE/SPREAD-or-GRAIN/FEEDBACK page; PRESETS encoder toggles MODE/WET/original controls. Real values route to DSP. | Host unit tests updated; source-accurate original effect audio not yet proved. |
+| ④ | People visible; reuse same encoder as normal EFFECTS, no monochrome blob | All 488 user frames now 48×48 16-colour **existing 8×4/256-dictionary RGB565 VQ**; source generated from supplied contact sheets, stored as direct C palettes/codebooks/maps. Old 32×32 1-bit fallback removed. | Packed source SHA-256 `429f2aa8f561079481c3b60562ef3f88e2f5abd044a446eca1b1ebe1c6bc11ee`. Separate C preflight compiled GCC ASan+UBSan; 488 frame-map indexes/packed pixels PASS. Hardware appearance unverified. |
+| ⑤ | FX OFF + SEL returns to normal animation, no irreversible lock | FX OFF has priority over fixed FX photo selection; pressing SEL resets visual override and enters the regular feed. | Hardware button sequence pending. |
+| ⑥ | HOME WAVE includes MULTI; MODE selects OSC1/OSC2, WET replaced by DETUNE | WAVE=4 MULTI; HOME K2 MODE changes active edit oscillator, K3 modifies DETUNE; EDIT page switches oscillator waveform/level/octave. OSC2 is audio-enabled **only** when MULTI selected. MI14 saved-state migration supports MI13. | Actual two-voice detuned sound / CPU / old-save cross-version behavior unverified. |
+| ⑦ | **Integrated animation in NORMAL SEL playback**, not FX-only | SEL AUTO rotates all currently integrated sources: 6 user-supplied contact-sheet banks + original EFFECTS + EUREKA, on note attacks. FX preview independent. | **Partial.** Prior MIYAKO TWILIGHT, KNOWING, CLOUDS-DOT, other Android/EP-sampler banks have not been stored. No claim of complete all-source MIYAKO integration. |
+| ⑧ | REC is **OVERDUB** (layering), not overwrite. Long REC=clear | REC on nonempty clip retains PCM and additively layers live post-FX bus; monitor plays old PCM before the next sample write. Re-press stops take, preserved loop plays. Long REC ~700ms queues CLEAR on audio callback. Existing regression updated. | FM-1 loop boundary/click, multi-layer saturation and control latency still need physical verification. |
+
+### Flash budget before final target link
+
+EFFECTS 144 frames: 62,592 bytes; EUREKA 576: 250,368 bytes;
+user 488 frame VQ: 92,928 bytes. Total compressed media: **405,888 bytes**
+of 581,564-byte FM-1 application slot. Remaining **175,676 bytes** must hold
+program, other static data and packaging. This is an upper-bound accounting,
+not evidence of a successful JieLi link. It does not justify removing original
+images or writing a custom storage implementation without approval.
+
+### Independent prebuild evidence and limits
+
+- Existing PHOTO VQ representation was executed in an **isolated native C
+  preflight** under GCC `-Wall -Wextra -Werror -fsanitize=address,undefined`.
+  The packed payload SHA-256 matched the user tile source; 488 48×48 source
+  frames, each with 72 map entries and 1152 packed output bytes, decoded
+  within bounds. Array bytes FNV32 `df1d1580` matched decoded payload.
+- C/H source bracket/comment/string structural scan passed on 13 files;
+  static source references, selected FX controls, REC button dispatch,
+  save-state migration, and manual-only CircleCI configuration were checked.
+- No original repo complete native compilation / target JieLi
+  compilation/link / firmware packaging / real FM-1 audio, UI or performance
+  measurements in this turn. **Do not call any item fully tested** until
+  matching actual-source prebuild and a user-authorized build/physical test.
+
 ## One-to-one mapping of eight original requirements
 
 | ID | User requirement | Observed source status at baseline | Acceptance conditions |
