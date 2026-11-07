@@ -345,17 +345,22 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
         int32_t top=py+(int32_t)(sy*(unsigned)size/32u)-shift;
         int32_t bottom=py+(int32_t)((sy+1u)*(unsigned)size/32u)-shift;
         uint8_t line[4];
+        unsigned sample_row=sy;
         int32_t tear=0;
         unsigned bx,sx;
         if(bottom<=0||top>=120)continue;
         if(activity>0.025f&&((sy+visual_generation)%9u)==0u){
             tear=(int32_t)((visual_rng>>(sy%16u))&7u)-3;
         }
+        /* Displace whole 8x8 source blocks on strong attacks, VHS tile split.
+         * No extra image data and no mutations to the original source atlas. */
+        if(activity>0.15f && ((visual_rng>>(sy/8u*3u))&3u)==0u)
+            sample_row=(sy+8u)%32u;
         for(bx=0;bx<4u;bx++){
             unsigned map_pos=MI_TILE_CODE_BYTES+(unsigned)visual_tile*16u+
-                             (sy/8u)*4u+bx;
+                             (sample_row/8u)*4u+bx;
             uint8_t code=mi_atlas_byte(map_pos);
-            line[bx]=mi_atlas_byte((unsigned)code*8u+sy%8u);
+            line[bx]=mi_atlas_byte((unsigned)code*8u+sample_row%8u);
         }
         for(sx=0;sx<32u;){
             unsigned first=sx;
