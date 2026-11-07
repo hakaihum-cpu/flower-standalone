@@ -399,9 +399,14 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
     if (!s || k > 3) return 0;
     switch (s->view) {
     case MI_HOME:
-        if(s->wave==MI_WAVE_MULTI)
-            return k==0?MI_WAVE_MULTI:k==1?s->osc_page:
-                   k==2?(int32_t)s->osc2_detune-64:s->level;
+        if(s->wave==MI_WAVE_MULTI){
+            /* Return signed values explicitly: DETUNE may be negative and
+             * MI_WAVE_MULTI is an unsigned macro (4u). */
+            if(k==0u)return (int32_t)MI_WAVE_MULTI;
+            if(k==1u)return (int32_t)s->osc_page;
+            if(k==2u)return (int32_t)s->osc2_detune-64;
+            return (int32_t)s->level;
+        }
         return k==0?s->wave:k==1?s->fx:k==2?s->wet:s->level;
     case MI_OSC:
         if(s->osc_page)
