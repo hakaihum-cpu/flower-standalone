@@ -58,6 +58,24 @@ int main(void)
     assert(peak>0.02f);
     mi_fx_dsp_reset_shared(&p);
     assert(p.eureka_valid==0u && p.delay_valid==0u);
-    puts("PASS: EUREKA 2sec shared ring, DREAMY, DELAY, CHORUS, REVERB");
+    /* Real BITCRUSH: hold multiple output samples and reduce bit depth. */
+    mi_fx_dsp_init(&p);
+    {
+        float a=mi_fx_dsp_process(&p,MI_FX_BITCRUSH,0.6f,44100.f,0u,127u);
+        float b=mi_fx_dsp_process(&p,MI_FX_BITCRUSH,-0.6f,44100.f,0u,127u);
+        assert(a==b && a>0.f && a<0.6f);
+    }
+    /* Real +/-12-semitone grain shifter, reusing existing DREAMY RAM. */
+    mi_fx_dsp_reset_grain(&p);
+    peak=0.f;
+    for(i=0u;i<40000u;i++){
+        float dry=(i%149u)<50u?0.7f:-0.7f;
+        float out=mi_fx_dsp_process(&p,MI_FX_PITCHSHIFT,dry,
+                                    44100.f,96u,72u);
+        assert(out>=-1.f&&out<=1.f);
+        if(i>22000u && out>peak)peak=out;
+    }
+    assert(peak>0.01f);
+    puts("PASS: EUREKA shared ring, DREAMY, BITCRUSH, PITCHSHIFT, DELAY/CHORUS/REVERB");
     return 0;
 }
