@@ -398,6 +398,113 @@ static unsigned mi_visual_step(float activity)
 /* Source-space bitmaps remain square even if the original sheet was 720x720.
  * Nearest-neighbour expansion is deliberately rough: analog video/glitch.
  * Only visible rows of each 120-row LCD half are touched. */
+#if defined(MI_TILE_VQ_CLIPS)
+/* SAME 8x4, 256-code, 16-colour RGB565 VQ as existing EFFECTS.
+ * Decode the requested square photo into a 4bpp scratch buffer ONCE per
+ * frame; both LCD halves then reuse it. Do not decode base64 per LCD pixel. */
+static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
+static uint16_t mi_photo_palette[16];
+static int16_t mi_photo_cached=-1;
+static void mi_photo_decode(unsigned frame)
+{
+    unsigned clip,palbase,bookbase,mapbase,i,ty,tx,row,col;
+    if(frame>=MI_TILE_COUNT||mi_photo_cached==(int16_t)frame)return;
+    clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
+    palbase=clip*32u;
+    bookbase=MI_TILE_VQ_PALETTE_BYTES+clip*256u*16u;
+    mapbase=MI_TILE_VQ_PALETTE_BYTES+
+            MI_TILE_VQ_CODEBOOK_BYTES+frame*MI_TILE_VQ_MAP_STRIDE;
+    for(i=0u;i<16u;i++){
+        unsigned at=palbase+i*2u;
+        mi_photo_palette[i]=(uint16_t)(mi_atlas_byte(at)|
+                                     ((unsigned)mi_atlas_byte(at+1u)<<8));
+    }
+    for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
+        for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
+            unsigned id=mi_atlas_byte(mapbase+ty*MI_TILE_VQ_COLS+tx);
+            unsigned tile=bookbase+id*16u;
+            for(row=0u;row<4u;row++)
+                for(col=0u;col<4u;col++){
+                    unsigned at=(ty*4u+row)*(MI_TILE_SIDE/2u)+tx*4u+col;
+                    mi_photo_pixels[at]=mi_atlas_byte(tile+row*4u+col);
+                }
+        }
+    mi_photo_cached=(int16_t)frame;
+}
+static unsigned mi_photo_index(unsigned sy,unsigned sx)
+{
+    unsigned v=mi_photo_pixels[sy*(MI_TILE_SIDE/2u)+(sx>>1)];
+    return (sx&1u)?v&15u:v>>4;
+}
+static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
+                              int32_t size,float activity)
+{
+    const int32_t shift=(int32_t)half*120;
+    const unsigned fx=mi_visual_fx();
+    unsigned sy;
+    if(visual_tile>=MI_TILE_COUNT)return;
+    mi_photo_decode((unsigned)visual_tile);
+    for(sy=0u;sy<MI_TILE_SIDE;sy++){
+        int32_t top=py+(int32_t)(sy*(unsigned)size/MI_TILE_SIDE)-shift;
+        int32_t bottom=py+(int32_t)((sy+1u)*(unsigned)size/MI_TILE_SIDE)-shift;
+        unsigned sample_row=sy,sx=0u;
+        int32_t tear=0;
+        if(bottom<=0||top>=120)continue;
+        if(activity>0.025f&&((sy+visual_generation)%9u)==0u){
+            tear=(int32_t)((visual_rng>>(sy%16u))&7u)-3;
+            if(fx==MI_FX_CHORUS)tear+=(sy&1u)?2:-2;
+            if(fx==MI_FX_DELAY)tear+=((visual_generation>>1u)&1u)?3:0;
+            if(fx==MI_FX_REEL)tear+=(int32_t)((visual_rng>>(sy&15u))&3u);
+            if(fx==MI_FX_DREAMY)tear/=2;
+        }
+        if(activity>0.15f &&
+           ((visual_rng>>((sy/4u*3u)%24u))&3u)==0u &&
+           (fx==MI_FX_EUREKA||fx==MI_FX_DELAY||fx==MI_FX_REEL))
+            sample_row=(sy+4u)%MI_TILE_SIDE;
+        while(sx<MI_TILE_SIDE){
+            unsigned first=sx,idx=0u;
+            int32_t col=(int32_t)sx+tear;
+            if(col>=0&&col<(int32_t)MI_TILE_SIDE)
+                idx=mi_photo_index(sample_row,(unsigned)col);
+            ++sx;
+            while(sx<MI_TILE_SIDE){
+                unsigned next=0u;
+                col=(int32_t)sx+tear;
+                if(col>=0&&col<(int32_t)MI_TILE_SIDE)
+                    next=mi_photo_index(sample_row,(unsigned)col);
+                if(next!=idx)break;
+                ++sx;
+            }
+            if(idx){
+                int32_t x0=px+(int32_t)(first*(unsigned)size/MI_TILE_SIDE);
+                int32_t x1=px+(int32_t)(sx*(unsigned)size/MI_TILE_SIDE);
+                if(x1>x0)
+                    cv_rect(x0,top,x1-x0,bottom-top,mi_photo_palette[idx]);
+            }
+        }
+    }
+    /* Same event-driven native VFX overlay as the previous photo path.
+     * FX OFF shows the original supplied image without FX-specific noise. */
+    if(fx!=MI_FX_OFF&&activity>0.05f){
+        unsigned j,n=activity>0.25f?5u:2u;
+        if(fx==MI_FX_DREAMY)n=1u;
+        for(j=0u;j<n;j++){
+            unsigned q=(visual_rng>>(j*5u))^(visual_generation*127u+j*43u);
+            int32_t y=py+(int32_t)(q%(unsigned)size)-shift;
+            int32_t x=px+(int32_t)((q>>7u)%(unsigned)(size-19));
+            cv_rect(x,y,12+(int32_t)(q%8u),1,C_WHITE);
+        }
+        if(activity>0.28f){
+            unsigned k=(visual_generation*17u+visual_rng)%81u;
+            int32_t x=px+(int32_t)(k%9u)*(size/10);
+            int32_t y=py+(int32_t)(k/9u)*(size/10)-shift;
+            cv_rect(x,y,2,2,YELLOW);
+        }
+    }
+}
+#else
+/* Compatibility fallback until the already-created 16-colour PHOTO VQ
+ * header is committed: old 32x32 data remains loadable and compilable. */
 static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
                               int32_t size,float activity)
 {
@@ -475,6 +582,8 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
         }
     }
 }
+#endif
+
 /* Original 144 + 576 VQ frame banks remain available alongside photo tiles.
  * The original encoding is 128x78; its aspect is not distorted here. */
 static void mi_media_draw_scaled_half(unsigned half,int32_t px,int32_t py,
