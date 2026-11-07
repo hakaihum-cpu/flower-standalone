@@ -284,16 +284,23 @@ static uint8_t mi_atlas_byte(unsigned pos)
                 mi_atlas_sextet(mi_tile_atlas_base64[i+3u]);
     return (uint8_t)(v>>(16u-8u*(pos%3u)));
 }
+/* Display effect follows the actual active FX, independently of which
+ * picture bank was selected by the performer. */
+static unsigned mi_visual_fx(void)
+{
+    unsigned fx=state.fx_slot?state.fx2:state.fx;
+    if(fx==MI_FX_OFF)fx=state.fx!=MI_FX_OFF?state.fx:state.fx2;
+    return fx;
+}
 /* Physical SELECT cycles AUTO, six original sheets, EFFECTS, and EUREKA.
  * AUTO prioritises the selected audio FX but never changes any sound params. */
 static unsigned mi_visual_mode(void)
 {
-    unsigned fx=state.fx_slot?state.fx2:state.fx;
+    unsigned fx=mi_visual_fx();
     if(visual_choice>=1u&&visual_choice<=6u)return visual_choice-1u;
     if(visual_choice==7u)return 6u;
     if(visual_choice==8u)return 7u;
     if(state.fx==MI_FX_EUREKA||state.fx2==MI_FX_EUREKA)return 7u;
-    if(fx==MI_FX_OFF)fx=state.fx!=MI_FX_OFF?state.fx:state.fx2;
     switch(fx){
     case MI_FX_DREAMY:return 0u; /* pose sheet */
     case MI_FX_REEL:return 1u;   /* eye motion */
@@ -341,6 +348,7 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
                               int32_t size,float activity)
 {
     const int32_t shift=(int32_t)half*120;
+    const unsigned fx=mi_visual_fx();
     unsigned sy;
     for(sy=0;sy<32u;sy++){
         int32_t top=py+(int32_t)(sy*(unsigned)size/32u)-shift;
@@ -350,12 +358,21 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
         int32_t tear=0;
         unsigned bx,sx;
         if(bottom<=0||top>=120)continue;
+        /* Effects are transformations of user-owned pixels only.
+         * Delay = stagger, Chorus = double-tracking, Reel = jitter,
+         * Eureka = rhythmic large tearing, Dreamy = restrained motion. */
         if(activity>0.025f&&((sy+visual_generation)%9u)==0u){
             tear=(int32_t)((visual_rng>>(sy%16u))&7u)-3;
+            if(fx==MI_FX_CHORUS)tear+=sy&1u?2:-2;
+            if(fx==MI_FX_DELAY)tear+=((visual_generation>>1u)&1u)?3:0;
+            if(fx==MI_FX_REEL)tear+=((visual_rng>>(sy&15u))&3u);
+            if(fx==MI_FX_DREAMY)tear/=2;
         }
         /* Displace whole 8x8 source blocks on strong attacks, VHS tile split.
          * No extra image data and no mutations to the original source atlas. */
-        if(activity>0.15f && ((visual_rng>>(sy/8u*3u))&3u)==0u)
+        if(activity>0.15f &&
+           ((visual_rng>>(sy/8u*3u))&3u)==0u &&
+           (fx==MI_FX_EUREKA||fx==MI_FX_DELAY||fx==MI_FX_REEL))
             sample_row=(sy+8u)%32u;
         for(bx=0;bx<4u;bx++){
             unsigned map_pos=MI_TILE_CODE_BYTES+(unsigned)visual_tile*16u+
@@ -387,11 +404,14 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
      * with sound onset, so silence is genuinely frozen, not autonomous noise. */
     if(activity>0.05f){
         unsigned n=activity>0.25f?5u:2u,j;
+        if(fx==MI_FX_REEL)n+=2u;
+        if(fx==MI_FX_DREAMY)n=1u;
         for(j=0;j<n;j++){
             unsigned h=(visual_rng>>(j*5u))^(visual_generation*127u+j*43u);
             int32_t y=py+(int32_t)(h%(unsigned)size)-shift;
             int32_t x=px+(int32_t)((h>>7)%(unsigned)(size-19));
-            cv_rect(x,y,12+(int32_t)(h%8u),1,C_WHITE);
+            cv_rect(x,y,12+(int32_t)(h%8u),1,
+                    fx==MI_FX_REVERB?RGB(160,160,160):C_WHITE);
         }
         if(activity>0.28f){
             unsigned k=(visual_generation*17u+visual_rng)%81u;
