@@ -133,6 +133,26 @@ int main(void)
    mi_audio_render(&a,&s,lr,256,4096);
    assert(!a.osc_scope_active);
  }
+ /* FMDRUM is one-shot FM synthesis: consecutive 27 pads are different. */
+ {
+   unsigned pad;
+   float first_kick=0.f,second_kick=0.f,other=0.f;
+   mi_init(&s);mi_audio_init(&a,44100.f);
+   s.wave=MI_WAVE_FMDRUM;
+   for(pad=0u;pad<27u;pad++){
+     mi_audio_input_on(&a,&s,(uint8_t)(53u+pad),127u);
+     assert(a.drum_last_pad==pad);
+     assert(a.drums[pad%MI_NATIVE_POLY].base>=0.f);
+     mi_audio_render(&a,&s,lr,256,4096);
+     assert(a.osc_scope_active);
+     if(pad==0u)first_kick=a.drums[0].base;
+     if(pad==1u)other=a.drums[1].base;
+     if(pad==6u)second_kick=a.drums[6].base;
+   }
+   assert(first_kick!=other && first_kick!=second_kick);
+   mi_audio_panic(&a);
+   for(i=0u;i<MI_NATIVE_POLY;i++)assert(!a.drums[i].active);
+ }
  /* OSC2 changes actual PCM while preserving the selected polyphony. */
  {
    int32_t first_old,first_new;

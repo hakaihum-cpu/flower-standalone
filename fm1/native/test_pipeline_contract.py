@@ -263,7 +263,7 @@ assert "mi_wave_name(state.view==MI_OSC?" in ui
 assert "state.wave==MI_WAVE_MULTI" in ui
 assert "state.osc1_wave" in ui
 # HOME OSC mode is visible and separate from the selected MULTI waveform.
-assert "if(k==0){p=&s->wave;hi=MI_WAVE_MULTI;}" in controls
+assert "if(k==0){p=&s->wave;hi=MI_WAVE_FMDRUM;}" in controls
 assert "p=s->osc_page?&s->osc2_wave:&s->osc1_wave;" in controls
 assert 's->osc_page?"WAVE2":names[k]' in controls
 assert '"OSC","WIDTH","SUB","LEVEL"' in controls
@@ -286,6 +286,9 @@ assert "held_total" in audio and "release_samples" in audio
 assert "lfo_value" in audio
 assert "mode==MI_FX_DREAMY" in fxcode
 assert "mi_wave_name" in controls
+assert '"FMDRUM"' in controls
+assert 'MI_WAVE_FMDRUM' in audio and 'drum_trigger(a,note-53u,velocity)' in audio
+assert 'audio.drum_last_pad>=27u' in ui
 assert "case MI_VIDEO:" in controls
 # All non-REEL FX, including DREAMY, are routed through one generic
 # native DSP dispatcher. Do not regress to checking a non-existent per-mode

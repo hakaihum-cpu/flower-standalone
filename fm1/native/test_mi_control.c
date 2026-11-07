@@ -19,6 +19,7 @@ int main(void)
     assert(!strcmp(mi_wave_name(2),"SQUARE"));
     assert(!strcmp(mi_wave_name(3),"PULSE"));
     assert(!strcmp(mi_wave_name(MI_WAVE_MULTI),"MULTI"));
+    assert(!strcmp(mi_wave_name(MI_WAVE_FMDRUM),"FMDRUM"));
     assert(!strcmp(mi_arp_mode_name(4),"RND"));
     mi_button(&s, MI_B_EDIT, 0);
     mi_rotate(&s, MI_EN_K1, 3);
@@ -247,6 +248,17 @@ int main(void)
     s.osc1_wave=4u;
     assert(!mi_state_valid(&s));
 
+    /* FMDRUM is a distinct engine: 27 keys, six repeating timbre families. */
+    mi_init(&s);
+    mi_rotate(&s,MI_EN_K1,5);
+    assert(s.wave==MI_WAVE_FMDRUM && mi_state_valid(&s));
+    assert(!strcmp(mi_param_name(&s,0),"OSC"));
+    assert(!strcmp(mi_param_name(&s,1),""));
+    mi_button(&s,MI_B_EDIT,9307);
+    assert(s.view==MI_OSC && !strcmp(mi_param_name(&s,0),"OSC"));
+    mi_button(&s,MI_B_HOME,9308);
+    mi_rotate(&s,MI_EN_K1,-1);
+    assert(s.wave==MI_WAVE_MULTI);
     /* Validate real saved-state bounds: corrupted storage must never reach
      * UI lookup tables, oscillator routing or REC IN/OUT arithmetic. */
     mi_init(&s);
