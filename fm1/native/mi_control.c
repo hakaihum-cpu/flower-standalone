@@ -63,6 +63,15 @@ void mi_init(mi_state_t *s)
     s->fx_options[MI_FX_EUREKA][1] = 64;
     s->osc2_wave=0u;s->osc2_level=0u;s->osc2_detune=64u;
     s->osc2_octave=2u;s->osc_page=0u;
+    s->fx_extra[MI_FX_DREAMY][0]=64u;
+    s->fx_extra[MI_FX_DREAMY][1]=0u;
+    s->fx_extra[MI_FX_DREAMY][2]=64u;
+    s->fx_extra[MI_FX_DREAMY][3]=64u;
+    s->fx_extra[MI_FX_EUREKA][0]=64u;
+    s->fx_extra[MI_FX_EUREKA][1]=0u;
+    s->fx_extra[MI_FX_EUREKA][2]=64u;
+    s->fx_extra[MI_FX_EUREKA][3]=0u;
+    s->fx_page=0u;
     /* REC editor: IN=0, OUT=127, pitch=0 semitones, level=100. */
     s->seq[0]=0;s->seq[1]=127;s->seq[2]=3;s->seq[3]=100;
 }
@@ -81,8 +90,8 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
         else{s->osc_page=0u;view(s, MI_OSC);}
         break;
     case MI_B_FX:
-        if(s->view==MI_FX)s->fx_slot^=1u;
-        else{view(s,MI_FX);s->fx_slot=0;}
+        if(s->view==MI_FX){s->fx_slot^=1u;s->fx_page=0u;}
+        else{view(s,MI_FX);s->fx_slot=0;s->fx_page=0u;}
         break;
     case MI_B_SEL:
         /* Visualizer is a view, not an EUREKA sound selector.
@@ -145,6 +154,11 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         break;
     case MI_FX: {
         unsigned mode=s->fx_slot?s->fx2:s->fx;
+        if(s->fx_page && (mode==MI_FX_DREAMY||mode==MI_FX_EUREKA)){
+            p=&s->fx_extra[mode][k];
+            if(k==1)hi=127; /* REV: 0..63 off, 64..127 on. */
+            break;
+        }
         if(k==0){
             uint8_t candidate=(uint8_t)limited(mode,d,0,MI_FX_COUNT-1);
             unsigned one=s->fx_slot?s->fx:candidate;
@@ -209,6 +223,12 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
             s->wave=(uint8_t)limited(s->wave,steps>0?1:-1,0,3);
         break;
     case MI_EN_PRESETS: {
+        if(s->view==MI_FX){
+            unsigned mode=s->fx_slot?s->fx2:s->fx;
+            if(mode==MI_FX_DREAMY||mode==MI_FX_EUREKA)
+                s->fx_page^=1u; /* one physical detent => page change */
+            break;
+        }
         unsigned next = (unsigned)limited(s->preset, steps > 0 ? 1 : -1, 0, 5);
         if (next != s->preset) apply_preset(s, next);
         break;
@@ -259,16 +279,18 @@ int mi_state_valid(const mi_state_t *s)
         s->global[3] < 0 || s->global[3] > 2 ||
         s->osc2_wave>3u || s->osc2_level>127u ||
         s->osc2_detune>127u || s->osc2_octave>4u ||
-        s->osc_page>1u)
+        s->osc_page>1u || s->fx_page>1u)
         return 0;
     for (i = 0; i < 4u; ++i) {
         if (s->env[i] > 127u || s->lfo[i] > 127u)
             return 0;
     }
-    for (i = 0; i < MI_FX_COUNT; ++i)
+    for (i = 0; i < MI_FX_COUNT; ++i) {
         for (j = 0; j < 2u; ++j)
-            if (s->fx_options[i][j] > 127u)
-                return 0;
+            if (s->fx_options[i][j] > 127u)return 0;
+        for (j = 0; j < 4u; ++j)
+            if (s->fx_extra[i][j] > 127u)return 0;
+    }
     return 1;
 }
 
@@ -317,6 +339,12 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         static const char *const osc2_names[4]={"WAVE2","DETUNE","MIX2","OCT2"};
         return osc2_names[k];
     }
+    if (s->view == MI_FX && s->fx_page){
+        static const char *const more[4]={
+            "PITCH","REVERSE","DENSITY","FEEDBK"
+        };
+        return more[k];
+    }
     if (s->view == MI_FX && k >= 2) {
         unsigned fx=s->fx_slot?s->fx2:s->fx;
         if (fx == MI_FX_REEL) return k == 2 ? "WOW" : "FLTR";
@@ -345,6 +373,10 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
     case MI_VIDEO: return 0;
     case MI_FX: {
         unsigned fx=s->fx_slot?s->fx2:s->fx;
+        if(s->fx_page && (fx==MI_FX_DREAMY||fx==MI_FX_EUREKA))
+            return k==0?((int32_t)s->fx_extra[fx][0]-64)*12/63:
+                   k==1?(s->fx_extra[fx][1]>=64u?1:0):
+                   (int32_t)s->fx_extra[fx][k];
         return k==0?(int32_t)fx:k==1?(int32_t)(s->fx_slot?s->wet2:s->wet):
             (fx<MI_FX_COUNT?(int32_t)s->fx_options[fx][k-2]:0);
     }
