@@ -47,10 +47,15 @@ void mi_rec_configure(mi_recorder_t *r,unsigned bpm,unsigned bars,
     float step;
     if(!r)return;
     if(sample_rate<8000.f)sample_rate=44100.f;
-    if(bpm<40u)bpm=40u;if(bpm>240u)bpm=240u;
+    if(bpm<40u)bpm=40u;
+    if(bpm>240u)bpm=240u;
     if(r->clock_active && (uint32_t)(sample_clock-r->clock_last_sample)>
        (uint32_t)sample_rate){r->clock_active=0u;r->clock_period=0.f;}
-    r->bars=(uint8_t)(r->clock_active?2u:(bars==4u?4u:2u));
+    /* Do not change recorded duration mid-take because a UI parameter moved.
+     * External clock takes precedence and is always exactly two bars. */
+    if(r->clock_active)r->bars=2u;
+    else if(!r->recording&&!r->playing&&!r->armed)
+        r->bars=(uint8_t)(bars==4u?4u:2u);
     /* 44,100 PCM points span 2 or 4 bars, even at 40 BPM.
      * 4 bars therefore trades quality for duration, NOT extra RAM. */
     step=(float)MI_REC_CAPACITY*(float)bpm/
@@ -59,14 +64,21 @@ void mi_rec_configure(mi_recorder_t *r,unsigned bpm,unsigned bars,
         step=(float)MI_REC_CAPACITY/(192.f*r->clock_period);
     if(step>0.95f)step=0.95f;
     if(step<0.001f)step=0.001f;
-    if(!r->recording || !r->overdubbing)r->capture_step=step;
-    if(!r->playing && !r->recording && !r->armed)r->play_step=step;
+    if(!r->recording&&!r->playing ||
+       (r->recording&&!r->overdubbing))r->capture_step=step;
+    if(!r->playing&&!r->recording&&!r->armed)r->play_step=step;
+    /* Once locked to a MIDI master, playback can follow tempo drift
+     * without re-recording or adding storage. */
+    if(r->clock_active && r->clock_period>1.f &&
+       r->playing&&!r->recording&&r->count>=4u){
+        r->play_step=(float)r->count/(192.f*r->clock_period);
+    }
     /* Lost-clock fallback never leaves REC armed indefinitely. */
     if(r->armed&&!r->clock_active){
         r->armed=0u;r->recording=1u;r->write_pos=0u;
         r->capture_sum=0.f;r->capture_samples=0u;r->accumulator=0.f;
         if(r->count>=4u)r->overdubbing=1u;
-        else mi_rec_clear(r),r->recording=1u;
+        else{mi_rec_clear(r);r->recording=1u;}
     }
 }
 void mi_rec_external_tick(mi_recorder_t *r,uint32_t sample_clock)
@@ -189,7 +201,8 @@ float mi_rec_tick(mi_recorder_t *r,float input,const uint8_t controls[4])
                 if(r->overdubbing&&r->count>=4u)
                     v=clamp((float)clip[r->write_pos]*(1.f/32767.f)+v,-1.f,1.f);
                 amp=(int32_t)(v*110.f);
-                if(amp>110)amp=110;if(amp< -110)amp=-110;
+                if(amp>110)amp=110;
+                if(amp< -110)amp=-110;
                 if(amp<wave_min[column])wave_min[column]=(int8_t)amp;
                 if(amp>wave_max[column])wave_max[column]=(int8_t)amp;
                 clip[r->write_pos++]=(int16_t)(v*32767.f);
