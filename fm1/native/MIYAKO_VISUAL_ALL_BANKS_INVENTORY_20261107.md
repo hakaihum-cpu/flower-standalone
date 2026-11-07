@@ -6,6 +6,34 @@ Authoritative original MIYAKO:
 Port under development:
 `hakaihum-cpu/flower-standalone@feature/fm1-miyako-recorder-eureka-fx-20261107`.
 
+## 2026-11-07 implementation update: original user tile sheets
+
+- **Implemented in the FM-1 source, not target-linked or device-tested:** all 488
+  cells from six newly supplied **square** 1536x1536 contact sheets
+  (81 portrait poses, 64 eye tiles, 100 Shibuya tiles, 81 Shibuya tiles,
+  81 portrait tiles, 81 portrait tiles). No cell was deliberately skipped.
+- The generated `fm1/native/mi_tile_atlas.h` is a 32x32 **lossy**, 1-bit
+  8x8 VQ bank (256 8-byte dictionary entries + 488 x 16-byte index maps;
+  9856 decoded bytes, 13144 base64 bytes in XIP). Its checksum is
+  SHA-256 `27e7e780db7ae202e2a2d420fee7ff4c8de984787b4cb3fd76b0c0f0d929180c`.
+  The original images are neither fabricated nor replaced with AI artwork.
+- New FM-1 FX screen is 240x240: physical K1..K4 on left with four 2x2
+  dial cells, a **square** photo-tile preview on the right. SELECT in FX or
+  SEL views cycles AUTO / 6 photo banks / EFFECTS / EUREKA (0..8);
+  FX selection/sound WET remain independent. SEL opens full-screen image.
+  Audio amplitude drives tile selection, small VHS tracking/tearing,
+  displaced 8x8 source blocks, and sparse yellow DOT accents; silent
+  animations freeze according to the existing scheduler.
+- **Not complete:** the old Android-only TOP/SCENES/CRUSH/SAMPLER/TWILIGHT,
+  KNOWING, CLOUDS-DOT, DREAMY ensemble and EP video banks are still absent.
+  The native FX audio code is not an exact original Dreamy/Eureka port.
+- The current EFFECTS/EUREKA banks are still **128x78 VQ** and therefore
+  their original source aspect metadata has not been restored. Only the six
+  newly supplied photo-tile banks are guaranteed to render 1:1.
+- Source-integrity/read-only validation succeeded outside CircleCI;
+  no JieLi target compile, link, FWSC package, or FM-1 hardware test has
+  been executed for this change. **Do not trigger CircleCI without consent.**
+
 ## Original image and animation categories
 
 | Source bank | Primary original source | Original content / behavior | FM-1 today |
