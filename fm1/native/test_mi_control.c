@@ -142,6 +142,39 @@ int main(void)
     s.osc_page=2u; assert(!mi_state_valid(&s)); s.osc_page=0u;
     s.osc2_level=255u; assert(!mi_state_valid(&s)); s.osc2_level=0u;
     assert(mi_state_valid(&s));
+    /* Extra FX controls must not steal SELECT visual-bank or FX A/B routing.
+     * PRESET encoder in DREAMY/EUREKA cycles P1/P2 without loading presets. */
+    mi_init(&s);
+    mi_button(&s,MI_B_FX,9200);
+    mi_rotate(&s,MI_EN_K1,2); /* DREAMY */
+    assert(s.fx==MI_FX_DREAMY);
+    assert(s.fx_page==0u);
+    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.fx_page==1u && s.fx==MI_FX_DREAMY);
+    assert(!strcmp(mi_param_name(&s,0),"PITCH"));
+    assert(!strcmp(mi_param_name(&s,1),"REVERSE"));
+    assert(!strcmp(mi_param_name(&s,2),"SPREAD"));
+    mi_rotate(&s,MI_EN_K1,12); /* 64 -> 76 => 2 semitones */
+    mi_rotate(&s,MI_EN_K2,127);
+    mi_rotate(&s,MI_EN_K3,20);
+    mi_rotate(&s,MI_EN_K4,10);
+    assert(mi_param_value(&s,0)==2);
+    assert(mi_param_value(&s,1)==1);
+    assert(s.fx_extra[MI_FX_DREAMY][2]==84u);
+    assert(s.fx_extra[MI_FX_DREAMY][3]==74u);
+    assert(s.fx_options[MI_FX_DREAMY][0]==64u);
+    assert(s.fx_options[MI_FX_DREAMY][1]==80u);
+    mi_rotate(&s,MI_EN_PRESETS,-1);
+    assert(s.fx_page==0u);
+    assert(!strcmp(mi_param_name(&s,2),"GRAIN"));
+    mi_rotate(&s,MI_EN_K1,4); /* EUREKA, same selected FX slot */
+    assert(s.fx==MI_FX_EUREKA);
+    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(!strcmp(mi_param_name(&s,2),"GRAIN"));
+    assert(s.fx_extra[MI_FX_EUREKA][0]==64u);
+    mi_button(&s,MI_B_FX,9201);
+    assert(s.fx_slot==1u&&s.fx_page==0u);
+
     /* Validate real saved-state bounds: corrupted storage must never reach
      * UI lookup tables, oscillator routing or REC IN/OUT arithmetic. */
     mi_init(&s);
