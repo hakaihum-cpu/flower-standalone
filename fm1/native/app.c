@@ -101,7 +101,9 @@ void app_init(void)
      saved_v14_t old14;
      if(plat_store_load(OBJ_SETTINGS,&old14,sizeof old14)==(int)sizeof old14 &&
         old14.magic==SAVED_MAGIC_M14){
-         mi_memcopy(&state,old14.state_bytes,sizeof old14.state_bytes);
+         /* Only the MI14 fields are carried forward. The bytes after
+          * osc1_wave were tail padding, not valid MI15 controls. */
+         mi_memcopy(&state,old14.state_bytes,offsetof(mi_state_t,filter_cutoff));
          restored=mi_state_valid(&state);
      }
  }else if(stored_bytes==(int)sizeof(saved_legacy_t)){
