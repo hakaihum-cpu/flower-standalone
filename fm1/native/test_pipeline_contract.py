@@ -171,7 +171,7 @@ assert (root / "fm1/native/mi_memory.h").is_file()
 manifest = (root / "fm1/native/fm1.toml").read_text(encoding="utf-8")
 app_header = (root / "fm1/native/app.h").read_text(encoding="utf-8")
 assert 'id_prefix = "FM-1_9"' in manifest
-assert '#define APP_VERSION "0.3.0-DEV"' in app_header
+assert '#define APP_VERSION "0.3.1-DEV"' in app_header
 assert 'APP_TAGLINE "NATIVE TRIAL"' in app_header
 assert "--product FM-1_934" in ci
 # Keep package header marker and running firmware FELUCCA_ID in sync by

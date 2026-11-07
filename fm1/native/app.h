@@ -8,9 +8,9 @@
 #define APP_TAGLINE "NATIVE TRIAL"
 /* Version display is explicit for all development builds.
  * Release builds may override with -DAPP_VERSION from fm1-base.
- * This is distinct from the FWSC package identity FM-1_933. */
+ * This is distinct from the FWSC package identity FM-1_934. */
 #ifndef APP_VERSION
-#define APP_VERSION "0.3.0-DEV"
+#define APP_VERSION "0.3.1-DEV"
 #endif
 #define APP_SPLASH_RGB RGB(255, 209, 12)
 #define APP_BLOCK 256u
