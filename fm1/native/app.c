@@ -381,13 +381,26 @@ static int mi_visual_photo_bank(unsigned mode)
 static unsigned mi_visual_step(float activity)
 {
     int changed=0;
+    int full_random=0;
     unsigned mode;
     int photo_bank;
-    /* Rotate the normal SEL AUTO bank ONLY at audible note attacks.
-     * All six user sheets plus original EFFECTS/EUREKA are in this cycle. */
+    /* SEL AUTO: 70% of note attacks advance the normal bank playlist,
+     * 30% bypass it entirely and pick one of ALL 628 original photo frames.
+     * The user's manually pinned SELECT bank is always respected. */
     if(state.view==MI_VIDEO&&visual_choice==0u &&
        activity>0.012f&&activity>visual_last_activity*1.5f+0.004f){
-        normal_visual_bank=(uint8_t)((normal_visual_bank+1u)%11u);
+        uint32_t r;
+        visual_rng^=visual_rng<<13;
+        visual_rng^=visual_rng>>17;
+        visual_rng^=visual_rng<<5;
+        r=visual_rng;
+        if(r%10u<3u){
+            /* Mode 0..5 -> photo banks 0..5, 9..10 -> banks 6..7. */
+            unsigned bank=(unsigned)((r/10u)%MI_TILE_BANKS);
+            normal_visual_bank=(uint8_t)(bank<6u?bank:bank+3u);
+            full_random=1;
+        }else
+            normal_visual_bank=(uint8_t)((normal_visual_bank+1u)%11u);
         visual_last_mode=255u;
         changed=1;
     }
@@ -395,14 +408,25 @@ static unsigned mi_visual_step(float activity)
     photo_bank=mi_visual_photo_bank(mode);
     if(mode!=visual_last_mode){
         visual_last_mode=(uint8_t)mode;
-        if(photo_bank>=0)visual_tile=mi_tile_bank_first[photo_bank];
+        if(photo_bank>=0 && !full_random)
+            visual_tile=mi_tile_bank_first[photo_bank];
         visual_cooldown=0u;
         visual_last_activity=0.f;
         ++visual_generation;
         changed=1;
     }
-    if(visual_cooldown)--visual_cooldown;
-    if(photo_bank>=0 && activity>0.003f &&
+    if(full_random){
+        /* Global random selection ignores bank boundaries, not the source
+         * assets. This is a true 628-way image choice, not just bank shuffle. */
+        visual_rng^=visual_rng<<13;
+        visual_rng^=visual_rng>>17;
+        visual_rng^=visual_rng<<5;
+        visual_tile=(uint16_t)(visual_rng%MI_TILE_COUNT);
+        visual_cooldown=activity>0.15f?3u:5u;
+        ++visual_generation;
+        changed=1;
+    }else if(visual_cooldown)--visual_cooldown;
+    if(!full_random && photo_bank>=0 && activity>0.003f &&
        (activity>visual_last_activity*1.28f+0.0015f||!visual_cooldown)){
         unsigned count=mi_tile_bank_count[photo_bank],next;
         visual_rng^=visual_rng<<13;
