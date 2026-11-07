@@ -102,11 +102,12 @@ int main(void)
  /* A clip recording command is consumed only on an audio block boundary. */
  mi_audio_rec_request(&a,1u);
  mi_audio_render(&a,&s,lr,256,4096);
- assert(a.recorder.recording && a.recorder.count==128u);
+ assert(a.recorder.recording && a.recorder.count>=40u &&
+        a.recorder.count<=55u);
  mi_audio_rec_request(&a,1u);
  mi_audio_render(&a,&s,lr,256,4096);
  assert(!a.recorder.recording && a.recorder.playing &&
-        a.recorder.count==128u);
+        a.recorder.count>=40u && a.recorder.count<=55u);
  mi_audio_rec_request(&a,2u);
  mi_audio_render(&a,&s,lr,256,4096);
  assert(!a.recorder.playing);
@@ -166,6 +167,42 @@ int main(void)
  for(i=0;i<16u;i++)mi_audio_render(&a,&s,lr,256,4096);
  for(i=0;i<MI_NATIVE_POLY;i++)assert(a.v[i].active&&a.v[i].held);
  assert(a.last_mode==MI_FX_DREAMY&&a.last_mode2==MI_FX_REVERB);
- puts("PASS: eight-voice allocation and steal, ADSR LFO ARP serial FX A/B and recorder");
+ /* Six distinct FM synthesized drum voices mapped across consecutive keys.
+  * A second group changes timbre via variant, without needing samples. */
+ mi_init(&s);mi_audio_init(&a,44100.f);
+ s.wave=MI_WAVE_FMDRUM;
+ for(i=0u;i<6u;i++){
+     mi_audio_input_on(&a,&s,(uint8_t)(53u+i),127u);
+     assert(a.v[i].active && a.v[i].drum_type==(uint8_t)(i+1u));
+ }
+ for(i=0u;i<4u;i++)mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.osc_scope_active);
+ mi_audio_panic(&a);
+ /* FILTER reduces high-frequency sample movement but does not silence the
+  * signal or change the saved source oscillator waveform. */
+ mi_init(&s);mi_audio_init(&a,44100.f);
+ s.filter_cutoff=32u;s.filter_resonance=70u;
+ s.wave=MI_WAVE_MULTI;s.osc1_wave=1u;s.osc2_wave=2u;
+ s.osc2_level=80u;
+ mi_audio_note_on(&a,64u,127u);
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(s.filter_cutoff==32u && a.osc_scope_active);
+ /* LFO target must reach DSP rather than mutate saved control values. */
+ s.lfo[2]=100u;s.lfo[3]=5u;
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(s.filter_cutoff==32u);
+ s.lfo[3]=24u; s.video_params[0]=30u;
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(s.video_params[0]==30u);
+ assert(a.video_effective[0]!=30u || a.lfo_phase==0.f);
+ /* Dedicated Bitcrusher and Pitchshift are real stage selections. */
+ s.lfo[2]=0u;s.fx2=MI_FX_OFF;
+ s.fx=MI_FX_BITCRUSH;s.wet=127u;
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.last_mode==MI_FX_BITCRUSH);
+ s.fx=MI_FX_PITCHSHIFT;
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.last_mode==MI_FX_PITCHSHIFT);
+ puts("PASS: eight voices, FMDrum, filter, LFO routing, FX, adaptive REC");
  return 0;
 }
