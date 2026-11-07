@@ -112,6 +112,36 @@ int main(void)
     mi_button(&s,MI_B_FX,9002);
     assert(s.fx_slot==0u);
 
+    /* OSC2 is NOT the former SUB; the original OSC1 page stays intact. */
+    mi_button(&s,MI_B_EDIT,9010);
+    assert(s.view==MI_OSC && s.osc_page==0u);
+    mi_rotate(&s,MI_EN_K1,-50); /* original OSC1 waveform */
+    assert(s.wave==0u);
+    mi_button(&s,MI_B_EDIT,9011); /* repeated EDIT changes page */
+    assert(s.osc_page==1u);
+    assert(!strcmp(mi_param_name(&s,0),"WAVE2"));
+    assert(!strcmp(mi_param_name(&s,1),"DETUNE"));
+    mi_rotate(&s,MI_EN_K1,1);
+    mi_rotate(&s,MI_EN_K2,10);
+    mi_rotate(&s,MI_EN_K3,70);
+    mi_rotate(&s,MI_EN_K4,1);
+    assert(s.osc2_wave==1u && s.osc2_detune==74u &&
+           s.osc2_level==70u && s.osc2_octave==3u);
+    assert(s.wave==0u && mi_param_value(&s,1)==10);
+    assert(mi_param_value(&s,3)==1);
+    mi_button(&s,MI_B_EDIT,9012);
+    assert(s.osc_page==0u && !strcmp(mi_param_name(&s,2),"SUB"));
+    mi_button(&s,MI_B_HOME,9013);
+    /* The second oscillator's waveform and tuning cannot be confused
+     * with legacy SUB/CRUSH or corrupted saved-state values. */
+    mi_init(&s);
+    assert(s.osc2_level==0u && s.osc2_octave==2u && s.osc2_detune==64u);
+    assert(mi_state_valid(&s));
+    s.osc2_wave=4u; assert(!mi_state_valid(&s)); s.osc2_wave=0u;
+    s.osc2_octave=5u; assert(!mi_state_valid(&s)); s.osc2_octave=2u;
+    s.osc_page=2u; assert(!mi_state_valid(&s)); s.osc_page=0u;
+    s.osc2_level=255u; assert(!mi_state_valid(&s)); s.osc2_level=0u;
+    assert(mi_state_valid(&s));
     /* Validate real saved-state bounds: corrupted storage must never reach
      * UI lookup tables, oscillator routing or REC IN/OUT arithmetic. */
     mi_init(&s);
