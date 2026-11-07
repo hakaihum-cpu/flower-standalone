@@ -388,9 +388,16 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         }
         sample=clampf(sample,-1.f,1.f);
         sample=effect(a,s,sample);
-        /* Capture is post-FX and pre-master, before clip playback is mixed.
-         * REC OVERDUB adds only this live bus to the existing stored clip. */
-        sample=clampf(sample+mi_rec_tick(&a->recorder,sample,s->seq),-1.f,1.f);
+        /* Existing FX wet-smoothing principle: crossfade the recorder monitor
+         * in/out over milliseconds. Simply adding two full-scale signals
+         * clipped during layered playback and caused sharp transitions. */
+        {
+            float monitored=mi_rec_tick(&a->recorder,sample,s->seq);
+            float target=a->recorder.playing?1.f:0.f;
+            a->rec_monitor_mix+=(target-a->rec_monitor_mix)*0.0015f;
+            sample=clampf(sample*(1.f-0.5f*a->rec_monitor_mix)+
+                         monitored*(0.5f*a->rec_monitor_mix),-1.f,1.f);
+        }
         {
             int32_t out=(int32_t)(clampf(sample,-1.f,1.f)*scale);
             lr[2u*i]=out;lr[2u*i+1u]=out;
