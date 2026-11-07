@@ -422,6 +422,108 @@ static void mi_photo_decode(unsigned frame)
         }
     mi_photo_cached=(int16_t)frame;
 }
+/* Original MIYAKO DOT Dreamy (MiyakoPixelMotion.h::Scene::Dreamy).
+ * The portrait and tears are NOT new generated media: source is the
+ * unmodified 60x46 2-bit image in initPortrait() and its eight source
+ * procedural streams. The 64-sample sin lookup replaces std::sin on the
+ * freestanding pi32v2 target, without allocating a framebuffer. */
+static uint8_t mi_dreamy_dot_packed[MI_DREAMY_DOT_BYTES];
+static uint8_t mi_dreamy_dot_ready;
+static const int16_t mi_dreamy_dot_sin64[64]={
+    0,100,200,297,392,483,569,650,
+    724,792,851,903,946,980,1004,1019,
+    1024,1019,1004,980,946,903,851,792,
+    724,650,569,483,392,297,200,100,
+    0,-100,-200,-297,-392,-483,-569,-650,
+    -724,-792,-851,-903,-946,-980,-1004,-1019,
+    -1024,-1019,-1004,-980,-946,-903,-851,-792,
+    -724,-650,-569,-483,-392,-297,-200,-100
+};
+static void mi_dreamy_dot_unpack(void)
+{
+    unsigned acc=0u,bits=0u,cursor=0u;
+    const char *p=mi_dreamy_dot_portrait_b64;
+    if(mi_dreamy_dot_ready)return;
+    while(*p && cursor<MI_DREAMY_DOT_BYTES){
+        char c=*p++;
+        int n=-1;
+        if(c>='A'&&c<='Z')n=c-'A';
+        else if(c>='a'&&c<='z')n=c-'a'+26;
+        else if(c>='0'&&c<='9')n=c-'0'+52;
+        else if(c=='+')n=62;
+        else if(c=='/')n=63;
+        if(n<0)continue;
+        acc=(acc<<6)|(unsigned)n;
+        bits+=6u;
+        if(bits>=8u){
+            bits-=8u;
+            mi_dreamy_dot_packed[cursor++]=(uint8_t)((acc>>bits)&255u);
+        }
+    }
+    mi_dreamy_dot_ready=(uint8_t)(cursor==MI_DREAMY_DOT_BYTES);
+}
+/* 65 cells across matches the original MiyakoPixelMotion 720-square scene
+ * (60x46 portrait, centered at 2,9). Direct rectangles mirror the original
+ * nearest-neighbour JUCE drawing and retain the original source aspect. */
+static void mi_dreamy_dot_pixel(unsigned half,int32_t px,int32_t py,
+                               int32_t size,int x,int y,uint16_t color)
+{
+    int32_t top,bottom,left,right;
+    if(x<0||y<0||x>=65||y>=65)return;
+    top=py+(int32_t)((unsigned)y*(unsigned)size/65u)-(int32_t)half*120;
+    bottom=py+(int32_t)((unsigned)(y+1)*(unsigned)size/65u)-(int32_t)half*120;
+    if(bottom<=0||top>=120)return;
+    left=px+(int32_t)((unsigned)x*(unsigned)size/65u);
+    right=px+(int32_t)((unsigned)(x+1)*(unsigned)size/65u);
+    if(right>left&&bottom>top)cv_rect(left,top,right-left,bottom-top,color);
+}
+static void mi_dreamy_dot_draw_half(unsigned half,int32_t px,int32_t py,
+                                    int32_t size)
+{
+    unsigned x,y,i;
+    const float sadness=0.5f,fragility=0.4f,nostalgia=0.3f,melancholy=0.3f;
+    const uint16_t amber=RGB(255,216,54),ink=RGB(255,219,70);
+    const uint16_t dim=RGB(128,103,30);
+    mi_dreamy_dot_unpack();
+    if(!mi_dreamy_dot_ready)return;
+    cv_rect(px,py-(int32_t)half*120,size,size,RGB(17,16,11));
+    for(y=0u;y<MI_DREAMY_DOT_H;y++)
+        for(x=0u;x<MI_DREAMY_DOT_W;x++){
+            unsigned k=y*MI_DREAMY_DOT_W+x;
+            unsigned pixel=mi_dreamy_dot_packed[k>>2u];
+            unsigned col=(pixel>>(6u-(k&3u)*2u))&3u;
+            if(col==1u)mi_dreamy_dot_pixel(half,px,py,size,(int)x+2,
+                                          (int)y+9,RGB(150,114,18));
+            else if(col==2u)mi_dreamy_dot_pixel(half,px,py,size,(int)x+2,
+                                               (int)y+9,amber);
+        }
+    for(i=0u;i<2u+(unsigned)(sadness*12.f);i++){
+        float seed=(float)i*1.763f;
+        float cycle=dreamy_dot_phase*(0.010f+
+                   0.025f*(1.f-melancholy))+seed;
+        float angle;
+        unsigned wave_index,t,p;
+        int xdot,ydot;
+        /* Original fmod(positive_phase, 1.0f) without libm. */
+        cycle-=(float)((unsigned)cycle);
+        if(i>1u && !(sadness>((float)(i-1u)/12.f)))continue;
+        angle=cycle*2.f+seed;
+        while(angle>=6.2831853f)angle-=6.2831853f;
+        wave_index=((unsigned)(angle*10.18591636f+0.5f))&63u;
+        xdot=2+(i%2u==0u?27:46)+mi_dreamy_dot_sin64[wave_index]*2/1024;
+        ydot=9+20+(int)(cycle*65.f*0.62f);
+        for(t=0u;t<1u+(unsigned)(nostalgia*9.f);t++)
+            mi_dreamy_dot_pixel(half,px,py,size,xdot,ydot-(int)t,
+                               t==0u?ink:dim);
+        if(fragility>0.05f && cycle>0.25f+0.5f*(1.f-fragility)){
+            for(p=0u;p<4u;p++){
+                int spread=(int)(fragility*(float)(p+1u)*2.f);
+                mi_dreamy_dot_pixel(half,px,py,size,
+                    xdot+(p%2u?spread:-spread),ydot+(int)p*2,dim);
+            }
+        }
+    }
+}
 static unsigned mi_photo_index(unsigned sy,unsigned sx)
 {
     unsigned v=mi_photo_pixels[sy*(MI_TILE_SIDE/2u)+(sx>>1)];
