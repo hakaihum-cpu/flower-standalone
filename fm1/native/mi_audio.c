@@ -319,6 +319,73 @@ static float lfo_value(unsigned wave,float phase)
     if(wave==3u)return phase<0.5f?1.f:-1.f;
     return sin01(phase);
 }
+/* LFO destinations are actual editable parameters, not display-only labels.
+ * Targets are modulated on a local block snapshot; saved state is immutable.
+ * Pitch/PWM/AMP (0..2) retain audio-rate modulation below. */
+static uint8_t mod_u8(uint8_t base,float depth,unsigned hi)
+{
+    float v=(float)base+depth*64.f;
+    if(v<0.f)v=0.f;
+    if(v>(float)hi)v=(float)hi;
+    return (uint8_t)(v+0.5f);
+}
+static void apply_lfo_destination(mi_state_t *m,unsigned dest,float depth)
+{
+    unsigned first=m->fx<MI_FX_COUNT?m->fx:MI_FX_OFF;
+    unsigned second=m->fx2<MI_FX_COUNT?m->fx2:MI_FX_OFF;
+#define MOD(K,FIELD,HIGH) case K: m->FIELD=mod_u8(m->FIELD,depth,HIGH);break
+    switch(dest){
+    MOD(3,sub,127u);MOD(4,crush,127u);
+    MOD(5,filter_cutoff,127u);MOD(6,filter_resonance,127u);
+    MOD(7,osc2_level,127u);MOD(8,osc2_detune,127u);
+    MOD(9,level,127u);
+    MOD(10,env[0],127u);MOD(11,env[1],127u);
+    MOD(12,env[2],127u);MOD(13,env[3],127u);
+    MOD(14,wet,127u);
+    case 15:m->fx_options[first][0]=mod_u8(m->fx_options[first][0],depth,127u);break;
+    case 16:m->fx_options[first][1]=mod_u8(m->fx_options[first][1],depth,127u);break;
+    MOD(17,wet2,127u);
+    case 18:m->fx_options[second][0]=mod_u8(m->fx_options[second][0],depth,127u);break;
+    case 19:m->fx_options[second][1]=mod_u8(m->fx_options[second][1],depth,127u);break;
+    MOD(20,drum_tone,127u);MOD(21,drum_decay,127u);
+    MOD(22,drum_color,127u);MOD(23,drum_level,127u);
+    MOD(24,video_params[0],127u);MOD(25,video_params[1],127u);
+    MOD(26,video_params[2],127u);MOD(27,video_params[3],127u);
+    MOD(28,seq[0],126u);MOD(29,seq[1],127u);
+    MOD(30,seq[2],6u);MOD(31,seq[3],127u);
+    MOD(32,arp[1],3u);MOD(33,arp[2],100u);
+    MOD(34,arp[3],4u);
+    case 35:m->global[0]=(int16_t)clampf((float)m->global[0]+depth*60.f,40.f,240.f);break;
+    case 36:m->global[1]=(int16_t)clampf((float)m->global[1]+depth*50.f,0.f,100.f);break;
+    case 37:m->global[2]=(int16_t)clampf((float)m->global[2]+depth*50.f,-50.f,50.f);break;
+    case 38:m->fx_extra[first][0]=mod_u8(m->fx_extra[first][0],depth,127u);break;
+    case 39:m->fx_extra[first][1]=mod_u8(m->fx_extra[first][1],depth,127u);break;
+    case 40:m->fx_extra[first][2]=mod_u8(m->fx_extra[first][2],depth,127u);break;
+    case 41:m->fx_extra[first][3]=mod_u8(m->fx_extra[first][3],depth,127u);break;
+    case 42:m->fx_extra[second][0]=mod_u8(m->fx_extra[second][0],depth,127u);break;
+    case 43:m->fx_extra[second][1]=mod_u8(m->fx_extra[second][1],depth,127u);break;
+    case 44:m->fx_extra[second][2]=mod_u8(m->fx_extra[second][2],depth,127u);break;
+    case 45:m->fx_extra[second][3]=mod_u8(m->fx_extra[second][3],depth,127u);break;
+    MOD(46,osc2_octave,4u);MOD(47,osc1_wave,3u);
+    MOD(48,osc2_wave,3u);MOD(49,wave,MI_WAVE_FMDRUM);
+    MOD(50,fx,MI_FX_COUNT-1u);MOD(51,fx2,MI_FX_COUNT-1u);
+    MOD(52,arp[0],4u);MOD(53,lfo[0],127u);
+    MOD(54,lfo[1],3u);MOD(55,lfo[2],127u);
+    case 56:m->global[3]=(int16_t)clampf((float)m->global[3]+depth*2.f,0.f,2.f);break;
+    case 57:m->rec_bars=depth>=0.f?4u:2u;break;
+    default:break;
+    }
+#undef MOD
+    if(m->seq[0]>=m->seq[1]){
+        if(dest==28u)m->seq[0]=m->seq[1]>0u?m->seq[1]-1u:0u;
+        else m->seq[1]=m->seq[0]<127u?m->seq[0]+1u:127u;
+    }
+    if(m->arp[2]<10u)m->arp[2]=10u;
+    if(m->arp[3]<1u)m->arp[3]=1u;
+    if(!mi_fx_pair_supported(m->fx,m->fx2)){
+        m->fx=first;m->fx2=second;
+    }
+}
 static float fx_stage(mi_audio_t *a,const mi_state_t *s,
                       unsigned mode,unsigned wet_knob,float dry,float *smooth)
 {
@@ -380,6 +447,14 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
     }
     dry=fx_stage(a,s,first,s->wet,dry,&a->wet_current);
     return fx_stage(a,s,second,s->wet2,dry,&a->wet_current2);
+}
+void mi_audio_midi_clock(mi_audio_t *a,unsigned status)
+{
+    if(!a)return;
+    if(status==0xFAu){a->recorder.clock_ticks=0u;a->recorder.clock_period=0.f;}
+    else if(status==0xF8u)
+        mi_rec_external_tick(&a->recorder,a->rendered_samples);
+    else if(status==0xFCu)mi_rec_clock_stop(&a->recorder);
 }
 void mi_audio_rec_request(mi_audio_t *a,unsigned command)
 {
