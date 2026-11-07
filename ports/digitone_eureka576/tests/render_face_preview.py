@@ -7,8 +7,8 @@ import sys
 if len(sys.argv) != 3:
     raise SystemExit("usage: render_face_preview.py reference.bin sample.png")
 frames = Path(sys.argv[1]).read_bytes()
-assert len(frames) == 576 * 1024
-selected = [0, 35, 72, 143, 216, 323, 432, 575]
+assert len(frames) == 1152 * 1024
+selected = [0, 143, 288, 575, 576, 719, 864, 1151]
 scale = 4
 margin = 12
 header = 26

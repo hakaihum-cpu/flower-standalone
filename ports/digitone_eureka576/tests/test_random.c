@@ -56,7 +56,7 @@ static void native_stock_keydisp(void *brain,void *ev)
 extern const uint8_t eureka576_reference[],eureka576_reference_end[];
 static void check(unsigned index)
 {
-    if(index>=576u ||
+    if(index>=E576_COUNT ||
        memcmp(eureka576_framebuf,eureka576_reference+index*1024u,1024u)!=0) {
         fprintf(stderr,"bad decoded frame %u\n",index); abort();
     }
@@ -76,7 +76,7 @@ int main(void)
     uint8_t ctrl[128]={0};
     int32_t key[6]={0};
     unsigned speeds=0,stutters=0,jumps=0,reverses=0;
-    if((uintptr_t)eureka576_reference_end-(uintptr_t)eureka576_reference!=589824u)
+    if((uintptr_t)eureka576_reference_end-(uintptr_t)eureka576_reference!=(uintptr_t)(E576_COUNT*E576_FRAME_BYTES))
         abort();
     key[3]=2;key[4]=1;
     if(eureka576_key(NULL,key)!=1 ||
@@ -233,11 +233,21 @@ int main(void)
     eureka576_param_page=0u;
     check(0u);
     /* Exhaustive all-frame random seek and 4,718,592 display pixel comparisons. */
-    for(unsigned i=0u;i<576u;++i) {
+    for(unsigned i=0u;i<E576_COUNT;++i) {
         if(!eureka576_seek(i)) abort();
         check(i);
     }
-    if(eureka576_seek(576u)) abort();
+    if(eureka576_seek(E576_COUNT)) abort();
+    /* Preserve the two independent supplied banks on both sides of 576. */
+    for(unsigned i=570u;i<=582u;++i) {
+        if(!eureka576_seek(i)) abort();
+        check(i);
+    }
+    if(!eureka576_seek(1151u)) abort();
+    check(1151u);
+    if(!eureka576_seek(576u)) abort();
+    check(576u);
+
     /* Forward and reverse must loop INSIDE the selected 36-frame scene;
      * boundary must not enter the next scene in linear order. */
     if(!eureka576_seek(128u)) abort();
@@ -472,11 +482,11 @@ int main(void)
     if(eureka576_cc(0,40,0,CORE_MIDI_CC_AUTO)!=1)abort();
     eureka576_tick(ctrl); check(0);
 
-    /* SCRUB 127 is frame 575, and a second CC changes while stopped. */
+    /* SCRUB 127 is frame 1151, and a second CC changes while stopped. */
     if(eureka576_cc(0,68,127,CORE_MIDI_CC_AUTO)!=1)abort();
     eureka576_tick(ctrl);
-    if(eureka576_index!=575u)abort();
-    check(575u);
+    if(eureka576_index!=E576_COUNT-1u)abort();
+    check(E576_COUNT-1u);
     if(eureka576_cc(0,68,1,CORE_MIDI_CC_AUTO)!=1)abort();
     eureka576_tick(ctrl);
     if(eureka576_index!=0u)abort();
@@ -527,6 +537,6 @@ int main(void)
     if(eureka576_key(NULL,key)!=0 || eureka576_enabled)abort();
     key[4]=0;
     if(eureka576_key(NULL,key)!=0)abort();
-    printf("PASS: 576 frames, 16 random scenes, 1200 note reactions, CC sweeps, isolated MIDI+YES, solo MIDI and MIDI+TRACK stock replay, MUTE keys forwarded; %u rectangles\n",rectangle_count);
+    printf("PASS: 1152 frames, 32 random scenes, 1200 note reactions, CC sweeps, isolated MIDI+YES, solo MIDI and MIDI+TRACK stock replay, MUTE keys forwarded; %u rectangles\n",rectangle_count);
     return 0;
 }
