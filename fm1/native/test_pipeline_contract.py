@@ -238,6 +238,25 @@ own_lines = Path(__file__).read_text(encoding="utf-8").splitlines()
 assert len(own_lines)>100 and own_lines[-1].startswith("print(")
 recorder = (root / "fm1/native/mi_recorder.c").read_text(encoding="utf-8")
 assert "MI_REC_CAPACITY" in recorder and "mi_rec_tick" in recorder
+# Current user requirements: original animation into normal SEL (not FX-only),
+# no newly invented video codec or new CircleCI workflow; multi-OSC and overdub.
+atlas = (root / "fm1/native/mi_tile_atlas.h").read_text(encoding="utf-8")
+dot = (root / "fm1/native/mi_dreamy_dot_portrait.h").read_text(encoding="utf-8")
+assert "mi_dreamy_dot_portrait.h" in ci
+assert '#include "mi_dreamy_dot_portrait.h"' in ui
+assert "MI_DREAMY_DOT_BYTES 690u" in dot
+assert "mi_dreamy_dot_draw_half(half,0,0,240)" in ui
+assert "mi_tape_dot_draw_half(half,0,0,240)" in ui
+assert "visual_choice+steps)%11" in ui and "normal_visual_bank+1u)%10u" in ui
+assert "if(state.fx==MI_FX_OFF&&state.fx2==MI_FX_OFF)" in ui
+assert "static const uint8_t mi_photo_vq_maps[488][72]" in atlas
+assert "mi_photo_vq_tilebook" in atlas and "mi_photo_vq_palette" in atlas
+assert "mi_atlas_byte" not in ui  # no per-pixel base64 decode in rendering
+assert "s->wave==MI_WAVE_MULTI" in audio and "osc2_mix" in audio
+assert "s->fx_page=(candidate==MI_FX_DREAMY||" in controls
+assert "r->overdubbing=1u" in recorder
+assert "r->overdubbing && r->count>=4u" in recorder
+assert "rec_overdub" in ui and "rec_overdub 1" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "mi_audio_rec_request(&audio,1u)" in ui
 assert "mi_audio_rec_request(&audio,2u)" in ui
 assert "mi_graph_recorder()" in ui
