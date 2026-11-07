@@ -720,6 +720,9 @@ static void mi_fx_draw_half(unsigned half)
     mi_fx_dial(half,63,36,1u);
     mi_fx_dial(half,3,123,2u);
     mi_fx_dial(half,63,123,3u);
+    if(fx==MI_FX_DREAMY||fx==MI_FX_EUREKA)
+        cv_text(4,216-shift,&FONT_XS,
+                state.fx_page?"PRESETS: FX":"PRESETS: PITCH",YELLOW);
     if(mode<MI_TILE_BANKS){
         mi_tile_draw_half(half,123,62,116,audio_activity);
     }else{
