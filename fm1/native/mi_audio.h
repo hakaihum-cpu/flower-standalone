@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include "mi_control.h"
 #include "mi_recorder.h"
-#define MI_NATIVE_POLY 4
+#define MI_NATIVE_POLY 8
 #define MI_NATIVE_RING 4096
 typedef struct {
     uint8_t note, active, held, vel, env_stage;

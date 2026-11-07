@@ -32,21 +32,24 @@ int main(void)
  for(i=0;i<4;i++)mi_audio_render(&a,&s,lr,256,4096);
  assert(a.last_mode==MI_FX_DREAMY);
  mi_audio_panic(&a);
- for(i=0;i<4;i++)assert(!a.v[i].active);
- /* All four slots full: fifth note must steal the OLDEST, not newest. */
- mi_audio_note_on(&a,60,120);
- mi_audio_note_on(&a,62,120);
- mi_audio_note_on(&a,64,120);
- mi_audio_note_on(&a,65,120);
- mi_audio_note_on(&a,67,120);
- assert(a.v[0].note==67 && a.v[1].note==62 &&
-        a.v[2].note==64 && a.v[3].note==65);
- /* A released voice is stolen before an actively held one. */
- mi_audio_note_off(&a,64);
- mi_audio_note_on(&a,69,120);
- assert(a.v[2].note==69);
+ for(i=0;i<MI_NATIVE_POLY;i++)assert(!a.v[i].active);
+ /* All eight slots full: the ninth note must steal the oldest held voice.
+  * Keep the test parameterized by MI_NATIVE_POLY for a measured fallback. */
+ {
+   static const uint8_t chord[9]={60,62,64,65,67,69,71,72,74};
+   for(i=0;i<MI_NATIVE_POLY;i++)mi_audio_note_on(&a,chord[i],120);
+   for(i=0;i<MI_NATIVE_POLY;i++)
+     assert(a.v[i].active&&a.v[i].held&&a.v[i].note==chord[i]);
+   mi_audio_note_on(&a,chord[MI_NATIVE_POLY],120);
+   assert(a.v[0].note==chord[MI_NATIVE_POLY]);
+   for(i=1;i<MI_NATIVE_POLY;i++)assert(a.v[i].note==chord[i]);
+   /* A released voice is stolen before an actively held one. */
+   mi_audio_note_off(&a,chord[2]);
+   mi_audio_note_on(&a,76,120);
+   assert(a.v[2].note==76&&a.v[2].active&&a.v[2].held);
+ }
  mi_audio_panic(&a);
- for(i=0;i<4;i++)assert(!a.v[i].active);
+ for(i=0;i<MI_NATIVE_POLY;i++)assert(!a.v[i].active);
  /* Arpeggiator must start on first sample and advance at 1/16-note BPM. */
  mi_init(&s);mi_audio_init(&a,44100.f);
  s.arp[0]=1;s.arp[1]=2;s.arp[2]=70;s.arp[3]=1;
@@ -109,7 +112,7 @@ int main(void)
  mi_audio_rec_request(&a,2u);
  mi_audio_render(&a,&s,lr,256,4096);
  assert(!a.recorder.playing);
- /* OSC2 changes actual PCM while preserving four-voice handling. */
+ /* OSC2 changes actual PCM while preserving the selected polyphony. */
  {
    int32_t first_old,first_new;
    mi_init(&s);mi_audio_init(&a,44100.f);
@@ -131,6 +134,17 @@ int main(void)
    assert(a.v[0].phase2!=a.v[0].phase);
    assert(a.v[0].active);
  }
- puts("PASS: ADSR LFO ARP serial FX A/B and command-driven internal recorder");
+ /* Eight simultaneous voices through MULTI OSC and two FX: functional
+  * smoke only. Host tests cannot establish the FM-1 real-time CPU budget. */
+ mi_init(&s);mi_audio_init(&a,44100.f);
+ s.wave=MI_WAVE_MULTI;s.osc1_wave=1u;s.osc2_wave=2u;
+ s.osc2_level=64u;
+ s.fx=MI_FX_DREAMY;s.wet=90u;
+ s.fx2=MI_FX_REVERB;s.wet2=90u;
+ for(i=0;i<MI_NATIVE_POLY;i++)mi_audio_note_on(&a,(uint8_t)(60u+i),100u);
+ for(i=0;i<16u;i++)mi_audio_render(&a,&s,lr,256,4096);
+ for(i=0;i<MI_NATIVE_POLY;i++)assert(a.v[i].active&&a.v[i].held);
+ assert(a.last_mode==MI_FX_DREAMY&&a.last_mode2==MI_FX_REVERB);
+ puts("PASS: eight-voice allocation and steal, ADSR LFO ARP serial FX A/B and recorder");
  return 0;
 }

@@ -197,6 +197,13 @@ assert ci.index("rm -rf /tmp/fm1-base/miyako/build") < ci.index(
 # Feature coverage: reject a UI-only placebo update to the proven baseline.
 ui = (root / "fm1/native/app.c").read_text(encoding="utf-8")
 audio = (root / "fm1/native/mi_audio.c").read_text(encoding="utf-8")
+audio_h = (root / "fm1/native/mi_audio.h").read_text(encoding="utf-8")
+audio_test = (root / "fm1/native/test_mi_audio.c").read_text(encoding="utf-8")
+# Target is eight simultaneous voices; measure target xruns before choosing six.
+assert "#define MI_NATIVE_POLY 8" in audio_h
+assert "for(i=0;i<MI_NATIVE_POLY;i++)" in audio
+assert "All eight slots full" in audio_test
+assert "for(i=0;i<MI_NATIVE_POLY;i++)mi_audio_note_on" in audio_test
 fxcode = (root / "fm1/native/mi_fx_dsp.c").read_text(encoding="utf-8")
 controls = (root / "fm1/native/mi_control.c").read_text(encoding="utf-8")
 assert "static void mi_media_draw_half(unsigned half)" in ui
