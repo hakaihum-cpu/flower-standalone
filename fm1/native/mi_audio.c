@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Native FM-1 oscillator with initial Delay, Reverb and Chorus DSP.
  * Not all original MIYAKO FX are implemented or fidelity-tested.
- * EUREKA is not part of this branch, by the user's later instruction.
+ * EUREKA and DREAMY here are simplified finite-memory native implementations,
+ * not complete source-faithful ports of the original MIYAKO processors.
  */
 #include "mi_audio.h"
 #include "mi_fx_dsp.h"
