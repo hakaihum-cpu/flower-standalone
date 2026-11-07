@@ -16,6 +16,13 @@ static inline void mi_memzero(void *destination, unsigned count)
     while (count--) *p++ = 0u;
 }
 
+/* RAM-to-RAM state prefix migration; no hosted libc or volatile MMIO casts. */
+static inline void mi_memcopy(void *destination,const void *source,unsigned count)
+{
+    unsigned char *d=(unsigned char *)destination;
+    const unsigned char *s=(const unsigned char *)source;
+    while(count--)*d++=*s++;
+}
 static inline int mi_streq(const char *a, const char *b)
 {
     if (!a || !b) return a == b;
