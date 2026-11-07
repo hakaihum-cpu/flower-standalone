@@ -311,6 +311,9 @@ static void mi_media_decode(unsigned frame,unsigned eureka)
 /* Six 32x32 black/white banks: each 8x8 source block is mapped to one
  * dictionary entry. Selective base64 byte reads keep only one 9.9 KiB
  * vector atlas in XIP; there is no 488-frame runtime allocation. */
+/* Only the historical 1-bit atlas uses base64. The RGB565 VQ format uses
+ * the same C palette/codebook/map arrays as existing EFFECTS directly. */
+#if !defined(MI_TILE_VQ_CLIPS)
 static unsigned mi_atlas_sextet(char c)
 {
     if(c>='A'&&c<='Z')return (unsigned)(c-'A');
@@ -327,6 +330,7 @@ static uint8_t mi_atlas_byte(unsigned pos)
                 mi_atlas_sextet(mi_tile_atlas_base64[i+3u]);
     return (uint8_t)(v>>(16u-8u*(pos%3u)));
 }
+#endif
 /* Display effect follows the actual active FX, independently of which
  * picture bank was selected by the performer. */
 static unsigned mi_visual_fx(void)
@@ -407,26 +411,20 @@ static uint16_t mi_photo_palette[16];
 static int16_t mi_photo_cached=-1;
 static void mi_photo_decode(unsigned frame)
 {
-    unsigned clip,palbase,bookbase,mapbase,i,ty,tx,row,col;
+    unsigned clip,ty,tx,row,col,i;
     if(frame>=MI_TILE_COUNT||mi_photo_cached==(int16_t)frame)return;
     clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
-    palbase=clip*32u;
-    bookbase=MI_TILE_VQ_PALETTE_BYTES+clip*256u*16u;
-    mapbase=MI_TILE_VQ_PALETTE_BYTES+
-            MI_TILE_VQ_CODEBOOK_BYTES+frame*MI_TILE_VQ_MAP_STRIDE;
-    for(i=0u;i<16u;i++){
-        unsigned at=palbase+i*2u;
-        mi_photo_palette[i]=(uint16_t)(mi_atlas_byte(at)|
-                                     ((unsigned)mi_atlas_byte(at+1u)<<8));
-    }
+    /* Identical RGB565 palette/8x4 nibble-tile decode as mi_media_decode. */
+    for(i=0u;i<16u;i++)
+        mi_photo_palette[i]=mi_photo_vq_palette[clip][i];
     for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
         for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
-            unsigned id=mi_atlas_byte(mapbase+ty*MI_TILE_VQ_COLS+tx);
-            unsigned tile=bookbase+id*16u;
+            unsigned id=mi_photo_vq_maps[frame][ty*MI_TILE_VQ_COLS+tx];
+            const uint8_t *tile=mi_photo_vq_tilebook[clip][id];
             for(row=0u;row<4u;row++)
                 for(col=0u;col<4u;col++){
                     unsigned at=(ty*4u+row)*(MI_TILE_SIDE/2u)+tx*4u+col;
-                    mi_photo_pixels[at]=mi_atlas_byte(tile+row*4u+col);
+                    mi_photo_pixels[at]=tile[row*4u+col];
                 }
         }
     mi_photo_cached=(int16_t)frame;
