@@ -533,6 +533,64 @@ static void mi_dreamy_dot_draw_half(unsigned half,int32_t px,int32_t py,
         }
     }
 }
+/* Direct port of original MiyakoPixelMotion::Scene::Tape.
+ * Original source: 65x65 pixel grid; 2 reels, 60-step circles, 3 spokes,
+ * phase=24Hz and speed=0.02+controls[1]*0.05 where controls[1]=0.4.
+ * No new artwork, storage, or oscillator/DSP logic. */
+static const int8_t mi_tape_circle_x[60]={
+    9,8,8,8,8,7,7,6,6,5,4,3,
+    2,1,0,0,0,-1,-2,-3,-4,-5,-6,-6,
+    -7,-7,-8,-8,-8,-8,-8,-8,-8,-8,-8,-7,
+    -7,-6,-6,-5,-4,-3,-2,-1,0,0,0,1,
+    2,3,4,5,6,6,7,7,8,8,8,8
+};
+static const int8_t mi_tape_circle_y[60]={
+    0,0,1,2,3,4,5,6,6,7,7,8,
+    8,8,8,8,8,8,8,8,7,7,6,6,
+    5,4,3,2,1,0,0,0,-1,-2,-3,-4,
+    -5,-6,-6,-7,-7,-8,-8,-8,-8,-8,-8,-8,
+    -8,-8,-7,-7,-6,-6,-5,-4,-3,-2,-1,0
+};
+static void mi_tape_dot_draw_half(unsigned half,int32_t px,int32_t py,
+                                  int32_t size)
+{
+    const uint16_t ink=RGB(255,219,70),dim=RGB(128,103,30);
+    const int cx=32,cy=35,radius=9;
+    int reel;
+    {   int32_t top=py-(int32_t)half*120,bottom=top+size;
+        if(top<0)top=0;
+        if(bottom>120)bottom=120;
+        if(bottom>top)cv_rect(px,top,size,bottom-top,RGB(17,16,11));
+    }
+    for(reel=-1;reel<=1;reel+=2){
+        int center_x=cx+reel*13,spoke,k;
+        unsigned a;
+        for(a=0u;a<60u;a++)
+            mi_dreamy_dot_pixel(half,px,py,size,
+                center_x+mi_tape_circle_x[a],cy+mi_tape_circle_y[a],ink);
+        for(spoke=0;spoke<3;spoke++){
+            /* Original std::sin and std::cos wave with source angle speed;
+             * bounded 64-point lookup makes this valid on freestanding FM1. */
+            float angle=visual_dot_phase*0.04f+(float)spoke*2.094395f;
+            unsigned wave_index;
+            angle-=(float)((unsigned)(angle/6.2831853f))*6.2831853f;
+            if(angle<0.f)angle=0.f;
+            wave_index=(unsigned)(angle*10.18591636f+0.5f)&63u;
+            for(k=1;k<radius;k++){
+                int dx=(int)mi_dreamy_dot_sin64[(wave_index+16u)&63u]*k/1024;
+                int dy=(int)mi_dreamy_dot_sin64[wave_index]*k/1024;
+                mi_dreamy_dot_pixel(half,px,py,size,
+                                   center_x+dx,cy+dy,dim);
+            }
+        }
+    }
+    {   int x;
+        for(x=cx-65/3;x<=cx+65/3;x++){
+            mi_dreamy_dot_pixel(half,px,py,size,x,cy-radius-4,ink);
+            mi_dreamy_dot_pixel(half,px,py,size,x,cy+radius+4,ink);
+        }
+    }
+}
 static unsigned mi_photo_index(unsigned sy,unsigned sx)
 {
     unsigned v=mi_photo_pixels[sy*(MI_TILE_SIDE/2u)+(sx>>1)];
