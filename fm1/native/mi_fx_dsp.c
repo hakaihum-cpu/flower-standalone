@@ -49,6 +49,13 @@ void mi_fx_dsp_reset_shared(mi_fx_dsp_t *p)
     p->eureka_sum=0.f;p->eureka_phase=0.f;p->eureka_filter=0.f;
     p->eureka_last_pitch=255u;
 }
+void mi_fx_dsp_reset_grain(mi_fx_dsp_t *p)
+{
+    if(!p)return;
+    p->dreamy_write=0u;p->dreamy_valid=0u;
+    p->dreamy_phase=0.f;p->dreamy_filter=0.f;
+    p->dreamy_last_pitch=255u;
+}
 int mi_fx_dsp_eureka_ready(const mi_fx_dsp_t *p,unsigned time,unsigned haze)
 {
     if(!p)return 0;
@@ -102,6 +109,19 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
     if(p1>127u)p1=127u;
     if(p2>127u)p2=127u;
     dry=bounded(dry,-1.f,1.f);
+    if(mode==MI_FX_BITCRUSH){
+        /* BITS 2..16 and HOLD 1..64 samples: real sample-rate/bit reduction. */
+        unsigned bits=2u+(p1*14u/127u);
+        unsigned hold=1u+(p2*63u/127u);
+        if(!p->crush_hold_counter || p->crush_hold_counter>hold){
+            float levels=(float)(1u<<(bits-1u));
+            int32_t q=(int32_t)(dry*levels);
+            p->crush_held=bounded((float)q/levels,-1.f,1.f);
+            p->crush_hold_counter=hold;
+        }
+        --p->crush_hold_counter;
+        return p->crush_held;
+    }
     if(mode==MI_FX_EUREKA) {
         /* No heap or buffer clears on the audio thread. If playback starts
          * after idle, require NEW audible samples before enabling wet. Keep
@@ -164,7 +184,13 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
         }
         return wet;
     }
-    if(mode==MI_FX_DREAMY) {
+    if(mode==MI_FX_DREAMY||mode==MI_FX_PITCHSHIFT) {
+        /* PITCHSHIFT shares the existing grain RAM, never an extra buffer.
+         * UI: P1 = -12..+12 semitones, P2 = grain density. */
+        if(mode==MI_FX_PITCHSHIFT){
+            pitch=p1;density=p2;
+            p1=72u;p2=64u;reverse=0u;feedback=0u;
+        }
         /* Native bounded two-grain shifter. GRAIN and SPACE are preserved;
          * PITCH, REVERSE, DENSITY and FEEDBACK now change actual samples.
          * This is NOT the full original JUCE Dreamy implementation. */
