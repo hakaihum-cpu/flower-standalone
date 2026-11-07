@@ -47,6 +47,7 @@ void mi_fx_dsp_reset_shared(mi_fx_dsp_t *p)
     p->eureka_decimate=0u;p->eureka_heard=0u;
     p->eureka_content_valid=0u;p->eureka_quiet_samples=0u;
     p->eureka_sum=0.f;p->eureka_phase=0.f;p->eureka_filter=0.f;
+    p->eureka_last_pitch=255u;
 }
 int mi_fx_dsp_eureka_ready(const mi_fx_dsp_t *p,unsigned time,unsigned haze)
 {
@@ -78,6 +79,7 @@ void mi_fx_dsp_init(mi_fx_dsp_t *p)
     if(!p)return;
     mi_memzero(p,sizeof(*p));
     mi_fx_dsp_reset_shared(p);
+    p->dreamy_last_pitch=255u;
     mi_memzero(delay_memory,sizeof delay_memory);
     mi_memzero(chorus_memory,sizeof chorus_memory);
     mi_memzero(reverb_memory,sizeof reverb_memory);
@@ -121,7 +123,11 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
         float history=0.10f+1.60f*(float)p1/127.f;
         float grain_samples=grain*14700.f;
         float base=history*14700.f;
-        float playback=reverse>=64u?-pitch_ratio(pitch):pitch_ratio(pitch);
+        if(p->eureka_last_pitch!=(uint8_t)pitch){
+            p->eureka_last_pitch=(uint8_t)pitch;
+            p->eureka_pitch_cache=pitch_ratio(pitch);
+        }
+        float playback=reverse>=64u?-p->eureka_pitch_cache:p->eureka_pitch_cache;
         float sweep=1.f-playback;
         float ph0=p->eureka_phase,ph1=ph0+0.5f;
         float wet=0.f,weights=0.f;
@@ -164,7 +170,11 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
          * This is NOT the full original JUCE Dreamy implementation. */
         float size=0.08f+0.44f*(p1/127.f);
         float grain_samples=size*sample_rate*(1.3f-0.6f*density/127.f);
-        float playback=pitch_ratio(pitch);
+        if(p->dreamy_last_pitch!=(uint8_t)pitch){
+            p->dreamy_last_pitch=(uint8_t)pitch;
+            p->dreamy_pitch_cache=pitch_ratio(pitch);
+        }
+        float playback=p->dreamy_pitch_cache;
         int rev=reverse>=64u;
         float base,sweep,ph0,ph1,wet,weights=0.f,total=0.f;
         uint32_t write=p->dreamy_write&(MI_DREAM_N-1u);
