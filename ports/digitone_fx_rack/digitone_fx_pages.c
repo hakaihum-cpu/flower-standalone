@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * Unique native parameter pages for GRANULAR, EUREKA audio, REEL and CRUSH.
+ * Unique native parameter pages for GRANULAR, REEL and BITCRUSH.
  * Rendering follows the real Digitone layout: top tempo/title band, a
  * narrow left gutter and A-D / E-H in two rows of four on the 128x64 OLED.
  * Geometry informed by elekloader DigiPrism's GPL-2.0-or-later ui.c.
@@ -18,14 +18,6 @@ static const struct dnfx_control panels[DNFX_COUNT][2][8] = {
          K("POS",0,127,0), K("MIX",0,127,64), U,U,U},
         {U,U,U,U,U,U,U,U}
     },
-    { /* EUREKA: match HazeProcessor::Params, excluding global bypass */
-        {K("MIX",0,127,70),K("TIME",0,127,64),K("HAZE",0,127,64),
-         K("FILT",0,127,64),K("REPT",0,127,0),K("MOD",0,127,64),
-         K("VERB",0,127,0),S("SPED",0,2,1)},
-        {S("LOOP",0,2,1),S("WARB",0,2,0),S("TRNS",0,1,0),
-         S("ECHO",0,1,0),S("OG",0,1,0),S("LOCK",0,1,0),
-         S("GAIN",0,1,0),S("STEO",0,1,1)}
-    },
     { /* MIYAKO Master REEL: exact five source parameters */
         {K("DRIV",0,127,38),K("WOW",0,127,25),
          K("FLUT",0,127,13),K("NOIS",0,127,0),
@@ -43,9 +35,8 @@ static const struct dnfx_control panels[DNFX_COUNT][2][8] = {
 #undef U
 
 static const char *const titles[DNFX_COUNT] = {
-    "GRANULAR", "EUREKA", "REEL", "BITCRUSH"
+    "GRANULAR", "REEL", "BITCRUSH"
 };
-static const char *const eureka_subtitle[2]={"SOUND", "PLAY"};
 static const int8_t tip[29][2] = {
     {-4,-4},{-5,-3},{-5,-3},{-6,-2},{-6,-1},{-6,0},{-6,1},{-6,2},
     {-5,3},{-4,4},{-4,5},{-3,5},{-2,6},{-1,6},{0,6},
@@ -57,7 +48,7 @@ static const char *const pitch_names[8]={"-12","-7","-5","0","+5","+7","+12","+2
 
 unsigned dnfx_page_count(unsigned effect)
 {
-    return effect==DNFX_EUREKA ? 2u : effect<DNFX_COUNT ? 1u : 0u;
+    return effect<DNFX_COUNT ? 1u : 0u;
 }
 const struct dnfx_control *dnfx_control_at(unsigned effect,unsigned page,unsigned knob)
 {
@@ -148,19 +139,8 @@ static void label(void *bmp,int cx,int y,const char *s)
 }
 static const char *option_name(unsigned fx,unsigned pg,unsigned i,unsigned v)
 {
-    static const char *const speed[3]={"0.5X","1X","2X"};
-    static const char *const loops[3]={"1","2","2+"};
-    static const char *const warble[3]={"OFF","LITE","HEAV"};
+    (void)pg;
     if(fx==DNFX_GRANULAR && i<2u) return pitch_names[v>7?7:v];
-    if(fx==DNFX_EUREKA) {
-        if(pg==0u && i==7u) return speed[v>2?2:v];
-        if(pg==1u) {
-            if(i==0u) return loops[v>2?2:v];
-            if(i==1u) return warble[v>2?2:v];
-            if(i==7u) return v?"ST":"MO";
-            return v?"ON":"OFF";
-        }
-    }
     return "";
 }
 static void print_value(void *bmp,int x,int y,const struct dnfx_state *s,unsigned i)
@@ -178,24 +158,6 @@ static void print_value(void *bmp,int x,int y,const struct dnfx_state *s,unsigne
             fw_textf(bmp,font,x,y,-1,"%d.%dMS",tenth/10,tenth%10);
         } else fw_textf(bmp,font,x,y,-1,"%d%%",(v*100+63)/127);
         return;
-    }
-    if(fx==DNFX_EUREKA) {
-        if(pg==0u && i==7u) {
-            static const char *const speed[]={"0.5X","1X","2X"};
-            fw_textf(bmp,font,x,y,-1,"%s",speed[v>2?2:v]);return;
-        }
-        if(pg==1u) {
-            if(i==0u) {
-                static const char *const loops[]={"1","2","2+"};
-                fw_textf(bmp,font,x,y,-1,"%s",loops[v>2?2:v]);
-            } else if(i==1u) {
-                static const char *const warble[]={"OFF","LITE","HEAV"};
-                fw_textf(bmp,font,x,y,-1,"%s",warble[v>2?2:v]);
-            } else if(i==7u) {
-                fw_textf(bmp,font,x,y,-1,"%s",v?"ST":"MO");
-            } else fw_textf(bmp,font,x,y,-1,"%s",v?"ON":"OFF");
-            return;
-        }
     }
     if(fx==DNFX_CRUSH) {
         if(i==0u) fw_textf(bmp,font,x,y,-1,"%dBIT",v);
@@ -223,8 +185,6 @@ void dnfx_draw(void *bmp,const struct dnfx_state *s,unsigned bpm)
         print_value(bmp,70,56,s,s->focus);
     } else {
         fw_textf(bmp,(const void *)fw_font_title,22,56,-1,"%s",titles[s->effect]);
-        if(s->effect==DNFX_EUREKA)
-            fw_textf(bmp,(const void *)fw_font5,91,56,-1,"%s",eureka_subtitle[s->page]);
     }
     for(i=0u;i<8u;++i) {
         const struct dnfx_control *p=dnfx_control_at(s->effect,s->page,i);

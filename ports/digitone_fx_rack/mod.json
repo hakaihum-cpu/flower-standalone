@@ -1,11 +1,11 @@
 {
   "id": "digitone-fx-rack",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "GPL-2.0-or-later",
-  "title": "DIGITONE FOUR FX RACK",
+  "title": "DIGITONE THREE FX RACK",
   "category": "Effect",
   "author": "analoglav",
-  "description": "Exclusive post-master audio INSERT rack for Digitone mk1 OS1.44: Granular v0.5, Haze-based Eureka source port, MIYAKO Reel source port and Bitcrusher. User-selected TRACK-hold Mod Menu with OFF. Stock FM/MUTE/Chorus/Delay/Reverb and EUREKA video visual module remain separate. Prototype unbuilt, DSP fidelity and physical performance not yet verified.",
+  "description": "Exclusive audio insert: Granular v0.5, Reel, Bitcrusher. Unstable EUREKA AUDIO DSP removed. Expanded 1152-frame EUREKA VIDEO remains independent. Stock FM/MUTE/Chorus/Delay/Reverb and MIDI preserved.",
   "device": "digitone-mk1",
   "os": "1.44",
   "sources": [
@@ -63,7 +63,7 @@
         [
           0,
           "abs32",
-          "sym:rack_menu_eureka",
+          "sym:rack_menu_reel",
           0
         ]
       ]
@@ -76,19 +76,6 @@
         [
           0,
           "abs32",
-          "sym:rack_menu_reel",
-          0
-        ]
-      ]
-    },
-    {
-      "to": "core_menu",
-      "order": 49,
-      "data": "00000000",
-      "relocs": [
-        [
-          0,
-          "abs32",
           "sym:rack_menu_crush",
           0
         ]
@@ -96,7 +83,7 @@
     },
     {
       "to": "core_menu",
-      "order": 50,
+      "order": 49,
       "data": "00000000",
       "relocs": [
         [
@@ -122,14 +109,7 @@
     }
   ],
   "resources": {
-    "core": "4.1",
-    "regions": [
-      {
-        "name": "EUREKA FX stereo capture ring",
-        "lo": "0x47900000",
-        "hi": "0x47B00000"
-      }
-    ]
+    "core": "4.1"
   },
   "requires": [
     "core"
