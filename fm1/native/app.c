@@ -67,15 +67,20 @@ void app_init(void)
 {
  saved_t saved;
  int restored=0;
+ int stored_bytes=plat_store_size(OBJ_SETTINGS);
  mi_init(&state);
  mi_audio_init(&audio,44100.f);
  mi_video_init(&video,MI_EFFECTS_ASSET_COUNT);
  mi_video_set_eureka(&video,MI_EUREKA_ASSET_COUNT);
- if(plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved&&
+ /* fm1-base plat_store_load may truncate to max and return that truncated
+  * length. Check the ACTUAL stored size FIRST. Otherwise a corrupt new save
+  * might be misinterpreted as a valid old MI13 prefix. */
+ if(stored_bytes==(int)sizeof saved &&
+    plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved&&
     saved.magic==SAVED_MAGIC&&mi_state_valid(&saved.state)){
      state=saved.state;
      restored=1;
- }else{
+ }else if(stored_bytes==(int)sizeof(saved_legacy_t)){
      saved_legacy_t old;
      if(plat_store_load(OBJ_SETTINGS,&old,sizeof old)==(int)sizeof old&&
         old.magic==SAVED_MAGIC){
