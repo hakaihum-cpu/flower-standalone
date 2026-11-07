@@ -245,8 +245,9 @@ static float fx_stage(mi_audio_t *a,const mi_state_t *s,
         a->ring[a->wr&(MI_NATIVE_RING-1u)]=(int16_t)(clampf(dry,-1.f,1.f)*32767.f);
         ++a->wr;if(a->valid<MI_NATIVE_RING)++a->valid;
     }else if(mode!=MI_FX_OFF&&mode<MI_FX_COUNT){
-        wet=mi_fx_dsp_process(&native_fx,mode,dry,a->sample_rate,
-                             s->fx_options[mode][0],s->fx_options[mode][1]);
+        wet=mi_fx_dsp_process_ex(&native_fx,mode,dry,a->sample_rate,
+                                s->fx_options[mode][0],s->fx_options[mode][1],
+                                s->fx_extra[mode]);
     }else target=0.f;
     /* EUREKA is genuinely wet-only and its history starts empty. Previously
      * the wet mixer muted a newly played note before the TIME+HAZE history
