@@ -2,7 +2,12 @@
 master 4096
 tap FX
 expect view 2
-turn K1 6
+# Host "turn" sends individual detents. Selecting DREAMY opens its PITCH
+# page, so return K1 to MODE through PRESET before moving to EUREKA.
+turn K1 2
+expect fx 2
+turn PRESET 1
+turn K1 4
 expect fx 6
 # DREAMY/EUREKA select the PITCH page by default.
 # The existing PRESET encoder opens the original MODE/WET/TIME/HAZE page.

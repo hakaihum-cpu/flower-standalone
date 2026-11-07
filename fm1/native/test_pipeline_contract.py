@@ -296,6 +296,14 @@ host_smoke = (root / "fm1/native/host_smoke.txt").read_text()
 assert "turn K1 1\nexpect fx 2\nturn PRESET 1\nturn K1 4\nexpect fx 6" in host_smoke
 assert "turn K1 2\nexpect fx2 2\nturn PRESET 1\nturn K1 1\nexpect fx 6\nexpect fx2 4" in host_smoke
 assert "turn K1 5\nexpect fx 6" not in host_smoke
+# All three host scripts must select EUREKA with the correct per-detent
+# K1/PRESET sequence; unlike "spin", "turn" never batches detents.
+host_eureka = (root / "fm1/native/host_eureka_preview.txt").read_text()
+assert "turn K1 2\nexpect fx 2\nturn PRESET 1\nturn K1 4\nexpect fx 6" in host_eureka
+assert "turn K1 6\nexpect fx 6" not in host_eureka
+host_fx = (root / "fm1/native/host_fx_preview.txt").read_text()
+assert "spin K1 -3\nexpect fx 2" in host_fx
+assert "spin PRESET 1" in host_fx
 assert "429f2aa8f561079481c3b60562ef3f88e2f5abd044a446eca1b1ebe1c6bc11ee" in resource_packer
 assert "7cf48b59c60028829c0d7db6f49a2e52750d3d49b7da33943cba2599d18344ca" in resource_packer
 assert "mi_new_two_sheets_vq.h" in ci

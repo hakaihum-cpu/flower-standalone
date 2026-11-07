@@ -182,6 +182,21 @@ int main(void)
     mi_button(&s,MI_B_FX,9201);
     assert(s.fx_slot==1u&&s.fx_page==0u);
 
+    /* Reproduce the third host script too: start with FX OFF, advance
+     * across DREAMY (which opens PITCH), toggle back, then reach EUREKA. */
+    mi_init(&s);
+    mi_button(&s,MI_B_FX,9240);
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.fx==MI_FX_REEL && s.fx_page==0u);
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.fx==MI_FX_DREAMY && s.fx_page==1u);
+    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.fx_page==0u);
+    for(i=0;i<4u;i++)mi_rotate(&s,MI_EN_K1,1);
+    assert(s.fx==MI_FX_EUREKA && s.fx_page==1u);
+    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.fx==MI_FX_EUREKA && s.fx_page==0u);
+
     /* Host "turn" delivers each detent separately, unlike a steps batch.
      * DREAMY auto-opens PITCH; PRESET returns K1 to MODE. Both FX slots
      * must support EUREKA and the compatible REVERB. */
