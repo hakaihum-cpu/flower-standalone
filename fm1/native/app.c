@@ -264,42 +264,250 @@ static void mi_media_decode(unsigned frame,unsigned eureka)
  * original animation (128x78 -> 240x146) centered at y=47, with no labels
  * or hidden FX parameter values. No source pixels are cropped or stretched.
  */
-static void mi_media_draw_half(unsigned half)
+/* Six 32x32 black/white banks: each 8x8 source block is mapped to one
+ * dictionary entry. Selective base64 byte reads keep only one 9.9 KiB
+ * vector atlas in XIP; there is no 488-frame runtime allocation. */
+static unsigned mi_atlas_sextet(char c)
+{
+    if(c>='A'&&c<='Z')return (unsigned)(c-'A');
+    if(c>='a'&&c<='z')return (unsigned)(c-'a'+26);
+    if(c>='0'&&c<='9')return (unsigned)(c-'0'+52);
+    return c=='+'?62u:c=='/'?63u:0u;
+}
+static uint8_t mi_atlas_byte(unsigned pos)
+{
+    unsigned i=(pos/3u)*4u;
+    unsigned v=(mi_atlas_sextet(mi_tile_atlas_base64[i])<<18) |
+               (mi_atlas_sextet(mi_tile_atlas_base64[i+1u])<<12) |
+               (mi_atlas_sextet(mi_tile_atlas_base64[i+2u])<<6) |
+                mi_atlas_sextet(mi_tile_atlas_base64[i+3u]);
+    return (uint8_t)(v>>(16u-8u*(pos%3u)));
+}
+/* Physical SELECT cycles AUTO, six original sheets, EFFECTS, and EUREKA.
+ * AUTO prioritises the selected audio FX but never changes any sound params. */
+static unsigned mi_visual_mode(void)
+{
+    unsigned fx=state.fx_slot?state.fx2:state.fx;
+    if(visual_choice>=1u&&visual_choice<=6u)return visual_choice-1u;
+    if(visual_choice==7u)return 6u;
+    if(visual_choice==8u)return 7u;
+    if(state.fx==MI_FX_EUREKA||state.fx2==MI_FX_EUREKA)return 7u;
+    if(fx==MI_FX_OFF)fx=state.fx!=MI_FX_OFF?state.fx:state.fx2;
+    switch(fx){
+    case MI_FX_DREAMY:return 0u; /* pose sheet */
+    case MI_FX_REEL:return 1u;   /* eye motion */
+    case MI_FX_DELAY:return 2u;  /* Shibuya/tape */
+    case MI_FX_REVERB:return 3u; /* Shibuya/tape */
+    case MI_FX_CHORUS:return 4u; /* portrait */
+    default:return 6u;          /* existing original EFFECTS bank */
+    }
+}
+static unsigned mi_visual_step(float activity)
+{
+    unsigned mode=mi_visual_mode();
+    int changed=0;
+    if(mode!=visual_last_mode){
+        visual_last_mode=(uint8_t)mode;
+        if(mode<MI_TILE_BANKS)visual_tile=mi_tile_bank_first[mode];
+        visual_cooldown=0u;
+        visual_last_activity=0.f;
+        ++visual_generation;
+        changed=1;
+    }
+    if(visual_cooldown)--visual_cooldown;
+    if(mode<MI_TILE_BANKS && activity>0.003f &&
+       (activity>visual_last_activity*1.28f+0.0015f||!visual_cooldown)){
+        unsigned count=mi_tile_bank_count[mode],next;
+        visual_rng^=visual_rng<<13;
+        visual_rng^=visual_rng>>17;
+        visual_rng^=visual_rng<<5;
+        next=(unsigned)mi_tile_bank_first[mode]+visual_rng%count;
+        if(count>1u && next==visual_tile)
+            next=(unsigned)mi_tile_bank_first[mode]+
+                 (next-(unsigned)mi_tile_bank_first[mode]+1u)%count;
+        visual_tile=(uint16_t)next;
+        ++visual_generation;
+        visual_cooldown=activity>0.15f?3u:5u;
+        changed=1;
+    }
+    visual_last_activity=activity;
+    return (unsigned)changed;
+}
+/* Source-space bitmaps remain square even if the original sheet was 720x720.
+ * Nearest-neighbour expansion is deliberately rough: analog video/glitch.
+ * Only visible rows of each 120-row LCD half are touched. */
+static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
+                              int32_t size,float activity)
+{
+    const int32_t shift=(int32_t)half*120;
+    unsigned sy;
+    for(sy=0;sy<32u;sy++){
+        int32_t top=py+(int32_t)(sy*(unsigned)size/32u)-shift;
+        int32_t bottom=py+(int32_t)((sy+1u)*(unsigned)size/32u)-shift;
+        uint8_t line[4];
+        int32_t tear=0;
+        unsigned bx,sx;
+        if(bottom<=0||top>=120)continue;
+        if(activity>0.025f&&((sy+visual_generation)%9u)==0u){
+            tear=(int32_t)((visual_rng>>(sy%16u))&7u)-3;
+        }
+        for(bx=0;bx<4u;bx++){
+            unsigned map_pos=MI_TILE_CODE_BYTES+(unsigned)visual_tile*16u+
+                             (sy/8u)*4u+bx;
+            uint8_t code=mi_atlas_byte(map_pos);
+            line[bx]=mi_atlas_byte((unsigned)code*8u+sy%8u);
+        }
+        for(sx=0;sx<32u;){
+            unsigned first=sx;
+            int32_t sample=(int32_t)sx+tear;
+            int whiten=sample>=0&&sample<32&&
+                ((line[(unsigned)sample/8u]>>(7u-((unsigned)sample%8u)))&1u);
+            ++sx;
+            while(sx<32u){
+                int32_t sample2=(int32_t)sx+tear;
+                int next=sample2>=0&&sample2<32&&
+                    ((line[(unsigned)sample2/8u]>>(7u-((unsigned)sample2%8u)))&1u);
+                if(next!=whiten)break;
+                ++sx;
+            }
+            if(whiten){
+                int32_t x0=px+(int32_t)(first*(unsigned)size/32u);
+                int32_t x1=px+(int32_t)(sx*(unsigned)size/32u);
+                if(x1>x0)cv_rect(x0,top,x1-x0,bottom-top,C_WHITE);
+            }
+        }
+    }
+    /* Render a few short, event-seeded VHS tracking tears. They only change
+     * with sound onset, so silence is genuinely frozen, not autonomous noise. */
+    if(activity>0.05f){
+        unsigned n=activity>0.25f?5u:2u,j;
+        for(j=0;j<n;j++){
+            unsigned h=(visual_rng>>(j*5u))^(visual_generation*127u+j*43u);
+            int32_t y=py+(int32_t)(h%(unsigned)size)-shift;
+            int32_t x=px+(int32_t)((h>>7)%(unsigned)(size-19));
+            cv_rect(x,y,12+(int32_t)(h%8u),1,C_WHITE);
+        }
+        if(activity>0.28f){
+            unsigned k=(visual_generation*17u+visual_rng)%81u;
+            int32_t x=px+(int32_t)(k%9u)*(size/10);
+            int32_t y=py+(int32_t)(k/9u)*(size/10)-shift;
+            cv_rect(x,y,2,2,YELLOW); /* sparse MIYAKO yellow DOT accent */
+        }
+    }
+}
+/* Original 144 + 576 VQ frame banks remain available alongside photo tiles.
+ * The original encoding is 128x78; its aspect is not distorted here. */
+static void mi_media_draw_scaled_half(unsigned half,int32_t px,int32_t py,
+                                      int32_t width,int32_t height,int eureka)
 {
     unsigned sy;
-    unsigned eureka=state.fx==MI_FX_EUREKA||state.fx2==MI_FX_EUREKA;
     int frame=eureka?video.eureka_frame:video.effects_frame;
-    const int32_t shift=(int32_t)half*120;
+    int32_t shift=(int32_t)half*120;
     if(frame<0)return;
-    mi_media_decode((unsigned)frame,eureka);
+    mi_media_decode((unsigned)frame,(unsigned)eureka);
     for(sy=0;sy<MI_EFFECTS_ASSET_H;sy++){
-        int32_t absolute_y0=47+(int32_t)(sy*146u/MI_EFFECTS_ASSET_H);
-        int32_t absolute_y1=47+(int32_t)((sy+1u)*146u/MI_EFFECTS_ASSET_H);
-        int32_t y0=absolute_y0-shift,y1=absolute_y1-shift;
+        int32_t y0=py+(int32_t)(sy*(unsigned)height/MI_EFFECTS_ASSET_H)-shift;
+        int32_t y1=py+(int32_t)((sy+1u)*(unsigned)height/MI_EFFECTS_ASSET_H)-shift;
         unsigned x=0;
         uint32_t row=sy*(MI_EFFECTS_ASSET_W/2u);
-        if(y0<0)y0=0;
-        if(y1>120)y1=120;
-        if(y1<=y0)continue;
+        if(y1<=0||y0>=120)continue;
         while(x<MI_EFFECTS_ASSET_W){
             unsigned at=row+(x>>1);
             unsigned idx=(x&1u)?(mi_media_pixels[at]&15u):(mi_media_pixels[at]>>4);
-            unsigned from=x++,to;
+            unsigned first=x++,last;
             if(idx==0u)continue;
             while(x<MI_EFFECTS_ASSET_W){
                 at=row+(x>>1);
-                unsigned j=(x&1u)?(mi_media_pixels[at]&15u):(mi_media_pixels[at]>>4);
-                if(j!=idx)break;
+                if(((x&1u)?(mi_media_pixels[at]&15u):
+                              (mi_media_pixels[at]>>4))!=idx)break;
                 ++x;
             }
-            to=x;
+            last=x;
             {
-                int32_t dx0=(int32_t)(from*240u/MI_EFFECTS_ASSET_W);
-                int32_t dx1=(int32_t)(to*240u/MI_EFFECTS_ASSET_W);
+                int32_t dx0=px+(int32_t)(first*(unsigned)width/MI_EFFECTS_ASSET_W);
+                int32_t dx1=px+(int32_t)(last*(unsigned)width/MI_EFFECTS_ASSET_W);
                 if(dx1>dx0)cv_rect(dx0,y0,dx1-dx0,y1-y0,mi_media_palette[idx]);
             }
         }
     }
+}
+static void mi_media_draw_half(unsigned half)
+{
+    unsigned mode=mi_visual_mode();
+    if(mode<MI_TILE_BANKS)mi_tile_draw_half(half,0,0,240,audio_activity);
+    else mi_media_draw_scaled_half(half,0,47,240,146,mode==7u);
+}
+/* Intentionally limited by the FM-1's physical 240x240 LCD: 2x2 compact
+ * hardware knobs on the left; a live square source tile on the right. */
+static void mi_fx_dial(unsigned half,int32_t x,int32_t y,unsigned knob)
+{
+    static const int8_t cx[12]={0,8,14,17,14,8,0,-8,-14,-17,-14,-8};
+    static const int8_t cy[12]={-17,-14,-8,0,8,14,17,14,8,0,-8,-14};
+    static const int8_t hx[11]={-10,-12,-12,-9,-5,0,5,9,12,12,10};
+    static const int8_t hy[11]={10,7,2,-5,-10,-13,-10,-5,2,7,10};
+    char val[16];
+    unsigned i;
+    int32_t oy=y-(int32_t)half*120;
+    int32_t center=x+29,mid=oy+23;
+    const char *label=mi_param_name(&state,knob);
+    int32_t v=mi_param_value(&state,knob);
+    unsigned dial=(unsigned)(v<0?0:v);
+    if(knob==0u){
+        unsigned m=state.fx_slot?state.fx2:state.fx;
+        textcpy(val,mi_fx_name((mi_fx_t)m),sizeof val);
+        dial=m*127u/(MI_FX_COUNT-1u);
+    }else number(v,val);
+    cv_rect(x,oy,57,80,C_WHITE);
+    cv_rect(x+1,oy+1,55,1,C_BLACK);
+    cv_rect(x+1,oy+78,55,1,C_BLACK);
+    for(i=0;i<12u;i++){
+        unsigned next=(i+1u)%12u;
+        cv_line(center+cx[i],mid+cy[i],center+cx[next],mid+cy[next],C_BLACK);
+    }
+    i=dial*10u/127u;
+    cv_line(center,mid,center+hx[i],mid+hy[i],C_BLACK);
+    cv_text(x+4,oy+43,&FONT_XS,label,C_BLACK);
+    cv_rect(x+3,oy+59,51,17,C_BLACK);
+    cv_text(x+5,oy+61,&FONT_XS,val,C_WHITE);
+}
+static void mi_fx_draw_half(unsigned half)
+{
+    const int32_t shift=(int32_t)half*120;
+    const unsigned mode=mi_visual_mode();
+    const unsigned fx=state.fx_slot?state.fx2:state.fx;
+    const char *bankname=mode<MI_TILE_BANKS?mi_tile_bank_name[mode]:
+                         mode==7u?"EUREKA":"EFFECTS";
+    unsigned i;
+    cv_begin(240,120,C_BLACK);
+    cv_text(5,5-shift,&FONT_XS,"FX /",C_WHITE);
+    cv_text(38,5-shift,&FONT_S,mi_fx_name((mi_fx_t)fx),C_WHITE);
+    cv_text(199,5-shift,&FONT_XS,state.fx_slot?"FX B":"FX A",C_WHITE);
+    cv_rect(4,27-shift,232,1,RGB(110,110,110));
+    mi_fx_dial(half,5,34,0u);
+    mi_fx_dial(half,65,34,1u);
+    mi_fx_dial(half,5,122,2u);
+    mi_fx_dial(half,65,122,3u);
+    cv_text(133,32-shift,&FONT_XS,"PREVIEW",C_WHITE);
+    cv_rect(130,46-shift,108,1,C_WHITE);
+    cv_rect(130,46-shift,1,108,C_WHITE);
+    cv_rect(237,46-shift,1,108,C_WHITE);
+    cv_rect(130,153-shift,108,1,C_WHITE);
+    if(mode<MI_TILE_BANKS){
+        mi_tile_draw_half(half,133,49,102,audio_activity);
+    }else{
+        /* 128:78 remains 128:78, not stretched to a false square. */
+        mi_media_draw_scaled_half(half,133,69,102,62,mode==7u);
+    }
+    cv_text(133,164-shift,&FONT_XS,visual_choice?"LOCK":"AUTO",YELLOW);
+    cv_text(133,180-shift,&FONT_XS,bankname,C_WHITE);
+    cv_text(133,199-shift,&FONT_XS,"VHS / 8MM",RGB(180,180,180));
+    cv_rect(133,213-shift,102,2,RGB(70,70,70));
+    i=(unsigned)(audio_activity*102.f);
+    if(i>102u)i=102u;
+    if(i)cv_rect(133,213-shift,(int32_t)i,2,YELLOW);
+    cv_rect(3,221-shift,234,1,RGB(100,100,100));
+    cv_text(6,225-shift,&FONT_XS,"K1-K4 FX   SELECT BANK   SEL FULL",C_WHITE);
+    cv_blit(0,half*120u);
 }
 static void mi_graph_env(void)
 {
