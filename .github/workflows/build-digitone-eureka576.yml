@@ -1,11 +1,11 @@
-name: Digitone PG81 EXCLUSIVE FX CPUFIX + EUREKA VIDEO (PG79 protected)
+name: Digitone PG82 EXCLUSIVE FX + USER EUREKA TILES (PG79 protected)
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/fix/digitone-pg80-audio-cpu-20261104'
+    if: github.ref == 'refs/heads/feature/digitone-eureka-user-tiles-20261107'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -24,21 +24,18 @@ jobs:
           curl -fL --retry 3 -o _firmware/stock.zip 'https://www.elektron.se/wp-content/uploads/2026/10/Digitone_and_Digitone_Keys_OS1.44_dist.zip'
           unzip -p _firmware/stock.zip Digitone_and_Digitone_Keys_OS1.44.syx > _firmware/stock.syx
           echo 'd4f200d04484333d82822db7744e6484d0def8f2db8ddf55ee2b780cc13c9659  _firmware/stock.syx' | sha256sum -c -
-      - name: Reconstruct original EUREKA footage and convert 576 HYBRID 04 frames
+      - name: Reconstruct 576 supplied-source EUREKA tile frames using unchanged HYBRID04 codec
         run: |
           set -euo pipefail
-          python3 scripts/materialize_frame_pack.py
-          python3 ports/digitone_eureka576/prepare.py Resources/eureka_frames.pack ports/digitone_eureka576/frames.bin --seek ports/digitone_eureka576/seek.bin --preview ports/digitone_eureka576/eureka_lcd_preview.png
+          python3 ports/digitone_eureka576/prepare_user_tiles.py
           sha256sum ports/digitone_eureka576/frames.bin
           test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -gt 0
           test "$(stat -c '%s' ports/digitone_eureka576/frames.bin)" -lt 589824
           test "$(stat -c '%s' ports/digitone_eureka576/seek.bin)" -eq 98688
           test -s ports/digitone_eureka576/eureka_lcd_preview.png
-          python3 ports/digitone_eureka576/tests/verify_stream.py \
-            Resources/eureka_frames.pack \
-            ports/digitone_eureka576/frames.bin \
-            ports/digitone_eureka576/reference.bin \
-            ports/digitone_eureka576/seek.bin
+          python3 ports/digitone_eureka576/tests/verify_user_tiles.py
+          echo 'ef27b3bf8b85a0cdb3b7461df0a5d76b110138ddd7bf1177deb3e8f78d865c47  ports/digitone_eureka576/frames.bin' | sha256sum -c -
+          echo 'd5757d7293d2ef04536518ab07927a7768d52f9db7bbdc7abdc52e7acab049e3  ports/digitone_eureka576/seek.bin' | sha256sum -c -
           (
             cd ports/digitone_eureka576
             gcc -std=c11 -Wall -Wextra -Werror -Wconversion -O1 -g \
@@ -237,11 +234,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$RACK_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_FX_RACK_CPUFIX_PG81_TRIAL.syx" \
-            --version PG81
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_FX_RACK_CPUFIX_USER_TILES_PG82_TRIAL.syx" \
+            --version PG82
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_FX_RACK_CPUFIX_PG81_TRIAL.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_FX_RACK_CPUFIX_USER_TILES_PG82_TRIAL.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$RACK_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -253,7 +250,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-FOUR-FX-CPUFIX-PG81-TRIAL
+          name: Digitone-OS1.44-FOUR-FX-USER-TILES-PG82-TRIAL
           path: _release/
           if-no-files-found: error
           retention-days: 30
