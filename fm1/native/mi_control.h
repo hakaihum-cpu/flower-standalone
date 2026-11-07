@@ -30,6 +30,8 @@ typedef enum {
 typedef struct {
     mi_view_t view;
     uint8_t wave, width, sub, crush, fx, wet, level, preset;
+    /* wave 0..3 = single, 4 = MULTI. Oscillator1's actual waveform is
+     * retained separately while the HOME WAVE selector stays on MULTI. */
     uint8_t fx_options[MI_FX_COUNT][2];
     uint8_t env[4], lfo[4], arp[4], seq[4];
     int16_t global[4]; /* BPM 40..240, SWING 0..100, TUNE -50..50, CLOCK 0..2 */
@@ -46,6 +48,7 @@ typedef struct {
      * pitch, reverse, density, feedback. Original 2 controls remain. */
     uint8_t fx_extra[MI_FX_COUNT][4];
     uint8_t fx_page;
+    uint8_t osc1_wave; /* appended, previous saved-state prefix unchanged */
 } mi_state_t;
 typedef struct {
     mi_action_t action;
@@ -56,6 +59,7 @@ void mi_init(mi_state_t *s);
 mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms);
 mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t encoder, int32_t steps);
 const char *mi_wave_name(unsigned wave);
+#define MI_WAVE_MULTI 4u
 const char *mi_arp_mode_name(unsigned mode);
 const char *mi_lfo_wave_name(unsigned wave);
 const char *mi_view_name(mi_view_t view);
