@@ -72,6 +72,16 @@ void mi_init(mi_state_t *s)
     s->fx_extra[MI_FX_EUREKA][2]=64u;
     s->fx_extra[MI_FX_EUREKA][3]=0u;
     s->fx_page=0u;
+    s->filter_cutoff=127u;s->filter_resonance=0u;
+    s->drum_tone=64u;s->drum_decay=64u;
+    s->drum_color=64u;s->drum_level=100u;
+    s->rec_bars=2u;
+    s->video_params[0]=0u;s->video_params[1]=0u;
+    s->video_params[2]=64u;s->video_params[3]=64u;
+    s->fx_options[MI_FX_BITCRUSH][0]=32u;
+    s->fx_options[MI_FX_BITCRUSH][1]=0u;
+    s->fx_options[MI_FX_PITCHSHIFT][0]=64u;
+    s->fx_options[MI_FX_PITCHSHIFT][1]=64u;
     /* REC editor: IN=0, OUT=127, pitch=0 semitones, level=100. */
     s->seq[0]=0;s->seq[1]=127;s->seq[2]=3;s->seq[3]=100;
 }
@@ -86,8 +96,12 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
     switch (b) {
     case MI_B_HOME: view(s, MI_HOME); break;
     case MI_B_EDIT:
-        if(s->view==MI_OSC)s->osc_page^=1u;
-        else{if(s->wave!=MI_WAVE_MULTI)s->osc_page=0u;view(s, MI_OSC);}
+        if(s->view==MI_OSC){
+            if(s->osc_page==0u)s->osc_page=s->wave==MI_WAVE_MULTI?1u:2u;
+            else if(s->osc_page==1u)s->osc_page=2u;
+            else s->osc_page=0u;
+        }
+        else{if(s->wave!=MI_WAVE_MULTI && s->osc_page==1u)s->osc_page=0u;view(s, MI_OSC);}
         break;
     case MI_B_FX:
         if(s->view==MI_FX){s->fx_slot^=1u;}
@@ -138,24 +152,28 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     if (k >= 4) return;
     switch (s->view) {
     case MI_HOME:
-        if(k==0){
-            if(s->wave==MI_WAVE_MULTI){
-                /* K1 edits the selected OSC waveform, not MULTI value 4. */
-                p=s->osc_page?&s->osc2_wave:&s->osc1_wave;
-                hi=3;
-            }else{p=&s->wave;hi=MI_WAVE_MULTI;}
-        }
+        if(k==0){p=&s->wave;hi=MI_WAVE_FMDRUM;}
         if(k==1){if(s->wave==MI_WAVE_MULTI){p=&s->osc_page;hi=1;}
                  else{p=&s->fx;hi=MI_FX_COUNT-1;}}
         if(k==2)p=s->wave==MI_WAVE_MULTI?&s->osc2_detune:&s->wet;
         if(k==3)p=&s->level;
         break;
     case MI_OSC:
-        if(s->osc_page==0u){
-            if (k == 0) { p = s->wave==MI_WAVE_MULTI?&s->osc1_wave:&s->wave; hi = 3; }
-            if (k == 1) p = &s->width;
-            if (k == 2) p = &s->sub;
-            if (k == 3) p = &s->crush;
+        if(s->osc_page==2u){
+            if(k==0)p=&s->filter_cutoff;
+            if(k==1)p=&s->filter_resonance;
+            if(k==2)p=&s->level;
+            if(k==3)p=&s->crush;
+        }else if(s->wave==MI_WAVE_FMDRUM){
+            if(k==0)p=&s->drum_tone;
+            if(k==1)p=&s->drum_decay;
+            if(k==2)p=&s->drum_color;
+            if(k==3)p=&s->drum_level;
+        }else if(s->osc_page==0u){
+            if(k==0){p=s->wave==MI_WAVE_MULTI?&s->osc1_wave:&s->wave;hi=3;}
+            if(k==1)p=&s->width;
+            if(k==2)p=&s->sub;
+            if(k==3)p=&s->crush;
         }else{
             if(k==0){p=&s->osc2_wave;hi=3;}
             if(k==1)p=&s->osc2_detune;
@@ -193,11 +211,9 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         if(k>1&&mode<MI_FX_COUNT)p=&s->fx_options[mode][k-2];
         break;
     }
-    case MI_VIDEO:
-        /* SEL is a true media-only screen: avoid hidden knob changes. */
-        break;
+    case MI_VIDEO: p=&s->video_params[k];break;
     case MI_ENV: p = &s->env[k]; break;
-    case MI_LFO: p = &s->lfo[k]; if(k==1)hi=3; if(k==3)hi=2; break;
+    case MI_LFO: p = &s->lfo[k]; if(k==1)hi=3; if(k==3)hi=MI_LFO_DEST_COUNT-1; break;
     case MI_ARP:
         p = &s->arp[k];
         if(k==0)hi=4;
@@ -239,7 +255,7 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
     case MI_EN_ALGORITHM:
         /* Never silently exit MULTI while an FX/VIDEO/other page is open. */
         if(s->view!=MI_HOME&&s->view!=MI_OSC)break;
-        if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI){
+        if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI&&s->osc_page<2u){
             uint8_t *selected=s->osc_page?&s->osc2_wave:&s->osc1_wave;
             *selected=(uint8_t)limited(*selected,steps>0?1:-1,0,3);
         }else if(s->view==MI_OSC&&s->osc_page){
@@ -247,7 +263,7 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
         }else{
             uint8_t old=s->wave;
             s->wave=(uint8_t)limited(s->wave,steps>0?1:-1,0,
-                                     s->view==MI_HOME?MI_WAVE_MULTI:3);
+                                     s->view==MI_HOME?MI_WAVE_FMDRUM:MI_WAVE_FMDRUM);
             if(old!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
                 s->osc1_wave=old;
                 if(s->osc2_level==0u)s->osc2_level=64u;
@@ -256,6 +272,10 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
         }
         break;
     case MI_EN_PRESETS: {
+        if(s->view==MI_SEQ){
+            if(steps!=0)s->rec_bars=s->rec_bars==2u?4u:2u;
+            break;
+        }
         if(s->view==MI_FX){
             unsigned mode=s->fx_slot?s->fx2:s->fx;
             if(mode==MI_FX_DREAMY||mode==MI_FX_EUREKA)
@@ -285,6 +305,8 @@ int mi_fx_pair_supported(unsigned first,unsigned second)
     if(first>=MI_FX_COUNT||second>=MI_FX_COUNT)return 0;
     if(first==MI_FX_OFF||second==MI_FX_OFF)return 1;
     if(first==second)return 0;
+    if((first==MI_FX_DREAMY&&second==MI_FX_PITCHSHIFT)||
+       (first==MI_FX_PITCHSHIFT&&second==MI_FX_DREAMY))return 0;
     if((first==MI_FX_DELAY&&second==MI_FX_EUREKA)||
        (first==MI_FX_EUREKA&&second==MI_FX_DELAY))return 0;
     return 1;
@@ -296,7 +318,7 @@ int mi_state_valid(const mi_state_t *s)
 {
     unsigned i, j;
     if (!s || (unsigned)s->view >= MI_VIEW_COUNT ||
-        s->wave > MI_WAVE_MULTI || s->osc1_wave > 3u ||
+        s->wave > MI_WAVE_FMDRUM || s->osc1_wave > 3u ||
         s->width > 127u || s->sub > 127u ||
         s->crush > 127u || s->level > 127u ||
         s->fx >= MI_FX_COUNT || s->fx2 >= MI_FX_COUNT ||
@@ -306,7 +328,7 @@ int mi_state_valid(const mi_state_t *s)
         s->project_slot > 4u || s->octave < -3 || s->octave > 3 ||
         s->seq[0] >= s->seq[1] || s->seq[1] > 127u ||
         s->seq[2] > 6u || s->seq[3] > 127u ||
-        s->lfo[1] > 3u || s->lfo[3] > 2u ||
+        s->lfo[1] > 3u || s->lfo[3] >= MI_LFO_DEST_COUNT ||
         s->arp[0] > 4u || s->arp[1] > 3u ||
         s->arp[2] < 10u || s->arp[2] > 100u ||
         s->arp[3] < 1u || s->arp[3] > 4u ||
@@ -316,10 +338,11 @@ int mi_state_valid(const mi_state_t *s)
         s->global[3] < 0 || s->global[3] > 2 ||
         s->osc2_wave>3u || s->osc2_level>127u ||
         s->osc2_detune>127u || s->osc2_octave>4u ||
-        s->osc_page>1u || s->fx_page>1u)
+        s->osc_page>2u || s->fx_page>1u ||
+        (s->rec_bars!=2u&&s->rec_bars!=4u))
         return 0;
     for (i = 0; i < 4u; ++i) {
-        if (s->env[i] > 127u || s->lfo[i] > 127u)
+        if (s->env[i] > 127u || s->lfo[i] > 127u || s->video_params[i]>127u)
             return 0;
     }
     for (i = 0; i < MI_FX_COUNT; ++i) {
