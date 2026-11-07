@@ -18,6 +18,7 @@ int main(void)
     assert(!strcmp(mi_wave_name(1),"SAW"));
     assert(!strcmp(mi_wave_name(2),"SQUARE"));
     assert(!strcmp(mi_wave_name(3),"PULSE"));
+    assert(!strcmp(mi_wave_name(MI_WAVE_MULTI),"MULTI"));
     assert(!strcmp(mi_arp_mode_name(4),"RND"));
     mi_button(&s, MI_B_EDIT, 0);
     mi_rotate(&s, MI_EN_K1, 3);
