@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * FM-1 MIYAKO internal-bus recorder: 2 seconds 22.05kHz mono 16-bit.
+ * FM-1 MIYAKO internal-bus recorder: fixed 44,100 mono 16-bit frames, tempo-adaptive.
  * Input is MIYAKO synth/FX output, not external audio or USB playback.
  */
 #ifndef MI_NATIVE_RECORDER_H
