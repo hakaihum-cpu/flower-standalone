@@ -124,10 +124,11 @@ static void drum_on(mi_audio_t *a,const mi_state_t *s,
     static const float hz[6]={55.f,182.f,2460.f,1760.f,1120.f,84.f};
     static const float decay[6]={0.65f,0.24f,0.075f,0.40f,1.32f,0.55f};
     mi_voice_t *v=0;
-    if(note>=53u){idx=((unsigned)note-53u)%6u;
-                  variant=(((unsigned)note-53u)/6u)%4u;}
-    else{idx=((unsigned)note+6u-36u%6u)%6u;
-         variant=((unsigned)note/6u)%4u;}
+    /* NOTE 53 is the first physical kick. Octave shifts preserve each
+     * six-key drum order, including notes below 53. */
+    idx=((unsigned)note+1u)%6u;
+    if(note>=53u)variant=(((unsigned)note-53u)/6u)%4u;
+    else variant=((53u-(unsigned)note)/6u)%4u;
     mi_audio_note_on(a,note,velocity);
     for(i=0u;i<MI_NATIVE_POLY;i++)
         if(a->v[i].active&&a->v[i].age==a->age_counter){v=&a->v[i];break;}
