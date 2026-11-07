@@ -103,7 +103,7 @@ midi USB 90 45 7F
 tap REC
 expect view 7
 wait 650
-expect rec_samples >10000
+expect rec_samples >4000
 tap REC
 midi USB 80 45 00
 expect recording 0
@@ -115,7 +115,7 @@ expect rec_overdub 1
 wait 100
 tap REC
 expect recording 0
-expect rec_samples >10000
+expect rec_samples >4000
 expect rec_playing 1
 tap PLAY
 expect rec_playing 0

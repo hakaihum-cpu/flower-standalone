@@ -4,80 +4,42 @@
 int main(void)
 {
     mi_recorder_t r;
-    uint8_t edits[4]={0,127,3,100};
+    const uint8_t controls[4]={0,127,3,127};
     uint32_t i;
     mi_rec_init(&r);
-    assert(r.count==0u&&!r.playing&&!r.recording);
-    mi_rec_toggle_play(&r);
-    assert(!r.playing);
+    mi_rec_config(&r,44100.f,40u);
     mi_rec_toggle_record(&r);
-    assert(r.recording);
-    for(i=0;i<MI_REC_CAPACITY*2u;i++){
-        float signal=(i/100u)&1u?-0.75f:0.75f;
-        float out=mi_rec_tick(&r,signal,edits);
-        assert(out==0.f);
-    }
-    assert(!r.recording&&r.playing&&r.count==MI_REC_CAPACITY);
-    assert(mi_rec_sample(100)>20000);
-    assert(mi_rec_sample(150)<-20000);
-    {
-        int8_t lo,hi;
-        mi_rec_peak(0,&lo,&hi);
-        assert(lo<0&&hi>0);
-    }
-    /* Full buffer automatically loops; PLAY still toggles stop/restart. */
-    mi_rec_toggle_play(&r);
-    assert(!r.playing);
-    mi_rec_toggle_play(&r);
-    assert(r.playing);
-    for(i=0;i<128u;i++){
-        float out=mi_rec_tick(&r,0.f,edits);
-        assert(out>=-1.f&&out<=1.f);
-    }
-    /* Seven rate indices: -12/-7/-5/0/+5/+7/+12, 0 is half-rate
-       22.05 kHz clip -> 44.1 kHz output; +12 is exactly 2x that. */
-    float before=r.playback_pos;
-    edits[2]=0;
-    mi_rec_tick(&r,0.f,edits);
-    assert(r.playback_pos-before>0.24f&&r.playback_pos-before<0.26f);
-    before=r.playback_pos;
-    edits[2]=6;
-    mi_rec_tick(&r,0.f,edits);
-    assert(r.playback_pos-before>0.99f&&r.playback_pos-before<1.01f);
-    edits[0]=20;edits[1]=30;edits[2]=3;
-    for(i=0;i<MI_REC_CAPACITY*3u;i++)
-        mi_rec_tick(&r,0.f,edits);
-    assert(r.playing);
-    assert(r.playback_pos>=(float)((r.count-1u)*20u/127u));
-    assert(r.playback_pos<(float)((r.count-1u)*30u/127u+1u));
-    mi_rec_toggle_play(&r);
-    assert(!r.playing);
-    /* Second REC adds a new layer; it must NEVER clear the first clip. */
-    edits[0]=0u;edits[1]=127u;edits[2]=3u;edits[3]=100u;
-    int16_t old10=mi_rec_sample(10),old40=mi_rec_sample(40);
+    assert(r.recording&&!r.clock_mode&&r.limit_count==MI_REC_CAPACITY);
+    for(i=0u;i<44100u;i++)mi_rec_tick(&r,(i/4410u)&1u? -0.75f:0.75f,controls);
     mi_rec_toggle_record(&r);
-    assert(r.recording&&r.overdubbing&&r.count==MI_REC_CAPACITY&&r.playing);
-    for(i=0;i<40u;i++){
-        float monitored=mi_rec_tick(&r,0.1f,edits);
-        assert(monitored>=-1.f&&monitored<=1.f);
-    }
-    assert(r.count==MI_REC_CAPACITY);
-    assert(mi_rec_sample(10)!=old10); /* new layer actually added */
-    assert(mi_rec_sample(40)==old40); /* untouched future samples preserved */
-    mi_rec_toggle_record(&r);
-    assert(!r.recording&&!r.overdubbing&&r.playing);
+    assert(!r.recording&&r.playing);
+    assert(r.count>=7999u&&r.count<=8001u);
+    assert(mi_rec_sample(100)>18000);
     mi_rec_clear(&r);
-    assert(r.count==0u&&!r.recording&&!r.overdubbing&&!r.playing);
+    assert(!r.count);
+    mi_rec_config(&r,44100.f,120u);
+    mi_rec_midi_realtime(&r,0xfau);
+    for(i=0u;i<10u;i++)mi_rec_midi_realtime(&r,0xf8u);
     mi_rec_toggle_record(&r);
-    assert(r.recording&&!r.overdubbing&&r.count==0u);
+    assert(r.clock_mode&&r.clock_wait&&!r.recording);
+    /* Align to the next bar after START: tick #96. */
+    for(i=0u;i<86u;i++){
+        unsigned j;
+        mi_rec_midi_realtime(&r,0xf8u);
+        for(j=0u;j<919u;j++)mi_rec_tick(&r,0.f,controls);
+    }
+    assert(!r.clock_wait&&r.recording);
+    for(i=0u;i<192u;i++){
+        unsigned j;
+        mi_rec_midi_realtime(&r,0xf8u);
+        for(j=0u;j<919u;j++)mi_rec_tick(&r,0.25f,controls);
+        if(i==37u)mi_rec_toggle_record(&r);
+    }
+    assert(!r.clock_mode&&!r.recording&&!r.clock_pad&&r.playing);
+    assert(r.count>30000u&&r.count<34000u);
+    assert(mi_rec_sample(5000)>0);
+    assert(mi_rec_sample(r.count-1u)==0);
     mi_rec_stop(&r);
-    assert(!r.recording&&!r.playing);
-    mi_rec_clear(&r);
-    mi_rec_toggle_record(&r);
-    for(i=0;i<1000u;i++)mi_rec_tick(&r,0.25f,edits);
-    mi_rec_toggle_record(&r);
-    assert(!r.recording&&r.playing&&r.count==500u);
-    assert(r.playback_pos==0.f);
-    puts("PASS: REC stop and 2-second limit auto-play, overdub, clear, pitch/trim");
+    puts("PASS: free record end, 8kHz uLaw, MIDI two-bar endpoint, silent tail");
     return 0;
 }

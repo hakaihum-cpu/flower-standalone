@@ -446,6 +446,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         a->previous_engine=s->wave;
     }
     if(s->wave!=MI_WAVE_FMDRUM)arp_sync(a,s);
+    mi_rec_config(&a->recorder,a->sample_rate,(unsigned)s->global[0]);
     /* UI updates only an 8-bit command; the audio thread owns the samples. */
     if(a->rec_command){
         uint8_t cmd=a->rec_command;

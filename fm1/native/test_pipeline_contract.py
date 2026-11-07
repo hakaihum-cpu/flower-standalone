@@ -324,11 +324,16 @@ assert "mi_atlas_byte" not in ui  # no per-pixel base64 decode in rendering
 assert "s->wave==MI_WAVE_MULTI" in audio and "osc2_mix" in audio
 assert "s->fx_page=0u;" in controls
 assert "s->fx_page^=1u;" in controls
-assert "REC stop and 2-second limit auto-play" in (root / "fm1/native/test_mi_recorder.c").read_text()
+assert "MIDI two-bar endpoint" in (root / "fm1/native/test_mi_recorder.c").read_text()
+assert "MI_REC_RATE 8000u" in (root / "fm1/native/mi_recorder.h").read_text()
+assert "MI_REC_CAPACITY 192000u" in (root / "fm1/native/mi_recorder.h").read_text()
+assert "mi_rec_midi_realtime(&audio.recorder,status)" in ui
+assert "mi_rec_config(&a->recorder" in audio
+assert "MI_REC_CLOCK_TICKS 192u" in (root / "fm1/native/mi_recorder.h").read_text()
 assert "mi_soft_limit(sample)" in audio
 assert "p->dreamy_filter+=" in fxcode
 assert "r->overdubbing=1u" in recorder
-assert "r->overdubbing && r->count>=4u" in recorder
+assert "r->overdubbing&&r->count>=4u" in recorder
 # Upstream fm1-base's existing CRC-checked separate resource installer,
 # explicitly approved for integrated animation; user data sectors stay intact.
 resource_header = (root / "fm1/native/mi_resource_media.h").read_text()

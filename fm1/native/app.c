@@ -145,6 +145,11 @@ static void midi_audio_poll(void)
      uint8_t velocity=(uint8_t)((pkt>>24)&127u);
      uint8_t kind=status&0xF0u;
      (void)port;
+     if(status==0xf8u||status==0xfau||status==0xfbu||status==0xfcu){
+         /* USB/TRS MIDI realtime: 24 PPQN, 192 pulses = two 4/4 bars. */
+         mi_rec_midi_realtime(&audio.recorder,status);
+         continue;
+     }
      if(kind==0x90u&&velocity)mi_audio_input_on(&audio,&state,note,velocity);
      else if(kind==0x80u||(kind==0x90u&&!velocity))
          mi_audio_input_off(&audio,&state,note);
