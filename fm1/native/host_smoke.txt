@@ -124,8 +124,14 @@ expect view 2
 # FX P1 MODE remains editable when crossing DREAMY and EUREKA.
 turn K1 1
 expect fx 2
+expect fx_page 0
+turn PRESET 1
+expect fx_page 1
+turn PRESET 1
+expect fx_page 0
 turn K1 4
 expect fx 6
+expect fx_page 0
 tap SEL
 expect view 3
 midi USB 90 45 7F
@@ -140,6 +146,7 @@ tap FX
 expect fx_slot 1
 turn K1 2
 expect fx2 2
+expect fx_page 0
 turn K1 1
 expect fx 6
 expect fx2 4

@@ -1089,6 +1089,7 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"visual_choice")) *got=(int)visual_choice;
   else if(mi_streq(what,"fx2")) *got=(int)state.fx2;
   else if(mi_streq(what,"fx_slot")) *got=(int)state.fx_slot;
+ else if(mi_streq(what,"fx_page")) *got=(int)state.fx_page;
  else if(mi_streq(what,"wave")) *got=(int)state.wave;
  else if(mi_streq(what,"octave")) *got=(int)state.octave;
  else if(mi_streq(what,"arp_mode")) *got=(int)state.arp[0];

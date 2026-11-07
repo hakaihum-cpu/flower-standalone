@@ -171,15 +171,15 @@ assert (root / "fm1/native/mi_memory.h").is_file()
 manifest = (root / "fm1/native/fm1.toml").read_text(encoding="utf-8")
 app_header = (root / "fm1/native/app.h").read_text(encoding="utf-8")
 assert 'id_prefix = "FM-1_9"' in manifest
-assert '#define APP_VERSION "0.3.1-DEV"' in app_header
+assert '#define APP_VERSION "0.3.2-DEV"' in app_header
 assert 'APP_TAGLINE "NATIVE TRIAL"' in app_header
-assert "--product FM-1_934" in ci
+assert "--product FM-1_935" in ci
 # Keep package header marker and running firmware FELUCCA_ID in sync by
 # patching the pinned original builder BEFORE ANY compilation step.
 id_patch = (root / "fm1/native/tools/set_miyako_product_id.py").read_text(encoding="utf-8")
-assert 'TARGET = "FM-1_934"' in id_patch
+assert 'TARGET = "FM-1_935"' in id_patch
 assert 'OLD = \'    PRODUCT = prefix + "00"\'' in id_patch
-assert 'NEW = \'    PRODUCT = prefix + "34"' in id_patch
+assert 'NEW = \'    PRODUCT = prefix + "35"' in id_patch
 # Check the package product ID against the actual pinned build patch,
 # rather than maintaining two contradictory hard-coded CI expectations.
 actual_product = re.search(r'^TARGET = "(FM-1_[0-9]+)"', id_patch, re.M)
@@ -198,7 +198,7 @@ for n, line in enumerate(Path(__file__).read_text(encoding="utf-8").splitlines()
 assert 'set_miyako_product_id.py --base /tmp/fm1-base' in ci
 assert ci.index('set_miyako_product_id.py') < ci.index('tools/build.py /tmp/fm1-base/miyako --host')
 assert "FM-1_9100" not in ci
-assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_934') >= 1
+assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_935') >= 1
 
 # Root issue from the current build log: fm1-base's own mmio_check()
 # correctly rejects a volatile pointer cast outside the BSP, even though
@@ -287,14 +287,18 @@ dot = (root / "fm1/native/mi_dreamy_dot_portrait.h").read_text(encoding="utf-8")
 assert "mi_dreamy_dot_portrait.h" in ci
 assert '#include "mi_dreamy_dot_portrait.h"' in ui
 assert "MI_DREAMY_DOT_BYTES 690u" in dot
-assert "mi_dreamy_dot_draw_half(half,0,0,240)" in ui
+assert "mi_dreamy_dot_draw_half(half,0,0,240,0)" in ui
 # TAPE DOT was deleted; the 11-bank SEL contract is verified above.
 assert "if(state.fx==MI_FX_OFF&&state.fx2==MI_FX_OFF)" in ui
 assert "static const uint8_t mi_photo_vq_maps[488][72]" in atlas
 assert "mi_photo_vq_tilebook" in atlas and "mi_photo_vq_palette" in atlas
 assert "mi_atlas_byte" not in ui  # no per-pixel base64 decode in rendering
 assert "s->wave==MI_WAVE_MULTI" in audio and "osc2_mix" in audio
-assert "s->fx_page=(candidate==MI_FX_DREAMY||" in controls
+assert "s->fx_page=0u;" in controls
+assert "s->fx_page^=1u;" in controls
+assert "REC stop and 2-second limit auto-play" in (root / "fm1/native/test_mi_recorder.c").read_text()
+assert "mi_soft_limit(sample)" in audio
+assert "p->dreamy_filter+=" in fxcode
 assert "r->overdubbing=1u" in recorder
 assert "r->overdubbing && r->count>=4u" in recorder
 # Upstream fm1-base's existing CRC-checked separate resource installer,
@@ -318,7 +322,7 @@ assert "pack_miyako_resource.py" in ci
 assert 'MIYAKO-FM1-NATIVE-DEV-res.bin' in ci
 # Photo bank requires the CRC-checked separate resource. Both SEL and FX
 # must display a visible existing original when a user flashes FWSC alone.
-assert "mi_dreamy_dot_draw_half(half,px,py,size);" in ui
+assert "mi_dreamy_dot_draw_half(half,px,py,size,clip_left);" in ui
 assert "resource_length<MI_TILE_DATA_BYTES" in ui
 assert "mi_photo_cached=-1;" in ui
 # Toggling res 0 must force a render; pixel tests must not accept the
@@ -334,10 +338,12 @@ assert ci.count("check_noresource_display.py") == 2
 assert 'expect media_ready 1' in (root / "fm1/native/host_smoke.txt").read_text()
 assert 'MIYAKO_ADDED_SHEET1.png' in (root / "fm1/native/host_smoke.txt").read_text()
 assert 'MIYAKO_ADDED_SHEET2.png' in (root / "fm1/native/host_smoke.txt").read_text()
-# Host "turn" emits individual detents; DREAMY/EUREKA auto-switch K1 to
-# PITCH. Check the already-supported PRESET page toggle in smoke tests.
+# Host must prove FX P1 starts on MODE, PRESET detents alone toggle P2.
 host_smoke = (root / "fm1/native/host_smoke.txt").read_text()
-assert "turn K1 1\nexpect fx 2\nturn PRESET 1\nturn K1 4\nexpect fx 6" in host_smoke
+assert "turn K1 1\nexpect fx 2\nexpect fx_page 0" in host_smoke
+assert "turn PRESET 1\nexpect fx_page 1" in host_smoke
+assert "turn PRESET 1\nexpect fx_page 0" in host_smoke
+assert "turn K1 4\nexpect fx 6" in host_smoke
 assert "turn K1 2\nexpect fx2 2\nturn PRESET 1\nturn K1 1\nexpect fx 6\nexpect fx2 4" in host_smoke
 assert "turn K1 5\nexpect fx 6" not in host_smoke
 # All three host scripts must select EUREKA with the correct per-detent

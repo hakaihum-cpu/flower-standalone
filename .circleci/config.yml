@@ -97,7 +97,7 @@ jobs:
             # running FM-1 identity, all metadata, and final FWSC markers.
             # The upstream pinned builder defaults to suffix 00.
             python3 fm1/native/tools/set_miyako_product_id.py --base /tmp/fm1-base
-            grep -q 'PRODUCT = prefix + "34"' /tmp/fm1-base/tools/build.py
+            grep -q 'PRODUCT = prefix + "35"' /tmp/fm1-base/tools/build.py
             # Fail early on fonts: never reach the C build with untested
             # Pillow Raqm or a missing upstream bitmap asset.
             test -s /tmp/fm1-base/assets/fonts/ter-u12n.bdf
@@ -271,7 +271,7 @@ jobs:
               /tmp/fm1-base/miyako/build/miyako.fwsc \
               /tmp/fm1-base/miyako/build/miyako.bin \
               /tmp/fm1-base/miyako/build/loader/ota.bin \
-              --base /tmp/fm1-base --product FM-1_934
+              --base /tmp/fm1-base --product FM-1_935
             cp /tmp/fm1-base/miyako/build/miyako.fwsc fm1-dist/MIYAKO-FM1-NATIVE-DEV.fwsc
             # The matching upstream resource installer uses this exact stem.
             test -s /tmp/fm1-base/miyako/build/miyako-res.bin
