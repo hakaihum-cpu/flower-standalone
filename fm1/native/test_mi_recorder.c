@@ -17,7 +17,7 @@ int main(void)
         float out=mi_rec_tick(&r,signal,edits);
         assert(out==0.f);
     }
-    assert(!r.recording&&r.count==MI_REC_CAPACITY);
+    assert(!r.recording&&r.playing&&r.count==MI_REC_CAPACITY);
     assert(mi_rec_sample(100)>20000);
     assert(mi_rec_sample(150)<-20000);
     {
@@ -25,6 +25,9 @@ int main(void)
         mi_rec_peak(0,&lo,&hi);
         assert(lo<0&&hi>0);
     }
+    /* Full buffer automatically loops; PLAY still toggles stop/restart. */
+    mi_rec_toggle_play(&r);
+    assert(!r.playing);
     mi_rec_toggle_play(&r);
     assert(r.playing);
     for(i=0;i<128u;i++){
@@ -68,6 +71,13 @@ int main(void)
     mi_rec_toggle_record(&r);
     assert(r.recording&&!r.overdubbing&&r.count==0u);
     mi_rec_stop(&r);
-    puts("PASS: loop monitor, real REC overdub, long-press CLEAR command, pitch/trim");
+    assert(!r.recording&&!r.playing);
+    mi_rec_clear(&r);
+    mi_rec_toggle_record(&r);
+    for(i=0;i<1000u;i++)mi_rec_tick(&r,0.25f,edits);
+    mi_rec_toggle_record(&r);
+    assert(!r.recording&&r.playing&&r.count==500u);
+    assert(r.playback_pos==0.f);
+    puts("PASS: REC stop and 2-second limit auto-play, overdub, clear, pitch/trim");
     return 0;
 }

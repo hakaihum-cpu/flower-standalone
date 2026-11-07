@@ -32,7 +32,13 @@ void mi_rec_toggle_record(mi_recorder_t *r)
 {
     if(!r)return;
     if(r->recording){
+        /* Short REC release starts the current take at its beginning.
+         * An overdub was already monitoring the loop; keep it playing. */
         r->recording=0u;r->overdubbing=0u;
+        if(r->count>=4u){
+            r->playing=1u;
+            r->playback_pos=0.f;
+        }
         return;
     }
     if(r->count>=4u){
@@ -125,7 +131,12 @@ float mi_rec_tick(mi_recorder_t *r,float internal_audio,const uint8_t controls[4
             r->capture_phase=0u;
             if(r->overdubbing){
                 if(r->write_pos>=r->count)r->write_pos=0u;
-            }else if(r->write_pos>=MI_REC_CAPACITY)r->recording=0u;
+            }else if(r->write_pos>=MI_REC_CAPACITY){
+                /* Automatic stop at the 2-second limit also starts playback. */
+                r->recording=0u;
+                r->playing=1u;
+                r->playback_pos=0.f;
+            }
         }
     }
     level=clamp((float)controls[3]/127.f,0.f,1.f);

@@ -95,6 +95,7 @@ expect rec_samples >10000
 tap REC
 midi USB 80 45 00
 expect recording 0
+expect rec_playing 1
 # A second short REC means OVERDUB, not overwrite or erase.
 tap REC
 expect recording 1
@@ -120,11 +121,9 @@ wait 40
 expect rec_playing 0
 tap FX
 expect view 2
-# Each "turn" is delivered as individual detents. DREAMY selects PITCH page,
-# so PRESET must return K1 to MODE before selecting EUREKA.
+# FX P1 MODE remains editable when crossing DREAMY and EUREKA.
 turn K1 1
 expect fx 2
-turn PRESET 1
 turn K1 4
 expect fx 6
 tap SEL
@@ -136,13 +135,11 @@ midi USB 80 45 00
 tap FX
 expect view 2
 # A=EUREKA (6): B must skip DELAY (3), because they share RAM.
-# Two detents select DREAMY (PITCH page); switch back to MODE before
-# the third detent, which must skip DELAY and select REVERB.
+# Two detents select DREAMY on P1, next detent skips DELAY to REVERB.
 tap FX
 expect fx_slot 1
 turn K1 2
 expect fx2 2
-turn PRESET 1
 turn K1 1
 expect fx 6
 expect fx2 4

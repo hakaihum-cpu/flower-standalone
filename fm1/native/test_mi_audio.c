@@ -105,13 +105,14 @@ int main(void)
  assert(a.recorder.recording && a.recorder.count==128u);
  mi_audio_rec_request(&a,1u);
  mi_audio_render(&a,&s,lr,256,4096);
- assert(!a.recorder.recording && a.recorder.count==128u);
- mi_audio_rec_request(&a,2u);
- mi_audio_render(&a,&s,lr,256,4096);
- assert(a.recorder.playing);
+ assert(!a.recorder.recording && a.recorder.playing &&
+        a.recorder.count==128u);
  mi_audio_rec_request(&a,2u);
  mi_audio_render(&a,&s,lr,256,4096);
  assert(!a.recorder.playing);
+ mi_audio_rec_request(&a,2u);
+ mi_audio_render(&a,&s,lr,256,4096);
+ assert(a.recorder.playing);
  /* OSC2 changes actual PCM while preserving the selected polyphony. */
  {
    int32_t first_old,first_new;

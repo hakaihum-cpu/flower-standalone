@@ -26,9 +26,9 @@ int main(void)
     mi_button(&s, MI_B_FX, 0);
     mi_rotate(&s, MI_EN_K1, 2);
     assert(s.fx == MI_FX_DREAMY);
-    assert(!strcmp(mi_param_name(&s,0),"PITCH"));
-    assert(!strcmp(mi_param_name(&s,2),"SPREAD"));
-    assert(mi_param_value(&s,2)==64 && mi_param_value(&s,3)==64);
+    assert(!strcmp(mi_param_name(&s,0),"MODE"));
+    assert(!strcmp(mi_param_name(&s,2),"GRAIN"));
+    assert(mi_param_value(&s,2)==64 && mi_param_value(&s,3)==80);
     mi_button(&s, MI_B_HOME, 0);
     mi_rotate(&s, MI_EN_PRESETS, 1);
     assert(s.preset == 1 && s.wave == 1);
@@ -143,81 +143,63 @@ int main(void)
     s.osc_page=2u; assert(!mi_state_valid(&s)); s.osc_page=0u;
     s.osc2_level=255u; assert(!mi_state_valid(&s)); s.osc2_level=0u;
     assert(mi_state_valid(&s));
-    /* Extra FX controls must not steal SELECT visual-bank or FX A/B routing.
-     * PRESET encoder in DREAMY/EUREKA cycles P1/P2 without loading presets. */
+    /* The FM-1 FX page always enters P1 (MODE/WET), including EUREKA and
+     * DREAMY. PRESET detents explicitly toggle P2 and back; K1 must
+     * never unexpectedly change PITCH after selecting an effect. */
     mi_init(&s);
     mi_button(&s,MI_B_FX,9200);
-    mi_rotate(&s,MI_EN_K1,2); /* DREAMY */
-    assert(s.fx==MI_FX_DREAMY);
-    assert(s.fx_page==1u); /* PITCH visible immediately after selection */
-    mi_rotate(&s,MI_EN_PRESETS,1);
-    assert(s.fx_page==0u && s.fx==MI_FX_DREAMY);
+    mi_rotate(&s,MI_EN_K1,2);
+    assert(s.fx==MI_FX_DREAMY && s.fx_page==0u);
+    assert(!strcmp(mi_param_name(&s,0),"MODE"));
+    assert(!strcmp(mi_param_name(&s,2),"GRAIN"));
     mi_rotate(&s,MI_EN_PRESETS,1);
     assert(s.fx_page==1u && s.fx==MI_FX_DREAMY);
     assert(!strcmp(mi_param_name(&s,0),"PITCH"));
     assert(!strcmp(mi_param_name(&s,1),"REVERSE"));
-    assert(!strcmp(mi_param_name(&s,2),"SPREAD"));
-    mi_rotate(&s,MI_EN_K1,12); /* 64 -> 76 => 2 semitones */
+    mi_rotate(&s,MI_EN_K1,12);
     mi_rotate(&s,MI_EN_K2,127);
     mi_rotate(&s,MI_EN_K3,20);
     mi_rotate(&s,MI_EN_K4,10);
-    assert(mi_param_value(&s,0)==2);
-    assert(mi_param_value(&s,1)==1);
+    assert(mi_param_value(&s,0)==2 && mi_param_value(&s,1)==1);
     assert(s.fx_extra[MI_FX_DREAMY][2]==84u);
     assert(s.fx_extra[MI_FX_DREAMY][3]==74u);
     assert(s.fx_options[MI_FX_DREAMY][0]==64u);
     assert(s.fx_options[MI_FX_DREAMY][1]==80u);
     mi_rotate(&s,MI_EN_PRESETS,-1);
     assert(s.fx_page==0u);
-    assert(!strcmp(mi_param_name(&s,2),"GRAIN"));
-    mi_rotate(&s,MI_EN_K1,4); /* EUREKA, same selected FX slot */
-    assert(s.fx==MI_FX_EUREKA);
-    assert(s.fx_page==1u);
-    assert(!strcmp(mi_param_name(&s,0),"PITCH"));
-    assert(!strcmp(mi_param_name(&s,2),"GRAIN"));
+    mi_rotate(&s,MI_EN_K1,4);
+    assert(s.fx==MI_FX_EUREKA && s.fx_page==0u);
     mi_rotate(&s,MI_EN_PRESETS,1);
-    assert(s.fx_page==0u);
-    assert(!strcmp(mi_param_name(&s,2),"TIME"));
-    assert(s.fx_extra[MI_FX_EUREKA][0]==64u);
+    assert(s.fx_page==1u && !strcmp(mi_param_name(&s,0),"PITCH"));
+    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.fx_page==0u && !strcmp(mi_param_name(&s,2),"TIME"));
     mi_button(&s,MI_B_FX,9201);
     assert(s.fx_slot==1u&&s.fx_page==0u);
 
-    /* Reproduce the third host script too: start with FX OFF, advance
-     * across DREAMY (which opens PITCH), toggle back, then reach EUREKA. */
+    /* Repeated single hardware detents can cross DREAMY to EUREKA
+     * without an undocumented preliminary page switch. */
     mi_init(&s);
     mi_button(&s,MI_B_FX,9240);
-    mi_rotate(&s,MI_EN_K1,1);
-    assert(s.fx==MI_FX_REEL && s.fx_page==0u);
-    mi_rotate(&s,MI_EN_K1,1);
-    assert(s.fx==MI_FX_DREAMY && s.fx_page==1u);
-    mi_rotate(&s,MI_EN_PRESETS,1);
-    assert(s.fx_page==0u);
-    for(i=0;i<4u;i++)mi_rotate(&s,MI_EN_K1,1);
-    assert(s.fx==MI_FX_EUREKA && s.fx_page==1u);
-    mi_rotate(&s,MI_EN_PRESETS,1);
+    for(i=0;i<6u;i++)mi_rotate(&s,MI_EN_K1,1);
     assert(s.fx==MI_FX_EUREKA && s.fx_page==0u);
+    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.fx_page==1u);
+    mi_button(&s,MI_B_SEL,9241);
+    mi_button(&s,MI_B_FX,9242);
+    assert(s.fx_page==0u && s.fx_slot==0u);
 
-    /* Host "turn" delivers each detent separately, unlike a steps batch.
-     * DREAMY auto-opens PITCH; PRESET returns K1 to MODE. Both FX slots
-     * must support EUREKA and the compatible REVERB. */
+    /* EUREKA + REVERB A/B selection still skips the DELAY memory clash. */
     mi_init(&s);
     s.fx=MI_FX_REEL;
     mi_button(&s,MI_B_FX,9250);
-    mi_rotate(&s,MI_EN_K1,1);
-    assert(s.fx==MI_FX_DREAMY && s.fx_page==1u);
-    mi_rotate(&s,MI_EN_PRESETS,1);
-    assert(s.fx_page==0u);
-    for(i=0;i<4u;i++)mi_rotate(&s,MI_EN_K1,1);
-    assert(s.fx==MI_FX_EUREKA && s.fx_page==1u);
+    for(i=0;i<5u;i++)mi_rotate(&s,MI_EN_K1,1);
+    assert(s.fx==MI_FX_EUREKA && s.fx_page==0u);
     mi_button(&s,MI_B_SEL,9251);
-    mi_button(&s,MI_B_FX,9252); /* return from SEL to slot A */
-    mi_button(&s,MI_B_FX,9253); /* switch from A to B */
+    mi_button(&s,MI_B_FX,9252);
+    mi_button(&s,MI_B_FX,9253);
     assert(s.fx_slot==1u && s.fx_page==0u);
-    mi_rotate(&s,MI_EN_K1,1);
-    mi_rotate(&s,MI_EN_K1,1);
-    assert(s.fx2==MI_FX_DREAMY && s.fx_page==1u);
-    mi_rotate(&s,MI_EN_PRESETS,1);
-    assert(s.fx_page==0u);
+    mi_rotate(&s,MI_EN_K1,2);
+    assert(s.fx2==MI_FX_DREAMY && s.fx_page==0u);
     mi_rotate(&s,MI_EN_K1,1);
     assert(s.fx==MI_FX_EUREKA && s.fx2==MI_FX_REVERB);
     assert(mi_fx_pair_supported(s.fx,s.fx2));

@@ -9,6 +9,22 @@
 #include "mi_memory.h"
 static mi_fx_dsp_t native_fx;
 static float clampf(float x,float lo,float hi){return x<lo?lo:x>hi?hi:x;}
+/* Peak compression keeps the slope continuous at +/-0.75, unlike a hard
+ * clamp. It removes clipped edges from overlapping voices and serial FX
+ * without changing quiet notes or allocating an audio buffer. */
+static float mi_soft_limit(float x)
+{
+    const float threshold=0.75f;
+    if(x>threshold){
+        float over=x-threshold;
+        return threshold+0.25f*over/(0.25f+over);
+    }
+    if(x< -threshold){
+        float over=-x-threshold;
+        return -(threshold+0.25f*over/(0.25f+over));
+    }
+    return x;
+}
 static float wrap01(float x){while(x>=1.f)x-=1.f;while(x<0.f)x+=1.f;return x;}
 static float note_freq(int note)
 {
@@ -259,7 +275,7 @@ static float fx_stage(mi_audio_t *a,const mi_state_t *s,
            s->fx_options[MI_FX_EUREKA][1]))
         target=0.f;
     *smooth+=(target-*smooth)*0.001f;
-    return clampf(dry+(wet-dry)*(*smooth),-1.f,1.f);
+    return mi_soft_limit(dry+(wet-dry)*(*smooth));
 }
 static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
 {
@@ -386,7 +402,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                 }
             }
         }
-        sample=clampf(sample,-1.f,1.f);
+        sample=mi_soft_limit(sample);
         sample=effect(a,s,sample);
         /* Existing FX wet-smoothing principle: crossfade the recorder monitor
          * in/out over milliseconds. Simply adding two full-scale signals
@@ -395,8 +411,8 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
             float monitored=mi_rec_tick(&a->recorder,sample,s->seq);
             float target=a->recorder.playing?1.f:0.f;
             a->rec_monitor_mix+=(target-a->rec_monitor_mix)*0.0015f;
-            sample=clampf(sample*(1.f-0.5f*a->rec_monitor_mix)+
-                         monitored*(0.5f*a->rec_monitor_mix),-1.f,1.f);
+            sample=mi_soft_limit(sample*(1.f-0.5f*a->rec_monitor_mix)+
+                                 monitored*(0.5f*a->rec_monitor_mix));
         }
         {
             int32_t out=(int32_t)(clampf(sample,-1.f,1.f)*scale);

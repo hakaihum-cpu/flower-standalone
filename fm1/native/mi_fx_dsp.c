@@ -221,7 +221,11 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
         ++p->dreamy_write;
         p->dreamy_phase+=1.f/grain_samples;
         if(p->dreamy_phase>=1.f)p->dreamy_phase-=1.f;
-        return bounded(wet,-1.f,1.f);
+        /* The independent grain heads can jump at wrap/parameter changes.
+         * A one-pole slew at the wet output reduces audible crackles while
+         * keeping the fixed sample buffer and grain scheduler unchanged. */
+        p->dreamy_filter+=(wet-p->dreamy_filter)*0.65f;
+        return bounded(p->dreamy_filter,-1.f,1.f);
     }
     if(mode==MI_FX_DELAY) {
         /* 40..680 ms; one tap; 0..0.85 feedback */

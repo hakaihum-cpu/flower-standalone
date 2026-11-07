@@ -16,6 +16,7 @@ typedef struct {
     uint32_t dreamy_write, dreamy_valid;
     float dreamy_phase;
     float dreamy_pitch_cache;
+    float dreamy_filter; /* suppress sharp grain-boundary clicks */
     uint8_t dreamy_last_pitch;
     uint32_t chorus_write;
     uint32_t reverb_write[4];
