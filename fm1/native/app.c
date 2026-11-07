@@ -442,26 +442,44 @@ static void mi_photo_decode(unsigned frame)
         mi_photo_cached=-1;
         return;
     }
-    clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
-    if(clip>=MI_TILE_VQ_CLIPS)return;
-    for(i=0u;i<16u;i++){
-        unsigned off=MI_TILE_VQ_PALETTE_OFFSET+clip*32u+i*2u;
-        mi_photo_palette[i]=(uint16_t)((uint16_t)res[off]|
-                                      ((uint16_t)res[off+1u]<<8));
-    }
-    for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
-        for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
-            unsigned id=res[MI_TILE_VQ_MAP_OFFSET+
-                            frame*MI_TILE_VQ_MAP_STRIDE+
-                            ty*MI_TILE_VQ_COLS+tx];
-            const uint8_t *tile=res+MI_TILE_VQ_BOOK_OFFSET+
-                                clip*4096u+id*16u;
+    /* Same existing 16-colour 8x4 VQ decoder for ALL 628 frames.
+     * The previous 488 frames retain byte-for-byte resource offsets.
+     * Each new 10x7 sheet starts a 36-frame-palette pair, so frames 558+
+     * do not unintentionally share a codebook with sheet 1's last clip. */
+    {
+        unsigned palette_base,book_base,map_base,local_frame;
+        if(frame<MI_TILE_OLD_COUNT){
+            clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
+            palette_base=MI_TILE_VQ_PALETTE_OFFSET;
+            book_base=MI_TILE_VQ_BOOK_OFFSET;
+            map_base=MI_TILE_VQ_MAP_OFFSET;
+            local_frame=frame;
+        }else{
+            local_frame=frame-MI_TILE_NEW_FIRST;
+            clip=frame<MI_TILE_NEW_SHEET2_FIRST?
+                local_frame/36u:2u+(frame-MI_TILE_NEW_SHEET2_FIRST)/36u;
+            palette_base=MI_TILE_NEW_PALETTE_OFFSET;
+            book_base=MI_TILE_NEW_BOOK_OFFSET;
+            map_base=MI_TILE_NEW_MAP_OFFSET;
+        }
+        for(i=0u;i<16u;i++){
+            unsigned off=palette_base+clip*32u+i*2u;
+            mi_photo_palette[i]=(uint16_t)((uint16_t)res[off]|
+                                          ((uint16_t)res[off+1u]<<8));
+        }
+        for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
+            for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
+                unsigned id=res[map_base+
+                                local_frame*MI_TILE_VQ_MAP_STRIDE+
+                                ty*MI_TILE_VQ_COLS+tx];
+                const uint8_t *tile=res+book_base+clip*4096u+id*16u;
             for(row=0u;row<4u;row++)
                 for(col=0u;col<4u;col++){
                     unsigned at=(ty*4u+row)*(MI_TILE_SIDE/2u)+tx*4u+col;
                     mi_photo_pixels[at]=tile[row*4u+col];
                 }
-        }
+    }
+    }
     mi_photo_cached=(int16_t)frame;
 }
 /* Original MIYAKO DOT Dreamy (MiyakoPixelMotion.h::Scene::Dreamy).
