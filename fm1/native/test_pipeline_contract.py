@@ -93,6 +93,13 @@ assert "test -s /tmp/mi_font_preflight.h" in ci
 assert "python3 /tmp/fm1-base/tools/build.py" not in ci
 assert ci.count("/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py") >= 3
 assert ci.index("Host-compile real MIYAKO app") < ci.index("Reconstruct all 144 original")
+# All three host scripts must run before expensive 720-frame VQ.
+preflight_name = "Install pinned JieLi compiler"
+for smoke in ("host_smoke.txt", "host_fx_preview.txt", "host_eureka_preview.txt"):
+    command = "fm1/native/" + smoke + " /tmp/miyako-host-preflight"
+    assert command in ci, "missing early host preflight: " + smoke
+    assert ci.index(command) < ci.index(preflight_name)
+assert ci.index("mkdir -p /tmp/miyako-host-preflight") < ci.index(preflight_name)
 assert ci.index("Reconstruct all 144 original") < ci.index("Compile FM-1 native platform host")
 assert "grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB'" in ci
 assert "mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/test_mi_audio.c" in ci
@@ -210,6 +217,10 @@ assert "static void mi_media_draw_half(unsigned half)" in ui
 # TAPE DOT removed by user request; keep the unrelated REEL sound FX.
 assert "mi_tape_dot_draw_half" not in ui and "mi_tape_circle_x" not in ui
 assert "((int32_t)visual_choice+steps)%12" in ui
+assert "if(next<0)next+=12;" in ui
+assert "if(next<0)next+=13;" not in ui
+assert 'mi_streq(what,"visual_choice")' in ui
+assert "expect visual_choice 11" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "(normal_visual_bank+1u)%11u" in ui
 assert "if(mode==9u||mode==10u)return (int)(mode-3u);" in ui
 assert "case MI_FX_REEL:return 9u;" not in ui

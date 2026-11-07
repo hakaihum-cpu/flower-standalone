@@ -267,7 +267,7 @@ static void input(void)
          if(i==EN_SELECT&&(state.view==MI_FX||state.view==MI_VIDEO)){
              /* Preserve each hardware detent; large steps must not be lost. */
              int32_t next=((int32_t)visual_choice+steps)%12;
-             if(next<0)next+=13;
+             if(next<0)next+=12;
              visual_choice=(uint8_t)next;
              visual_last_mode=255u; /* force new bank selection */
          }else mi_rotate(&state,map_encoder(i),steps);
@@ -1040,6 +1040,7 @@ int app_expect(const char *what,int *got)
 {
  if(mi_streq(what,"view")) *got=(int)state.view;
  else if(mi_streq(what,"fx")) *got=(int)state.fx;
+ else if(mi_streq(what,"visual_choice")) *got=(int)visual_choice;
   else if(mi_streq(what,"fx2")) *got=(int)state.fx2;
   else if(mi_streq(what,"fx_slot")) *got=(int)state.fx_slot;
  else if(mi_streq(what,"wave")) *got=(int)state.wave;

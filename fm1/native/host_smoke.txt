@@ -26,6 +26,12 @@ expect media_ready 1
 turn SELECT 1
 shot MIYAKO_PHOTO_RESOURCE.png
 turn SELECT -1
+expect visual_choice 0
+# Selection AUTO + 11 banks: negative wrap must return last bank.
+turn SELECT -1
+expect visual_choice 11
+turn SELECT 1
+expect visual_choice 0
 # The user's five supplied sheets are all integrated: three were already
 # among the original six banks; two new 10x7 sheets add 70 frames each.
 turn SELECT 10

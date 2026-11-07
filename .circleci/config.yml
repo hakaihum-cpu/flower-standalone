@@ -117,6 +117,16 @@ jobs:
               /tmp/fm1-base/miyako/mi_effects_vq_frames.h)" -eq 1
             test "$(grep -c 'MI_EUREKA_MEDIA_PREFLIGHT_STUB 1' \
               /tmp/fm1-base/miyako/mi_eureka_vq_frames.h)" -eq 1
+            # Execute all three real FM-1 host scripts BEFORE image VQ.
+            # Stubbed frame data checks the control/audio flow only.
+            # These temporary files must never enter final artifacts.
+            mkdir -p /tmp/miyako-host-preflight
+            /tmp/fm1-base/miyako/build/host/miyako_host \
+              fm1/native/host_smoke.txt /tmp/miyako-host-preflight
+            /tmp/fm1-base/miyako/build/host/miyako_host \
+              fm1/native/host_fx_preview.txt /tmp/miyako-host-preflight
+            /tmp/fm1-base/miyako/build/host/miyako_host \
+              fm1/native/host_eureka_preview.txt /tmp/miyako-host-preflight
       - run:
           name: Install pinned JieLi compiler and minimum AC79 packaging inputs
           command: |
