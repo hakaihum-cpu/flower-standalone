@@ -326,15 +326,19 @@ static unsigned mi_visual_fx(void)
 static unsigned mi_visual_mode(void)
 {
     unsigned fx=mi_visual_fx();
-    /* FX OFF takes precedence over the prior FX visual selection.
-     * SEL opens the regular animation feed even after FX selection. */
+    /* SEL normal animation is independent of sound FX; SELECT may pin
+     * any source bank after entering SEL. With AUTO, sound events cycle
+     * through all currently integrated banks, even with both FX OFF. */
+    if(state.view==MI_VIDEO){
+        if(visual_choice>=1u&&visual_choice<=8u)
+            return visual_choice-1u;
+        return normal_visual_bank;
+    }
+    /* FX OFF always falls back to the regular animation feed. */
     if(state.fx==MI_FX_OFF&&state.fx2==MI_FX_OFF)
         return normal_visual_bank;
-    if(state.view==MI_VIDEO&&visual_choice==0u)
-        return normal_visual_bank;
-    if(visual_choice>=1u&&visual_choice<=6u)return visual_choice-1u;
-    if(visual_choice==7u)return 6u;
-    if(visual_choice==8u)return 7u;
+    if(visual_choice>=1u&&visual_choice<=8u)
+        return visual_choice-1u;
     if(state.fx==MI_FX_EUREKA||state.fx2==MI_FX_EUREKA)return 7u;
     switch(fx){
     case MI_FX_DREAMY:return 0u;
