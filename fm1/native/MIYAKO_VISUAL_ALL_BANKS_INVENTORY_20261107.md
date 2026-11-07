@@ -6,7 +6,7 @@ FM-1版 `hakaihum-cpu/flower-standalone@feature/fm1-miyako-recorder-eureka-fx-20
 
 **⑦の確定定義：収録したアニメーションは通常SEL画面で使用する。**
 FXプレビューは同じ画像の副次的な使用先であり、FXがOFFでも通常SELに
-戻れる。通常SELのSELECTで8バンクを手動固定できる。
+戻れる。通常SELのSELECTで**9バンク**を手動固定できる。
 
 ## ソース実装済み（実機未確認）
 
@@ -16,18 +16,24 @@ FXプレビューは同じ画像の副次的な使用先であり、FXがOFFで�
   映像データは92,928 bytes。古い32×32・1bit形式は使わない。
   元画像からの生成は非可逆だが、元の488箇所を省略していない。
 - **EFFECTS**: 元の144フレーム、収録済み（62,592 bytes）。
+- **DREAMY DOT**：元の `Source/MiyakoPixelMotion.h` の
+  `initPortrait()` 原画60×46ドット・2ビット（デコード690 bytes）、
+  `Scene::Dreamy` の涙・粒子ストリーム、24Hzタイマー進行を通常SELに実装。
+  原画Base64（920文字）は元ソースと**完全一致**。
+  これは `Resources/flower_embedded_atlas.png` の人物アニメーションと
+  **異なり**、後者はまだ未移植。
 - **EUREKA**: 元の16クリップ×36フレーム = 576枚（250,368 bytes）。
   元の `VisualizerComponent::setAudioActivity` の音量変化に連動する
   同一クリップ内進行、必要時のみクリップ切替、無音・一定音量で静止
   する方式を移植し、GitHubとbyte-for-byte一致したCソースを使った
   GCC/Clang ASan/UBSanテストに合格。
-- 6タイル群、EFFECTS、EUREKAは**通常SELのAUTO再生対象**に入り、
-  SELECTで8バンクを切替可能。FXプレビュー専用の収録ではない。
+- 6タイル群、EFFECTS、EUREKA、DREAMY DOTは**通常SELのAUTO再生対象**。
+  SELECTで9バンクを切替可能。FXプレビュー専用ではない。
 
 ## 未移植
 
 下表のTOP／SCENES／CRUSH／SAMPLER／TWILIGHT／KNOWING／CLOUDS DOT／
-元のDREAMYアトラス／EP動画は、元のGitHub上で存在を確認しているだけで、
+元のDREAMYの別画像アトラス／EP動画は、元のGitHub上で存在を確認しているだけで、
 現行FM-1の実行イメージには**収録されていない**。未収録素材に対して
 再生可能とする空のメニューや仮データを作らない。
 
@@ -44,7 +50,7 @@ FXプレビューは同じ画像の副次的な使用先であり、FXがOFFで�
 | EUREKA | `Resources/eureka_*_frame_chunks`, `Source/VisualizerComponent.cpp` | 16 clips x 36 = 576 original frames, audio-triggered, not free-running | **通常SELに収録済み** 576-frame 16-colour VQ、元のクリップ進行を移植 |
 | KNOWING | `Android/knowing_frames.b64`, `Source/KnowingVisualMotion.h` | 140 supplied JPGs composed with displaced tiles/eyes/hair as a performance-dependent effect | Absent |
 | CLOUDS DOT | `Android/clouds_dot_frames.b64`, `Source/MiyakoDigitaktPage.h` | Dedicated DOT image sequence | Absent |
-| DREAMY visual | `Resources/flower_embedded_atlas.png`, `Source/PluginEditor.cpp` FlowerAnimationComponent | Procedural character/ensemble motion from provided atlas | Absent |
+| DREAMY visual（ensemble） | `Resources/flower_embedded_atlas.png`, `Source/PluginEditor.cpp` FlowerAnimationComponent | Procedural character/ensemble motion from provided atlas | **未移植**。ただし `MiyakoPixelMotion.h` の別系統 DREAMY DOT 原画＋涙の手続き的アニメーションは通常SELに移植済み |
 | EP-SAMPLER videos | `AndroidAssets/EP/*.mp4`, `Source/MiyakoEpVideoReader.h` | At least drums, pianica/accordion, saxophone, wood bass, xylophone background clips | Absent |
 | DOT/VFX procedural | `Source/MiyakoPixelMotion.h`, `Source/VisualizerComponent.cpp` | Yellow DOT, performance reactive glitch, tiles, noise, jitter, scanline, RGB shift, pixelation, ghost, flicker, zoom, etc. | Absent |
 | KNOWING-related eye / graphics | `Source/KnowingVisualMotion.h`, `Source/EyeKnobAtlas.h` | Procedural overlays using provided image/atlas, no synthetic source replacement | Absent |
@@ -63,7 +69,7 @@ FXプレビューは同じ画像の副次的な使用先であり、FXがOFFで�
 ## Mandatory porting rules
 
 1. **Do not claim all animation banks are integrated** until every original bank is present, selectable, correctly sequenced and physically validated. A registry/menu stub is not integration.
-2. Preserve source images from the original MIYAKO repository. Do not use generated or substituted frames or silently drop frames/clips.
+2. Preserve source images from the original MIYAKO repository. Do not use generated or substituted frames or silently drop frames/clips. DREAMY DOTは原画690 bytesを保全し元の動きを移植済み。大きな別アトラスは未移植。
 3. Aspect ratios: 488枚の正方形原画像は48×48として正方形のまま表示。元のEFFECTS/EUREKAは128×78で、それぞれ元の縦横比を保持。
 4. **One shared selector** shall allow explicit bank selection independent of audio FX: SELECT/knob navigation for bank, SEL to show media; a sound FX selection must not silently replace the user's visual bank.
 5. Allow separate *AUTO* routing keyed to FX/instrument for live performance, plus a manual fixed-bank override. DREAMY's procedural ensemble is distinct from EUREKA's 576 source frames.
