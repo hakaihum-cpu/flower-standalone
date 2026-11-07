@@ -266,8 +266,8 @@ static void input(void)
      if(steps){
          if(i==EN_SELECT&&(state.view==MI_FX||state.view==MI_VIDEO)){
              /* Preserve each hardware detent; large steps must not be lost. */
-             int32_t next=((int32_t)visual_choice+steps)%11;
-             if(next<0)next+=11;
+             int32_t next=((int32_t)visual_choice+steps)%13;
+             if(next<0)next+=13;
              visual_choice=(uint8_t)next;
              visual_last_mode=255u; /* force new bank selection */
          }else mi_rotate(&state,map_encoder(i),steps);
@@ -350,14 +350,14 @@ static unsigned mi_visual_mode(void)
      * any source bank after entering SEL. With AUTO, sound events cycle
      * through all currently integrated banks, even with both FX OFF. */
     if(state.view==MI_VIDEO){
-        if(visual_choice>=1u&&visual_choice<=10u)
+        if(visual_choice>=1u&&visual_choice<=12u)
             return visual_choice-1u;
         return normal_visual_bank;
     }
     /* FX OFF always falls back to the regular animation feed. */
     if(state.fx==MI_FX_OFF&&state.fx2==MI_FX_OFF)
         return normal_visual_bank;
-    if(visual_choice>=1u&&visual_choice<=10u)
+    if(visual_choice>=1u&&visual_choice<=12u)
         return visual_choice-1u;
     if(state.fx==MI_FX_EUREKA||state.fx2==MI_FX_EUREKA)return 7u;
     switch(fx){
@@ -369,38 +369,48 @@ static unsigned mi_visual_mode(void)
     default:return normal_visual_bank;
     }
 }
+/* Normal SEL keeps original EFFECTS/EUREKA (6/7), DOT scenes (8/9).
+ * Supplied extra image sheets appear in modes 10/11. */
+static int mi_visual_photo_bank(unsigned mode)
+{
+    if(mode<6u)return (int)mode;
+    if(mode==10u||mode==11u)return (int)(mode-4u);
+    return -1;
+}
 static unsigned mi_visual_step(float activity)
 {
     int changed=0;
     unsigned mode;
+    int photo_bank;
     /* Rotate the normal SEL AUTO bank ONLY at audible note attacks.
      * All six user sheets plus original EFFECTS/EUREKA are in this cycle. */
     if(state.view==MI_VIDEO&&visual_choice==0u &&
        activity>0.012f&&activity>visual_last_activity*1.5f+0.004f){
-        normal_visual_bank=(uint8_t)((normal_visual_bank+1u)%10u);
+        normal_visual_bank=(uint8_t)((normal_visual_bank+1u)%12u);
         visual_last_mode=255u;
         changed=1;
     }
     mode=mi_visual_mode();
+    photo_bank=mi_visual_photo_bank(mode);
     if(mode!=visual_last_mode){
         visual_last_mode=(uint8_t)mode;
-        if(mode<MI_TILE_BANKS)visual_tile=mi_tile_bank_first[mode];
+        if(photo_bank>=0)visual_tile=mi_tile_bank_first[photo_bank];
         visual_cooldown=0u;
         visual_last_activity=0.f;
         ++visual_generation;
         changed=1;
     }
     if(visual_cooldown)--visual_cooldown;
-    if(mode<MI_TILE_BANKS && activity>0.003f &&
+    if(photo_bank>=0 && activity>0.003f &&
        (activity>visual_last_activity*1.28f+0.0015f||!visual_cooldown)){
-        unsigned count=mi_tile_bank_count[mode],next;
+        unsigned count=mi_tile_bank_count[photo_bank],next;
         visual_rng^=visual_rng<<13;
         visual_rng^=visual_rng>>17;
         visual_rng^=visual_rng<<5;
-        next=(unsigned)mi_tile_bank_first[mode]+visual_rng%count;
+        next=(unsigned)mi_tile_bank_first[photo_bank]+visual_rng%count;
         if(count>1u && next==visual_tile)
-            next=(unsigned)mi_tile_bank_first[mode]+
-                 (next-(unsigned)mi_tile_bank_first[mode]+1u)%count;
+            next=(unsigned)mi_tile_bank_first[photo_bank]+
+                 (next-(unsigned)mi_tile_bank_first[photo_bank]+1u)%count;
         visual_tile=(uint16_t)next;
         ++visual_generation;
         visual_cooldown=activity>0.15f?3u:5u;
@@ -768,7 +778,8 @@ static void mi_video_vfx_half(unsigned half,int32_t x,int32_t y,
 static void mi_media_draw_half(unsigned half)
 {
     unsigned mode=mi_visual_mode();
-    if(mode<MI_TILE_BANKS)mi_tile_draw_half(half,0,0,240,audio_activity);
+    if(mi_visual_photo_bank(mode)>=0)
+        mi_tile_draw_half(half,0,0,240,audio_activity);
     else if(mode==8u)mi_dreamy_dot_draw_half(half,0,0,240);
     else if(mode==9u)mi_tape_dot_draw_half(half,0,0,240);
     else{
@@ -835,7 +846,7 @@ static void mi_fx_draw_half(unsigned half)
     mi_fx_dial(half,63,36,1u);
     mi_fx_dial(half,3,123,2u);
     mi_fx_dial(half,63,123,3u);
-    if(mode<MI_TILE_BANKS){
+    if(mi_visual_photo_bank(mode)>=0){
         mi_tile_draw_half(half,123,62,116,audio_activity);
     }else if(mode==8u){
         mi_dreamy_dot_draw_half(half,123,62,116);
