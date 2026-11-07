@@ -1055,6 +1055,9 @@ void app_frame(void)
         (visual_changed||(mode==6u&&old_effects!=video.effects_frame)||
          (mode==7u&&old_eureka!=video.eureka_frame)))
          redraw=1;
+     if((state.view==MI_VIDEO||state.view==MI_FX)&&
+        state.lfo[2]&&state.lfo[3]>=24u&&state.lfo[3]<=27u)
+         redraw=1;
      if(state.view==MI_SEQ && (audio.recorder.recording||
                                 audio.recorder.playing||audio.recorder.armed))
          redraw=1;
