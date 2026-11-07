@@ -97,7 +97,7 @@ jobs:
             # running FM-1 identity, all metadata, and final FWSC markers.
             # The upstream pinned builder defaults to suffix 00.
             python3 fm1/native/tools/set_miyako_product_id.py --base /tmp/fm1-base
-            grep -q 'PRODUCT = prefix + "33"' /tmp/fm1-base/tools/build.py
+            grep -q 'PRODUCT = prefix + "34"' /tmp/fm1-base/tools/build.py
             # Fail early on fonts: never reach the C build with untested
             # Pillow Raqm or a missing upstream bitmap asset.
             test -s /tmp/fm1-base/assets/fonts/ter-u12n.bdf
@@ -134,6 +134,9 @@ jobs:
             # image placeholders do not affect the native sound processing.
             test -s /tmp/miyako-host-preflight/MIYAKO_FX_PREVIEW.wav
             test -s /tmp/miyako-host-preflight/MIYAKO_EUREKA_AUDIO.wav
+            /tmp/mi-video-venv/bin/python fm1/native/tools/check_noresource_display.py \
+              /tmp/miyako-host-preflight/MIYAKO_NO_RESOURCE_SEL.png \
+              /tmp/miyako-host-preflight/MIYAKO_NO_RESOURCE_FX.png
             python3 fm1/native/tools/check_host_wav.py \
               /tmp/miyako-host-preflight/MIYAKO_FX_PREVIEW.wav
             python3 fm1/native/tools/check_eureka_wav.py \
@@ -239,6 +242,10 @@ jobs:
             test -s fm1-dist/MIYAKO_LFO.png
             test -s fm1-dist/MIYAKO_ARP.png
             test -s fm1-dist/MIYAKO_EUREKA_VIDEO.png
+            test -s fm1-dist/MIYAKO_PHOTO_RESOURCE_RESTORED.png
+            /tmp/mi-video-venv/bin/python fm1/native/tools/check_noresource_display.py \
+              fm1-dist/MIYAKO_NO_RESOURCE_SEL.png \
+              fm1-dist/MIYAKO_NO_RESOURCE_FX.png
             test -s fm1-dist/MIYAKO_FX_DUAL.png
             test -s fm1-dist/MIYAKO_RECORDER.png
             test -s fm1-dist/MIYAKO_RECORDER_PLAY.png
@@ -260,7 +267,7 @@ jobs:
               /tmp/fm1-base/miyako/build/miyako.fwsc \
               /tmp/fm1-base/miyako/build/miyako.bin \
               /tmp/fm1-base/miyako/build/loader/ota.bin \
-              --base /tmp/fm1-base --product FM-1_933
+              --base /tmp/fm1-base --product FM-1_934
             cp /tmp/fm1-base/miyako/build/miyako.fwsc fm1-dist/MIYAKO-FM1-NATIVE-DEV.fwsc
             # The matching upstream resource installer uses this exact stem.
             test -s /tmp/fm1-base/miyako/build/miyako-res.bin

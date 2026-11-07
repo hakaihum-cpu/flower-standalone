@@ -25,6 +25,21 @@ expect view 3
 expect media_ready 1
 turn SELECT 1
 shot MIYAKO_PHOTO_RESOURCE.png
+# Real FM-1 without separately installed resources must show the existing
+# DOT portrait in BOTH the SEL display and FX image panel, not blank black.
+# Also check that a cached photo is invalidated when resources disappear.
+res 0
+expect media_ready 0
+shot MIYAKO_NO_RESOURCE_SEL.png
+tap FX
+expect view 2
+shot MIYAKO_NO_RESOURCE_FX.png
+res 1
+expect media_ready 1
+tap SEL
+expect view 3
+turn SELECT 1
+shot MIYAKO_PHOTO_RESOURCE_RESTORED.png
 turn SELECT -1
 expect visual_choice 0
 # Selection AUTO + 11 banks: negative wrap must return last bank.

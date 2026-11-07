@@ -16,7 +16,7 @@ def main() -> None:
     ap.add_argument("application", type=Path)
     ap.add_argument("loader", type=Path)
     ap.add_argument("--base", type=Path, required=True)
-    ap.add_argument("--product", default="FM-1_933")
+    ap.add_argument("--product", default="FM-1_934")
     a = ap.parse_args()
     sys.path.insert(0, str(a.base / "tools"))
     import fm1_install  # pylint: disable=import-outside-toplevel

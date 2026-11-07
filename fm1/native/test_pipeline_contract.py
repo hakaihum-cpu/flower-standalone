@@ -173,13 +173,13 @@ app_header = (root / "fm1/native/app.h").read_text(encoding="utf-8")
 assert 'id_prefix = "FM-1_9"' in manifest
 assert '#define APP_VERSION "0.3.0-DEV"' in app_header
 assert 'APP_TAGLINE "NATIVE TRIAL"' in app_header
-assert "--product FM-1_933" in ci
+assert "--product FM-1_934" in ci
 # Keep package header marker and running firmware FELUCCA_ID in sync by
 # patching the pinned original builder BEFORE ANY compilation step.
 id_patch = (root / "fm1/native/tools/set_miyako_product_id.py").read_text(encoding="utf-8")
-assert 'TARGET = "FM-1_933"' in id_patch
+assert 'TARGET = "FM-1_934"' in id_patch
 assert 'OLD = \'    PRODUCT = prefix + "00"\'' in id_patch
-assert 'NEW = \'    PRODUCT = prefix + "33"' in id_patch
+assert 'NEW = \'    PRODUCT = prefix + "34"' in id_patch
 # Check the package product ID against the actual pinned build patch,
 # rather than maintaining two contradictory hard-coded CI expectations.
 actual_product = re.search(r'^TARGET = "(FM-1_[0-9]+)"', id_patch, re.M)
@@ -198,7 +198,7 @@ for n, line in enumerate(Path(__file__).read_text(encoding="utf-8").splitlines()
 assert 'set_miyako_product_id.py --base /tmp/fm1-base' in ci
 assert ci.index('set_miyako_product_id.py') < ci.index('tools/build.py /tmp/fm1-base/miyako --host')
 assert "FM-1_9100" not in ci
-assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_933') >= 1
+assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_934') >= 1
 
 # Root issue from the current build log: fm1-base's own mmio_check()
 # correctly rejects a volatile pointer cast outside the BSP, even though
@@ -316,6 +316,15 @@ assert '#include "mi_resource_media.h"' in ui and 'plat_res(&length)' in ui
 assert "mi_resource_media.h" in ci
 assert "pack_miyako_resource.py" in ci
 assert 'MIYAKO-FM1-NATIVE-DEV-res.bin' in ci
+# Photo bank requires the CRC-checked separate resource. Both SEL and FX
+# must display a visible existing original when a user flashes FWSC alone.
+assert "mi_dreamy_dot_draw_half(half,px,py,size);" in ui
+assert "resource_length<MI_TILE_DATA_BYTES" in ui
+assert "mi_photo_cached=-1;" in ui
+for name in ("MIYAKO_NO_RESOURCE_SEL.png", "MIYAKO_NO_RESOURCE_FX.png",
+             "MIYAKO_PHOTO_RESOURCE_RESTORED.png"):
+    assert name in (root / "fm1/native/host_smoke.txt").read_text()
+assert ci.count("check_noresource_display.py") == 2
 assert 'expect media_ready 1' in (root / "fm1/native/host_smoke.txt").read_text()
 assert 'MIYAKO_ADDED_SHEET1.png' in (root / "fm1/native/host_smoke.txt").read_text()
 assert 'MIYAKO_ADDED_SHEET2.png' in (root / "fm1/native/host_smoke.txt").read_text()

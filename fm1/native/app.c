@@ -603,9 +603,28 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
     const int32_t shift=(int32_t)half*120;
     const unsigned fx=mi_visual_fx();
     unsigned sy;
-    if(visual_tile>=MI_TILE_COUNT)return;
+    /* The approved 628 photos are stored in FM-1's separate CRC-checked
+     * resource area, not in FWSC. An updater that writes FWSC alone leaves
+     * plat_res() absent. Do not silently draw an empty black square in
+     * either SEL or FX: use the already-integrated original DREAMY DOT
+     * animation until the matching resource is installed.
+     * Check even a cached photo, as the host/device resource can disappear.
+     * plat_res() is a cheap validity-gated pointer lookup (device/res.c). */
+    {
+        uint32_t resource_length=0u;
+        if(visual_tile>=MI_TILE_COUNT ||
+           !plat_res(&resource_length) ||
+           resource_length<MI_TILE_DATA_BYTES){
+            mi_photo_cached=-1;
+            mi_dreamy_dot_draw_half(half,px,py,size);
+            return;
+        }
+    }
     mi_photo_decode((unsigned)visual_tile);
-    if(mi_photo_cached!=(int16_t)visual_tile)return;
+    if(mi_photo_cached!=(int16_t)visual_tile){
+        mi_dreamy_dot_draw_half(half,px,py,size);
+        return;
+    }
     for(sy=0u;sy<MI_TILE_SIDE;sy++){
         int32_t top=py+(int32_t)(sy*(unsigned)size/MI_TILE_SIDE)-shift;
         int32_t bottom=py+(int32_t)((sy+1u)*(unsigned)size/MI_TILE_SIDE)-shift;
