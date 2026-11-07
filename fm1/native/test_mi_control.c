@@ -176,6 +176,32 @@ int main(void)
     mi_button(&s,MI_B_FX,9201);
     assert(s.fx_slot==1u&&s.fx_page==0u);
 
+    /* HOME WAVE MULTI must genuinely expose two editable oscillators. */
+    mi_init(&s);
+    mi_rotate(&s,MI_EN_K1,4);
+    assert(s.view==MI_HOME && s.wave==MI_WAVE_MULTI);
+    assert(s.osc2_level==64u && s.osc1_wave==0u);
+    assert(!strcmp(mi_param_name(&s,0),"WAVE"));
+    assert(!strcmp(mi_param_name(&s,1),"MODE"));
+    assert(!strcmp(mi_param_name(&s,2),"DETUNE"));
+    mi_rotate(&s,MI_EN_K2,1);  /* MODE -> OSC2 */
+    assert(s.osc_page==1u);
+    mi_rotate(&s,MI_EN_K3,10); /* HOME WET now edits DETUNE */
+    assert(s.osc2_detune==74u&&mi_param_value(&s,2)==10);
+    mi_button(&s,MI_B_EDIT,9300);
+    assert(s.view==MI_OSC&&s.osc_page==1u);
+    mi_rotate(&s,MI_EN_K1,1); /* OSC2 wave only */
+    assert(s.osc2_wave==1u&&s.osc1_wave==0u&&s.wave==MI_WAVE_MULTI);
+    mi_button(&s,MI_B_HOME,9301);
+    mi_rotate(&s,MI_EN_K2,-1); /* MODE -> OSC1 */
+    mi_button(&s,MI_B_EDIT,9302);
+    assert(s.osc_page==0u);
+    mi_rotate(&s,MI_EN_K1,2);
+    assert(s.osc1_wave==2u&&s.osc2_wave==1u&&s.wave==MI_WAVE_MULTI);
+    assert(mi_state_valid(&s));
+    s.osc1_wave=4u;
+    assert(!mi_state_valid(&s));
+
     /* Validate real saved-state bounds: corrupted storage must never reach
      * UI lookup tables, oscillator routing or REC IN/OUT arithmetic. */
     mi_init(&s);
