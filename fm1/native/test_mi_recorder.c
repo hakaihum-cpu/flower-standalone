@@ -78,6 +78,38 @@ int main(void)
     mi_rec_toggle_record(&r);
     assert(!r.recording&&r.playing&&r.count==500u);
     assert(r.playback_pos==0.f);
-    puts("PASS: REC stop and 2-second limit auto-play, overdub, clear, pitch/trim");
+    /* No external MIDI clock: 2 or 4 bars fit the existing PCM capacity. */
+    mi_rec_init(&r);
+    mi_rec_configure(&r,120u,2u,44100.f,0u);
+    assert(r.bars==2u && r.capture_step>0.24f &&
+           r.capture_step<0.26f);
+    mi_rec_configure(&r,120u,4u,44100.f,0u);
+    assert(r.bars==4u && r.capture_step>0.12f &&
+           r.capture_step<0.13f);
+    mi_rec_toggle_record(&r);
+    for(i=0u;i<44100u;i++)mi_rec_tick(&r,0.6f,edits);
+    assert(r.recording && r.count>5400u && r.count<5600u);
+    mi_rec_toggle_record(&r);
+    assert(!r.recording && r.playing && r.count<MI_REC_CAPACITY);
+    /* Clock: two bars = 2 * 4 * 24 = 192 ticks; even when REC is set
+     * to 4 bars it is ignored under live external clock. */
+    mi_rec_init(&r);
+    mi_rec_external_tick(&r,0u);
+    mi_rec_configure(&r,120u,4u,44100.f,0u);
+    assert(r.clock_active && r.bars==2u);
+    mi_rec_toggle_record(&r);
+    assert(r.armed&&!r.recording);
+    for(i=1u;i<=290u;i++){
+        uint32_t j;
+        mi_rec_external_tick(&r,i*919u);
+        mi_rec_configure(&r,120u,4u,44100.f,i*919u);
+        for(j=0u;j<919u;j++)mi_rec_tick(&r,0.3f,edits);
+        if(i==100u)assert(r.recording&&!r.armed);
+    }
+    assert(r.count>40000u && r.count<=MI_REC_CAPACITY);
+    assert(!r.recording && r.playing && r.bars==2u);
+    mi_rec_clock_stop(&r);
+    assert(!r.clock_active);
+    puts("PASS: REC manual stop, adaptive 2/4 bars, 192 MIDI ticks, overdub, clear, pitch/trim");
     return 0;
 }
