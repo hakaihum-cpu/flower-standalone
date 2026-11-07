@@ -17,22 +17,33 @@ void mi_rec_init(mi_recorder_t *r){if(r)mi_memzero(r,sizeof(*r));}
 void mi_rec_stop(mi_recorder_t *r)
 {
     if(!r)return;
-    r->recording=0u;r->playing=0u;
+    r->recording=0u;r->playing=0u;r->overdubbing=0u;
 }
 void mi_rec_clear(mi_recorder_t *r)
 {
     if(!r)return;
     r->count=0u;r->write_pos=0u;r->playback_pos=0.f;
     r->accumulator=0.f;r->capture_phase=0u;
-    r->recording=0u;r->playing=0u;
+    r->recording=0u;r->playing=0u;r->overdubbing=0u;
     mi_memzero(wave_min,sizeof wave_min);
     mi_memzero(wave_max,sizeof wave_max);
 }
 void mi_rec_toggle_record(mi_recorder_t *r)
 {
     if(!r)return;
-    if(r->recording){r->recording=0u;return;}
-    /* Every new take overwrites the previous clip, never overdubs it. */
+    if(r->recording){
+        r->recording=0u;r->overdubbing=0u;
+        return;
+    }
+    if(r->count>=4u){
+        /* Multi-layer recording: keep the existing 2-second clip.
+         * New input is added to PCM; previous playback is not re-recorded. */
+        r->overdubbing=1u;r->recording=1u;r->playing=1u;
+        r->write_pos=0u;r->playback_pos=0.f;
+        r->capture_phase=0u;r->accumulator=0.f;
+        return;
+    }
+    /* Only the first recording initializes an empty clip. */
     mi_rec_clear(r);
     r->recording=1u;
 }
@@ -57,6 +68,11 @@ float mi_rec_tick(mi_recorder_t *r,float internal_audio,const uint8_t controls[4
             r->capture_phase=1u;
         }else{
             float v=clamp((r->accumulator+internal_audio)*0.5f,-1.f,1.f);
+            if(r->overdubbing && r->count>=4u){
+                /* Add only live synth/FX input; never the monitored loop. */
+                float older=(float)clip[r->write_pos]*(1.f/32767.f);
+                v=clamp(older+v,-1.f,1.f);
+            }
             if(r->write_pos<MI_REC_CAPACITY){
                 uint32_t column=r->write_pos*224u/MI_REC_CAPACITY;
                 int32_t amp=(int32_t)(v*110.f);
@@ -65,10 +81,12 @@ float mi_rec_tick(mi_recorder_t *r,float internal_audio,const uint8_t controls[4
                 if(amp<wave_min[column])wave_min[column]=(int8_t)amp;
                 if(amp>wave_max[column])wave_max[column]=(int8_t)amp;
                 clip[r->write_pos++]=(int16_t)(v*32767.f);
-                r->count=r->write_pos;
+                if(!r->overdubbing)r->count=r->write_pos;
             }
             r->capture_phase=0u;
-            if(r->write_pos>=MI_REC_CAPACITY)r->recording=0u;
+            if(r->overdubbing){
+                if(r->write_pos>=r->count)r->write_pos=0u;
+            }else if(r->write_pos>=MI_REC_CAPACITY)r->recording=0u;
         }
     }
     if(!r->playing||r->count<4u)return 0.f;
