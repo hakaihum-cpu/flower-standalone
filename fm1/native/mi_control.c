@@ -255,6 +255,8 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
     case MI_EN_ALGORITHM:
         /* Never silently exit MULTI while an FX/VIDEO/other page is open. */
         if(s->view!=MI_HOME&&s->view!=MI_OSC)break;
+        /* Algorithm knob is not an accidental wave switch on FILTER. */
+        if(s->view==MI_OSC&&s->osc_page==2u)break;
         if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI&&s->osc_page<2u){
             uint8_t *selected=s->osc_page?&s->osc2_wave:&s->osc1_wave;
             *selected=(uint8_t)limited(*selected,steps>0?1:-1,0,3);
