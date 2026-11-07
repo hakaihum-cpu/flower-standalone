@@ -1050,6 +1050,7 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"lfo_wave")) *got=(int)state.lfo[1];
  else if(mi_streq(what,"recording")) *got=(int)audio.recorder.recording;
   else if(mi_streq(what,"rec_playing")) *got=(int)audio.recorder.playing;
+  else if(mi_streq(what,"rec_overdub")) *got=(int)audio.recorder.overdubbing;
   else if(mi_streq(what,"rec_samples")) *got=(int)audio.recorder.count;
   else if(mi_streq(what,"rec_pitch")) *got=(int)state.seq[2];
   else if(mi_streq(what,"preset")) *got=(int)state.preset;
