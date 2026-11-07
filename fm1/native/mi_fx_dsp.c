@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * FM-1 native, finite-memory effects. The original MIYAKO parameter and
- * multi-FX semantics still require fidelity tests; EUREKA is out of scope.
+ * multi-FX semantics still require fidelity tests; EUREKA is a bounded,
+ * simplified native implementation and not the original JUCE model.
  */
 #include "mi_fx_dsp.h"
 #include "mi_control.h"
@@ -27,6 +28,14 @@ static float sine(float x)
     float p=4.f*y*(1.f-y);
     p=0.775f*p+0.225f*p*p;
     return negative?-p:p;
+}
+/* exp(ln(2)*semitones/12) for -12..+12 semitones, no libm.
+ * 6th-order polynomial absolute error below 0.0001 on this bounded span. */
+static float pitch_ratio(unsigned knob)
+{
+    float x=((int)knob-64)*0.69314718056f/63.f;
+    return 1.f+x*(1.f+x*(0.5f+x*(0.16666667f+
+           x*(0.04166667f+x*(0.008333333f+x*0.001388889f)))));
 }
 void mi_fx_dsp_reset_shared(mi_fx_dsp_t *p)
 {
@@ -74,9 +83,18 @@ void mi_fx_dsp_init(mi_fx_dsp_t *p)
     mi_memzero(reverb_memory,sizeof reverb_memory);
     mi_memzero(dreamy_memory,sizeof dreamy_memory);
 }
-float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
-                        float sample_rate,unsigned p1,unsigned p2)
+float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
+                           float sample_rate,unsigned p1,unsigned p2,
+                           const uint8_t extra[4])
 {
+    unsigned pitch=extra?(unsigned)extra[0]:64u;
+    unsigned reverse=extra?(unsigned)extra[1]:0u;
+    unsigned density=extra?(unsigned)extra[2]:64u;
+    unsigned feedback=extra?(unsigned)extra[3]:0u;
+    if(pitch>127u)pitch=127u;
+    if(reverse>127u)reverse=127u;
+    if(density>127u)density=127u;
+    if(feedback>127u)feedback=127u;
     if(!p)return dry;
     if(sample_rate<8000.f)sample_rate=44100.f;
     if(p1>127u)p1=127u;
@@ -221,4 +239,11 @@ float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
         return bounded(sum,-1.f,1.f);
     }
     return dry;
+}
+/* Legacy host DSP tests and historical callers retain their original API. */
+float mi_fx_dsp_process(mi_fx_dsp_t *p,unsigned mode,float dry,
+                         float sample_rate,unsigned p1,unsigned p2)
+{
+    static const uint8_t defaults[4]={64u,0u,64u,0u};
+    return mi_fx_dsp_process_ex(p,mode,dry,sample_rate,p1,p2,defaults);
 }
