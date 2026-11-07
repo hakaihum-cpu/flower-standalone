@@ -13,7 +13,8 @@ typedef enum {
 } mi_view_t;
 typedef enum {
     MI_FX_OFF, MI_FX_REEL, MI_FX_DREAMY, MI_FX_DELAY,
-    MI_FX_REVERB, MI_FX_CHORUS, MI_FX_EUREKA, MI_FX_COUNT
+    MI_FX_REVERB, MI_FX_CHORUS, MI_FX_EUREKA,
+    MI_FX_BITCRUSH, MI_FX_PITCHSHIFT, MI_FX_COUNT
 } mi_fx_t;
 typedef enum {
     MI_B_HOME, MI_B_EDIT, MI_B_FX, MI_B_SEL, MI_B_ENV,
@@ -49,6 +50,11 @@ typedef struct {
     uint8_t fx_extra[MI_FX_COUNT][4];
     uint8_t fx_page;
     uint8_t osc1_wave; /* appended, previous saved-state prefix unchanged */
+    /* MI15 additions preserve all MI14 settings byte-for-byte. */
+    uint8_t filter_cutoff,filter_resonance;
+    uint8_t drum_tone,drum_decay,drum_color,drum_level;
+    uint8_t rec_bars; /* 2(default) or 4; external MIDI clock forces 2 */
+    uint8_t video_params[4]; /* glitch, tile, xshift, yshift */
 } mi_state_t;
 typedef struct {
     mi_action_t action;
@@ -60,8 +66,11 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms);
 mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t encoder, int32_t steps);
 const char *mi_wave_name(unsigned wave);
 #define MI_WAVE_MULTI 4u
+#define MI_WAVE_FMDRUM 5u
+#define MI_LFO_DEST_COUNT 58u
 const char *mi_arp_mode_name(unsigned mode);
 const char *mi_lfo_wave_name(unsigned wave);
+const char *mi_lfo_dest_name(unsigned dest);
 const char *mi_view_name(mi_view_t view);
 const char *mi_fx_name(mi_fx_t effect);
 /* Two serial FX, but no duplicate processor or shared DELAY/EUREKA ring. */
