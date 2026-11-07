@@ -8,6 +8,7 @@
 #include "digitone_fx_pages.h"
 extern struct dnfx_state rack_state[DNFX_COUNT];
 extern volatile int32_t rack_active; /* -1 OFF, else 0..3 */
+extern volatile uint8_t rack_overload_mode; /* 0, else selected FX+1 */
 void rack_choose(int mode);
 void rack_render(int32_t *out,const int32_t *in);
 void rack_granular_render(int32_t *out,const int32_t *in);

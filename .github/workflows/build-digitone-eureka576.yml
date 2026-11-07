@@ -1,11 +1,11 @@
-name: Digitone PG83 EUREKA YELLOW PADDING (PG79 protected)
+name: Digitone PG84 EUREKA YELLOW + CPU GUARD (PG79 protected)
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-eureka-yellow-padding-20261107'
+    if: github.ref == 'refs/heads/fix/digitone-eureka-overload-guard-yellow-20261107'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -234,11 +234,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$RACK_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_FX_RACK_USER_TILES_YELLOW_PG83_TRIAL.syx" \
-            --version PG83
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_FX_RACK_EUREKA_GUARD_YELLOW_PG84_TRIAL.syx" \
+            --version PG84
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_FX_RACK_USER_TILES_YELLOW_PG83_TRIAL.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_FX_RACK_EUREKA_GUARD_YELLOW_PG84_TRIAL.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$RACK_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -250,7 +250,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-USER-TILES-YELLOW-PG83-TRIAL
+          name: Digitone-OS1.44-EUREKA-GUARD-YELLOW-PG84-TRIAL
           path: _release/
           if-no-files-found: error
           retention-days: 30

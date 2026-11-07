@@ -24,6 +24,16 @@
 #define KEY_PUSH_A 46
 #define KEY_PUSH_H 53
 #define COUNTS_PER_DETENT 4
+/* The Digitone ColdFire's bus-clock timer, as used by Elekloader DigiReel.
+ * One 32-frame audio block has ~166,667 ticks at 250 MHz / 48 kHz.
+ * Do not use a wall-clock, allocation, division or UI callback in audio IRQ.
+ */
+#if defined(RACK_HOST_TEST)
+volatile uint32_t rack_test_cycles; /* injectable fake DMA counter in host test */
+#define RACK_CYCLES() rack_test_cycles
+#else
+#define RACK_CYCLES() (*(volatile uint32_t *)0xFC07000Cu)
+#endif
 struct dnfx_state rack_state[DNFX_COUNT];
 volatile int32_t rack_active=-1; /* OFF */
 static volatile int32_t rack_pending=-2;
@@ -34,6 +44,10 @@ static volatile uint32_t rack_ramp=0u;
 static volatile uint8_t rack_fading=0u;
 static int32_t rack_acc[8];
 static uint8_t rack_redraw_divider=0u;
+static uint32_t rack_prev_start=0u;
+static uint8_t rack_hot_blocks=0u;
+volatile uint8_t rack_overload_mode=0u; /* 0=no fault, otherwise FX + 1 */
+static uint8_t rack_overload_seen=0u;
 struct core_audio_owner rack_owner={0,rack_render,CORE_AUDIO_INSERT};
 
 static void rack_init(void)
@@ -51,10 +65,16 @@ void rack_choose(int mode)
     rack_init();
     /* Reselecting the current effect opens its page WITHOUT restarting
      * capture history or turning off an active sustained loop. */
-    if(mode==rack_active && rack_pending==-2 && !rack_fading) {
+    if(mode==rack_active && rack_pending==-2 && !rack_fading && rack_owner.on) {
         rack_ui_open=mode>=0;
         return;
     }
+    /* A guard trip latches until the user explicitly selects another mode
+     * (or reselects the same mode). Never re-arm automatically. */
+    rack_overload_mode=0u;
+    rack_overload_seen=0u;
+    rack_prev_start=0u;
+    rack_hot_blocks=0u;
     rack_pending=(mode>=0 && mode<DNFX_COUNT)?mode:-1;
     if(rack_owner.on && rack_active>=0) {
         rack_fading=1u; /* old path fades to dry before release */
@@ -92,7 +112,10 @@ const struct core_menu_item rack_menu_off={"FX OFF",menu_off,0,0};
 void rack_render(int32_t *out,const int32_t *in)
 {
     int32_t active=rack_active;
+    uint32_t entered=RACK_CYCLES();
+    uint32_t period=rack_prev_start?entered-rack_prev_start:0u;
     unsigned i;
+    rack_prev_start=entered;
     if(active==DNFX_GRANULAR)
         rack_granular_render(out,in);
     else if(active>=DNFX_EUREKA && active<DNFX_COUNT)
@@ -123,6 +146,32 @@ void rack_render(int32_t *out,const int32_t *in)
             }
         }
     }
+    /* Measure ONLY the added insert cost, including its fade. The stock
+     * master and FM voices have consumed their own budget already.
+     * Sustained >1/3-block extra load is not safe; a single >80% hit
+     * trips immediately. This cannot prevent the first expensive block,
+     * but prevents repeated blocks from starving the UI.
+     *
+     * A real unit's DMA counter wraps at 32 bits. Subtraction is
+     * intentionally unsigned. Host tests inject a deterministic timer.
+     */
+    if(active>DNFX_GRANULAR && active<DNFX_COUNT && !rack_overload_mode) {
+        uint32_t busy=RACK_CYCLES()-entered;
+        uint8_t panic=busy>400000u; /* >2.4 block periods */
+        if(period>=1000u && period<=400000u) {
+            if(busy*5u>=period*4u) panic=1u; /* >=80%, immediate */
+            if(busy*3u>=period) {
+                if(rack_hot_blocks<6u) ++rack_hot_blocks;
+            } else rack_hot_blocks=0u;
+            if(rack_hot_blocks>=6u) panic=1u;
+        }
+        if(panic) {
+            /* IRQ-safe, aligned global: core reads 'on' on the next
+             * render block. Do not clear audio/history RAM here. */
+            rack_overload_mode=(uint8_t)(active+1);
+            rack_owner.on=0;
+        }
+    }
 }
 static void rack_mark_dirty(void *ctrl)
 {
@@ -132,6 +181,14 @@ void rack_tick(void *ctrl)
 {
     int32_t pending;
     rack_init();
+    if(rack_overload_mode && !rack_owner.on && !rack_overload_seen) {
+        rack_overload_seen=1u;
+        rack_fading=0u;
+        rack_ramp=0u;
+        rack_pending=-2;
+        rack_pause=0u;
+        rack_mark_dirty(ctrl); /* Display the overload state once. */
+    }
     if(rack_fading && rack_ramp==0u) {
         rack_owner.on=0;
         rack_active=-1;
@@ -261,4 +318,8 @@ void rack_draw(void *bmp,void *ctrl)
     if(!rack_ui_open || rack_active<0) return;
     dnfx_draw(bmp,&rack_state[(unsigned)rack_active],
               (unsigned)fw_tempo/120u);
+    if(rack_overload_mode) {
+        fw_fillrect(bmp,21,54,127,63,0);
+        fw_textf(bmp,(const void *)fw_font5,24,56,-1,"FX CPU LIMIT");
+    }
 }
