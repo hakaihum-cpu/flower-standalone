@@ -43,6 +43,7 @@ static uint8_t rec_long_done;
  * 0=AUTO, 1..6=all six supplied photo sheets, 7=EFFECTS, 8=EUREKA. */
 static uint8_t visual_choice,visual_last_mode=255u,visual_cooldown;
 static uint16_t visual_tile;
+static uint8_t normal_visual_bank; /* SEL independent integrated playlist */
 static float visual_last_activity;
 static uint32_t visual_rng=0x6d697961u,visual_generation;
 static uint8_t held_note[NKEYS];
@@ -104,7 +105,7 @@ void app_init(void)
  last_keys=last_buttons=rec_pressed_at=0u;rec_long_done=0u;
  visual_choice=0u;visual_last_mode=255u;visual_cooldown=0u;
  visual_rng=0x6d697961u;visual_generation=0u;
- visual_last_activity=0.f;visual_tile=0u;
+ visual_last_activity=0.f;visual_tile=0u;normal_visual_bank=6u;
  mi_memzero(held_note,sizeof held_note);redraw=1;
  message_until=0;line_a[0]=line_b[0]=0;
 }
@@ -221,6 +222,10 @@ static void input(void)
      mi_result_t action;
      bit=1u<<i;
      if(i==B_REC||!(buttons&bit)||(last_buttons&bit))continue;
+     /* SEL always returns to normal animation, never locks to FX imagery. */
+     if(i==B_SEL && state.view!=MI_VIDEO){
+         visual_choice=0u;visual_last_mode=255u;
+     }
      action=mi_button(&state,map_button(i),now);
      redraw=1;
      if(action.action==MI_ACTION_SAVE){
@@ -330,28 +335,39 @@ static unsigned mi_visual_fx(void)
     if(fx==MI_FX_OFF)fx=state.fx!=MI_FX_OFF?state.fx:state.fx2;
     return fx;
 }
-/* Physical SELECT cycles AUTO, six original sheets, EFFECTS, and EUREKA.
- * AUTO prioritises the selected audio FX but never changes any sound params. */
+/* SEL AUTO is independent of any audio FX; its playlist includes all
+ * available integrated sources. FX OFF always uses this same base feed. */
 static unsigned mi_visual_mode(void)
 {
     unsigned fx=mi_visual_fx();
     if(visual_choice>=1u&&visual_choice<=6u)return visual_choice-1u;
     if(visual_choice==7u)return 6u;
     if(visual_choice==8u)return 7u;
+    if(state.view==MI_VIDEO||(state.fx==MI_FX_OFF&&
+       state.fx2==MI_FX_OFF))return normal_visual_bank;
     if(state.fx==MI_FX_EUREKA||state.fx2==MI_FX_EUREKA)return 7u;
     switch(fx){
-    case MI_FX_DREAMY:return 0u; /* pose sheet */
-    case MI_FX_REEL:return 1u;   /* eye motion */
-    case MI_FX_DELAY:return 2u;  /* Shibuya/tape */
-    case MI_FX_REVERB:return 3u; /* Shibuya/tape */
-    case MI_FX_CHORUS:return 4u; /* portrait */
-    default:return 6u;          /* existing original EFFECTS bank */
+    case MI_FX_DREAMY:return 0u;
+    case MI_FX_REEL:return 1u;
+    case MI_FX_DELAY:return 2u;
+    case MI_FX_REVERB:return 3u;
+    case MI_FX_CHORUS:return 4u;
+    default:return normal_visual_bank;
     }
 }
 static unsigned mi_visual_step(float activity)
 {
-    unsigned mode=mi_visual_mode();
     int changed=0;
+    unsigned mode;
+    /* Rotate the normal SEL AUTO bank ONLY at audible note attacks.
+     * All six user sheets plus original EFFECTS/EUREKA are in this cycle. */
+    if(state.view==MI_VIDEO&&visual_choice==0u &&
+       activity>0.012f&&activity>visual_last_activity*1.5f+0.004f){
+        normal_visual_bank=(uint8_t)((normal_visual_bank+1u)%8u);
+        visual_last_mode=255u;
+        changed=1;
+    }
+    mode=mi_visual_mode();
     if(mode!=visual_last_mode){
         visual_last_mode=(uint8_t)mode;
         if(mode<MI_TILE_BANKS)visual_tile=mi_tile_bank_first[mode];
