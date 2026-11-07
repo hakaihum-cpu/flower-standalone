@@ -43,7 +43,7 @@ static uint8_t rec_long_done;
 static uint8_t backup_hold;
 /* Visual selection is independent of audio FX or the saved sound preset.
  * 0=AUTO, 1..6=supplied photo sheets, 7=EFFECTS, 8=EUREKA,
- * 9=original DREAMY DOT portrait, 10=original TAPE reel animation. */
+ * 9=original DREAMY DOT portrait, 10..11=two new supplied image sheets. */
 static uint8_t visual_choice,visual_last_mode=255u,visual_cooldown;
 static uint16_t visual_tile;
 static uint8_t normal_visual_bank; /* SEL independent integrated playlist */
@@ -266,7 +266,7 @@ static void input(void)
      if(steps){
          if(i==EN_SELECT&&(state.view==MI_FX||state.view==MI_VIDEO)){
              /* Preserve each hardware detent; large steps must not be lost. */
-             int32_t next=((int32_t)visual_choice+steps)%13;
+             int32_t next=((int32_t)visual_choice+steps)%12;
              if(next<0)next+=13;
              visual_choice=(uint8_t)next;
              visual_last_mode=255u; /* force new bank selection */
@@ -350,31 +350,30 @@ static unsigned mi_visual_mode(void)
      * any source bank after entering SEL. With AUTO, sound events cycle
      * through all currently integrated banks, even with both FX OFF. */
     if(state.view==MI_VIDEO){
-        if(visual_choice>=1u&&visual_choice<=12u)
+        if(visual_choice>=1u&&visual_choice<=11u)
             return visual_choice-1u;
         return normal_visual_bank;
     }
     /* FX OFF always falls back to the regular animation feed. */
     if(state.fx==MI_FX_OFF&&state.fx2==MI_FX_OFF)
         return normal_visual_bank;
-    if(visual_choice>=1u&&visual_choice<=12u)
+    if(visual_choice>=1u&&visual_choice<=11u)
         return visual_choice-1u;
     if(state.fx==MI_FX_EUREKA||state.fx2==MI_FX_EUREKA)return 7u;
     switch(fx){
     case MI_FX_DREAMY:return 8u; /* original DOT Dreamy */
-    case MI_FX_REEL:return 9u; /* original TAPE reel scene */
     case MI_FX_DELAY:return 2u;
     case MI_FX_REVERB:return 3u;
     case MI_FX_CHORUS:return 4u;
     default:return normal_visual_bank;
     }
 }
-/* Normal SEL keeps original EFFECTS/EUREKA (6/7), DOT scenes (8/9).
- * Supplied extra image sheets appear in modes 10/11. */
+/* Normal SEL keeps original EFFECTS/EUREKA (6/7) and DREAMY DOT (8).
+ * Supplied extra image sheets appear in modes 9/10. */
 static int mi_visual_photo_bank(unsigned mode)
 {
     if(mode<6u)return (int)mode;
-    if(mode==10u||mode==11u)return (int)(mode-4u);
+    if(mode==9u||mode==10u)return (int)(mode-3u);
     return -1;
 }
 static unsigned mi_visual_step(float activity)
@@ -386,7 +385,7 @@ static unsigned mi_visual_step(float activity)
      * All six user sheets plus original EFFECTS/EUREKA are in this cycle. */
     if(state.view==MI_VIDEO&&visual_choice==0u &&
        activity>0.012f&&activity>visual_last_activity*1.5f+0.004f){
-        normal_visual_bank=(uint8_t)((normal_visual_bank+1u)%12u);
+        normal_visual_bank=(uint8_t)((normal_visual_bank+1u)%11u);
         visual_last_mode=255u;
         changed=1;
     }
@@ -593,64 +592,6 @@ static void mi_dreamy_dot_draw_half(unsigned half,int32_t px,int32_t py,
         }
     }
 }
-/* Direct port of original MiyakoPixelMotion::Scene::Tape.
- * Original source: 65x65 pixel grid; 2 reels, 60-step circles, 3 spokes,
- * phase=24Hz and speed=0.02+controls[1]*0.05 where controls[1]=0.4.
- * No new artwork, storage, or oscillator/DSP logic. */
-static const int8_t mi_tape_circle_x[60]={
-    9,8,8,8,8,7,7,6,6,5,4,3,
-    2,1,0,0,0,-1,-2,-3,-4,-5,-6,-6,
-    -7,-7,-8,-8,-8,-8,-8,-8,-8,-8,-8,-7,
-    -7,-6,-6,-5,-4,-3,-2,-1,0,0,0,1,
-    2,3,4,5,6,6,7,7,8,8,8,8
-};
-static const int8_t mi_tape_circle_y[60]={
-    0,0,1,2,3,4,5,6,6,7,7,8,
-    8,8,8,8,8,8,8,8,7,7,6,6,
-    5,4,3,2,1,0,0,0,-1,-2,-3,-4,
-    -5,-6,-6,-7,-7,-8,-8,-8,-8,-8,-8,-8,
-    -8,-8,-7,-7,-6,-6,-5,-4,-3,-2,-1,0
-};
-static void mi_tape_dot_draw_half(unsigned half,int32_t px,int32_t py,
-                                  int32_t size)
-{
-    const uint16_t ink=RGB(255,219,70),dim=RGB(128,103,30);
-    const int cx=32,cy=35,radius=9;
-    int reel;
-    {   int32_t top=py-(int32_t)half*120,bottom=top+size;
-        if(top<0)top=0;
-        if(bottom>120)bottom=120;
-        if(bottom>top)cv_rect(px,top,size,bottom-top,RGB(17,16,11));
-    }
-    for(reel=-1;reel<=1;reel+=2){
-        int center_x=cx+reel*13,spoke,k;
-        unsigned a;
-        for(a=0u;a<60u;a++)
-            mi_dreamy_dot_pixel(half,px,py,size,
-                center_x+mi_tape_circle_x[a],cy+mi_tape_circle_y[a],ink);
-        for(spoke=0;spoke<3;spoke++){
-            /* Original std::sin and std::cos wave with source angle speed;
-             * bounded 64-point lookup makes this valid on freestanding FM1. */
-            float angle=visual_dot_phase*0.04f+(float)spoke*2.094395f;
-            unsigned wave_index;
-            angle-=(float)((unsigned)(angle/6.2831853f))*6.2831853f;
-            if(angle<0.f)angle=0.f;
-            wave_index=(unsigned)(angle*10.18591636f+0.5f)&63u;
-            for(k=1;k<radius;k++){
-                int dx=(int)mi_dreamy_dot_sin64[(wave_index+16u)&63u]*k/1024;
-                int dy=(int)mi_dreamy_dot_sin64[wave_index]*k/1024;
-                mi_dreamy_dot_pixel(half,px,py,size,
-                                   center_x+dx,cy+dy,dim);
-            }
-        }
-    }
-    {   int x;
-        for(x=cx-65/3;x<=cx+65/3;x++){
-            mi_dreamy_dot_pixel(half,px,py,size,x,cy-radius-4,ink);
-            mi_dreamy_dot_pixel(half,px,py,size,x,cy+radius+4,ink);
-        }
-    }
-}
 static unsigned mi_photo_index(unsigned sy,unsigned sx)
 {
     unsigned v=mi_photo_pixels[sy*(MI_TILE_SIDE/2u)+(sx>>1)];
@@ -799,7 +740,6 @@ static void mi_media_draw_half(unsigned half)
     if(mi_visual_photo_bank(mode)>=0)
         mi_tile_draw_half(half,0,0,240,audio_activity);
     else if(mode==8u)mi_dreamy_dot_draw_half(half,0,0,240);
-    else if(mode==9u)mi_tape_dot_draw_half(half,0,0,240);
     else{
         mi_media_draw_scaled_half(half,0,47,240,146,mode==7u);
         mi_video_vfx_half(half,0,47,240,146,audio_activity);
@@ -868,8 +808,6 @@ static void mi_fx_draw_half(unsigned half)
         mi_tile_draw_half(half,123,62,116,audio_activity);
     }else if(mode==8u){
         mi_dreamy_dot_draw_half(half,123,62,116);
-    }else if(mode==9u){
-        mi_tape_dot_draw_half(half,123,62,116);
     }else{
         /* Existing MIYAKO VQ source is 128x78. Keep its actual aspect. */
         mi_media_draw_scaled_half(half,123,85,116,70,mode==7u);
@@ -1080,7 +1018,7 @@ void app_frame(void)
      /* Never process off-screen video banks when a photo-tile sheet is chosen. */
      if(mode==6u||mode==7u)mi_video_tick(&video,audio_activity,mode==7u);
      else video.eureka_previous=0.f; /* original source disabled gate */
-     if((mode==8u||mode==9u)&&(state.view==MI_VIDEO||state.view==MI_FX)){
+     if(mode==8u&&(state.view==MI_VIDEO||state.view==MI_FX)){
          /* Original Dreamy DOT clock is 24 Hz; FM-1 redraw tick is 30 Hz. */
          visual_dot_phase+=0.8f; /* no non-source periodic restart */
          redraw=1;

@@ -200,6 +200,12 @@ audio = (root / "fm1/native/mi_audio.c").read_text(encoding="utf-8")
 fxcode = (root / "fm1/native/mi_fx_dsp.c").read_text(encoding="utf-8")
 controls = (root / "fm1/native/mi_control.c").read_text(encoding="utf-8")
 assert "static void mi_media_draw_half(unsigned half)" in ui
+# TAPE DOT removed by user request; keep the unrelated REEL sound FX.
+assert "mi_tape_dot_draw_half" not in ui and "mi_tape_circle_x" not in ui
+assert "((int32_t)visual_choice+steps)%12" in ui
+assert "(normal_visual_bank+1u)%11u" in ui
+assert "if(mode==9u||mode==10u)return (int)(mode-3u);" in ui
+assert "case MI_FX_REEL:return 9u;" not in ui
 assert "if(state.view==MI_VIDEO)" in ui and "mi_media_draw_half(1)" in ui
 assert "MIYAKO FM-1 / NATIVE PREVIEW" not in ui
 # FM-1 OSC page displays OSC1 or OSC2, never the obsolete OSC1-only
