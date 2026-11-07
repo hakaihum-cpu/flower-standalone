@@ -258,7 +258,7 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
         if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI&&s->osc_page<2u){
             uint8_t *selected=s->osc_page?&s->osc2_wave:&s->osc1_wave;
             *selected=(uint8_t)limited(*selected,steps>0?1:-1,0,3);
-        }else if(s->view==MI_OSC&&s->osc_page){
+        }else if(s->view==MI_OSC&&s->osc_page==1u){
             s->osc2_wave=(uint8_t)limited(s->osc2_wave,steps>0?1:-1,0,3);
         }else{
             uint8_t old=s->wave;
@@ -339,6 +339,9 @@ int mi_state_valid(const mi_state_t *s)
         s->osc2_wave>3u || s->osc2_level>127u ||
         s->osc2_detune>127u || s->osc2_octave>4u ||
         s->osc_page>2u || s->fx_page>1u ||
+        s->filter_cutoff>127u||s->filter_resonance>127u||
+        s->drum_tone>127u||s->drum_decay>127u||
+        s->drum_color>127u||s->drum_level>127u||
         (s->rec_bars!=2u&&s->rec_bars!=4u))
         return 0;
     for (i = 0; i < 4u; ++i) {
@@ -410,7 +413,7 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         static const char *const f[4]={"CUTOFF","RES","LEVEL","CRUSH"};
         return f[k];
     }
-    if(s->view==MI_OSC&&s->wave==MI_WAVE_FMDRUM){
+    if(s->view==MI_OSC&&s->wave==MI_WAVE_FMDRUM&&s->osc_page==0u){
         static const char *const d[4]={"TONE","DECAY","COLOR","D LEVEL"};
         return d[k];
     }
