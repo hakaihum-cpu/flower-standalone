@@ -26,7 +26,8 @@ static mi_state_t state;
 static mi_audio_t audio;
 static mi_video_t video;
 static volatile float audio_activity;
-static uint32_t last_keys,last_buttons;
+static uint32_t last_keys,last_buttons,rec_pressed_at;
+static uint8_t rec_long_done;
 static uint8_t held_note[NKEYS];
 static int redraw;
 static char line_a[24],line_b[24];
@@ -60,7 +61,8 @@ void app_init(void)
      state.playing=state.recording=0;
      state.view=MI_HOME;
  }
- last_keys=last_buttons=0;mi_memzero(held_note,sizeof held_note);redraw=1;
+ last_keys=last_buttons=rec_pressed_at=0u;rec_long_done=0u;
+ mi_memzero(held_note,sizeof held_note);redraw=1;
  message_until=0;line_a[0]=line_b[0]=0;
 }
 void app_panic(void){mi_audio_panic(&audio);}
@@ -145,10 +147,31 @@ static void input(void)
  }
  if(keys!=last_keys)redraw=1;
  last_keys=keys;
+ /* REC: release starts/stops an overwrite take, held 700ms clears.
+  * The UI never clears PCM; the audio callback owns the clip. */
+ {
+     uint32_t bit_rec=1u<<B_REC;
+     if((buttons&bit_rec)&&!(last_buttons&bit_rec)){
+         rec_pressed_at=now;
+         rec_long_done=0u;
+     }
+     if((buttons&bit_rec)&&!rec_long_done &&
+        (uint32_t)(now-rec_pressed_at)>=700u){
+         rec_long_done=1u;
+         mi_button(&state,MI_B_SEQ,now);
+         mi_audio_rec_request(&audio,3u);
+         redraw=1;
+     }
+     if(!(buttons&bit_rec)&&(last_buttons&bit_rec)&&!rec_long_done){
+         mi_button(&state,MI_B_REC,now);
+         mi_audio_rec_request(&audio,1u);
+         redraw=1;
+     }
+ }
  for(i=0;i<NB;i++){
      mi_result_t action;
      bit=1u<<i;
-     if(!(buttons&bit)||(last_buttons&bit))continue;
+     if(i==B_REC||!(buttons&bit)||(last_buttons&bit))continue;
      action=mi_button(&state,map_button(i),now);
      redraw=1;
      if(action.action==MI_ACTION_SAVE){
