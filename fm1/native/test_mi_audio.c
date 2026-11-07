@@ -177,6 +177,18 @@ int main(void)
  }
  for(i=0u;i<4u;i++)mi_audio_render(&a,&s,lr,256u,4096u);
  assert(a.osc_scope_active);
+ /* OCT DOWN must preserve Kick/Snare/Closed/Open/Crash/Tom order.
+  * Physical first key becomes MIDI 41, then 29 and 17 in lower octaves. */
+ mi_audio_panic(&a);
+ for(i=0u;i<6u;i++){
+     mi_audio_input_on(&a,&s,(uint8_t)(41u+i),127u);
+     assert(a.v[i].drum_type==(uint8_t)(i+1u));
+ }
+ mi_audio_panic(&a);
+ for(i=0u;i<6u;i++){
+     mi_audio_input_on(&a,&s,(uint8_t)(17u+i),127u);
+     assert(a.v[i].drum_type==(uint8_t)(i+1u));
+ }
  mi_audio_panic(&a);
  /* FILTER reduces high-frequency sample movement but does not silence the
   * signal or change the saved source oscillator waveform. */
