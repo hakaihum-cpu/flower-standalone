@@ -11,6 +11,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mi_palette import clip_pixels as effects_palette
 from pack_eureka_frames import clip_pixels as eureka_palette
+from mi_reference_palette import REFERENCE_565
 
 W, H = 128, 78
 # Varying luminance, colors and high-contrast contours, no face synthesis.
@@ -32,6 +33,7 @@ before = [im.tobytes() for im in frames]
 for name, run in (("EFFECTS", effects_palette), ("EUREKA", eureka_palette)):
     palette, coded = run(frames)
     assert len(palette) == 16
+    assert tuple(palette) == REFERENCE_565
     assert len(coded) == 36 and all(len(b) == W * H // 2 for b in coded)
     assert all(0 <= c <= 65535 for c in palette)
     assert len(set(palette)) >= 12, (name, "too few distinct palette colors")

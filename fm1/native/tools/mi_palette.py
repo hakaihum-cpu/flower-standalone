@@ -5,6 +5,7 @@ Exactly 36 user-supplied frames per clip; fixed 16-colour RGB565 palette.
 No EUREKA audio, animation or code dependency.
 """
 from PIL import Image, ImageStat, ImageFilter
+from mi_reference_palette import reference_pixels
 
 WIDTH, HEIGHT = 128, 78
 CLIP_LENGTH = 36
@@ -66,28 +67,6 @@ def clip_pixels(frames: list[Image.Image]) -> tuple[list[int], list[bytes]]:
             im.getchannel("R"), im.getchannel("G"),
             im.getchannel("B").point(blue_lut))) for im in fixed]
 
-    montage = Image.new("RGB", (WIDTH, HEIGHT * CLIP_LENGTH))
-    for i, im in enumerate(fixed):
-        montage.paste(im, (0, i * HEIGHT))
-    colors = montage.quantize(colors=COLORS - 1,
-                              method=Image.Quantize.MEDIANCUT,
-                              dither=Image.Dither.NONE).getpalette()
-    rgb = [(0, 0, 0)] + [tuple(colors[i * 3:i * 3 + 3])
-                         for i in range(COLORS - 1)]
-    if len(rgb) != COLORS:
-        raise ValueError("incomplete RGB palette")
-    # One reserved black + 15 image-derived colors, shared by the clip.
-    # A particular frame may use fewer than 16; never invent colors to
-    # claim utilization or alter the source person's features.
-    pal = Image.new("P", (1, 1))
-    pal.putpalette([c for color in rgb for c in color])
-    palette565 = [((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
-                  for r, g, b in rgb]
-    pixels = []
-    for im in fixed:
-        indices = im.quantize(palette=pal, dither=Image.Dither.NONE).tobytes()
-        if len(indices) != WIDTH * HEIGHT or max(indices) >= COLORS:
-            raise ValueError("Pillow produced out-of-range palette indices")
-        pixels.append(bytes((indices[i] << 4) | indices[i + 1]
-                            for i in range(0, len(indices), 2)))
-    return palette565, pixels
+    # The reference user's 16 warm colors replace grayscale-per-clip medcut.
+    # Face outline and frame sequence remain the real source pixels only.
+    return reference_pixels(fixed)

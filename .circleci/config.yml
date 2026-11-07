@@ -67,6 +67,7 @@ jobs:
             /tmp/mi-video-venv/bin/python -c 'from PIL import Image, ImageDraw, ImageFont; import numpy; print("PASS: fm1-base gen_font.py dependencies")'
             /tmp/mi-video-venv/bin/python fm1/native/tools/test_black_frame_guard.py
             /tmp/mi-video-venv/bin/python fm1/native/tools/test_video_palette_natural.py
+            /tmp/mi-video-venv/bin/python -m py_compile fm1/native/tools/mi_reference_palette.py
       - run:
           name: Host-compile real MIYAKO app and native FX BEFORE expensive video encoding
           command: |
