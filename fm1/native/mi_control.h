@@ -38,6 +38,10 @@ typedef struct {
     int8_t octave;       /* -3..+3 */
     uint8_t playing, recording, save_armed;
     uint32_t save_armed_ms;
+    /* Added at the END to preserve the complete original MI13 state prefix.
+     * OSC1 parameters/sub/crush are unchanged. OSC2 has independent waveform,
+     * octave, fine detune and level. Page only affects editing, never audio. */
+    uint8_t osc2_wave, osc2_level, osc2_detune, osc2_octave, osc_page;
 } mi_state_t;
 typedef struct {
     mi_action_t action;
