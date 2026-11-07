@@ -463,11 +463,46 @@ static void mi_media_draw_scaled_half(unsigned half,int32_t px,int32_t py,
         }
     }
 }
+/* Apply FX-linked analog-video defects to any media bank. The underlying
+ * original EFFECTS/EUREKA frame sequence stays untouched. Event-seeded noise
+ * is deterministic between played note attacks; never free-running random. */
+static void mi_video_vfx_half(unsigned half,int32_t x,int32_t y,
+                              int32_t w,int32_t h,float activity)
+{
+    unsigned fx=mi_visual_fx(),n,i;
+    int32_t shift=(int32_t)half*120;
+    uint32_t seed=visual_rng^(visual_generation*0x9e3779b9u);
+    if(activity<0.007f)return;
+    n=activity>0.18f?5u:2u;
+    if(fx==MI_FX_DREAMY)n=1u;
+    if(fx==MI_FX_REEL||fx==MI_FX_EUREKA)n+=2u;
+    for(i=0u;i<n;i++){
+        uint32_t q=seed^(i*0x45d9f3bu);
+        int32_t liney=y+(int32_t)(q%(uint32_t)h)-shift;
+        int32_t linex=x+(int32_t)((q>>13u)%(uint32_t)(w-18));
+        int32_t width=8+(int32_t)((q>>7u)%18u);
+        uint16_t color=fx==MI_FX_REVERB?RGB(116,116,116):
+                       fx==MI_FX_DREAMY?RGB(170,170,170):C_WHITE;
+        cv_rect(linex,liney,width,1,color);
+    }
+    if(fx==MI_FX_CHORUS && activity>0.08f){
+        /* Lightweight video-double/ghost line, no second image buffer. */
+        cv_rect(x+3,y+h/2-shift,w-8,1,RGB(122,122,122));
+    }
+    if(fx==MI_FX_REEL && activity>0.08f){
+        /* Tracking line at 8-mm-like field boundary. */
+        cv_rect(x,y+(int32_t)(visual_generation%(uint32_t)h)-shift,w,1,
+                RGB(132,132,132));
+    }
+}
 static void mi_media_draw_half(unsigned half)
 {
     unsigned mode=mi_visual_mode();
     if(mode<MI_TILE_BANKS)mi_tile_draw_half(half,0,0,240,audio_activity);
-    else mi_media_draw_scaled_half(half,0,47,240,146,mode==7u);
+    else{
+        mi_media_draw_scaled_half(half,0,47,240,146,mode==7u);
+        mi_video_vfx_half(half,0,47,240,146,audio_activity);
+    }
 }
 /* Intentionally limited by the FM-1's physical 240x240 LCD: 2x2 compact
  * hardware knobs on the left; a live square source tile on the right. */
@@ -534,6 +569,7 @@ static void mi_fx_draw_half(unsigned half)
     }else{
         /* 128:78 remains 128:78, not stretched to a false square. */
         mi_media_draw_scaled_half(half,133,69,102,62,mode==7u);
+        mi_video_vfx_half(half,133,69,102,62,audio_activity);
     }
     cv_text(133,164-shift,&FONT_XS,visual_choice?"LOCK":"AUTO",YELLOW);
     cv_text(133,180-shift,&FONT_XS,bankname,C_WHITE);
