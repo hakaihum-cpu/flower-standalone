@@ -33,6 +33,7 @@ typedef struct {
     uint32_t arp_clock, arp_gate_clock, arp_random;
     float lfo_phase;
     float filter_a,filter_b;
+    volatile uint8_t video_effective[4];
     uint32_t rendered_samples; /* MIDI-clock timestamp in output samples */
     mi_recorder_t recorder;
     volatile uint8_t rec_command;
