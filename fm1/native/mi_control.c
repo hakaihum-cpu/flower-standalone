@@ -341,8 +341,10 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
     }
     if (s->view == MI_FX && s->fx_page){
         static const char *const more[4]={
-            "PITCH","REVERSE","DENSITY","FEEDBK"
+            "PITCH","REVERSE","SPREAD","FEEDBK"
         };
+        unsigned fx=s->fx_slot?s->fx2:s->fx;
+        if(k==2u && fx==MI_FX_EUREKA)return "GRAIN";
         return more[k];
     }
     if (s->view == MI_FX && k >= 2) {
