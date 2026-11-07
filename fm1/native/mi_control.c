@@ -138,7 +138,13 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     if (k >= 4) return;
     switch (s->view) {
     case MI_HOME:
-        if(k==0){p=&s->wave;hi=MI_WAVE_MULTI;}
+        if(k==0){
+            if(s->wave==MI_WAVE_MULTI){
+                /* K1 edits the selected OSC waveform, not MULTI value 4. */
+                p=s->osc_page?&s->osc2_wave:&s->osc1_wave;
+                hi=3;
+            }else{p=&s->wave;hi=MI_WAVE_MULTI;}
+        }
         if(k==1){if(s->wave==MI_WAVE_MULTI){p=&s->osc_page;hi=1;}
                  else{p=&s->fx;hi=MI_FX_COUNT-1;}}
         if(k==2)p=s->wave==MI_WAVE_MULTI?&s->osc2_detune:&s->wet;
@@ -260,10 +266,13 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
         if (next != s->preset) apply_preset(s, next);
         break;
     }
-    case MI_EN_SELECT:
-        view(s, (mi_view_t)((s->view + MI_VIEW_COUNT + (steps > 0 ? 1 : -1))
-                            % MI_VIEW_COUNT));
+    case MI_EN_SELECT: {
+        /* SELECT traverses views; do not swallow fast encoder detents. */
+        int32_t next=((int32_t)s->view+steps)%MI_VIEW_COUNT;
+        if(next<0)next+=MI_VIEW_COUNT;
+        view(s,(mi_view_t)next);
         break;
+    }
     case MI_EN_K1: case MI_EN_K2: case MI_EN_K3: case MI_EN_K4:
         knob(s, (unsigned)(e - MI_EN_K1), steps);
         break;
@@ -364,8 +373,8 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
     if (s->view == MI_VIDEO) return "";
     if(s->view==MI_HOME&&s->wave==MI_WAVE_MULTI){
-        static const char *const multi[4]={"WAVE","MODE","DETUNE","LEVEL"};
-        return multi[k];
+        static const char *const multi[4]={"WAVE1","OSC","DETUNE","LEVEL"};
+        return k==0u&&s->osc_page?"WAVE2":multi[k];
     }
     if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI&&!s->osc_page&&k==0u)
         return "WAVE1";
@@ -402,7 +411,8 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
         if(s->wave==MI_WAVE_MULTI){
             /* Return signed values explicitly: DETUNE may be negative and
              * MI_WAVE_MULTI is an unsigned macro (4u). */
-            if(k==0u)return (int32_t)MI_WAVE_MULTI;
+            if(k==0u)return (int32_t)(s->osc_page?
+                                      s->osc2_wave:s->osc1_wave);
             if(k==1u)return (int32_t)s->osc_page;
             if(k==2u)return (int32_t)s->osc2_detune-64;
             return (int32_t)s->level;

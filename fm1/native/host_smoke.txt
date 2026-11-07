@@ -152,3 +152,28 @@ turn K1 1
 expect fx 6
 expect fx2 4
 shot MIYAKO_FX_DUAL.png
+# SELECT must navigate out of DREAMY/EUREKA FX, not change the image bank.
+turn SELECT 1
+expect view 3
+tap HOME
+expect view 0
+# Reboot restored SQUARE=2. Enter MULTI then edit each independent wave.
+turn K1 2
+expect wave 4
+expect osc_page 0
+turn K1 1
+expect osc1_wave 3
+expect wave 4
+turn K2 1
+expect osc_page 1
+turn K1 2
+expect osc2_wave 2
+expect wave 4
+shot MIYAKO_MULTI_HOME_WAVES.png
+tap EDIT
+expect view 1
+expect osc_page 1
+turn K1 1
+expect osc2_wave 3
+tap HOME
+expect view 0

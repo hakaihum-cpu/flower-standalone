@@ -264,8 +264,8 @@ static void input(void)
  for(i=0;i<NE;i++){
      steps=plat_enc((int)i);
      if(steps){
-         if(i==EN_SELECT&&(state.view==MI_FX||state.view==MI_VIDEO)){
-             /* Preserve each hardware detent; large steps must not be lost. */
+         if(i==EN_SELECT&&state.view==MI_VIDEO){
+             /* SEL alone uses SELECT for image banks; FX allows page navigation. */
              int32_t next=((int32_t)visual_choice+steps)%12;
              if(next<0)next+=12;
              visual_choice=(uint8_t)next;
@@ -847,7 +847,10 @@ static void mi_fx_draw_half(unsigned half)
     cv_text(4,4-shift,&FONT_S,mi_fx_name((mi_fx_t)fx),C_WHITE);
     cv_text(75,5-shift,&FONT_XS,state.fx_page?"P2":"P1",YELLOW);
     cv_text(98,5-shift,&FONT_XS,state.fx_slot?"B":"A",C_WHITE);
-    cv_rect(3,28-shift,117,1,RGB(100,100,100));
+    cv_text(4,20-shift,&FONT_XS,
+            (fx==MI_FX_DREAMY||fx==MI_FX_EUREKA)?
+            "PRESET:PAGE":"FX:A/B",GREY);
+    cv_rect(3,34-shift,117,1,RGB(100,100,100));
     mi_fx_dial(half,3,36,0u);
     mi_fx_dial(half,63,36,1u);
     mi_fx_dial(half,3,123,2u);
@@ -1028,7 +1031,9 @@ static void draw(void)
             textcpy(val,mi_wave_name(state.view==MI_OSC?
                   (state.osc_page?state.osc2_wave:
                    state.wave==MI_WAVE_MULTI?state.osc1_wave:state.wave):
-                   state.wave),sizeof val);
+                   (state.wave==MI_WAVE_MULTI?
+                    (state.osc_page?state.osc2_wave:state.osc1_wave):
+                    state.wave)),sizeof val);
         else if(state.view==MI_HOME&&state.wave==MI_WAVE_MULTI&&i==1u)
             textcpy(val,state.osc_page?"OSC2":"OSC1",sizeof val);
         else if(state.view==MI_LFO&&i==1u)
@@ -1096,6 +1101,9 @@ int app_expect(const char *what,int *got)
   else if(mi_streq(what,"fx_slot")) *got=(int)state.fx_slot;
  else if(mi_streq(what,"fx_page")) *got=(int)state.fx_page;
  else if(mi_streq(what,"wave")) *got=(int)state.wave;
+ else if(mi_streq(what,"osc_page")) *got=(int)state.osc_page;
+ else if(mi_streq(what,"osc1_wave")) *got=(int)state.osc1_wave;
+ else if(mi_streq(what,"osc2_wave")) *got=(int)state.osc2_wave;
  else if(mi_streq(what,"octave")) *got=(int)state.octave;
  else if(mi_streq(what,"arp_mode")) *got=(int)state.arp[0];
  else if(mi_streq(what,"arp_note")) *got=(int)audio.arp_note;

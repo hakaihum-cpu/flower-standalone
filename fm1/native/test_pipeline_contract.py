@@ -254,6 +254,18 @@ assert "state.osc_page" in ui and "state.osc2_wave" in ui
 assert "mi_wave_name(state.view==MI_OSC?" in ui
 assert "state.wave==MI_WAVE_MULTI" in ui
 assert "state.osc1_wave" in ui
+# HOME MULTI K1 edits the selected oscillator waveform instead of WAVE=4.
+assert "p=s->osc_page?&s->osc2_wave:&s->osc1_wave;" in controls
+assert 's->osc_page?"WAVE2":multi[k]' in controls
+assert 'mi_streq(what,"osc1_wave")' in ui
+assert 'mi_streq(what,"osc2_wave")' in ui
+assert "expect osc1_wave 3" in (root / "fm1/native/host_smoke.txt").read_text()
+assert "expect osc2_wave 2" in (root / "fm1/native/host_smoke.txt").read_text()
+# FX SELECT restores page navigation; only SEL changes photo banks.
+assert 'if(i==EN_SELECT&&state.view==MI_VIDEO)' in ui
+assert 'if(i==EN_SELECT&&(state.view==MI_FX||state.view==MI_VIDEO))' not in ui
+assert '"PRESET:PAGE"' in ui
+assert "turn SELECT 1\nexpect view 3\ntap HOME" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "mi_graph_env();" in ui and "mi_graph_lfo();" in ui
 assert "mi_graph_arp();" in ui
 assert "mi_audio_input_on(&audio,&state" in ui
