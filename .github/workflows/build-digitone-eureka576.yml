@@ -1,12 +1,6 @@
 name: Digitone PG84 EUREKA YELLOW + CPU GUARD (PG79 protected)
 on:
   workflow_dispatch:
-  # Single user-authorized PG84 firmware build; disarm after run queued.
-  push:
-    branches:
-      - fix/digitone-eureka-overload-guard-yellow-20261107
-    paths:
-      - .github/workflows/build-digitone-eureka576.yml
 permissions:
   contents: read
 jobs:
