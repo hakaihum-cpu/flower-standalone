@@ -9,8 +9,8 @@ from pathlib import Path
 import sys
 from PIL import Image
 
-if len(sys.argv) != 3:
-    raise SystemExit("Usage: check_noresource_display.py SEL.png FX.png")
+if len(sys.argv) != 5:
+    raise SystemExit("Usage: check_noresource_display.py missing_SEL.png missing_FX.png restored_SEL.png original_SEL.png")
 
 
 def check(path, region, name):
@@ -30,3 +30,11 @@ def check(path, region, name):
 check(Path(sys.argv[1]), (0, 0, 240, 240), "SEL missing-resource image")
 # The FX image square is x=123..239, y=62..178; knobs don't count.
 check(Path(sys.argv[2]), (123, 62, 239, 178), "FX missing-resource image")
+
+# Reinstalling the matching stock FM-1 photo resource must restore real
+# user imagery; a stale cached screenshot must not satisfy the fallback test.
+check(Path(sys.argv[3]), (0, 0, 240, 240), "SEL restored-photo image")
+with Image.open(sys.argv[1]) as missing, Image.open(sys.argv[4]) as installed:
+    if missing.convert("RGB").tobytes() == installed.convert("RGB").tobytes():
+        raise SystemExit("FAIL: missing resource did not change SEL image; stale rendering")
+print("PASS: resource loss visibly changes SEL image, and restoration is visible")

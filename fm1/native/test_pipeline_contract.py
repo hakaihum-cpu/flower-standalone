@@ -321,6 +321,12 @@ assert 'MIYAKO-FM1-NATIVE-DEV-res.bin' in ci
 assert "mi_dreamy_dot_draw_half(half,px,py,size);" in ui
 assert "resource_length<MI_TILE_DATA_BYTES" in ui
 assert "mi_photo_cached=-1;" in ui
+# Toggling res 0 must force a render; pixel tests must not accept the
+# previous cached photo screenshot without rendering the fallback.
+smoke = (root / "fm1/native/host_smoke.txt").read_text()
+assert "res 0\nexpect media_ready 0\n" in smoke
+assert "turn SELECT 1\nturn SELECT -1\nexpect visual_choice 1" in smoke
+assert "stale rendering" in (root / "fm1/native/tools/check_noresource_display.py").read_text()
 for name in ("MIYAKO_NO_RESOURCE_SEL.png", "MIYAKO_NO_RESOURCE_FX.png",
              "MIYAKO_PHOTO_RESOURCE_RESTORED.png"):
     assert name in (root / "fm1/native/host_smoke.txt").read_text()

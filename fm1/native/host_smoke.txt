@@ -30,6 +30,11 @@ shot MIYAKO_PHOTO_RESOURCE.png
 # Also check that a cached photo is invalidated when resources disappear.
 res 0
 expect media_ready 0
+# Resource toggling alone doesn't imply a UI redraw. Move to another
+# photo sheet and back, verifying the ACTUAL newly drawn fallback.
+turn SELECT 1
+turn SELECT -1
+expect visual_choice 1
 shot MIYAKO_NO_RESOURCE_SEL.png
 tap FX
 expect view 2

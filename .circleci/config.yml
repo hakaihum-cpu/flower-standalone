@@ -136,7 +136,9 @@ jobs:
             test -s /tmp/miyako-host-preflight/MIYAKO_EUREKA_AUDIO.wav
             /tmp/mi-video-venv/bin/python fm1/native/tools/check_noresource_display.py \
               /tmp/miyako-host-preflight/MIYAKO_NO_RESOURCE_SEL.png \
-              /tmp/miyako-host-preflight/MIYAKO_NO_RESOURCE_FX.png
+              /tmp/miyako-host-preflight/MIYAKO_NO_RESOURCE_FX.png \
+              /tmp/miyako-host-preflight/MIYAKO_PHOTO_RESOURCE_RESTORED.png \
+              /tmp/miyako-host-preflight/MIYAKO_PHOTO_RESOURCE.png
             python3 fm1/native/tools/check_host_wav.py \
               /tmp/miyako-host-preflight/MIYAKO_FX_PREVIEW.wav
             python3 fm1/native/tools/check_eureka_wav.py \
@@ -245,7 +247,9 @@ jobs:
             test -s fm1-dist/MIYAKO_PHOTO_RESOURCE_RESTORED.png
             /tmp/mi-video-venv/bin/python fm1/native/tools/check_noresource_display.py \
               fm1-dist/MIYAKO_NO_RESOURCE_SEL.png \
-              fm1-dist/MIYAKO_NO_RESOURCE_FX.png
+              fm1-dist/MIYAKO_NO_RESOURCE_FX.png \
+              fm1-dist/MIYAKO_PHOTO_RESOURCE_RESTORED.png \
+              fm1-dist/MIYAKO_PHOTO_RESOURCE.png
             test -s fm1-dist/MIYAKO_FX_DUAL.png
             test -s fm1-dist/MIYAKO_RECORDER.png
             test -s fm1-dist/MIYAKO_RECORDER_PLAY.png
