@@ -201,8 +201,8 @@ static void input(void)
  }
  if(keys!=last_keys)redraw=1;
  last_keys=keys;
- /* REC: release starts/stops an overwrite take, held 700ms clears.
-  * The UI never clears PCM; the audio callback owns the clip. */
+ /* REC: release starts/stops a take (OVERDUB if a clip exists).
+  * Only a 700ms hold clears the clip on the audio callback. */
  {
      uint32_t bit_rec=1u<<B_REC;
      if((buttons&bit_rec)&&!(last_buttons&bit_rec)){
