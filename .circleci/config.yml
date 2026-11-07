@@ -25,6 +25,8 @@ jobs:
           command: |
             set -eu
             test "$CIRCLE_BRANCH" = "feature/fm1-miyako-recorder-eureka-fx-20261107"
+            # Parse-check EVERY CircleCI run script before any build work.
+            python3 fm1/native/tools/check_ci_run_shell.py
             python3 -m compileall -q fm1/native
             python3 -m py_compile fm1/native/verify_standalone.py fm1/native/test_pipeline_contract.py
             python3 fm1/native/verify_standalone.py
@@ -270,7 +272,7 @@ jobs:
               'REEL, DREAMY, DELAY, REVERB and CHORUS are native FM-1 DSP implementations.' \
               'Original 144 EFFECTS and 576 EUREKA source frames are 16-colour VQ.' \
               'Install MIYAKO-FM1-NATIVE-DEV-res.bin with the matching FWSC using the fm1-base installer.' \
-              'The separate resource holds all 628 original user-image tiles: previous 488 + five-sheet set's additional 140 (same 16-colour VQ).' \
+              'The resource stores 628 user-image tiles: 488 existing and 140 added from two new sheets (16-colour VQ).' \
               'REC internal 2s, EUREKA short-buffer 2s, two serial FX with conflict guards.' \
               'This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.' \
               > fm1-dist/README_BEFORE_INSTALL.txt

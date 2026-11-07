@@ -61,6 +61,13 @@ assert "<<" not in ci.replace("<< pipeline.parameters.run_build >>", ""), (
     "CircleCI 2.1 unclosed << tag: replace shell here-documents with printf"
 )
 assert "printf '%s\\n'" in ci, "README must use a CircleCI-safe printf"
+# #275 built and verified a valid FWSC, then failed on a README quote.
+# Validate all CircleCI shell snippets before costly native build work.
+assert "python3 fm1/native/tools/check_ci_run_shell.py" in ci
+assert ci.index("python3 fm1/native/tools/check_ci_run_shell.py") < ci.index(
+    "python3 -m compileall -q fm1/native")
+assert "five-sheet set's" not in ci
+assert (root / "fm1/native/tools/check_ci_run_shell.py").is_file()
 assert re.search(r"^\s+only: feature/fm1-miyako-recorder-eureka-fx-20261107\s*$", ci, re.M)
 assert "/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako" in ci
 assert "test_media_crc.c" in ci
