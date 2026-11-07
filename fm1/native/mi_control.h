@@ -50,7 +50,7 @@ typedef struct {
     uint8_t fx_extra[MI_FX_COUNT][4];
     uint8_t fx_page;
     uint8_t osc1_wave; /* appended, previous saved-state prefix unchanged */
-    /* MI15 additions preserve all MI14 settings byte-for-byte. */
+    /* MI15 additions are migrated field-wise from historic layouts. */
     uint8_t filter_cutoff,filter_resonance;
     uint8_t drum_tone,drum_decay,drum_color,drum_level;
     uint8_t rec_bars; /* 2(default) or 4; external MIDI clock forces 2 */
