@@ -173,15 +173,15 @@ assert (root / "fm1/native/mi_memory.h").is_file()
 manifest = (root / "fm1/native/fm1.toml").read_text(encoding="utf-8")
 app_header = (root / "fm1/native/app.h").read_text(encoding="utf-8")
 assert 'id_prefix = "FM-1_9"' in manifest
-assert '#define APP_VERSION "0.3.4-DEV"' in app_header
+assert '#define APP_VERSION "0.3.5-DEV"' in app_header
 assert 'APP_TAGLINE "NATIVE TRIAL"' in app_header
-assert "--product FM-1_937" in ci
+assert "--product FM-1_938" in ci
 # Keep package header marker and running firmware FELUCCA_ID in sync by
 # patching the pinned original builder BEFORE ANY compilation step.
 id_patch = (root / "fm1/native/tools/set_miyako_product_id.py").read_text(encoding="utf-8")
-assert 'TARGET = "FM-1_937"' in id_patch
+assert 'TARGET = "FM-1_938"' in id_patch
 assert 'OLD = \'    PRODUCT = prefix + "00"\'' in id_patch
-assert 'NEW = \'    PRODUCT = prefix + "37"' in id_patch
+assert 'NEW = \'    PRODUCT = prefix + "38"' in id_patch
 # Check the package product ID against the actual pinned build patch,
 # rather than maintaining two contradictory hard-coded CI expectations.
 actual_product = re.search(r'^TARGET = "(FM-1_[0-9]+)"', id_patch, re.M)
@@ -200,7 +200,7 @@ for n, line in enumerate(Path(__file__).read_text(encoding="utf-8").splitlines()
 assert 'set_miyako_product_id.py --base /tmp/fm1-base' in ci
 assert ci.index('set_miyako_product_id.py') < ci.index('tools/build.py /tmp/fm1-base/miyako --host')
 assert "FM-1_9100" not in ci
-assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_937') >= 1
+assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_938') >= 1
 
 # Root issue from the current build log: fm1-base's own mmio_check()
 # correctly rejects a volatile pointer cast outside the BSP, even though
@@ -333,11 +333,16 @@ assert 'APP_RES_BASE 0x97000u' in app_header
 assert 'APP_RES_SECTORS 69u' in app_header
 assert 'APP_STORE_MAP {0xFC000u, 0xDC000u}' in app_header
 assert 'APP_BACKUP_OBJS {OBJ_SETTINGS}' in app_header
-assert 'MI_TILE_VQ_MAP_OFFSET 57792u' in resource_header
-assert 'MI_TILE_NEW_MAP_OFFSET 109440u' in resource_header
+assert 'MI_TILE_VQ_MAP_OFFSET 99072u' in resource_header
+assert 'MI_TILE_VQ_BOOK_OFFSET 768u' in resource_header
+assert 'MI_TILE_VQ_MAP_STRIDE 288u' in resource_header
+assert 'MI_TILE_VQ_FRAMES_PER_CLIP 27u' in resource_header
+assert 'MI_TILE_SIDE 96u' in resource_header
 assert 'MI_TILE_COUNT 628u' in resource_header
 assert 'MI_TILE_BANKS 8u' in resource_header
-assert 'MI_TILE_DATA_BYTES 119520u' in resource_header
+assert 'MI_TILE_DATA_BYTES 279936u' in resource_header
+assert 'test_miyako_resource96.py' in ci
+assert '279968' in ci and '279936' in ci
 assert '#include "mi_resource_media.h"' in ui and 'plat_res(&length)' in ui
 assert "mi_resource_media.h" in ci
 assert "pack_miyako_resource.py" in ci
@@ -376,10 +381,11 @@ assert "turn K1 6\nexpect fx 6" not in host_eureka
 host_fx = (root / "fm1/native/host_fx_preview.txt").read_text()
 assert "spin K1 -3\nexpect fx 2" in host_fx
 assert "spin PRESET 1" not in host_fx
-assert "429f2aa8f561079481c3b60562ef3f88e2f5abd044a446eca1b1ebe1c6bc11ee" in resource_packer
-assert "7cf48b59c60028829c0d7db6f49a2e52750d3d49b7da33943cba2599d18344ca" in resource_packer
-assert "mi_new_two_sheets_vq.h" in ci
-assert "mi_new_vq_maps[140][72]" in (root / "fm1/native/mi_new_two_sheets_vq.h").read_text()
+assert "bb5345df9b9e4118052b2feac603e38f16db0fccd5af49223e52b08115a1cc40" in resource_packer
+assert "RESOURCE_CAPACITY = 69 * 4096 - 32" in resource_packer
+assert "photo96_rebuild.py" in (root / "fm1/native/tools/PHOTO96_REBUILD.md").read_text()
+assert "mi_photo_palette[i]=(uint16_t)" in ui
+assert "clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP" in ui
 assert "mi_visual_photo_bank(mode)" in ui
 assert "MIYAKO_FX_DREAMY_LARGE.png" in ci
 assert "MIYAKO_FX_EUREKA_LARGE.png" in ci
@@ -397,8 +403,10 @@ assert "int32_t tear=0" not in ui
 assert "mi_tile_draw_half(half,123,62,116,123" not in ui
 assert "mi_media_draw_scaled_half(half,123,84,116,71" not in ui
 assert "if(x<clip_left)" in ui and "mi_image_rect(" in ui
-assert "mi_photo_reference_rgb(rgb)" in ui
-assert "mi_user_reference_rgb565[16]" in ui
+assert "mi_photo_reference_rgb(rgb)" not in ui
+assert "mi_user_reference_rgb565[16]" not in ui
+assert "mi_photo_palette[i]=(uint16_t)" in ui
+assert "mi_tile_bank_first[8]" in resource_header
 for source in ("mi_palette.py", "pack_eureka_frames.py"):
     color_source = (root / "fm1/native/tools" / source).read_text()
     assert "ImageStat" in color_source and "blue_lut" in color_source

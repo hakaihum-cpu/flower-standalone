@@ -330,9 +330,7 @@ static void mi_media_decode(unsigned frame,unsigned eureka)
  * original animation (128x78 -> 240x146) centered at y=47, with no labels
  * or hidden FX parameter values. No source pixels are cropped or stretched.
  */
-/* Six 32x32 black/white banks: each 8x8 source block is mapped to one
- * dictionary entry. Selective base64 byte reads keep only one 9.9 KiB
- * vector atlas in XIP; there is no 488-frame runtime allocation. */
+/* Eight photo banks, 628 frames, rebuilt from approved original sheets at 96x96. */
 /* Photo frames use the same static RGB565 palette + 8x4 VQ arrays
  * as mi_media_decode() uses for EFFECTS/EUREKA. No base64 runtime work. */
 /* Display effect follows the actual active FX, independently of which
@@ -423,10 +421,7 @@ static unsigned mi_visual_step(float activity)
 /* Source-space bitmaps remain square even if the original sheet was 720x720.
  * Nearest-neighbour expansion is deliberately rough: analog video/glitch.
  * Only visible rows of each 120-row LCD half are touched. */
-/* Native 16-colour RGB565 VQ 8x4, identical to EFFECTS/EUREKA.
- * Each frame is 72 byte IDs; this scratch frame is cached until the
- * performer actually switches frame, so animation cannot cause redundant
- * full-frame decompression in both LCD halves. */
+/* Original-source 96x96 VQ: 288 tile IDs/photo, cached for 2 LCD passes. */
 /* Clip only image rectangles; FX right background must not paint the knobs. */
 static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
                           int32_t clip_left,uint16_t rgb)
@@ -435,21 +430,9 @@ static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
     if(x+w>240)w=240-x;
     if(w>0&&h>0)cv_rect(x,y,w,h,rgb);
 }
-/* 16 RGB565 colors extracted from the user's actual reference image.
- * Recolor old GRAY and yellow-biased palettes without changing source
- * pixel indices, original faces, animation order, or installed res.bin. */
-static const uint16_t mi_user_reference_rgb565[16]={
-    0x0000u,0x1841u,0x28a2u,0x5101u,0x4184u,0x49c5u,0x6206u,0x7a05u,0x89e4u,0x8b0au,0xa2c6u,0xd2c6u,0xabacu,0xec49u,0xdd50u,0xfdd1u
-};
-static uint16_t mi_photo_reference_rgb(uint16_t rgb)
-{
-    unsigned r=((unsigned)(rgb>>11u)&31u)*255u/31u;
-    unsigned g=((unsigned)(rgb>>5u)&63u)*255u/63u;
-    unsigned b=((unsigned)rgb&31u)*255u/31u;
-    unsigned luma=(77u*r+150u*g+29u*b)>>8u;
-    unsigned index=(luma*15u+127u)/255u;
-    return mi_user_reference_rgb565[index];
-}
+/* Real fixed 16 RGB565 colours are encoded in the NEW original-source
+ * 96x96 VQ payload. Do not remap them by brightness (the previous buggy
+ * method made every real picture look like coloured grayscale). */
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
 static uint16_t mi_photo_palette[16];
 static int16_t mi_photo_cached=-1;
@@ -459,52 +442,33 @@ static void mi_photo_decode(unsigned frame)
     const uint8_t *res;
     unsigned clip,ty,tx,row,col,i;
     if(frame>=MI_TILE_COUNT||mi_photo_cached==(int16_t)frame)return;
-    /* Standard fm1-base CRC-checked resource area; NEVER access it on the
-     * audio callback. Without the separate resource install, no fake frames. */
+    /* FM-1_938 requires its 279936-byte photo resource. All older
+     * 119520-byte resources are INCOMPATIBLE and show DOT fallback. */
     res=plat_res(&length);
     if(!res||length<MI_TILE_DATA_BYTES){
         mi_photo_cached=-1;
         return;
     }
-    /* Same existing 16-colour 8x4 VQ decoder for ALL 628 frames.
-     * The previous 488 frames retain byte-for-byte resource offsets.
-     * Each new 10x7 sheet starts a 36-frame-palette pair, so frames 558+
-     * do not unintentionally share a codebook with sheet 1's last clip. */
-    {
-        unsigned palette_base,book_base,map_base,local_frame;
-        if(frame<MI_TILE_OLD_COUNT){
-            clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
-            palette_base=MI_TILE_VQ_PALETTE_OFFSET;
-            book_base=MI_TILE_VQ_BOOK_OFFSET;
-            map_base=MI_TILE_VQ_MAP_OFFSET;
-            local_frame=frame;
-        }else{
-            local_frame=frame-MI_TILE_NEW_FIRST;
-            clip=frame<MI_TILE_NEW_SHEET2_FIRST?
-                local_frame/36u:2u+(frame-MI_TILE_NEW_SHEET2_FIRST)/36u;
-            palette_base=MI_TILE_NEW_PALETTE_OFFSET;
-            book_base=MI_TILE_NEW_BOOK_OFFSET;
-            map_base=MI_TILE_NEW_MAP_OFFSET;
-        }
-        for(i=0u;i<16u;i++){
-            unsigned off=palette_base+clip*32u+i*2u;
-            uint16_t rgb=(uint16_t)((uint16_t)res[off]|
-                                   ((uint16_t)res[off+1u]<<8));
-            mi_photo_palette[i]=mi_photo_reference_rgb(rgb);
-        }
-        for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
-            for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
-                unsigned id=res[map_base+
-                                local_frame*MI_TILE_VQ_MAP_STRIDE+
-                                ty*MI_TILE_VQ_COLS+tx];
-                const uint8_t *tile=res+book_base+clip*4096u+id*16u;
+    clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
+    if(clip>=MI_TILE_VQ_CLIPS){mi_photo_cached=-1;return;}
+    for(i=0u;i<16u;i++){
+        unsigned off=MI_TILE_VQ_PALETTE_OFFSET+clip*32u+i*2u;
+        mi_photo_palette[i]=(uint16_t)((uint16_t)res[off]|
+                                      ((uint16_t)res[off+1u]<<8u));
+    }
+    for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
+        for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
+            unsigned id=res[MI_TILE_VQ_MAP_OFFSET+
+                            frame*MI_TILE_VQ_MAP_STRIDE+
+                            ty*MI_TILE_VQ_COLS+tx];
+            const uint8_t *tile=res+MI_TILE_VQ_BOOK_OFFSET+
+                                (clip*256u+id)*16u;
             for(row=0u;row<4u;row++)
                 for(col=0u;col<4u;col++){
                     unsigned at=(ty*4u+row)*(MI_TILE_SIDE/2u)+tx*4u+col;
                     mi_photo_pixels[at]=tile[row*4u+col];
                 }
-    }
-    }
+        }
     mi_photo_cached=(int16_t)frame;
 }
 /* Original MIYAKO DOT Dreamy (MiyakoPixelMotion.h::Scene::Dreamy).
@@ -644,7 +608,7 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
         mi_dreamy_dot_draw_half(half,px,py,size,clip_left);
         return;
     }
-    /* Original 48x48 pixel map: no line tears, white bars or row shifts. */
+    /* Original-source 96x96 pixel map: no artificial tearing or stripes. */
     for(sy=0u;sy<MI_TILE_SIDE;sy++){
         int32_t top=py+(int32_t)(sy*(unsigned)size/MI_TILE_SIDE)-shift;
         int32_t bottom=py+(int32_t)((sy+1u)*(unsigned)size/MI_TILE_SIDE)-shift;

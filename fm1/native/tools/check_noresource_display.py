@@ -28,8 +28,8 @@ def check(path, region, name):
 
 
 check(Path(sys.argv[1]), (0, 0, 240, 240), "SEL missing-resource image")
-# The FX image square is x=123..239, y=62..178; knobs don't count.
-check(Path(sys.argv[2]), (123, 62, 239, 178), "FX missing-resource image")
+# Enlarged FX image x=40..200, y=18..178, knobs below.
+check(Path(sys.argv[2]), (40, 18, 200, 178), "FX missing-resource image")
 
 # Reinstalling the matching stock FM-1 photo resource must restore real
 # user imagery; a stale cached screenshot must not satisfy the fallback test.

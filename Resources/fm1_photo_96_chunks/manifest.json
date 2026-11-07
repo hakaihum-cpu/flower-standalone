@@ -1,0 +1,138 @@
+{
+  "format": "FM1 VQ palette16 fixed RGB565 8x4 tiles 96x96",
+  "source": "the eight user-provided sheets",
+  "frames": 628,
+  "side": 96,
+  "clip_length": 27,
+  "clips": 24,
+  "tiles_per_frame": 288,
+  "palette_offset": 0,
+  "book_offset": 768,
+  "map_offset": 99072,
+  "payload_bytes": 279936,
+  "payload_sha256": "bb5345df9b9e4118052b2feac603e38f16db0fccd5af49223e52b08115a1cc40",
+  "palette_hex_565": [
+    "0x0000",
+    "0x1841",
+    "0x28a2",
+    "0x5101",
+    "0x4184",
+    "0x49c5",
+    "0x6206",
+    "0x7a05",
+    "0x89e4",
+    "0x8b0a",
+    "0xa2c6",
+    "0xd2c6",
+    "0xabac",
+    "0xec49",
+    "0xdd50",
+    "0xfdd1"
+  ],
+  "files": [
+    {
+      "name": "file_000000008e98820690554a4b75774ed5.png",
+      "grid": [
+        9,
+        9
+      ],
+      "frames": 81,
+      "dimensions": [
+        1536,
+        1536
+      ],
+      "sha256": "24a69a98804e44ef8ba78fc8ccd259c28c0ee52526cc662b5478ca9b5d78132f"
+    },
+    {
+      "name": "file_00000000f1a08206a57bdcc319a336d0.png",
+      "grid": [
+        8,
+        8
+      ],
+      "frames": 64,
+      "dimensions": [
+        1536,
+        1536
+      ],
+      "sha256": "40c47bac6a17b199a3e515610bec5a95fdb6a3a477ee9e1a28848cf637f7f368"
+    },
+    {
+      "name": "file_00000000e7388206b7bb79a8b73154ee(2).png",
+      "grid": [
+        10,
+        10
+      ],
+      "frames": 100,
+      "dimensions": [
+        1536,
+        1536
+      ],
+      "sha256": "77543d5543d927f8254281f75144490079f502788d55633d9c2a2dc005a91c2c"
+    },
+    {
+      "name": "file_00000000e9448206897342ec340f08d4(2).png",
+      "grid": [
+        9,
+        9
+      ],
+      "frames": 81,
+      "dimensions": [
+        1536,
+        1536
+      ],
+      "sha256": "5288f17826dcd0649fd1d8566d8bfa02d45d4a5a15faafa5385b82ba6bba9efc"
+    },
+    {
+      "name": "file_00000000cf38820685e20ea7661aea2d(2).png",
+      "grid": [
+        9,
+        9
+      ],
+      "frames": 81,
+      "dimensions": [
+        1536,
+        1536
+      ],
+      "sha256": "64fdfa02fa8127e4cc110061abe5ef05a74477300ceb8ade7c235b38b7849669"
+    },
+    {
+      "name": "file_000000006c3882069f4e9ec393c3615f(2).png",
+      "grid": [
+        9,
+        9
+      ],
+      "frames": 81,
+      "dimensions": [
+        1536,
+        1536
+      ],
+      "sha256": "c82bae262f5d2314d8667ae08117e1df63bbd1b295b054f6bc6859291ade5074"
+    },
+    {
+      "name": "Gemini_Generated_Image (3).jpeg",
+      "grid": [
+        10,
+        8
+      ],
+      "frames": 70,
+      "dimensions": [
+        1456,
+        720
+      ],
+      "sha256": "049336425575d8aebc0c0e83a3588a65cbf53e51019e66e02c067a5700921669"
+    },
+    {
+      "name": "Gemini_Generated_Image (4).jpeg",
+      "grid": [
+        10,
+        7
+      ],
+      "frames": 70,
+      "dimensions": [
+        1196,
+        880
+      ],
+      "sha256": "85e11797296b3ef801e571a804e15db3c368273701b2a6cc764ef6442e72674e"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 # Independent MIYAKO app on the MPL-2.0 fm1-base hardware layer.
 name = "MIYAKO"
-# Development FWSC revision FM-1_937 (baseline identity FM-1_934).
-# fm1-base normally appends "00"; pinned build.py patch changes suffix to "37".
+# Development FWSC revision FM-1_938 (baseline identity FM-1_934).
+# fm1-base normally appends "00"; pinned build.py patch changes suffix to "38".
 id_prefix = "FM-1_9"
 usb_manufacturer = "MIYAKO"
 usb_product = "MIYAKO FM-1"
@@ -16,7 +16,7 @@ credits = "MIYAKO native application with fm1-base / felucca-bsp hardware suppor
 author = "MIYAKO"
 description = "Native MIYAKO FM-1 development firmware. NOT a complete MIYAKO port."
 tags = ["synth", "utility"]
-# fm1-base stock resource region: original RGB565 VQ media, no codec change.
+# fm1-base standard resource: 96x96 original-source RGB565 16-colour VQ.
 backup = true
 resources = "miyako_media.bin"
 resources_what = "MIYAKO image data"
