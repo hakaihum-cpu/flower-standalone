@@ -62,7 +62,7 @@ void mi_init(mi_state_t *s)
     s->fx_options[MI_FX_EUREKA][0] = 48;
     s->fx_options[MI_FX_EUREKA][1] = 64;
     s->osc2_wave=0u;s->osc2_level=0u;s->osc2_detune=64u;
-    s->osc2_octave=2u;s->osc_page=0u;
+    s->osc2_octave=2u;s->osc_page=0u;s->osc1_wave=0u;
     s->fx_extra[MI_FX_DREAMY][0]=64u;
     s->fx_extra[MI_FX_DREAMY][1]=0u;
     s->fx_extra[MI_FX_DREAMY][2]=64u;
@@ -87,11 +87,13 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
     case MI_B_HOME: view(s, MI_HOME); break;
     case MI_B_EDIT:
         if(s->view==MI_OSC)s->osc_page^=1u;
-        else{s->osc_page=0u;view(s, MI_OSC);}
+        else{if(s->wave!=MI_WAVE_MULTI)s->osc_page=0u;view(s, MI_OSC);}
         break;
     case MI_B_FX:
-        if(s->view==MI_FX){s->fx_slot^=1u;s->fx_page=0u;}
-        else{view(s,MI_FX);s->fx_slot=0;s->fx_page=0u;}
+        if(s->view==MI_FX){s->fx_slot^=1u;}
+        else{view(s,MI_FX);s->fx_slot=0u;}
+        { unsigned fx=s->fx_slot?s->fx2:s->fx;
+          s->fx_page=(fx==MI_FX_DREAMY||fx==MI_FX_EUREKA)?1u:0u; }
         break;
     case MI_B_SEL:
         /* Visualizer is a view, not an EUREKA sound selector.
@@ -131,17 +133,19 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
 {
     uint8_t *p = 0;
     int32_t lo = 0, hi = 127;
+    uint8_t previous_wave=s->wave;
     if (k >= 4) return;
     switch (s->view) {
     case MI_HOME:
-        if (k == 0) { p = &s->wave; hi = 3; }
-        if (k == 1) { p = &s->fx; hi = MI_FX_COUNT - 1; }
-        if (k == 2) p = &s->wet;
-        if (k == 3) p = &s->level;
+        if(k==0){p=&s->wave;hi=MI_WAVE_MULTI;}
+        if(k==1){if(s->wave==MI_WAVE_MULTI){p=&s->osc_page;hi=1;}
+                 else{p=&s->fx;hi=MI_FX_COUNT-1;}}
+        if(k==2)p=s->wave==MI_WAVE_MULTI?&s->osc2_detune:&s->wet;
+        if(k==3)p=&s->level;
         break;
     case MI_OSC:
         if(s->osc_page==0u){
-            if (k == 0) { p = &s->wave; hi = 3; }
+            if (k == 0) { p = s->wave==MI_WAVE_MULTI?&s->osc1_wave:&s->wave; hi = 3; }
             if (k == 1) p = &s->width;
             if (k == 2) p = &s->sub;
             if (k == 3) p = &s->crush;
@@ -209,6 +213,12 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     default: break;
     }
     if (p) *p = (uint8_t)limited(*p, d, lo, hi);
+    if(s->view==MI_HOME&&k==0u &&
+       previous_wave!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
+        s->osc1_wave=previous_wave;
+        if(s->osc2_level==0u)s->osc2_level=64u;
+        s->osc_page=0u;
+    }
     if(s->view==MI_HOME && !mi_fx_pair_supported(s->fx,s->fx2))
         s->fx2=MI_FX_OFF;
 }
@@ -217,10 +227,21 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
     if (!s || !steps) return result(MI_ACTION_NONE, 0);
     switch (e) {
     case MI_EN_ALGORITHM:
-        if(s->view==MI_OSC&&s->osc_page)
+        if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI){
+            uint8_t *selected=s->osc_page?&s->osc2_wave:&s->osc1_wave;
+            *selected=(uint8_t)limited(*selected,steps>0?1:-1,0,3);
+        }else if(s->view==MI_OSC&&s->osc_page){
             s->osc2_wave=(uint8_t)limited(s->osc2_wave,steps>0?1:-1,0,3);
-        else
-            s->wave=(uint8_t)limited(s->wave,steps>0?1:-1,0,3);
+        }else{
+            uint8_t old=s->wave;
+            s->wave=(uint8_t)limited(s->wave,steps>0?1:-1,0,
+                                     s->view==MI_HOME?MI_WAVE_MULTI:3);
+            if(old!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
+                s->osc1_wave=old;
+                if(s->osc2_level==0u)s->osc2_level=64u;
+                s->osc_page=0u;
+            }
+        }
         break;
     case MI_EN_PRESETS: {
         if(s->view==MI_FX){
@@ -260,7 +281,8 @@ int mi_state_valid(const mi_state_t *s)
 {
     unsigned i, j;
     if (!s || (unsigned)s->view >= MI_VIEW_COUNT ||
-        s->wave > 3u || s->width > 127u || s->sub > 127u ||
+        s->wave > MI_WAVE_MULTI || s->osc1_wave > 3u ||
+        s->width > 127u || s->sub > 127u ||
         s->crush > 127u || s->level > 127u ||
         s->fx >= MI_FX_COUNT || s->fx2 >= MI_FX_COUNT ||
         s->wet > 127u || s->wet2 > 127u || s->fx_slot > 1u ||
@@ -296,8 +318,8 @@ int mi_state_valid(const mi_state_t *s)
 
 const char *mi_wave_name(unsigned wave)
 {
-    static const char *const names[] = {"SINE","SAW","SQUARE","PULSE"};
-    return wave<4u?names[wave]:"?";
+    static const char *const names[] = {"SINE","SAW","SQUARE","PULSE","MULTI"};
+    return wave<=MI_WAVE_MULTI?names[wave]:"?";
 }
 const char *mi_arp_mode_name(unsigned mode)
 {
@@ -335,6 +357,12 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
     };
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
     if (s->view == MI_VIDEO) return "";
+    if(s->view==MI_HOME&&s->wave==MI_WAVE_MULTI){
+        static const char *const multi[4]={"WAVE","MODE","DETUNE","LEVEL"};
+        return multi[k];
+    }
+    if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI&&!s->osc_page&&k==0u)
+        return "WAVE1";
     if (s->view==MI_OSC && s->osc_page){
         static const char *const osc2_names[4]={"WAVE2","DETUNE","MIX2","OCT2"};
         return osc2_names[k];
@@ -365,13 +393,17 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
     if (!s || k > 3) return 0;
     switch (s->view) {
     case MI_HOME:
-        return k == 0 ? s->wave : k == 1 ? s->fx : k == 2 ? s->wet : s->level;
+        if(s->wave==MI_WAVE_MULTI)
+            return k==0?MI_WAVE_MULTI:k==1?s->osc_page:
+                   k==2?(int32_t)s->osc2_detune-64:s->level;
+        return k==0?s->wave:k==1?s->fx:k==2?s->wet:s->level;
     case MI_OSC:
         if(s->osc_page)
             return k==0?s->osc2_wave:
                    k==1?(int32_t)s->osc2_detune-64:
                    k==2?s->osc2_level:(int32_t)s->osc2_octave-2;
-        return k==0?s->wave:k==1?s->width:k==2?s->sub:s->crush;
+        return k==0?(s->wave==MI_WAVE_MULTI?s->osc1_wave:s->wave):
+               k==1?s->width:k==2?s->sub:s->crush;
     case MI_VIDEO: return 0;
     case MI_FX: {
         unsigned fx=s->fx_slot?s->fx2:s->fx;
