@@ -140,23 +140,25 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     case MI_HOME:
         /* HOME K1 selects the engine (including MULTI), not a nested wave.
          * WET and MODE are FX parameters and no longer appear on OSC HOME. */
-        if(k==0){p=&s->wave;hi=MI_WAVE_MULTI;}
+        if(k==0){p=&s->wave;hi=MI_WAVE_FMDRUM;}
         if(k==1){
             if(s->wave==MI_WAVE_MULTI){p=&s->osc_page;hi=1;}
             else if(s->wave==3u)p=&s->width;
-            else p=&s->sub;
+            else if(s->wave!=MI_WAVE_FMDRUM)p=&s->sub;
         }
         if(k==2){
             if(s->wave==MI_WAVE_MULTI){
                 p=s->osc_page?&s->osc2_wave:&s->osc1_wave;
                 hi=3;
             }else if(s->wave==3u)p=&s->sub;
-            else p=&s->crush;
+            else if(s->wave!=MI_WAVE_FMDRUM)p=&s->crush;
         }
         if(k==3)p=&s->level;
         break;
     case MI_OSC:
-        if(s->osc_page==0u){
+        if(s->wave==MI_WAVE_FMDRUM){
+            if(k==0){p=&s->wave;hi=MI_WAVE_FMDRUM;}
+        }else if(s->osc_page==0u){
             if (k == 0) { p = s->wave==MI_WAVE_MULTI?&s->osc1_wave:&s->wave; hi = 3; }
             if (k == 1) p = &s->width;
             if (k == 2) p = &s->sub;
@@ -252,7 +254,7 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
         }else{
             uint8_t old=s->wave;
             s->wave=(uint8_t)limited(s->wave,steps>0?1:-1,0,
-                                     s->view==MI_HOME?MI_WAVE_MULTI:3);
+                                     MI_WAVE_FMDRUM);
             if(old!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
                 s->osc1_wave=old;
                 if(s->osc2_level==0u)s->osc2_level=64u;
@@ -301,7 +303,7 @@ int mi_state_valid(const mi_state_t *s)
 {
     unsigned i, j;
     if (!s || (unsigned)s->view >= MI_VIEW_COUNT ||
-        s->wave > MI_WAVE_MULTI || s->osc1_wave > 3u ||
+        s->wave > MI_WAVE_FMDRUM || s->osc1_wave > 3u ||
         s->width > 127u || s->sub > 127u ||
         s->crush > 127u || s->level > 127u ||
         s->fx >= MI_FX_COUNT || s->fx2 >= MI_FX_COUNT ||
@@ -338,8 +340,8 @@ int mi_state_valid(const mi_state_t *s)
 
 const char *mi_wave_name(unsigned wave)
 {
-    static const char *const names[] = {"SINE","SAW","SQUARE","PULSE","MULTI"};
-    return wave<=MI_WAVE_MULTI?names[wave]:"?";
+    static const char *const names[] = {"SINE","SAW","SQUARE","PULSE","MULTI","FMDRUM"};
+    return wave<=MI_WAVE_FMDRUM?names[wave]:"?";
 }
 const char *mi_arp_mode_name(unsigned mode)
 {
@@ -378,6 +380,10 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
     if (s->view == MI_VIDEO) return "";
     if(s->view==MI_HOME){
+        if(s->wave==MI_WAVE_FMDRUM){
+            static const char *const drum[4]={"OSC","","","LEVEL"};
+            return drum[k];
+        }
         if(s->wave==MI_WAVE_MULTI){
             static const char *const names[4]={"OSC","SELECT","WAVE1","LEVEL"};
             return k==2u&&s->osc_page?"WAVE2":names[k];
@@ -390,6 +396,10 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
             static const char *const normal[4]={"OSC","SUB","CRUSH","LEVEL"};
             return normal[k];
         }
+    }
+    if(s->view==MI_OSC&&s->wave==MI_WAVE_FMDRUM){
+        static const char *const drum[4]={"OSC","","",""};
+        return drum[k];
     }
     if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI&&!s->osc_page&&k==0u)
         return "WAVE1";
@@ -423,6 +433,7 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
     if (!s || k > 3) return 0;
     switch (s->view) {
     case MI_HOME:
+        if(s->wave==MI_WAVE_FMDRUM)return k==0?MI_WAVE_FMDRUM:k==3?s->level:0;
         if(s->wave==MI_WAVE_MULTI){
             if(k==0u)return (int32_t)s->wave;
             if(k==1u)return (int32_t)s->osc_page;
@@ -435,6 +446,7 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
                k==2?(int32_t)(s->wave==3u?s->sub:s->crush):
                (int32_t)s->level;
     case MI_OSC:
+        if(s->wave==MI_WAVE_FMDRUM)return k==0?MI_WAVE_FMDRUM:0;
         if(s->osc_page)
             return k==0?s->osc2_wave:
                    k==1?(int32_t)s->osc2_detune-64:

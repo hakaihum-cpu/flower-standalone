@@ -208,7 +208,9 @@ static void input(void)
  keys=touch_keys();
  for(i=0;i<NKEYS;i++){
      bit=1u<<i;
-     uint8_t note=(uint8_t)(53+(int)i+12*(int)state.octave);
+     uint8_t note=state.wave==MI_WAVE_FMDRUM?
+                       (uint8_t)(53u+i):
+                       (uint8_t)(53+(int)i+12*(int)state.octave);
      if((keys&bit)&&!(last_keys&bit)){
          held_note[i]=note;
          mi_audio_input_on(&audio,&state,note,(uint8_t)touch_vel(i));
@@ -921,7 +923,15 @@ static void draw(void)
                            (state.osc_page?state.osc2_wave:state.osc1_wave):
                            state.view==MI_OSC&&state.osc_page?
                            state.osc2_wave:state.wave;
-        cv_text(12,35,&FONT_XS,mi_wave_name(show_wave),GREY);
+        cv_text(12,35,&FONT_XS,
+            state.wave==MI_WAVE_FMDRUM?
+             (audio.drum_last_pad>=27u?"FMDRUM":
+              audio.drum_last_pad%6u==0u?"KICK":
+              audio.drum_last_pad%6u==1u?"SNARE":
+              audio.drum_last_pad%6u==2u?"HH-C":
+              audio.drum_last_pad%6u==3u?"HH-O":
+              audio.drum_last_pad%6u==4u?"CRASH":"TOM-L"):
+             mi_wave_name(show_wave),GREY);
         /* Live pre-FX OSC audio waveform (SINE/SAW/SQUARE/PULSE). */
         {
             uint32_t head=audio.osc_scope_head;
