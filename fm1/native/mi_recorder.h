@@ -10,9 +10,10 @@
 typedef struct {
     uint32_t count, write_pos;
     float playback_pos, accumulator;
-    uint8_t capture_phase, recording, playing;
+    uint8_t capture_phase, recording, playing, overdubbing;
 } mi_recorder_t;
 void mi_rec_init(mi_recorder_t *r);
+/* REC on a nonempty clip means OVERDUB: add new audio, never erase. */
 void mi_rec_toggle_record(mi_recorder_t *r);
 void mi_rec_toggle_play(mi_recorder_t *r);
 float mi_rec_tick(mi_recorder_t *r,float internal_audio,const uint8_t controls[4]);
