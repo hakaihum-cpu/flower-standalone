@@ -87,6 +87,7 @@ void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
     v->phase=0.f;v->phase2=0.f;v->subphase=0.f;
     v->increment=note_freq(note)/a->sample_rate;
     v->env=0.f;v->env_stage=0;v->release_step=0.f;v->age=++a->age_counter;
+    v->drum_type=0u;v->drum_variant=0u;
 }
 void mi_audio_note_off(mi_audio_t *a,uint8_t note)
 {
@@ -112,6 +113,82 @@ void mi_audio_panic(mi_audio_t *a)
     a->held_total=0;
     mi_rec_stop(&a->recorder);
 }
+/* The six FM drum voices are synthesized; no sampled drum ROM is needed.
+ * Six consecutive local keys: kick, snare, closed hat, open hat, crash,
+ * low tom. Higher six-key groups vary tuning, envelope and FM index. */
+static void drum_on(mi_audio_t *a,const mi_state_t *s,
+                    uint8_t note,uint8_t velocity)
+{
+    unsigned i,idx,variant;
+    static const float hz[6]={55.f,182.f,2460.f,1760.f,1120.f,84.f};
+    static const float decay[6]={0.65f,0.24f,0.075f,0.40f,1.32f,0.55f};
+    mi_voice_t *v=0;
+    if(note>=53u){idx=((unsigned)note-53u)%6u;
+                  variant=(((unsigned)note-53u)/6u)%4u;}
+    else{idx=((unsigned)note+6u-36u%6u)%6u;
+         variant=((unsigned)note/6u)%4u;}
+    mi_audio_note_on(a,note,velocity);
+    for(i=0u;i<MI_NATIVE_POLY;i++)
+        if(a->v[i].active&&a->v[i].age==a->age_counter){v=&a->v[i];break;}
+    if(!v)return;
+    v->drum_type=(uint8_t)(idx+1u);
+    v->drum_variant=(uint8_t)variant;
+    v->env=1.f;v->env_stage=2u;v->held=0u;
+    v->drum_pitch_env=1.f;
+    v->increment=hz[idx]*(0.7f+(float)s->drum_tone/256.f+
+                (float)variant*0.07f)/a->sample_rate;
+    {
+        float duration=decay[idx]*(0.45f+(float)s->drum_decay/127.f)
+                       *(0.8f+0.15f*(float)variant);
+        v->drum_decay_rate=clampf(1.f-7.f/(duration*a->sample_rate),
+                                 0.85f,0.99998f);
+    }
+}
+static float drum_sample(mi_audio_t *a,const mi_state_t *s,mi_voice_t *v)
+{
+    float carrier=sin01(v->phase);
+    float mod=sin01(v->phase2);
+    float noise,voice=0.f;
+    float brightness=0.15f+1.6f*(float)s->drum_color/127.f;
+    a->rand_state^=a->rand_state<<13;
+    a->rand_state^=a->rand_state>>17;
+    a->rand_state^=a->rand_state<<5;
+    noise=((int32_t)(a->rand_state>>16)-32768)*(1.f/32768.f);
+    switch(v->drum_type){
+    case 1u: /* kick: sine with exponentially dropping FM pitch */
+        voice=sin01(v->phase+mod*0.17f*v->drum_pitch_env);
+        break;
+    case 2u: /* snare: noisy metallic FM plus a low pitched body */
+        voice=0.55f*sin01(v->phase+mod*brightness*0.21f)+
+              0.45f*noise;
+        break;
+    case 3u: /* closed hi-hat: short inharmonic FM and white noise */
+        voice=0.60f*noise+0.40f*sin01(v->phase+mod*brightness);
+        break;
+    case 4u: /* open hi-hat: longer ring, softer attack */
+        voice=0.48f*noise+0.52f*sin01(v->phase+mod*brightness*0.9f);
+        break;
+    case 5u: /* crash: multiple beating FM partials + noise */
+        voice=0.62f*noise+0.38f*sin01(v->phase+
+                       mod*(2.0f+brightness));
+        break;
+    case 6u: /* low tom: pitch drop and low inharmonic modulation */
+        voice=0.87f*sin01(v->phase+mod*0.22f*v->drum_pitch_env)+
+              0.13f*noise*v->drum_pitch_env;
+        break;
+    default:voice=carrier;break;
+    }
+    v->phase=wrap01(v->phase+v->increment*
+                     (1.f+(v->drum_type==1u?5.f:
+                            v->drum_type==6u?2.5f:0.3f)*v->drum_pitch_env));
+    v->phase2=wrap01(v->phase2+v->increment*
+                     (1.41421356f+0.12f*(float)v->drum_variant));
+    v->drum_pitch_env*=0.9975f;
+    v->env*=v->drum_decay_rate;
+    if(v->env<0.0008f)v->active=0u;
+    return voice*v->env*(v->vel/127.f)*
+           ((float)s->drum_level/127.f)*0.31f;
+}
 /* Keep raw keyboard/midi held notes; arpeggiator and live voice routing
  * share the same source so release cannot leave stuck repeating notes. */
 void mi_audio_input_on(mi_audio_t *a,const mi_state_t *s,
@@ -124,8 +201,10 @@ void mi_audio_input_on(mi_audio_t *a,const mi_state_t *s,
     }
     if(a->held_refs[note]<255u)++a->held_refs[note];
     a->held_velocity[note]=velocity?velocity:1u;
-    if(s->arp[0]==0u && a->held_refs[note]==1u)
-        mi_audio_note_on(a,note,velocity);
+    if(s->arp[0]==0u && a->held_refs[note]==1u){
+        if(s->wave==MI_WAVE_FMDRUM)drum_on(a,s,note,velocity);
+        else mi_audio_note_on(a,note,velocity);
+    }
 }
 void mi_audio_input_off(mi_audio_t *a,const mi_state_t *s,uint8_t note)
 {
@@ -136,7 +215,7 @@ void mi_audio_input_off(mi_audio_t *a,const mi_state_t *s,uint8_t note)
     --a->held_total;
     a->held_keys[note>>5]&=~(1u<<(note&31u));
     a->held_velocity[note]=0;
-    if(s->arp[0]==0u)mi_audio_note_off(a,note);
+    if(s->arp[0]==0u&&s->wave!=MI_WAVE_FMDRUM)mi_audio_note_off(a,note);
 }
 static unsigned held_count(const mi_audio_t *a){return a->held_total;}
 static uint8_t held_nth(const mi_audio_t *a,unsigned index)
@@ -225,7 +304,8 @@ static void arp_tick(mi_audio_t *a,const mi_state_t *s)
         uint8_t vel=a->held_velocity[held_nth(a,base)];
         if(note>127u)note=127u;
         a->arp_note=(uint8_t)note;
-        mi_audio_note_on(a,a->arp_note,vel?vel:100u);
+        if(s->wave==MI_WAVE_FMDRUM)drum_on(a,s,a->arp_note,vel?vel:100u);
+        else mi_audio_note_on(a,a->arp_note,vel?vel:100u);
     }
     a->arp_sounding=1u;
     a->arp_gate_clock=gate;
