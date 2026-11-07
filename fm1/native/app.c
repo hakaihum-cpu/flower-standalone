@@ -311,25 +311,8 @@ static void mi_media_decode(unsigned frame,unsigned eureka)
 /* Six 32x32 black/white banks: each 8x8 source block is mapped to one
  * dictionary entry. Selective base64 byte reads keep only one 9.9 KiB
  * vector atlas in XIP; there is no 488-frame runtime allocation. */
-/* Decode bytes directly from the existing EFFECTS RGB565 16-colour
- * 8x4 VQ stream. Base64 is only the storage wrapper for the unchanged
- * palette/codebook/index data (not a new image codec). */
-static unsigned mi_atlas_sextet(char c)
-{
-    if(c>='A'&&c<='Z')return (unsigned)(c-'A');
-    if(c>='a'&&c<='z')return (unsigned)(c-'a'+26);
-    if(c>='0'&&c<='9')return (unsigned)(c-'0'+52);
-    return c=='+'?62u:c=='/'?63u:0u;
-}
-static uint8_t mi_atlas_byte(unsigned pos)
-{
-    unsigned i=(pos/3u)*4u;
-    unsigned v=(mi_atlas_sextet(mi_tile_atlas_base64[i])<<18) |
-               (mi_atlas_sextet(mi_tile_atlas_base64[i+1u])<<12) |
-               (mi_atlas_sextet(mi_tile_atlas_base64[i+2u])<<6) |
-                mi_atlas_sextet(mi_tile_atlas_base64[i+3u]);
-    return (uint8_t)(v>>(16u-8u*(pos%3u)));
-}
+/* Photo frames use the same static RGB565 palette + 8x4 VQ arrays
+ * as mi_media_decode() uses for EFFECTS/EUREKA. No base64 runtime work. */
 /* Display effect follows the actual active FX, independently of which
  * picture bank was selected by the performer. */
 static unsigned mi_visual_fx(void)
@@ -401,36 +384,28 @@ static unsigned mi_visual_step(float activity)
 /* Source-space bitmaps remain square even if the original sheet was 720x720.
  * Nearest-neighbour expansion is deliberately rough: analog video/glitch.
  * Only visible rows of each 120-row LCD half are touched. */
-/* RGB565 / 4bpp VQ: exact SAME 8x4 dictionary/map layout as existing
- * EFFECTS, stored as one contiguous source data block. Decoder runs only
- * when the frame changes, never inside the audio callback. */
+/* Native 16-colour RGB565 VQ 8x4, identical to EFFECTS/EUREKA.
+ * Each frame is 72 byte IDs; this scratch frame is cached until the
+ * performer actually switches frame, so animation cannot cause redundant
+ * full-frame decompression in both LCD halves. */
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
-static uint16_t mi_photo_palette[16];
+static const uint16_t *mi_photo_palette;
 static int16_t mi_photo_cached=-1;
 static void mi_photo_decode(unsigned frame)
 {
-    const unsigned palettes=0u;
-    const unsigned books=MI_TILE_VQ_PALETTE_BYTES;
-    const unsigned maps=MI_TILE_VQ_PALETTE_BYTES+MI_TILE_VQ_CODEBOOK_BYTES;
-    unsigned clip,ty,tx,row,col,i;
+    unsigned clip,ty,tx,row,col;
     if(frame>=MI_TILE_COUNT||mi_photo_cached==(int16_t)frame)return;
     clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
     if(clip>=MI_TILE_VQ_CLIPS)return;
-    for(i=0u;i<16u;i++){
-        unsigned off=palettes+clip*32u+i*2u;
-        mi_photo_palette[i]=(uint16_t)((uint16_t)mi_atlas_byte(off)|
-                                        ((uint16_t)mi_atlas_byte(off+1u)<<8));
-    }
+    mi_photo_palette=mi_photo_vq_palette[clip];
     for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
         for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
-            unsigned map_pos=maps+frame*MI_TILE_VQ_MAP_STRIDE+
-                              ty*MI_TILE_VQ_COLS+tx;
-            unsigned id=mi_atlas_byte(map_pos);
-            unsigned tile_base=books+clip*4096u+id*16u;
+            unsigned id=mi_photo_vq_maps[frame][ty*MI_TILE_VQ_COLS+tx];
+            const uint8_t *tile=mi_photo_vq_tilebook[clip][id];
             for(row=0u;row<4u;row++)
                 for(col=0u;col<4u;col++){
                     unsigned at=(ty*4u+row)*(MI_TILE_SIDE/2u)+tx*4u+col;
-                    mi_photo_pixels[at]=mi_atlas_byte(tile_base+row*4u+col);
+                    mi_photo_pixels[at]=tile[row*4u+col];
                 }
         }
     mi_photo_cached=(int16_t)frame;
