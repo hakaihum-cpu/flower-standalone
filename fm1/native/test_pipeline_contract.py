@@ -353,6 +353,16 @@ assert "7cf48b59c60028829c0d7db6f49a2e52750d3d49b7da33943cba2599d18344ca" in res
 assert "mi_new_two_sheets_vq.h" in ci
 assert "mi_new_vq_maps[140][72]" in (root / "fm1/native/mi_new_two_sheets_vq.h").read_text()
 assert "mi_visual_photo_bank(mode)" in ui
+# Native UI background fills FX right half, center-cropped, never on knobs.
+assert "mi_tile_draw_half(half,61,0,240,123,audio_activity)" in ui
+assert "mi_dreamy_dot_draw_half(half,61,0,240,123)" in ui
+assert "mi_media_draw_scaled_half(half,-15,0,393,240,123,mode==7u)" in ui
+assert "if(x<clip_left)" in ui and "mi_image_rect(" in ui
+assert "mi_photo_neutral_rgb(rgb)" in ui
+for source in ("mi_palette.py", "pack_eureka_frames.py"):
+    color_source = (root / "fm1/native/tools" / source).read_text()
+    assert "ImageStat" in color_source and "blue_lut" in color_source
+
 assert "fm1/native/mi_tile_atlas.h \\" not in ci, (
     "no duplicate 93 KB photo C table in the actual target app")
 assert "rec_overdub" in ui and "rec_overdub 1" in (root / "fm1/native/host_smoke.txt").read_text()

@@ -4,7 +4,7 @@
 Exactly 36 user-supplied frames per clip; fixed 16-colour RGB565 palette.
 No EUREKA audio, animation or code dependency.
 """
-from PIL import Image
+from PIL import Image, ImageStat
 
 WIDTH, HEIGHT = 128, 78
 CLIP_LENGTH = 36
@@ -46,6 +46,19 @@ def clip_pixels(frames: list[Image.Image]) -> tuple[list[int], list[bytes]]:
         for v in range(256)]
     fixed = [Image.merge("YCbCr", (y.point(lut), cb, cr)).convert("RGB")
              for y, cb, cr in ycc]
+    # Fix only STRONGLY yellow-biased clips; one gain for all 36 frames,
+    # preserving the same 16-color palette and preventing color flicker.
+    means = [ImageStat.Stat(im).mean for im in fixed]
+    red = sum(m[0] for m in means) / len(means)
+    green = sum(m[1] for m in means) / len(means)
+    blue = sum(m[2] for m in means) / len(means)
+    if (blue > 12.0 and green > 35.0 and
+            red > blue * 1.25 and green > blue * 1.16):
+        gain = min(1.24, (red + green) / (2.0 * blue))
+        blue_lut = [min(255, round(i * gain)) for i in range(256)]
+        fixed = [Image.merge("RGB", (
+            im.getchannel("R"), im.getchannel("G"),
+            im.getchannel("B").point(blue_lut))) for im in fixed]
 
     montage = Image.new("RGB", (WIDTH, HEIGHT * CLIP_LENGTH))
     for i, im in enumerate(fixed):

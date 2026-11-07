@@ -425,6 +425,26 @@ static unsigned mi_visual_step(float activity)
  * Each frame is 72 byte IDs; this scratch frame is cached until the
  * performer actually switches frame, so animation cannot cause redundant
  * full-frame decompression in both LCD halves. */
+/* Clip only image rectangles; FX right background must not paint the knobs. */
+static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
+                          int32_t clip_left,uint16_t rgb)
+{
+    if(x<clip_left){w-=clip_left-x;x=clip_left;}
+    if(x+w>240)w=240-x;
+    if(w>0&&h>0)cv_rect(x,y,w,h,rgb);
+}
+/* Lightly neutralize the amber cast of only the TWO additional user sheets.
+ * Palette index/map, original separate resource and frame count stay intact. */
+static uint16_t mi_photo_neutral_rgb(uint16_t rgb)
+{
+    unsigned r=(rgb>>11u)&31u,g=(rgb>>5u)&63u,b=rgb&31u;
+    unsigned g5=(g+1u)/2u;
+    if(r>=g5&&g5>b+1u){
+        unsigned lift=(g5-b)*3u/4u;
+        b=b+lift>31u?31u:b+lift;
+    }
+    return (uint16_t)((r<<11u)|(g<<5u)|b);
+}
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
 static uint16_t mi_photo_palette[16];
 static int16_t mi_photo_cached=-1;
@@ -463,8 +483,10 @@ static void mi_photo_decode(unsigned frame)
         }
         for(i=0u;i<16u;i++){
             unsigned off=palette_base+clip*32u+i*2u;
-            mi_photo_palette[i]=(uint16_t)((uint16_t)res[off]|
-                                          ((uint16_t)res[off+1u]<<8));
+            uint16_t rgb=(uint16_t)((uint16_t)res[off]|
+                                   ((uint16_t)res[off+1u]<<8));
+            mi_photo_palette[i]=frame>=MI_TILE_NEW_FIRST?
+                                mi_photo_neutral_rgb(rgb):rgb;
         }
         for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
             for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
@@ -525,7 +547,8 @@ static void mi_dreamy_dot_unpack(void)
  * (60x46 portrait, centered at 2,9). Direct rectangles mirror the original
  * nearest-neighbour JUCE drawing and retain the original source aspect. */
 static void mi_dreamy_dot_pixel(unsigned half,int32_t px,int32_t py,
-                               int32_t size,int x,int y,uint16_t color)
+                               int32_t size,int32_t clip_left,
+                               int x,int y,uint16_t color)
 {
     int32_t top,bottom,left,right;
     if(x<0||y<0||x>=65||y>=65)return;
@@ -536,12 +559,12 @@ static void mi_dreamy_dot_pixel(unsigned half,int32_t px,int32_t py,
     if(bottom>120)bottom=120;
     left=px+(int32_t)((unsigned)x*(unsigned)size/65u);
     right=px+(int32_t)((unsigned)(x+1)*(unsigned)size/65u);
-    if(left<0)left=0;
+    if(left<clip_left)left=clip_left;
     if(right>240)right=240;
     if(right>left&&bottom>top)cv_rect(left,top,right-left,bottom-top,color);
 }
 static void mi_dreamy_dot_draw_half(unsigned half,int32_t px,int32_t py,
-                                    int32_t size)
+                                    int32_t size,int32_t clip_left)
 {
     unsigned x,y,i;
     const float sadness=0.5f,fragility=0.4f,nostalgia=0.3f,melancholy=0.3f;
@@ -553,16 +576,17 @@ static void mi_dreamy_dot_draw_half(unsigned half,int32_t px,int32_t py,
         int32_t top=py-(int32_t)half*120,bottom=top+size;
         if(top<0)top=0;
         if(bottom>120)bottom=120;
-        if(bottom>top)cv_rect(px,top,size,bottom-top,RGB(17,16,11));
+        if(bottom>top)
+            mi_image_rect(px,top,size,bottom-top,clip_left,RGB(17,16,11));
     }
     for(y=0u;y<MI_DREAMY_DOT_H;y++)
         for(x=0u;x<MI_DREAMY_DOT_W;x++){
             unsigned k=y*MI_DREAMY_DOT_W+x;
             unsigned pixel=mi_dreamy_dot_packed[k>>2u];
             unsigned col=(pixel>>(6u-(k&3u)*2u))&3u;
-            if(col==1u)mi_dreamy_dot_pixel(half,px,py,size,(int)x+2,
+            if(col==1u)mi_dreamy_dot_pixel(half,px,py,size,clip_left,(int)x+2,
                                           (int)y+9,RGB(150,114,18));
-            else if(col==2u)mi_dreamy_dot_pixel(half,px,py,size,(int)x+2,
+            else if(col==2u)mi_dreamy_dot_pixel(half,px,py,size,clip_left,(int)x+2,
                                                (int)y+9,amber);
         }
     for(i=0u;i<2u+(unsigned)(sadness*12.f);i++){
@@ -581,12 +605,12 @@ static void mi_dreamy_dot_draw_half(unsigned half,int32_t px,int32_t py,
         xdot=2+(i%2u==0u?27:46)+mi_dreamy_dot_sin64[wave_index]*2/1024;
         ydot=9+20+(int)(cycle*65.f*0.62f);
         for(t=0u;t<1u+(unsigned)(nostalgia*9.f);t++)
-            mi_dreamy_dot_pixel(half,px,py,size,xdot,ydot-(int)t,
+            mi_dreamy_dot_pixel(half,px,py,size,clip_left,xdot,ydot-(int)t,
                                t==0u?ink:dim);
         if(fragility>0.05f && cycle>0.25f+0.5f*(1.f-fragility)){
             for(p=0u;p<4u;p++){
                 int spread=(int)(fragility*(float)(p+1u)*2.f);
-                mi_dreamy_dot_pixel(half,px,py,size,
+                mi_dreamy_dot_pixel(half,px,py,size,clip_left,
                     xdot+(p%2u?spread:-spread),ydot+(int)p*2,dim);
             }
         }
@@ -598,7 +622,7 @@ static unsigned mi_photo_index(unsigned sy,unsigned sx)
     return (sx&1u)?v&15u:v>>4;
 }
 static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
-                              int32_t size,float activity)
+                              int32_t size,int32_t clip_left,float activity)
 {
     const int32_t shift=(int32_t)half*120;
     const unsigned fx=mi_visual_fx();
@@ -616,13 +640,13 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
            !plat_res(&resource_length) ||
            resource_length<MI_TILE_DATA_BYTES){
             mi_photo_cached=-1;
-            mi_dreamy_dot_draw_half(half,px,py,size);
+            mi_dreamy_dot_draw_half(half,px,py,size,clip_left);
             return;
         }
     }
     mi_photo_decode((unsigned)visual_tile);
     if(mi_photo_cached!=(int16_t)visual_tile){
-        mi_dreamy_dot_draw_half(half,px,py,size);
+        mi_dreamy_dot_draw_half(half,px,py,size,clip_left);
         return;
     }
     for(sy=0u;sy<MI_TILE_SIDE;sy++){
@@ -660,7 +684,8 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
                 int32_t x0=px+(int32_t)(first*(unsigned)size/MI_TILE_SIDE);
                 int32_t x1=px+(int32_t)(sx*(unsigned)size/MI_TILE_SIDE);
                 if(x1>x0)
-                    cv_rect(x0,top,x1-x0,bottom-top,mi_photo_palette[idx]);
+                    mi_image_rect(x0,top,x1-x0,bottom-top,
+                                  clip_left,mi_photo_palette[idx]);
             }
         }
     }
@@ -673,13 +698,13 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
             unsigned q=(visual_rng>>(j*5u))^(visual_generation*127u+j*43u);
             int32_t y=py+(int32_t)(q%(unsigned)size)-shift;
             int32_t x=px+(int32_t)((q>>7u)%(unsigned)(size-19));
-            cv_rect(x,y,12+(int32_t)(q%8u),1,C_WHITE);
+            mi_image_rect(x,y,12+(int32_t)(q%8u),1,clip_left,C_WHITE);
         }
         if(activity>0.28f){
             unsigned k=(visual_generation*17u+visual_rng)%81u;
             int32_t x=px+(int32_t)(k%9u)*(size/10);
             int32_t y=py+(int32_t)(k/9u)*(size/10)-shift;
-            cv_rect(x,y,2,2,YELLOW);
+            mi_image_rect(x,y,2,2,clip_left,YELLOW);
         }
     }
 }
@@ -688,7 +713,8 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
 /* Original 144 + 576 VQ frame banks remain available alongside photo tiles.
  * The original encoding is 128x78; its aspect is not distorted here. */
 static void mi_media_draw_scaled_half(unsigned half,int32_t px,int32_t py,
-                                      int32_t width,int32_t height,int eureka)
+                                      int32_t width,int32_t height,
+                                      int32_t clip_left,int eureka)
 {
     unsigned sy;
     int frame=eureka?video.eureka_frame:video.effects_frame;
@@ -716,7 +742,9 @@ static void mi_media_draw_scaled_half(unsigned half,int32_t px,int32_t py,
             {
                 int32_t dx0=px+(int32_t)(first*(unsigned)width/MI_EFFECTS_ASSET_W);
                 int32_t dx1=px+(int32_t)(last*(unsigned)width/MI_EFFECTS_ASSET_W);
-                if(dx1>dx0)cv_rect(dx0,y0,dx1-dx0,y1-y0,mi_media_palette[idx]);
+                if(dx1>dx0)
+                    mi_image_rect(dx0,y0,dx1-dx0,y1-y0,
+                                  clip_left,mi_media_palette[idx]);
             }
         }
     }
@@ -757,10 +785,10 @@ static void mi_media_draw_half(unsigned half)
 {
     unsigned mode=mi_visual_mode();
     if(mi_visual_photo_bank(mode)>=0)
-        mi_tile_draw_half(half,0,0,240,audio_activity);
-    else if(mode==8u)mi_dreamy_dot_draw_half(half,0,0,240);
+        mi_tile_draw_half(half,0,0,240,0,audio_activity);
+    else if(mode==8u)mi_dreamy_dot_draw_half(half,0,0,240,0);
     else{
-        mi_media_draw_scaled_half(half,0,47,240,146,mode==7u);
+        mi_media_draw_scaled_half(half,0,47,240,146,0,mode==7u);
         mi_video_vfx_half(half,0,47,240,146,audio_activity);
     }
 }
@@ -806,9 +834,8 @@ static void mi_fx_dial(unsigned half,int32_t x,int32_t y,unsigned knob)
     cv_rect(x+3,oy+59,51,17,C_BLACK);
     cv_text(x+5,oy+61,&FONT_XS,val,C_WHITE);
 }
-/* On the physical 240x240 square LCD, knobs take x=2..120 and the
- * entire right-hand width x=122..239 belongs to imagery, never captions.
- * A source-square tile fills 116x116 without stretching its aspect ratio. */
+/* FX image fills the 240px screen height as a center-cropped background.
+ * Cropping is confined to the right x=123..239; knobs are never covered. */
 static void mi_fx_draw_half(unsigned half)
 {
     const int32_t shift=(int32_t)half*120;
@@ -824,13 +851,13 @@ static void mi_fx_draw_half(unsigned half)
     mi_fx_dial(half,3,123,2u);
     mi_fx_dial(half,63,123,3u);
     if(mi_visual_photo_bank(mode)>=0){
-        mi_tile_draw_half(half,123,62,116,audio_activity);
+        mi_tile_draw_half(half,61,0,240,123,audio_activity);
     }else if(mode==8u){
-        mi_dreamy_dot_draw_half(half,123,62,116);
+        mi_dreamy_dot_draw_half(half,61,0,240,123);
     }else{
-        /* Existing MIYAKO VQ source is 128x78. Keep its actual aspect. */
-        mi_media_draw_scaled_half(half,123,85,116,70,mode==7u);
-        mi_video_vfx_half(half,123,85,116,70,audio_activity);
+        /* Original 128x78 ratio: height=240 gives width=393. */
+        mi_media_draw_scaled_half(half,-15,0,393,240,123,mode==7u);
+        mi_video_vfx_half(half,123,0,116,240,audio_activity);
     }
     cv_blit(0,half*120u);
 }
