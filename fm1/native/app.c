@@ -223,7 +223,7 @@ static void input(void)
      bit=1u<<i;
      if(i==B_REC||!(buttons&bit)||(last_buttons&bit))continue;
      /* SEL always returns to normal animation, never locks to FX imagery. */
-     if(i==B_SEL && state.view!=MI_VIDEO){
+     if(i==B_SEL){
          visual_choice=0u;visual_last_mode=255u;
      }
      action=mi_button(&state,map_button(i),now);
@@ -326,11 +326,15 @@ static unsigned mi_visual_fx(void)
 static unsigned mi_visual_mode(void)
 {
     unsigned fx=mi_visual_fx();
+    /* FX OFF takes precedence over the prior FX visual selection.
+     * SEL opens the regular animation feed even after FX selection. */
+    if(state.fx==MI_FX_OFF&&state.fx2==MI_FX_OFF)
+        return normal_visual_bank;
+    if(state.view==MI_VIDEO&&visual_choice==0u)
+        return normal_visual_bank;
     if(visual_choice>=1u&&visual_choice<=6u)return visual_choice-1u;
     if(visual_choice==7u)return 6u;
     if(visual_choice==8u)return 7u;
-    if(state.view==MI_VIDEO||(state.fx==MI_FX_OFF&&
-       state.fx2==MI_FX_OFF))return normal_visual_bank;
     if(state.fx==MI_FX_EUREKA||state.fx2==MI_FX_EUREKA)return 7u;
     switch(fx){
     case MI_FX_DREAMY:return 0u;
