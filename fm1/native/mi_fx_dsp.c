@@ -159,36 +159,50 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
         return wet;
     }
     if(mode==MI_FX_DREAMY) {
-        /* Two staggered, overlap-crossfaded grains from a bounded
-         * 16-bit mono history. Parameters: GRAIN length / SPACE feedback.
-         * Native FM-1 implementation; not a bit-exact JUCE Dreamy model.
-         * At most 64 KiB additional pool memory; no heap or libc. */
+        /* Native bounded two-grain shifter. GRAIN and SPACE are preserved;
+         * PITCH, REVERSE, DENSITY and FEEDBACK now change actual samples.
+         * This is NOT the full original JUCE Dreamy implementation. */
         float size=0.08f+0.44f*(p1/127.f);
-        float grain_samples=size*sample_rate;
-        float ph0=p->dreamy_phase;
-        float ph1=ph0+0.5f;
-        float samples[2],windows[2];
+        float grain_samples=size*sample_rate*(1.3f-0.6f*density/127.f);
+        float playback=pitch_ratio(pitch);
+        int rev=reverse>=64u;
+        float base,sweep,ph0,ph1,wet,weights=0.f,total=0.f;
         uint32_t write=p->dreamy_write&(MI_DREAM_N-1u);
         unsigned i;
+        if(grain_samples<100.f)grain_samples=100.f;
+        /* Reverse at high transpose needs a larger backward lookback.
+         * 8000 samples keeps even -12st reads inside the 32K ring. */
+        if(rev && grain_samples>8000.f)grain_samples=8000.f;
+        if(rev)playback=-playback;
+        sweep=1.f-playback;
+        base=(rev?2048.f+2.f*grain_samples:
+                  2048.f+0.5f*grain_samples)
+              +((int)p2-64)*12.f; /* SPACE shifts the grain's position */
+        ph0=p->dreamy_phase;
+        ph1=ph0+0.5f;
         if(ph1>=1.f)ph1-=1.f;
         for(i=0;i<2u;i++){
             float phase=i==0u?ph0:ph1;
-            float offset=2048.f+phase*grain_samples*0.5f;
-            unsigned delay=(unsigned)offset;
-            float fract=offset-(float)delay;
-            unsigned at=(p->dreamy_write-delay)&(MI_DREAM_N-1u);
-            float a=read16(dreamy_memory[at]);
-            float b=read16(dreamy_memory[(at-1u)&(MI_DREAM_N-1u)]);
-            samples[i]=a+(b-a)*fract;
-            windows[i]=1.f-(phase<0.5f?1.f-2.f*phase:2.f*phase-1.f);
+            float offset=base+(phase-0.5f)*grain_samples*sweep;
+            unsigned at,delay;
+            float fract,a,b,weight;
+            if(offset<2.f)offset=2.f;
+            if(offset>(float)MI_DREAM_N-3.f)offset=(float)MI_DREAM_N-3.f;
+            delay=(unsigned)offset;
+            fract=offset-(float)delay;
+            at=(p->dreamy_write-delay)&(MI_DREAM_N-1u);
+            a=read16(dreamy_memory[at]);
+            b=read16(dreamy_memory[(at-1u)&(MI_DREAM_N-1u)]);
+            weight=phase<0.5f?phase*2.f:(1.f-phase)*2.f;
+            if(p->dreamy_valid>delay+2u){
+                total+=(a+(b-a)*fract)*weight;
+                weights+=weight;
+            }
         }
-        float denom=windows[0]+windows[1];
-        float wet=(samples[0]*windows[0]+samples[1]*windows[1])/
-                  (denom>0.01f?denom:1.f);
+        wet=weights>0.01f?total/weights:0.f;
         if(p->dreamy_valid<MI_DREAM_N)++p->dreamy_valid;
-        if(p->dreamy_valid<(uint32_t)(grain_samples+2048.f))wet=0.f;
-        float fb=0.42f*(p2/127.f);
-        dreamy_memory[write]=quant(dry+wet*fb);
+        /* No stale/empty unwritten memory may become the loop head. */
+        dreamy_memory[write]=quant(dry+wet*(0.5f*feedback/127.f));
         ++p->dreamy_write;
         p->dreamy_phase+=1.f/grain_samples;
         if(p->dreamy_phase>=1.f)p->dreamy_phase-=1.f;
