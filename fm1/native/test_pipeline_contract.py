@@ -310,6 +310,15 @@ assert "mi_lfo_dest_name" in controls and "apply_lfo_destination" in audio
 assert "mi_visual_map(&sx,&sy" in ui and "mi_visual_photo_bank" in ui
 assert "next=visual_rng%10u<3u?" in ui
 assert "filter_cutoff" in controls and "a->filter_a+=" in audio
+# Old MI13/MI14 structs had seven FX slots; new state has nine.
+# Never memcpy the old save into the new layout (misaligned FX matrices).
+assert "sizeof(saved_v14_t)==104u" in ui
+assert "sizeof(saved_legacy_t)==68u" in ui
+assert "mi_migrate_old(&old14.state,1)" in ui
+assert "mi_migrate_old(&decoded,0)" in ui
+assert "mi_memcopy(&state,old14.state_bytes" not in ui
+assert "if(s->view==MI_OSC&&s->osc_page==2u)break;" in controls
+assert 'return "PWIDTH";' in controls
 # Current user requirements: original animation into normal SEL (not FX-only),
 # no newly invented video codec or new CircleCI workflow; multi-OSC and overdub.
 atlas = (root / "fm1/native/mi_tile_atlas.h").read_text(encoding="utf-8")
