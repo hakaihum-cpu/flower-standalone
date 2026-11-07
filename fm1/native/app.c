@@ -691,19 +691,23 @@ static void draw(void)
 
     cv_begin(240,120,C_BLACK);
     cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
-    cv_text(140,10,&FONT_XS,mi_view_name(state.view),GREY);
+    cv_text(140,10,&FONT_XS,
+            state.view==MI_OSC?(state.osc_page?"OSC2":"OSC1"):
+            mi_view_name(state.view),GREY);
     cv_rect(8,31,224,1,DIM);
     if(now<message_until){
         cv_text(12,50,&FONT_B,line_a,YELLOW);
         cv_text(12,76,&FONT_XS,line_b,GREY);
     }else if(state.view==MI_OSC||state.view==MI_HOME){
         int32_t prior=80;
-        cv_text(12,35,&FONT_XS,mi_wave_name(state.wave),GREY);
+        unsigned show_wave=state.view==MI_OSC&&state.osc_page?
+                           state.osc2_wave:state.wave;
+        cv_text(12,35,&FONT_XS,mi_wave_name(show_wave),GREY);
         for(i=0;i<224;i++){
             float p=(float)(i%112u)/112.f;
-            float value=state.wave==0?(p<0.5f?4.f*p*(1.f-2.f*p):-(4.f*(p-0.5f)*(2.f-2.f*p))):
-                state.wave==1?(2.f*p-1.f):
-                state.wave==2?(p<0.5f?1.f:-1.f):
+            float value=show_wave==0?(p<0.5f?4.f*p*(1.f-2.f*p):-(4.f*(p-0.5f)*(2.f-2.f*p))):
+                show_wave==1?(2.f*p-1.f):
+                show_wave==2?(p<0.5f?1.f:-1.f):
                 (p<0.05f+0.9f*state.width/127.f?1.f:-1.f);
             int32_t y=76-(int32_t)(value*26.f);
             if(i)cv_line((int32_t)(i+7u),prior,(int32_t)(i+8u),y,YELLOW);
@@ -733,7 +737,8 @@ static void draw(void)
         int32_t x=8+(int32_t)i*58;
         cv_text(x,24,&FONT_XS,mi_param_name(&state,i),GREY);
         if((state.view==MI_OSC||state.view==MI_HOME)&&i==0u)
-            textcpy(val,mi_wave_name(state.wave),sizeof val);
+            textcpy(val,mi_wave_name(state.view==MI_OSC&&state.osc_page?
+                                     state.osc2_wave:state.wave),sizeof val);
         else if(state.view==MI_LFO&&i==1u)
             textcpy(val,mi_lfo_wave_name(state.lfo[1]),sizeof val);
         else if(state.view==MI_LFO&&i==3u)
