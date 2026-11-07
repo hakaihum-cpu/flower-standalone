@@ -170,13 +170,14 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
         uint32_t write=p->dreamy_write&(MI_DREAM_N-1u);
         unsigned i;
         if(grain_samples<100.f)grain_samples=100.f;
-        /* Reverse at high transpose needs a larger backward lookback.
-         * 8000 samples keeps even -12st reads inside the 32K ring. */
+        /* Bound the entire read-head excursion inside 32,768 samples
+         * even at +/-12 semitones, max SPREAD and max SPACE. */
         if(rev && grain_samples>8000.f)grain_samples=8000.f;
+        if(!rev && grain_samples>20000.f)grain_samples=20000.f;
         if(rev)playback=-playback;
         sweep=1.f-playback;
         base=(rev?2048.f+2.f*grain_samples:
-                  2048.f+0.5f*grain_samples)
+                  4096.f+0.7f*grain_samples)
               +((int)p2-64)*12.f; /* SPACE shifts the grain's position */
         ph0=p->dreamy_phase;
         ph1=ph0+0.5f;
