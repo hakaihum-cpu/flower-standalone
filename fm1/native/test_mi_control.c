@@ -26,9 +26,9 @@ int main(void)
     mi_button(&s, MI_B_FX, 0);
     mi_rotate(&s, MI_EN_K1, 2);
     assert(s.fx == MI_FX_DREAMY);
-    assert(!strcmp(mi_param_name(&s,2),"GRAIN"));
-    assert(!strcmp(mi_param_name(&s,3),"SPACE"));
-    assert(mi_param_value(&s,2) == 64 && mi_param_value(&s,3) == 80);
+    assert(!strcmp(mi_param_name(&s,0),"PITCH"));
+    assert(!strcmp(mi_param_name(&s,2),"SPREAD"));
+    assert(mi_param_value(&s,2)==64 && mi_param_value(&s,3)==64);
     mi_button(&s, MI_B_HOME, 0);
     mi_rotate(&s, MI_EN_PRESETS, 1);
     assert(s.preset == 1 && s.wave == 1);
@@ -149,7 +149,9 @@ int main(void)
     mi_button(&s,MI_B_FX,9200);
     mi_rotate(&s,MI_EN_K1,2); /* DREAMY */
     assert(s.fx==MI_FX_DREAMY);
-    assert(s.fx_page==0u);
+    assert(s.fx_page==1u); /* PITCH visible immediately after selection */
+    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.fx_page==0u && s.fx==MI_FX_DREAMY);
     mi_rotate(&s,MI_EN_PRESETS,1);
     assert(s.fx_page==1u && s.fx==MI_FX_DREAMY);
     assert(!strcmp(mi_param_name(&s,0),"PITCH"));
@@ -170,8 +172,12 @@ int main(void)
     assert(!strcmp(mi_param_name(&s,2),"GRAIN"));
     mi_rotate(&s,MI_EN_K1,4); /* EUREKA, same selected FX slot */
     assert(s.fx==MI_FX_EUREKA);
-    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.fx_page==1u);
+    assert(!strcmp(mi_param_name(&s,0),"PITCH"));
     assert(!strcmp(mi_param_name(&s,2),"GRAIN"));
+    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.fx_page==0u);
+    assert(!strcmp(mi_param_name(&s,2),"TIME"));
     assert(s.fx_extra[MI_FX_EUREKA][0]==64u);
     mi_button(&s,MI_B_FX,9201);
     assert(s.fx_slot==1u&&s.fx_page==0u);
