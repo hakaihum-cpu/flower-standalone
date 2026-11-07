@@ -40,6 +40,7 @@ static mi_video_t video;
 static volatile float audio_activity;
 static uint32_t last_keys,last_buttons,rec_pressed_at;
 static uint8_t rec_long_done;
+static uint8_t backup_hold;
 /* Visual selection is independent of audio FX or the saved sound preset.
  * 0=AUTO, 1..6=supplied photo sheets, 7=EFFECTS, 8=EUREKA,
  * 9=original DREAMY DOT portrait, 10=original TAPE reel animation. */
@@ -114,6 +115,20 @@ void app_init(void)
  message_until=0;line_a[0]=line_b[0]=0;
 }
 void app_panic(void){mi_audio_panic(&audio);}
+/* fm1-base backup hooks are REQUIRED by the stock resources installer.
+ * Settings are already saved synchronously through plat_store_save().
+ * No new save format, project store or asynchronous worker is introduced. */
+int app_backup_playing(void)
+{
+    unsigned i;
+    if(audio.recorder.recording||audio.recorder.playing||audio.held_total||
+       audio.arp_sounding)return 1;
+    for(i=0u;i<MI_NATIVE_POLY;i++)if(audio.v[i].active)return 1;
+    return 0;
+}
+void app_backup_flush(void){/* current SAVE is synchronous */ }
+void app_backup_hold(int on){backup_hold=(uint8_t)(on!=0);}
+void app_backup_restored(void){app_init();}
 /* Read MIDI on the audio callback, as fm1-base's app_render contract expects.
  * This handles USB MIDI and the FM-1's TRS MIDI IN; radio support can be
  * enabled independently in the platform configuration later.
@@ -237,7 +252,8 @@ static void input(void)
          save.magic=SAVED_MAGIC;
          save.state=state;
          save.state.save_armed=0;
-         app_say(plat_store_save(OBJ_SETTINGS,&save,sizeof save)==0?"SAVED":"SAVE FAILED","");
+         app_say((!backup_hold&&plat_store_save(OBJ_SETTINGS,&save,sizeof save)==0)?
+                  "SAVED":"SAVE FAILED","");
      }else if(action.action==MI_ACTION_RECORD){
          mi_audio_rec_request(&audio,1u);
     }else if(action.action==MI_ACTION_PLAY){
