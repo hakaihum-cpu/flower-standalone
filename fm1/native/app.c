@@ -20,7 +20,8 @@
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
 #define GREY RGB(218,213,202)
-#define SAVED_MAGIC 0x4D493133u /* MI13: persistent FX A/B + REC trim controls */
+#define SAVED_MAGIC 0x4D493134u /* MI14: HOME MULTI and OSC1 wave */
+#define SAVED_MAGIC_PREV 0x4D493133u /* MI13: existing user's settings */
 typedef struct {
  uint32_t magic;
  mi_state_t state;
@@ -80,10 +81,17 @@ void app_init(void)
     saved.magic==SAVED_MAGIC&&mi_state_valid(&saved.state)){
      state=saved.state;
      restored=1;
+ }else if(stored_bytes==(int)sizeof saved &&
+          plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved&&
+          saved.magic==SAVED_MAGIC_PREV){
+     /* New osc1_wave occupies the old struct's tail padding; DO NOT treat
+      * uninitialised MI13 padding as a valid oscillator or sound parameter. */
+     mi_memcopy(&state,&saved.state,offsetof(mi_state_t,osc1_wave));
+     restored=mi_state_valid(&state);
  }else if(stored_bytes==(int)sizeof(saved_legacy_t)){
      saved_legacy_t old;
      if(plat_store_load(OBJ_SETTINGS,&old,sizeof old)==(int)sizeof old&&
-        old.magic==SAVED_MAGIC){
+        old.magic==SAVED_MAGIC_PREV){
          mi_memcopy(&state,old.state_prefix,sizeof old.state_prefix);
          restored=mi_state_valid(&state);
      }
