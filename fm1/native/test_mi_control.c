@@ -39,7 +39,7 @@ int main(void)
     s.wet=0;
     mi_button(&s, MI_B_SEL, 12);
     assert(s.view == MI_VIDEO && s.wet == 0 && s.fx == MI_FX_CHORUS);
-    assert(!strcmp(mi_param_name(&s,0),""));
+    assert(!strcmp(mi_param_name(&s,0),"GLITCH"));
     mi_rotate(&s, MI_EN_K1, 60); /* SEL cannot silently change current FX */
     assert(s.fx == MI_FX_CHORUS);
     mi_button(&s, MI_B_FX, 13);
