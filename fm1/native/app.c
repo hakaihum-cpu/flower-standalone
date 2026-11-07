@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Independent MIYAKO FM-1 app using only fm1-base's hardware platform API.
- * This is an INCOMPLETE port. The original EFFECTS animation frames are
- * converted at build time (16-colour lossy VQ). EUREKA is excluded at the
- * user's request. Full original MIYAKO DSP is not yet present.
+ * This is an INCOMPLETE port. Original EFFECTS and EUREKA frames are
+ * encoded at build time (16-colour lossy VQ); additionally, the six
+ * user-supplied portrait/eye/city tile sheets are a 488-frame 1-bit atlas.
+ * Full original MIYAKO DSP and independent video banks are not yet present.
  * Do not release this development image as the approved MIYAKO firmware.
  *
  * Compiled inside fm1-base's unity.c after gfx.c and lib/touch.c.
