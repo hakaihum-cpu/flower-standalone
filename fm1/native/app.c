@@ -16,6 +16,7 @@
 #include "mi_effects_vq_frames.h" /* 144 source frames */
 #include "mi_eureka_vq_frames.h" /* 576 source frames */
 #include "mi_memory.h"
+#include <stddef.h>
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
 #define GREY RGB(218,213,202)
@@ -23,7 +24,14 @@
 typedef struct {
  uint32_t magic;
  mi_state_t state;
-} saved_t;
+ } saved_t;
+/* MI13 originally stored exactly the prefix ending after save_armed_ms.
+ * Its legacy image can be loaded even after extending mi_state_t with OSC2,
+ * without resetting the user's sound settings to factory defaults. */
+typedef struct {
+  uint32_t magic;
+  uint8_t state_prefix[offsetof(mi_state_t,osc2_wave)];
+} saved_legacy_t;
 static mi_state_t state;
 static mi_audio_t audio;
 static mi_video_t video;
@@ -58,6 +66,7 @@ static void number(int32_t value,char *out)
 void app_init(void)
 {
  saved_t saved;
+ int restored=0;
  mi_init(&state);
  mi_audio_init(&audio,44100.f);
  mi_video_init(&video,MI_EFFECTS_ASSET_COUNT);
@@ -65,10 +74,20 @@ void app_init(void)
  if(plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved&&
     saved.magic==SAVED_MAGIC&&mi_state_valid(&saved.state)){
      state=saved.state;
-     state.save_armed=0;
-     state.playing=state.recording=0;
-     state.view=MI_HOME;
+     restored=1;
+ }else{
+     saved_legacy_t old;
+     if(plat_store_load(OBJ_SETTINGS,&old,sizeof old)==(int)sizeof old&&
+        old.magic==SAVED_MAGIC){
+         mi_memcopy(&state,old.state_prefix,sizeof old.state_prefix);
+         restored=mi_state_valid(&state);
+     }
  }
+ if(!restored)mi_init(&state);
+ state.save_armed=0;
+ state.playing=state.recording=0;
+ state.view=MI_HOME;
+ state.osc_page=0u;
  last_keys=last_buttons=rec_pressed_at=0u;rec_long_done=0u;
  visual_choice=0u;visual_last_mode=255u;visual_cooldown=0u;
  visual_rng=0x6d697961u;visual_generation=0u;
