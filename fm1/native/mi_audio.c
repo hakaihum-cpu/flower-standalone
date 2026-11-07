@@ -505,7 +505,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     default:break;
     }
     /* Select the oscillator currently being edited. */
-    scope_selected=(uint8_t)(rs->wave==MI_WAVE_MULTI&&rs->osc_page!=0u);
+    scope_selected=(uint8_t)(rs->wave==MI_WAVE_MULTI&&rs->osc_page==1u);
     if(a->osc_scope_selected!=scope_selected){
         mi_memzero(a->osc_scope,sizeof a->osc_scope);
         a->osc_scope_selected=scope_selected;
