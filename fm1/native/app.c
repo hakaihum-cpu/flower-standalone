@@ -834,6 +834,7 @@ void app_frame(void)
      unsigned mode=mi_visual_mode();
      /* Never process off-screen video banks when a photo-tile sheet is chosen. */
      if(mode>=6u)mi_video_tick(&video,audio_activity,mode==7u);
+     else video.eureka_previous=0.f; /* original source disabled gate */
      if((state.view==MI_VIDEO||state.view==MI_FX) &&
         (visual_changed||(mode==6u&&old_effects!=video.effects_frame)||
          (mode==7u&&old_eureka!=video.eureka_frame)))
