@@ -1,6 +1,12 @@
 name: Digitone PG85 1152 VIDEO + 3 FX (EUREKA AUDIO REMOVED)
 on:
   workflow_dispatch:
+  # User-authorized one-shot PG85 build: restore manual-only after queued.
+  push:
+    branches:
+      - feature/digitone-1152-video-no-eureka-audio-20261107
+    paths:
+      - .github/workflows/build-digitone-eureka576.yml
 permissions:
   contents: read
 jobs:
