@@ -206,7 +206,10 @@ assert "MIYAKO FM-1 / NATIVE PREVIEW" not in ui
 # expression that caused a source-contract false failure before host tests.
 assert "mi_wave_name(show_wave)" in ui
 assert "state.osc_page" in ui and "state.osc2_wave" in ui
-assert "mi_wave_name(state.view==MI_OSC&&state.osc_page?" in ui
+# HOME MULTI uses an actual selected OSC1/OSC2 waveform.
+assert "mi_wave_name(state.view==MI_OSC?" in ui
+assert "state.wave==MI_WAVE_MULTI" in ui
+assert "state.osc1_wave" in ui
 assert "mi_graph_env();" in ui and "mi_graph_lfo();" in ui
 assert "mi_graph_arp();" in ui
 assert "mi_audio_input_on(&audio,&state" in ui
