@@ -117,19 +117,24 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
          * continuous capture; two crossfaded repeat grains with TIME
          * and HAZE. Wet only. Uses DELAY memory; cannot run with DELAY. */
         float haze=(float)p2/127.f;
-        float grain=0.05f+0.24f*haze;
+        float grain=(0.05f+0.24f*haze)*(0.7f+0.6f*density/127.f);
         float history=0.10f+1.60f*(float)p1/127.f;
         float grain_samples=grain*14700.f;
         float base=history*14700.f;
+        float playback=reverse>=64u?-pitch_ratio(pitch):pitch_ratio(pitch);
+        float sweep=1.f-playback;
         float ph0=p->eureka_phase,ph1=ph0+0.5f;
         float wet=0.f,weights=0.f;
         unsigned k;
         if(ph1>=1.f)ph1-=1.f;
         for(k=0;k<2u;k++){
             float ph=k==0u?ph0:ph1;
-            float behind=base+ph*grain_samples*0.8f;
+            /* A grain's read-head velocity is +pitch_ratio (or negative for
+             * REVERSE), independently of the incoming note's pitch. */
+            float behind=base+(ph-0.5f)*grain_samples*sweep;
             float triangle=ph<0.5f?ph*2.f:(1.f-ph)*2.f;
-            if((float)p->eureka_valid>behind+2.f){
+            if(behind>=2.f && behind<(float)MI_EUREKA_FRAMES-2.f &&
+               (float)p->eureka_valid>behind+2.f){
                 wet+=eu_read(p,behind)*triangle;
                 weights+=triangle;
             }
@@ -141,7 +146,7 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
         wet=bounded(p->eureka_filter,-1.f,1.f);
         p->eureka_phase+=1.f/(grain*sample_rate);
         if(p->eureka_phase>=1.f)p->eureka_phase-=1.f;
-        p->eureka_sum+=dry;
+        p->eureka_sum+=bounded(dry+wet*(0.35f*feedback/127.f),-1.f,1.f);
         if(++p->eureka_decimate==3u){
             delay_memory[p->eureka_write]=quant(p->eureka_sum*(1.f/3.f));
             p->eureka_sum=0.f;
