@@ -19,6 +19,7 @@ int32_t fw_textf(void *bmp,const void *font,int32_t x,int32_t y,int32_t maxlen,c
 static void event(int32_t *ev,int key,int flags)
 {memset(ev,0,6*sizeof(int32_t));ev[3]=key;ev[4]=flags;}
 extern struct core_audio_owner rack_owner;
+extern volatile uint32_t rack_test_cycles,rack_test_render_cycles;
 extern const struct core_menu_item rack_menu_crush,rack_menu_off;
 int main(void)
 {
@@ -61,6 +62,31 @@ int main(void)
     rack_draw(wet,ctrl);
     assert(rectangles>0&&prints>0);
     assert(rack_menu_crush.open&&rack_menu_off.open);
-    puts("PASS rack UI menu, stock keys, exclusive modes, 2-page Eureka");
+    /* Make the rack idle, then simulate slow EUREKA IRQ callbacks.
+     * A real audio IRQ must disable the owner before the UI can freeze.
+     * All mock times are in DTCN0 bus clock ticks. */
+    rack_choose(-1);
+    for(int k=0;k<100;k++)rack_render(wet,dry);
+    for(int k=0;k<5;k++)rack_tick(ctrl);
+    assert(rack_owner.on==0);
+    rack_choose(DNFX_EUREKA);
+    for(int k=0;k<5;k++)rack_tick(ctrl);
+    assert(rack_owner.on==1 && rack_active==DNFX_EUREKA);
+    rack_test_cycles=500000u;
+    rack_test_render_cycles=100000u;
+    for(int k=0;k<15 && rack_owner.on;k++) {
+        rack_test_cycles+=150000u;  /* stock + UI between callbacks */
+        rack_render(wet,dry);
+    }
+    assert(rack_owner.on==0);
+    assert(rack_overload_mode==(uint8_t)(DNFX_EUREKA+1));
+    rack_tick(ctrl);
+    assert(rack_owner.on==0); /* no automatic retry */
+    /* Explicit TRACK-menu reselection clears the latch and restarts. */
+    rack_test_render_cycles=0u;
+    rack_choose(DNFX_EUREKA);
+    for(int k=0;k<5;k++)rack_tick(ctrl);
+    assert(rack_owner.on==1 && rack_overload_mode==0u);
+    puts("PASS rack UI and CPU guard: fake 250MHz deadlines, fail-safe, manual reset");
     return 0;
 }

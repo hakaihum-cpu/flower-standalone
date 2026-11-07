@@ -30,6 +30,7 @@
  */
 #if defined(RACK_HOST_TEST)
 volatile uint32_t rack_test_cycles; /* injectable fake DMA counter in host test */
+volatile uint32_t rack_test_render_cycles; /* synthetic audio cost, host only */
 #define RACK_CYCLES() rack_test_cycles
 #else
 #define RACK_CYCLES() (*(volatile uint32_t *)0xFC07000Cu)
@@ -156,6 +157,9 @@ void rack_render(int32_t *out,const int32_t *in)
      * intentionally unsigned. Host tests inject a deterministic timer.
      */
     if(active>DNFX_GRANULAR && active<DNFX_COUNT && !rack_overload_mode) {
+#if defined(RACK_HOST_TEST)
+        rack_test_cycles += rack_test_render_cycles;
+#endif
         uint32_t busy=RACK_CYCLES()-entered;
         uint8_t panic=busy>400000u; /* >2.4 block periods */
         if(period>=1000u && period<=400000u) {
