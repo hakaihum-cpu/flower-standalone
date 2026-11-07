@@ -321,7 +321,9 @@ assert "if(s->view==MI_OSC&&s->osc_page==2u)break;" in controls
 assert 'return "PWIDTH";' in controls
 # Current user requirements: original animation into normal SEL (not FX-only),
 # no newly invented video codec or new CircleCI workflow; multi-OSC and overdub.
-atlas = (root / "fm1/native/mi_tile_atlas.h").read_text(encoding="utf-8")
+# The old 488-frame compile-time atlas is NOT part of the active firmware.
+# All 628 photo frames now come from the CRC-checked separate resource.
+# Reject accidental reintroduction of the obsolete atlas into the renderer.
 dot = (root / "fm1/native/mi_dreamy_dot_portrait.h").read_text(encoding="utf-8")
 assert "mi_dreamy_dot_portrait.h" in ci
 assert '#include "mi_dreamy_dot_portrait.h"' in ui
@@ -329,8 +331,9 @@ assert "MI_DREAMY_DOT_BYTES 690u" in dot
 assert "mi_dreamy_dot_draw_half(half,0,0,240,0)" in ui
 # TAPE DOT was deleted; the 11-bank SEL contract is verified above.
 assert "if(state.fx==MI_FX_OFF&&state.fx2==MI_FX_OFF)" in ui
-assert "static const uint8_t mi_photo_vq_maps[488][72]" in atlas
-assert "mi_photo_vq_tilebook" in atlas and "mi_photo_vq_palette" in atlas
+assert '#include "mi_tile_atlas.h"' not in ui
+assert "mi_photo_vq_maps" not in ui and "mi_photo_vq_tilebook" not in ui
+assert "mi_photo_vq_palette" not in ui
 assert "mi_atlas_byte" not in ui  # no per-pixel base64 decode in rendering
 assert "rs->wave==MI_WAVE_MULTI" in audio and "osc2_mix" in audio
 assert "s->fx_page=0u;" in controls
