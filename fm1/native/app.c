@@ -1084,6 +1084,10 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"recording")) *got=(int)audio.recorder.recording;
   else if(mi_streq(what,"rec_playing")) *got=(int)audio.recorder.playing;
   else if(mi_streq(what,"rec_overdub")) *got=(int)audio.recorder.overdubbing;
+  else if(mi_streq(what,"media_ready")){
+      uint32_t length=0u;
+      *got=plat_res(&length)!=0&&length>=MI_TILE_DATA_BYTES?1:0;
+  }
   else if(mi_streq(what,"rec_samples")) *got=(int)audio.recorder.count;
   else if(mi_streq(what,"rec_pitch")) *got=(int)state.seq[2];
   else if(mi_streq(what,"preset")) *got=(int)state.preset;
