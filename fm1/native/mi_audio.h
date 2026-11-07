@@ -14,6 +14,8 @@ typedef struct {
     uint8_t note, active, held, vel, env_stage;
     float phase, phase2, subphase, increment, env, release_step;
     uint32_t age;
+    uint8_t drum_type,drum_variant;
+    float drum_decay_rate,drum_pitch_env;
 } mi_voice_t;
 typedef struct {
     mi_voice_t v[MI_NATIVE_POLY];
@@ -30,6 +32,8 @@ typedef struct {
     uint16_t arp_pos;
     uint32_t arp_clock, arp_gate_clock, arp_random;
     float lfo_phase;
+    float filter_a,filter_b;
+    uint32_t rendered_samples; /* MIDI-clock timestamp in output samples */
     mi_recorder_t recorder;
     volatile uint8_t rec_command;
     float sample_rate, wow, flutter, wet_current,wet_current2;
@@ -50,6 +54,8 @@ void mi_audio_input_off(mi_audio_t *a, const mi_state_t *s, uint8_t note);
 void mi_audio_panic(mi_audio_t *a);
 /* Command is consumed at the next audio block, no audio memory writes on UI. */
 void mi_audio_rec_request(mi_audio_t *a, unsigned command);
+/* USB/TRS real-time MIDI 0xF8/0xFA/0xFB/0xFC on the audio thread. */
+void mi_audio_midi_clock(mi_audio_t *a,unsigned status);
 void mi_audio_render(mi_audio_t *a, const mi_state_t *s,
                      int32_t *interleaved_lr, uint32_t frames, uint32_t master_q12);
 #endif
