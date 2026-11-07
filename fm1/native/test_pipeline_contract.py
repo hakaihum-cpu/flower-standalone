@@ -259,8 +259,7 @@ assert "mi_dreamy_dot_portrait.h" in ci
 assert '#include "mi_dreamy_dot_portrait.h"' in ui
 assert "MI_DREAMY_DOT_BYTES 690u" in dot
 assert "mi_dreamy_dot_draw_half(half,0,0,240)" in ui
-assert "mi_tape_dot_draw_half(half,0,0,240)" in ui
-assert "visual_choice+steps)%13" in ui and "normal_visual_bank+1u)%12u" in ui
+# TAPE DOT was deleted; the 11-bank SEL contract is verified above.
 assert "if(state.fx==MI_FX_OFF&&state.fx2==MI_FX_OFF)" in ui
 assert "static const uint8_t mi_photo_vq_maps[488][72]" in atlas
 assert "mi_photo_vq_tilebook" in atlas and "mi_photo_vq_palette" in atlas
