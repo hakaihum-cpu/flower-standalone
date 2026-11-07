@@ -28,16 +28,58 @@ typedef struct {
  uint32_t magic;
  mi_state_t state;
  } saved_t;
-/* MI13 originally stored exactly the prefix ending after save_armed_ms.
- * Its legacy image can be loaded even after extending mi_state_t with OSC2,
- * without resetting the user's sound settings to factory defaults. */
+/* Exact persisted MI13/MI14 layout: FX_COUNT was seven. */
 typedef struct {
-  uint32_t magic;
-  uint8_t state_prefix[offsetof(mi_state_t,osc2_wave)];
+    mi_view_t view;
+    uint8_t wave,width,sub,crush,fx,wet,level,preset;
+    uint8_t fx_options[7][2];
+    uint8_t env[4],lfo[4],arp[4],seq[4];
+    int16_t global[4];
+    uint8_t fx2,wet2,fx_slot,project_slot;
+    int8_t octave;
+    uint8_t playing,recording,save_armed;
+    uint32_t save_armed_ms;
+    uint8_t osc2_wave,osc2_level,osc2_detune,osc2_octave,osc_page;
+    uint8_t fx_extra[7][4],fx_page,osc1_wave;
+} mi_state_v14_t;
+typedef struct {uint32_t magic;mi_state_v14_t state;} saved_v14_t;
+typedef struct {uint32_t magic;
+    uint8_t state_prefix[offsetof(mi_state_v14_t,osc2_wave)];
 } saved_legacy_t;
-/* MI14 used exactly 104 state bytes including tail padding. */
-typedef struct { uint32_t magic; uint8_t state_bytes[104]; } saved_v14_t;
+/* Never attempt migration if platform ABI differs from historic layout. */
+typedef char mi_old_save_assert[(sizeof(saved_v14_t)==104u &&
+    sizeof(saved_legacy_t)==68u)?1:-1];
 static mi_state_t state;
+/* New MI15 defaults are retained for newly added FX, FILTER, REC and SEL. */
+static void mi_migrate_old(const mi_state_v14_t *old,int extended)
+{
+    unsigned i,j;
+    state.view=old->view;
+    state.wave=old->wave;state.width=old->width;state.sub=old->sub;
+    state.crush=old->crush;state.fx=old->fx;state.wet=old->wet;
+    state.level=old->level;state.preset=old->preset;
+    for(i=0u;i<7u;i++){
+        for(j=0u;j<2u;j++)state.fx_options[i][j]=old->fx_options[i][j];
+        if(extended)
+            for(j=0u;j<4u;j++)state.fx_extra[i][j]=old->fx_extra[i][j];
+    }
+    for(i=0u;i<4u;i++){
+        state.env[i]=old->env[i];state.lfo[i]=old->lfo[i];
+        state.arp[i]=old->arp[i];state.seq[i]=old->seq[i];
+        state.global[i]=old->global[i];
+    }
+    state.fx2=old->fx2;state.wet2=old->wet2;state.fx_slot=old->fx_slot;
+    state.project_slot=old->project_slot;state.octave=old->octave;
+    state.playing=old->playing;state.recording=old->recording;
+    state.save_armed=old->save_armed;state.save_armed_ms=old->save_armed_ms;
+    if(extended){
+        state.osc2_wave=old->osc2_wave;state.osc2_level=old->osc2_level;
+        state.osc2_detune=old->osc2_detune;state.osc2_octave=old->osc2_octave;
+        state.osc_page=old->osc_page;state.fx_page=old->fx_page;
+        state.osc1_wave=old->osc1_wave;
+    }
+}
+
 static mi_audio_t audio;
 static mi_video_t video;
 static volatile float audio_activity;
@@ -82,35 +124,30 @@ void app_init(void)
  mi_audio_init(&audio,44100.f);
  mi_video_init(&video,MI_EFFECTS_ASSET_COUNT);
  mi_video_set_eureka(&video,MI_EUREKA_ASSET_COUNT);
- /* fm1-base plat_store_load may truncate to max and return that truncated
-  * length. Check the ACTUAL stored size FIRST. Otherwise a corrupt new save
-  * might be misinterpreted as a valid old MI13 prefix. */
+ /* Check actual stored bytes before loading to avoid truncated legacy data. */
  if(stored_bytes==(int)sizeof saved &&
-    plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved&&
+    plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved &&
     saved.magic==SAVED_MAGIC&&mi_state_valid(&saved.state)){
-     state=saved.state;
-     restored=1;
- }else if(stored_bytes==(int)sizeof saved &&
-          plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved&&
-          saved.magic==SAVED_MAGIC_PREV){
-     /* New osc1_wave occupies the old struct's tail padding; DO NOT treat
-      * uninitialised MI13 padding as a valid oscillator or sound parameter. */
-     mi_memcopy(&state,&saved.state,offsetof(mi_state_t,osc1_wave));
-     restored=mi_state_valid(&state);
-  }else if(stored_bytes==(int)sizeof(saved_v14_t)){
+     state=saved.state;restored=1;
+ }else if(stored_bytes==(int)sizeof(saved_v14_t)){
      saved_v14_t old14;
-     if(plat_store_load(OBJ_SETTINGS,&old14,sizeof old14)==(int)sizeof old14 &&
-        old14.magic==SAVED_MAGIC_M14){
-         /* Only the MI14 fields are carried forward. The bytes after
-          * osc1_wave were tail padding, not valid MI15 controls. */
-         mi_memcopy(&state,old14.state_bytes,offsetof(mi_state_t,filter_cutoff));
-         restored=mi_state_valid(&state);
+     if(plat_store_load(OBJ_SETTINGS,&old14,sizeof old14)==(int)sizeof old14){
+         if(old14.magic==SAVED_MAGIC_M14){
+             mi_migrate_old(&old14.state,1);
+             restored=mi_state_valid(&state);
+         }else if(old14.magic==SAVED_MAGIC_PREV){
+             mi_migrate_old(&old14.state,0);
+             restored=mi_state_valid(&state);
+         }
      }
  }else if(stored_bytes==(int)sizeof(saved_legacy_t)){
      saved_legacy_t old;
      if(plat_store_load(OBJ_SETTINGS,&old,sizeof old)==(int)sizeof old&&
         old.magic==SAVED_MAGIC_PREV){
-         mi_memcopy(&state,old.state_prefix,sizeof old.state_prefix);
+         mi_state_v14_t decoded;
+         mi_memzero(&decoded,sizeof decoded);
+         mi_memcopy(&decoded,old.state_prefix,sizeof old.state_prefix);
+         mi_migrate_old(&decoded,0);
          restored=mi_state_valid(&state);
      }
  }
