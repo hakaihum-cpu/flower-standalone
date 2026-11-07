@@ -42,6 +42,10 @@ typedef struct {
      * OSC1 parameters/sub/crush are unchanged. OSC2 has independent waveform,
      * octave, fine detune and level. Page only affects editing, never audio. */
     uint8_t osc2_wave, osc2_level, osc2_detune, osc2_octave, osc_page;
+    /* Four additional genuinely routed DSP controls for DREAMY/EUREKA:
+     * pitch, reverse, density, feedback. Original 2 controls remain. */
+    uint8_t fx_extra[MI_FX_COUNT][4];
+    uint8_t fx_page;
 } mi_state_t;
 typedef struct {
     mi_action_t action;
