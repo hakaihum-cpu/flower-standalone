@@ -21,8 +21,9 @@
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
 #define GREY RGB(218,213,202)
-#define SAVED_MAGIC 0x4D493134u /* MI14: HOME MULTI and OSC1 wave */
-#define SAVED_MAGIC_PREV 0x4D493133u /* MI13: existing user's settings */
+#define SAVED_MAGIC 0x4D493135u /* MI15: expanded controls */
+#define SAVED_MAGIC_M14 0x4D493134u /* MI14 settings */
+#define SAVED_MAGIC_PREV 0x4D493133u /* MI13 settings */
 typedef struct {
  uint32_t magic;
  mi_state_t state;
@@ -34,6 +35,8 @@ typedef struct {
   uint32_t magic;
   uint8_t state_prefix[offsetof(mi_state_t,osc2_wave)];
 } saved_legacy_t;
+/* MI14 used exactly 104 state bytes including tail padding. */
+typedef struct { uint32_t magic; uint8_t state_bytes[104]; } saved_v14_t;
 static mi_state_t state;
 static mi_audio_t audio;
 static mi_video_t video;
@@ -94,6 +97,13 @@ void app_init(void)
       * uninitialised MI13 padding as a valid oscillator or sound parameter. */
      mi_memcopy(&state,&saved.state,offsetof(mi_state_t,osc1_wave));
      restored=mi_state_valid(&state);
+  }else if(stored_bytes==(int)sizeof(saved_v14_t)){
+     saved_v14_t old14;
+     if(plat_store_load(OBJ_SETTINGS,&old14,sizeof old14)==(int)sizeof old14 &&
+        old14.magic==SAVED_MAGIC_M14){
+         mi_memcopy(&state,old14.state_bytes,sizeof old14.state_bytes);
+         restored=mi_state_valid(&state);
+     }
  }else if(stored_bytes==(int)sizeof(saved_legacy_t)){
      saved_legacy_t old;
      if(plat_store_load(OBJ_SETTINGS,&old,sizeof old)==(int)sizeof old&&
@@ -145,6 +155,11 @@ static void midi_audio_poll(void)
      uint8_t velocity=(uint8_t)((pkt>>24)&127u);
      uint8_t kind=status&0xF0u;
      (void)port;
+     if(status==0xF8u||status==0xFAu||
+        status==0xFBu||status==0xFCu){
+         mi_audio_midi_clock(&audio,status);
+         continue;
+     }
      if(kind==0x90u&&velocity)mi_audio_input_on(&audio,&state,note,velocity);
      else if(kind==0x80u||(kind==0x90u&&!velocity))
          mi_audio_input_off(&audio,&state,note);
@@ -385,7 +400,10 @@ static unsigned mi_visual_step(float activity)
      * All six user sheets plus original EFFECTS/EUREKA are in this cycle. */
     if(state.view==MI_VIDEO&&visual_choice==0u &&
        activity>0.012f&&activity>visual_last_activity*1.5f+0.004f){
-        normal_visual_bank=(uint8_t)((normal_visual_bank+1u)%11u);
+        visual_rng^=visual_rng<<13;visual_rng^=visual_rng>>17;
+        visual_rng^=visual_rng<<5;
+        normal_visual_bank=(uint8_t)(visual_rng%10u<3u?
+            visual_rng%11u:(normal_visual_bank+1u)%11u);
         visual_last_mode=255u;
         changed=1;
     }
@@ -406,10 +424,11 @@ static unsigned mi_visual_step(float activity)
         visual_rng^=visual_rng<<13;
         visual_rng^=visual_rng>>17;
         visual_rng^=visual_rng<<5;
-        next=(unsigned)mi_tile_bank_first[photo_bank]+visual_rng%count;
-        if(count>1u && next==visual_tile)
-            next=(unsigned)mi_tile_bank_first[photo_bank]+
-                 (next-(unsigned)mi_tile_bank_first[photo_bank]+1u)%count;
+        /* 30% ignore the current photo bank and draw from all frames. */
+         next=visual_rng%10u<3u?visual_rng%MI_TILE_COUNT:
+              (unsigned)mi_tile_bank_first[photo_bank]+visual_rng%count;
+        if(MI_TILE_COUNT>1u&&next==visual_tile)
+             next=(next+1u)%MI_TILE_COUNT;
         visual_tile=(uint16_t)next;
         ++visual_generation;
         visual_cooldown=activity>0.15f?3u:5u;
