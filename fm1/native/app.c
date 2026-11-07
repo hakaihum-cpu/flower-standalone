@@ -538,11 +538,20 @@ static void mi_fx_dial(unsigned half,int32_t x,int32_t y,unsigned knob)
     const char *label=mi_param_name(&state,knob);
     int32_t v=mi_param_value(&state,knob);
     unsigned dial=(unsigned)(v<0?0:v);
-    if(knob==0u){
+    if(knob==0u&&!state.fx_page){
         unsigned m=state.fx_slot?state.fx2:state.fx;
         textcpy(val,mi_fx_name((mi_fx_t)m),sizeof val);
         dial=m*127u/(MI_FX_COUNT-1u);
-    }else number(v,val);
+    }else{
+        number(v,val);
+        if(state.fx_page){
+            unsigned fx=state.fx_slot?state.fx2:state.fx;
+            if(fx<MI_FX_COUNT&&knob==0u)
+                dial=state.fx_extra[fx][0]; /* +/-12 st value, 0..127 arc */
+            if(fx<MI_FX_COUNT&&knob==1u)
+                dial=state.fx_extra[fx][1]>=64u?127u:0u;
+        }
+    }
     cv_rect(x,oy,57,80,C_WHITE);
     cv_rect(x+1,oy+1,55,1,C_BLACK);
     cv_rect(x+1,oy+78,55,1,C_BLACK);
@@ -567,6 +576,7 @@ static void mi_fx_draw_half(unsigned half)
     cv_begin(240,120,C_BLACK);
     cv_text(5,5-shift,&FONT_XS,"FX /",C_WHITE);
     cv_text(38,5-shift,&FONT_S,mi_fx_name((mi_fx_t)fx),C_WHITE);
+    cv_text(163,5-shift,&FONT_XS,state.fx_page?"PG2":"PG1",C_WHITE);
     cv_text(199,5-shift,&FONT_XS,state.fx_slot?"FX B":"FX A",C_WHITE);
     cv_rect(4,27-shift,232,1,RGB(110,110,110));
     mi_fx_dial(half,5,34,0u);
@@ -598,7 +608,7 @@ static void mi_fx_draw_half(unsigned half)
     if(i>102u)i=102u;
     if(i)cv_rect(133,213-shift,(int32_t)i,2,YELLOW);
     cv_rect(3,221-shift,234,1,RGB(100,100,100));
-    cv_text(6,225-shift,&FONT_XS,"K1-K4 FX   SELECT BANK   SEL FULL",C_WHITE);
+    cv_text(6,225-shift,&FONT_XS,"PRESETS PAGE / SELECT BANK / SEL FULL",C_WHITE);
     cv_blit(0,half*120u);
 }
 static void mi_graph_env(void)
