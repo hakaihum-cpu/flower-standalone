@@ -1,0 +1,77 @@
+{
+  "request": "Replace Digitone EUREKA animation assets only with the seven uploaded user tile sheets.",
+  "baseline": "fix/digitone-pg80-audio-cpu-20261104 (PG81 trial); PG79 approved branch untouched",
+  "conversion": "Unmodified prepare.py #04 HYBRID (ImageOps.contain, CLAHE, Bayer4, 128x64 1bit). Exact runtime XOR-delta/RLE, 6-frame keyframe seek, 16 scenes x36.",
+  "sourceContactSheets": [
+    {
+      "sheet": 1,
+      "filename": "file_00000000e7388206b7bb79a8b73154ee(2)(1).png",
+      "rows": 9,
+      "cols": 9,
+      "count": 81
+    },
+    {
+      "sheet": 2,
+      "filename": "file_00000000e9448206897342ec340f08d4(2)(1).png",
+      "rows": 10,
+      "cols": 10,
+      "count": 100
+    },
+    {
+      "sheet": 3,
+      "filename": "file_000000006c3882069f4e9ec393c3615f(2)(1).png",
+      "rows": 9,
+      "cols": 9,
+      "count": 81
+    },
+    {
+      "sheet": 4,
+      "filename": "file_000000008e98820690554a4b75774ed5(1).png",
+      "rows": 9,
+      "cols": 9,
+      "count": 81
+    },
+    {
+      "sheet": 5,
+      "filename": "file_00000000cf38820685e20ea7661aea2d(2)(1).png",
+      "rows": 9,
+      "cols": 9,
+      "count": 81
+    },
+    {
+      "sheet": 6,
+      "filename": "Gemini_Generated_Image (4).jpeg",
+      "rows": 7,
+      "cols": 10,
+      "count": 70
+    },
+    {
+      "sheet": 7,
+      "filename": "Gemini_Generated_Image (3).jpeg",
+      "rows": 8,
+      "cols": 10,
+      "count": 80
+    }
+  ],
+  "originalTileCount": 574,
+  "totalPlaybackFrames": 576,
+  "duplicates": [
+    {
+      "playbackFrame": 574,
+      "originalTile": 572
+    },
+    {
+      "playbackFrame": 575,
+      "originalTile": 573
+    }
+  ],
+  "frameData": {
+    "uncompressedBytes": 589824,
+    "encodedBytes": 294719,
+    "seekBytes": 98688,
+    "frameSha256": "ef27b3bf8b85a0cdb3b7461df0a5d76b110138ddd7bf1177deb3e8f78d865c47",
+    "seekSha256": "d5757d7293d2ef04536518ab07927a7768d52f9db7bbdc7abdc52e7acab049e3",
+    "referenceSha256": "5eede689cf2794dd27f93fe0fee4f108f6cc584923127fbc2faed609c7b48ffc"
+  },
+  "notes": "Exact user-source crops, no new pictures. Reproducible JPEG-tile source, per-tile bounding boxes and SHA256 manifest delivered separately in user-facing ZIP. The GitHub branch stores only prepared 1bit frame bank to avoid any other firmware or audio changes."
+}
