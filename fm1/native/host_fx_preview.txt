@@ -31,6 +31,8 @@ midi USB 80 4C 00
 wait 950
 spin K1 -3
 expect fx 2
+# DREAMY opens PITCH controls; PRESET switches to original GRAIN/SPACE.
+spin PRESET 1
 spin K3 64
 spin K4 80
 midi USB 90 45 7F
