@@ -867,7 +867,11 @@ static void draw(void)
     cv_begin(240,120,C_BLACK);
     cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
     cv_text(140,10,&FONT_XS,
-            state.view==MI_OSC?(state.osc_page?"OSC2":"OSC1"):
+            state.view==MI_SEQ?(audio.recorder.clock_active?"MIDI 2BAR":
+                state.rec_bars==4u?"REC 4BAR":"REC 2BAR"):
+            state.view==MI_OSC?(state.osc_page==2u?"FILTER":
+                state.wave==MI_WAVE_FMDRUM?"FMDRUM":
+                state.osc_page==1u?"OSC2":"OSC1"):
             mi_view_name(state.view),GREY);
     cv_rect(8,31,224,1,DIM);
     if(now<message_until){
@@ -920,20 +924,18 @@ static void draw(void)
     for(i=0;i<4u;i++){
         int32_t x=8+(int32_t)i*58;
         cv_text(x,24,&FONT_XS,mi_param_name(&state,i),GREY);
-        if((state.view==MI_OSC||state.view==MI_HOME)&&i==0u)
-            textcpy(val,mi_wave_name(state.view==MI_OSC?
-                  (state.osc_page?state.osc2_wave:
-                   state.wave==MI_WAVE_MULTI?state.osc1_wave:state.wave):
-                   (state.wave==MI_WAVE_MULTI?
-                    (state.osc_page?state.osc2_wave:state.osc1_wave):
-                    state.wave)),sizeof val);
+        if(((state.view==MI_OSC&&state.osc_page<2u&&
+                 state.wave!=MI_WAVE_FMDRUM)||state.view==MI_HOME)&&i==0u)
+            textcpy(val,mi_wave_name(state.view==MI_HOME?state.wave:
+                   (state.osc_page==1u?state.osc2_wave:
+                    state.wave==MI_WAVE_MULTI?state.osc1_wave:state.wave)),
+                   sizeof val);
         else if(state.view==MI_HOME&&state.wave==MI_WAVE_MULTI&&i==1u)
             textcpy(val,state.osc_page?"OSC2":"OSC1",sizeof val);
         else if(state.view==MI_LFO&&i==1u)
             textcpy(val,mi_lfo_wave_name(state.lfo[1]),sizeof val);
         else if(state.view==MI_LFO&&i==3u)
-            textcpy(val,state.lfo[3]==0u?"PITCH":
-                         state.lfo[3]==1u?"PWM":"AMP",sizeof val);
+             textcpy(val,mi_lfo_dest_name(state.lfo[3]),sizeof val);
         else if(state.view==MI_ARP&&i==0u)
             textcpy(val,mi_arp_mode_name(state.arp[0]),sizeof val);
         else if(state.view==MI_ARP&&i==1u){
@@ -943,7 +945,8 @@ static void draw(void)
             static const int semitone[7]={-12,-7,-5,0,5,7,12};
             number(semitone[state.seq[2]<=6u?state.seq[2]:3u],val);
         }else number(mi_param_value(&state,i),val);
-        cv_text(x,49,&FONT_S,val,YELLOW);
+        cv_text(x,49,(state.view==MI_LFO&&i==3u)?&FONT_XS:&FONT_S,
+                 val,YELLOW);
     }
     cv_blit(0,120);
 }
@@ -976,7 +979,8 @@ void app_frame(void)
         (visual_changed||(mode==6u&&old_effects!=video.effects_frame)||
          (mode==7u&&old_eureka!=video.eureka_frame)))
          redraw=1;
-     if(state.view==MI_SEQ && (audio.recorder.recording||audio.recorder.playing))
+     if(state.view==MI_SEQ && (audio.recorder.recording||
+                                audio.recorder.playing||audio.recorder.armed))
          redraw=1;
      if(state.view==MI_OSC||state.view==MI_HOME){
          uint8_t active=audio.osc_scope_active;
