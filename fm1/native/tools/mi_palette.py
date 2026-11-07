@@ -4,7 +4,7 @@
 Exactly 36 user-supplied frames per clip; fixed 16-colour RGB565 palette.
 No EUREKA audio, animation or code dependency.
 """
-from PIL import Image, ImageStat
+from PIL import Image, ImageStat, ImageFilter
 
 WIDTH, HEIGHT = 128, 78
 CLIP_LENGTH = 36
@@ -42,19 +42,25 @@ def clip_pixels(frames: list[Image.Image]) -> tuple[list[int], list[bytes]]:
     if hi <= lo:
         raise ValueError("source clip has no luminance range")
     lut = [max(0, min(255, round(255 * (
-        max(0.0, min(1.0, (v - lo) / (hi - lo))) ** 0.75))))
+        max(0.0, min(1.0, (v - lo) / (hi - lo))) ** 0.86))))
         for v in range(256)]
     fixed = [Image.merge("YCbCr", (y.point(lut), cb, cr)).convert("RGB")
              for y, cb, cr in ycc]
-    # Fix only STRONGLY yellow-biased clips; one gain for all 36 frames,
-    # preserving the same 16-color palette and preventing color flicker.
+    # Preserve original pixel structure, geometry and natural hair/skin.
+    # Modest edge clarity only, before 16-color quantisation; no AI image
+    # creation, face reshape, skin smoothing or per-frame new palette.
+    fixed = [im.filter(ImageFilter.UnsharpMask(
+        radius=0.65, percent=30, threshold=4)) for im in fixed]
+    # Same color adjustment for all 36 frames prevents temporal flicker.
+    # Strong yellow clips get a SMALL reduction in cast, not a forced gray
+    # or orange replacement. Existing RGB channels stay otherwise intact.
     means = [ImageStat.Stat(im).mean for im in fixed]
     red = sum(m[0] for m in means) / len(means)
     green = sum(m[1] for m in means) / len(means)
     blue = sum(m[2] for m in means) / len(means)
     if (blue > 12.0 and green > 35.0 and
-            red > blue * 1.25 and green > blue * 1.16):
-        gain = min(1.24, (red + green) / (2.0 * blue))
+            red > blue * 1.30 and green > blue * 1.20):
+        gain = min(1.10, (red + green) / (2.0 * blue))
         blue_lut = [min(255, round(i * gain)) for i in range(256)]
         fixed = [Image.merge("RGB", (
             im.getchannel("R"), im.getchannel("G"),
@@ -70,6 +76,9 @@ def clip_pixels(frames: list[Image.Image]) -> tuple[list[int], list[bytes]]:
                          for i in range(COLORS - 1)]
     if len(rgb) != COLORS:
         raise ValueError("incomplete RGB palette")
+    # One reserved black + 15 image-derived colors, shared by the clip.
+    # A particular frame may use fewer than 16; never invent colors to
+    # claim utilization or alter the source person's features.
     pal = Image.new("P", (1, 1))
     pal.putpalette([c for color in rgb for c in color])
     palette565 = [((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)

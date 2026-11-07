@@ -41,6 +41,7 @@ expect view 2
 shot MIYAKO_NO_RESOURCE_FX.png
 res 1
 expect media_ready 1
+shot MIYAKO_FX_WHOLE_IMAGE.png
 tap SEL
 expect view 3
 turn SELECT 1

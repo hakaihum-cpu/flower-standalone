@@ -66,6 +66,7 @@ jobs:
             /tmp/mi-video-venv/bin/python -m pip install --disable-pip-version-check "Pillow==10.4.0" "numpy==1.26.4"
             /tmp/mi-video-venv/bin/python -c 'from PIL import Image, ImageDraw, ImageFont; import numpy; print("PASS: fm1-base gen_font.py dependencies")'
             /tmp/mi-video-venv/bin/python fm1/native/tools/test_black_frame_guard.py
+            /tmp/mi-video-venv/bin/python fm1/native/tools/test_video_palette_natural.py
       - run:
           name: Host-compile real MIYAKO app and native FX BEFORE expensive video encoding
           command: |
@@ -97,7 +98,7 @@ jobs:
             # running FM-1 identity, all metadata, and final FWSC markers.
             # The upstream pinned builder defaults to suffix 00.
             python3 fm1/native/tools/set_miyako_product_id.py --base /tmp/fm1-base
-            grep -q 'PRODUCT = prefix + "35"' /tmp/fm1-base/tools/build.py
+            grep -q 'PRODUCT = prefix + "36"' /tmp/fm1-base/tools/build.py
             # Fail early on fonts: never reach the C build with untested
             # Pillow Raqm or a missing upstream bitmap asset.
             test -s /tmp/fm1-base/assets/fonts/ter-u12n.bdf
@@ -271,7 +272,7 @@ jobs:
               /tmp/fm1-base/miyako/build/miyako.fwsc \
               /tmp/fm1-base/miyako/build/miyako.bin \
               /tmp/fm1-base/miyako/build/loader/ota.bin \
-              --base /tmp/fm1-base --product FM-1_935
+              --base /tmp/fm1-base --product FM-1_936
             cp /tmp/fm1-base/miyako/build/miyako.fwsc fm1-dist/MIYAKO-FM1-NATIVE-DEV.fwsc
             # The matching upstream resource installer uses this exact stem.
             test -s /tmp/fm1-base/miyako/build/miyako-res.bin

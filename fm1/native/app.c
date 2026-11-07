@@ -433,14 +433,15 @@ static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
     if(x+w>240)w=240-x;
     if(w>0&&h>0)cv_rect(x,y,w,h,rgb);
 }
-/* Lightly neutralize the amber cast of only the TWO additional user sheets.
- * Palette index/map, original separate resource and frame count stay intact. */
+/* Keep user-supplied photo colors recognizable. Only a conservative blue
+ * compensation applies to yellow-biased new sheets, never the face geometry,
+ * pixel indices, VQ maps or existing 488-color resource offsets. */
 static uint16_t mi_photo_neutral_rgb(uint16_t rgb)
 {
     unsigned r=(rgb>>11u)&31u,g=(rgb>>5u)&63u,b=rgb&31u;
     unsigned g5=(g+1u)/2u;
     if(r>=g5&&g5>b+1u){
-        unsigned lift=(g5-b)*3u/4u;
+        unsigned lift=(g5-b+4u)/5u;
         b=b+lift>31u?31u:b+lift;
     }
     return (uint16_t)((r<<11u)|(g<<5u)|b);
@@ -834,8 +835,9 @@ static void mi_fx_dial(unsigned half,int32_t x,int32_t y,unsigned knob)
     cv_rect(x+3,oy+59,51,17,C_BLACK);
     cv_text(x+5,oy+61,&FONT_XS,val,C_WHITE);
 }
-/* FX image fills the 240px screen height as a center-cropped background.
- * Cropping is confined to the right x=123..239; knobs are never covered. */
+/* FX preview must show the WHOLE original image inside the right-hand
+ * 116x240 field. Height-fill crop discarded 51-70 percent of the source
+ * and made faces/scenes unrecognizable. Preserve aspect, accept margins. */
 static void mi_fx_draw_half(unsigned half)
 {
     const int32_t shift=(int32_t)half*120;
@@ -851,13 +853,16 @@ static void mi_fx_draw_half(unsigned half)
     mi_fx_dial(half,3,123,2u);
     mi_fx_dial(half,63,123,3u);
     if(mi_visual_photo_bank(mode)>=0){
-        mi_tile_draw_half(half,61,0,240,123,audio_activity);
+        /* Full 48x48 original photo: exactly 116x116, centered vertically. */
+        mi_tile_draw_half(half,123,62,116,123,audio_activity);
     }else if(mode==8u){
-        mi_dreamy_dot_draw_half(half,61,0,240,123);
+        /* Full original DOT portrait; neither side may be cropped. */
+        mi_dreamy_dot_draw_half(half,123,62,116,123);
     }else{
-        /* Original 128x78 ratio: height=240 gives width=393. */
-        mi_media_draw_scaled_half(half,-15,0,393,240,123,mode==7u);
-        mi_video_vfx_half(half,123,0,116,240,audio_activity);
+        /* Full 128x78 clip: 116x71 (0.35% AR rounding) fits right side.
+         * No 393px off-screen render; all human faces remain in frame. */
+        mi_media_draw_scaled_half(half,123,84,116,71,123,mode==7u);
+        mi_video_vfx_half(half,123,84,116,71,audio_activity);
     }
     cv_blit(0,half*120u);
 }
