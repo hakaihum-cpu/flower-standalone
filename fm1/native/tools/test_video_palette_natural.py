@@ -14,18 +14,25 @@ from pack_eureka_frames import clip_pixels as eureka_palette
 from mi_reference_palette import REFERENCE_565
 import re
 
-# The embedded resource-photo renderer and both video encoders MUST use
-# the SAME real palette extracted from the supplied 16-color reference.
+# FM-1 photo frames load their 16 RGB565 colours from the separately
+# flashed resource, not from a compile-time C array.  Verify the real
+# renderer decoding contract and the existing independently audited resource
+# reference against the EFFECTS/EUREKA encoder's reference palette.
+from test_miyako_resource96 import REFERENCE as RESOURCE_REFERENCE
 app_source = (Path(__file__).resolve().parents[1] / "app.c").read_text()
-ref_match = re.search(
-    r"mi_user_reference_rgb565\[16\]\s*=\s*\{([^}]+)\}", app_source,
-    re.S,
+assert RESOURCE_REFERENCE == REFERENCE_565, (
+    "resource photo palette differs from EFFECTS/EUREKA palette"
 )
-assert ref_match, "C renderer is missing the actual reference palette"
-ref_c = tuple(int(v, 16) for v in re.findall(r"0x([0-9a-fA-F]{4})u", ref_match.group(1)))
-assert ref_c == REFERENCE_565 and len(set(ref_c)) == 16, (
-    "C photo palette must match Python EFFECTS/EUREKA palette exactly"
-)
+assert len(set(REFERENCE_565)) == 16
+assert re.search(r"static\s+uint16_t\s+mi_photo_palette\[16\];", app_source)
+assert "res=plat_res(&length);" in app_source
+assert "unsigned off=MI_TILE_VQ_PALETTE_OFFSET+clip*32u+i*2u;" in app_source
+assert re.search(
+    r"mi_photo_palette\[i\]\s*=\s*\(uint16_t\)\(\(uint16_t\)res\[off\]\s*\|\s*"
+    r"\(\(uint16_t\)res\[off\+1u\]<<8u\)\);",
+    app_source,
+), "C photo palette must decode little-endian RGB565 from the resource"
+assert "mi_photo_palette[idx]" in app_source
 
 W, H = 128, 78
 # Varying luminance, colors and high-contrast contours, no face synthesis.
