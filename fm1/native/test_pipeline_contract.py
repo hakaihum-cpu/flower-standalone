@@ -139,6 +139,14 @@ assert "test_black_frame_guard.py" in ci
 assert "test_video_palette_natural.py" in ci
 assert ci.index("test_video_palette_natural.py") < ci.index("Reconstruct all 144 original")
 assert ci.index("test_black_frame_guard.py") < ci.index("Reconstruct all 144 original")
+# Regression #284: the live photo renderer reads RGB565 from the CRC-checked
+# resource; testing a removed, compile-time palette array caused a false CI
+# failure after unit tests had already passed. Guard against that stale test.
+palette_test = (root / "fm1/native/tools/test_video_palette_natural.py").read_text()
+assert "RESOURCE_REFERENCE == REFERENCE_565" in palette_test
+assert "mi_photo_palette[idx]" in palette_test
+assert "mi_user_reference_rgb565" not in palette_test
+assert "mi_photo_palette[i]=(uint16_t)" in (root / "fm1/native/app.c").read_text()
 assert "visible<32u" in (root / "fm1/native/test_media_crc.c").read_text()
 assert (root / "fm1/native/tools/black_frame_guard.py").is_file()
 assert ci.index("Reconstruct all 144 original MIYAKO EFFECTS") < ci.index(
