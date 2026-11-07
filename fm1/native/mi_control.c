@@ -227,6 +227,8 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
     if (!s || !steps) return result(MI_ACTION_NONE, 0);
     switch (e) {
     case MI_EN_ALGORITHM:
+        /* Never silently exit MULTI while an FX/VIDEO/other page is open. */
+        if(s->view!=MI_HOME&&s->view!=MI_OSC)break;
         if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI){
             uint8_t *selected=s->osc_page?&s->osc2_wave:&s->osc1_wave;
             *selected=(uint8_t)limited(*selected,steps>0?1:-1,0,3);
