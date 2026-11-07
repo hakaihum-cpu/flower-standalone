@@ -109,6 +109,27 @@ int main(void)
  mi_audio_rec_request(&a,2u);
  mi_audio_render(&a,&s,lr,256,4096);
  assert(!a.recorder.playing);
+ /* OSC2 changes actual PCM while preserving four-voice handling. */
+ {
+   int32_t first_old,first_new;
+   mi_init(&s);mi_audio_init(&a,44100.f);
+   s.env[0]=0u;s.env[1]=0u;s.env[2]=127u;
+   mi_audio_note_on(&a,69,127);
+   for(i=0;i<8u;i++)mi_audio_render(&a,&s,lr,256,4096);
+   first_old=lr[128];
+   assert(a.v[0].phase2>=0.f&&a.v[0].phase2<1.f);
+   mi_audio_panic(&a);
+   mi_audio_init(&a,44100.f);
+   s.osc2_wave=1u;s.osc2_level=127u;
+   s.osc2_detune=81u;s.osc2_octave=3u;
+   mi_audio_note_on(&a,69,127);
+   for(i=0;i<8u;i++)mi_audio_render(&a,&s,lr,256,4096);
+   first_new=lr[128];
+   assert(first_old!=first_new);
+   assert(a.v[0].phase2>=0.f&&a.v[0].phase2<1.f);
+   assert(a.v[0].phase2!=a.v[0].phase);
+   assert(a.v[0].active);
+ }
  puts("PASS: ADSR LFO ARP serial FX A/B and command-driven internal recorder");
  return 0;
 }
