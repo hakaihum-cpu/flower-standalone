@@ -79,7 +79,7 @@ int main(void)
     assert(s.seq[1]==25);
     for(i=0;i<5;i++) mi_button(&s, MI_B_OCT_DOWN, 7001);
     assert(s.octave == -3);
-    assert(MI_FX_COUNT == 7 && MI_VIEW_COUNT == 10);
+    assert(MI_FX_COUNT == 9 && MI_VIEW_COUNT == 10);
     assert(!strcmp(mi_fx_name(MI_FX_EUREKA),"EUREKA"));
     assert(mi_fx_pair_supported(MI_FX_DREAMY,MI_FX_EUREKA));
     assert(!mi_fx_pair_supported(MI_FX_DELAY,MI_FX_EUREKA));
@@ -95,7 +95,7 @@ int main(void)
     mi_button(&s,MI_B_LFO,8001);
     mi_rotate(&s,MI_EN_K2,20);
     mi_rotate(&s,MI_EN_K4,20);
-    assert(s.lfo[1]==3 && s.lfo[3]==2);
+    assert(s.lfo[1]==3 && s.lfo[3]==20);
     assert(!strcmp(mi_param_name(&s,2),"DEPTH"));
     mi_button(&s,MI_B_ENV,8002);
     assert(!strcmp(mi_param_name(&s,0),"ATK"));
@@ -113,35 +113,43 @@ int main(void)
     mi_button(&s,MI_B_FX,9002);
     assert(s.fx_slot==0u);
 
-    /* OSC2 is NOT the former SUB; the original OSC1 page stays intact. */
+    /* OSC page 0 keeps PULSE WIDTH, page 2 exposes real FILTER.
+     * OSC2 editing is accessible only as part of MULTI. */
     mi_button(&s,MI_B_EDIT,9010);
-    assert(s.view==MI_OSC && s.osc_page==0u);
-    mi_rotate(&s,MI_EN_K1,-50); /* original OSC1 waveform */
+    assert(s.view==MI_OSC&&s.osc_page==0u);
+    mi_rotate(&s,MI_EN_K1,-50);
     assert(s.wave==0u);
-    mi_button(&s,MI_B_EDIT,9011); /* repeated EDIT changes page */
-    assert(s.osc_page==1u);
-    assert(!strcmp(mi_param_name(&s,0),"WAVE2"));
-    assert(!strcmp(mi_param_name(&s,1),"DETUNE"));
+    mi_button(&s,MI_B_EDIT,9011);
+    assert(s.osc_page==2u&&!strcmp(mi_param_name(&s,0),"CUTOFF"));
+    mi_rotate(&s,MI_EN_K1,-20);
+    mi_rotate(&s,MI_EN_K2,10);
+    assert(s.filter_cutoff==107u&&s.filter_resonance==10u);
+    mi_button(&s,MI_B_EDIT,9012);
+    assert(s.osc_page==0u&&!strcmp(mi_param_name(&s,1),"WIDTH"));
+    mi_button(&s,MI_B_HOME,9013);
+    mi_rotate(&s,MI_EN_K1,4);
+    assert(s.wave==MI_WAVE_MULTI);
+    mi_button(&s,MI_B_EDIT,9014);
+    mi_button(&s,MI_B_EDIT,9015);
+    assert(s.osc_page==1u&&!strcmp(mi_param_name(&s,0),"WAVE2"));
     mi_rotate(&s,MI_EN_K1,1);
     mi_rotate(&s,MI_EN_K2,10);
     mi_rotate(&s,MI_EN_K3,70);
     mi_rotate(&s,MI_EN_K4,1);
-    assert(s.osc2_wave==1u && s.osc2_detune==74u &&
-           s.osc2_level==70u && s.osc2_octave==3u);
-    assert(s.wave==0u && mi_param_value(&s,1)==10);
-    assert(mi_param_value(&s,3)==1);
-    mi_button(&s,MI_B_EDIT,9012);
-    assert(s.osc_page==0u && !strcmp(mi_param_name(&s,2),"SUB"));
-    mi_button(&s,MI_B_HOME,9013);
-    /* The second oscillator's waveform and tuning cannot be confused
-     * with legacy SUB/CRUSH or corrupted saved-state values. */
+    assert(s.osc2_wave==1u&&s.osc2_detune==74u&&
+           s.osc2_level==127u&&s.osc2_octave==3u);
+    mi_button(&s,MI_B_EDIT,9016);
+    assert(s.osc_page==2u);
+    mi_button(&s,MI_B_EDIT,9017);
+    assert(s.osc_page==0u);
     mi_init(&s);
-    assert(s.osc2_level==0u && s.osc2_octave==2u && s.osc2_detune==64u);
+    assert(s.osc2_level==0u&&s.osc2_octave==2u&&s.osc2_detune==64u);
     assert(mi_state_valid(&s));
-    s.osc2_wave=4u; assert(!mi_state_valid(&s)); s.osc2_wave=0u;
-    s.osc2_octave=5u; assert(!mi_state_valid(&s)); s.osc2_octave=2u;
-    s.osc_page=2u; assert(!mi_state_valid(&s)); s.osc_page=0u;
-    s.osc2_level=255u; assert(!mi_state_valid(&s)); s.osc2_level=0u;
+    s.osc2_wave=4u;assert(!mi_state_valid(&s));s.osc2_wave=0u;
+    s.osc2_octave=5u;assert(!mi_state_valid(&s));s.osc2_octave=2u;
+    s.osc_page=3u;assert(!mi_state_valid(&s));s.osc_page=0u;
+    s.osc2_level=255u;assert(!mi_state_valid(&s));s.osc2_level=0u;
+    s.filter_cutoff=200u;assert(!mi_state_valid(&s));s.filter_cutoff=127u;
     assert(mi_state_valid(&s));
     /* The FM-1 FX page always enters P1 (MODE/WET), including EUREKA and
      * DREAMY. PRESET detents explicitly toggle P2 and back; K1 must
@@ -210,49 +218,43 @@ int main(void)
     assert(s.fx==MI_FX_EUREKA && s.fx2==MI_FX_REVERB);
     assert(mi_fx_pair_supported(s.fx,s.fx2));
 
-    /* HOME WAVE MULTI must genuinely expose two editable oscillators. */
+    /* HOME K1 now chooses the program MULTI (never hides it by
+     * changing OSC waveform). K2 selects the OSC edit target. */
     mi_init(&s);
     mi_rotate(&s,MI_EN_K1,4);
-    assert(s.view==MI_HOME && s.wave==MI_WAVE_MULTI);
-    assert(s.osc2_level==64u && s.osc1_wave==0u);
-    assert(!strcmp(mi_param_name(&s,0),"WAVE1"));
+    assert(s.wave==MI_WAVE_MULTI&&s.osc2_level==64u);
+    assert(!strcmp(mi_param_name(&s,0),"WAVE"));
+    assert(mi_param_value(&s,0)==MI_WAVE_MULTI);
     assert(!strcmp(mi_param_name(&s,1),"OSC"));
-    assert(!strcmp(mi_param_name(&s,2),"DETUNE"));
-    mi_rotate(&s,MI_EN_K1,2); /* HOME K1 changes OSC1 wave */
-    assert(s.wave==MI_WAVE_MULTI&&s.osc1_wave==2u);
-    assert(mi_param_value(&s,0)==2);
-    mi_rotate(&s,MI_EN_K2,1);  /* OSC -> OSC2 */
+    mi_rotate(&s,MI_EN_K2,1);
     assert(s.osc_page==1u);
-    assert(!strcmp(mi_param_name(&s,0),"WAVE2"));
-    mi_rotate(&s,MI_EN_K1,3); /* HOME K1 changes OSC2 wave */
-    assert(s.osc2_wave==3u&&s.osc1_wave==2u);
-    assert(mi_param_value(&s,0)==3);
-    mi_rotate(&s,MI_EN_K3,10); /* HOME WET now edits DETUNE */
+    mi_rotate(&s,MI_EN_K3,10);
     assert(s.osc2_detune==74u&&mi_param_value(&s,2)==10);
-    /* HOME/MULTI values remain signed for negative DETUNE values. */
-    assert(mi_param_value(&s,0)==3);
-    assert(mi_param_value(&s,1)==1);
-    assert(mi_param_value(&s,3)==(int32_t)s.level);
-    s.osc2_detune=0u;
-    assert(mi_param_value(&s,2)==-64);
-    s.osc2_detune=74u;
     mi_button(&s,MI_B_EDIT,9300);
     assert(s.view==MI_OSC&&s.osc_page==1u);
-    mi_rotate(&s,MI_EN_K1,-2); /* OSC2 wave only */
-    assert(s.osc2_wave==1u&&s.osc1_wave==2u&&s.wave==MI_WAVE_MULTI);
-    mi_button(&s,MI_B_HOME,9301);
-    mi_rotate(&s,MI_EN_K2,-1); /* MODE -> OSC1 */
+    mi_rotate(&s,MI_EN_K1,3);
+    assert(s.osc2_wave==3u);
+    mi_button(&s,MI_B_EDIT,9301);
+    assert(s.osc_page==2u&&!strcmp(mi_param_name(&s,1),"RES"));
     mi_button(&s,MI_B_EDIT,9302);
     assert(s.osc_page==0u);
-    mi_rotate(&s,MI_EN_K1,-1);
-    assert(s.osc1_wave==1u&&s.osc2_wave==1u&&s.wave==MI_WAVE_MULTI);
+    mi_rotate(&s,MI_EN_K1,2);
+    assert(s.osc1_wave==2u&&s.osc2_wave==3u);
     mi_button(&s,MI_B_HOME,9303);
-    mi_rotate(&s,MI_EN_ALGORITHM,-1); /* exit MULTI without changing K1 */
-    assert(s.wave==3u);
-    assert(mi_state_valid(&s));
+    mi_rotate(&s,MI_EN_ALGORITHM,-1);
+    assert(s.wave==3u&&mi_state_valid(&s));
+    mi_rotate(&s,MI_EN_K1,2); /* PULSE -> MULTI -> FMDRUM */
+    assert(s.wave==MI_WAVE_FMDRUM);
+    assert(!strcmp(mi_wave_name(s.wave),"FMDRUM"));
+    mi_button(&s,MI_B_EDIT,9304);
+    assert(!strcmp(mi_param_name(&s,0),"TONE"));
+    mi_rotate(&s,MI_EN_K1,10);
+    assert(s.drum_tone==74u);
+    mi_button(&s,MI_B_EDIT,9305);
+    assert(!strcmp(mi_param_name(&s,0),"CUTOFF"));
+    mi_init(&s);
     s.osc1_wave=4u;
     assert(!mi_state_valid(&s));
-
     /* Validate real saved-state bounds: corrupted storage must never reach
      * UI lookup tables, oscillator routing or REC IN/OUT arithmetic. */
     mi_init(&s);
@@ -264,7 +266,7 @@ int main(void)
     s.seq[3]=128u; assert(!mi_state_valid(&s)); s.seq[3]=100u;
     s.env[2]=255u; assert(!mi_state_valid(&s)); s.env[2]=115u;
     s.lfo[1]=4u; assert(!mi_state_valid(&s)); s.lfo[1]=0u;
-    s.lfo[3]=3u; assert(!mi_state_valid(&s)); s.lfo[3]=0u;
+    s.lfo[3]=58u; assert(!mi_state_valid(&s)); s.lfo[3]=0u;
     s.arp[0]=5u; assert(!mi_state_valid(&s)); s.arp[0]=0u;
     s.arp[2]=9u; assert(!mi_state_valid(&s)); s.arp[2]=70u;
     s.arp[3]=0u; assert(!mi_state_valid(&s)); s.arp[3]=1u;
@@ -278,6 +280,34 @@ int main(void)
     assert(!mi_state_valid(&s)); s.fx=MI_FX_OFF; s.fx2=MI_FX_OFF;
     assert(mi_state_valid(&s));
 
-    puts("PASS: REC, FX conflicts, EUREKA, controls, and saved-state corruption bounds");
+    /* New FX, LFO, 4-bar and SEL control regressions. */
+    mi_init(&s);
+    assert(!strcmp(mi_fx_name(MI_FX_BITCRUSH),"BITCRUSH"));
+    assert(!strcmp(mi_fx_name(MI_FX_PITCHSHIFT),"PITCHSHIFT"));
+    assert(!mi_fx_pair_supported(MI_FX_DREAMY,MI_FX_PITCHSHIFT));
+    mi_button(&s,MI_B_FX,9500);
+    mi_rotate(&s,MI_EN_K1,7);
+    assert(s.fx==MI_FX_BITCRUSH);
+    assert(!strcmp(mi_param_name(&s,2),"BITS"));
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.fx==MI_FX_PITCHSHIFT);
+    assert(!strcmp(mi_param_name(&s,2),"PITCH"));
+    mi_button(&s,MI_B_LFO,9501);
+    mi_rotate(&s,MI_EN_K4,57);
+    assert(s.lfo[3]==57u);
+    assert(!strcmp(mi_lfo_dest_name(57u),"REC BARS"));
+    mi_button(&s,MI_B_SEL,9502);
+    mi_rotate(&s,MI_EN_K1,50);
+    assert(s.video_params[0]==50u);
+    mi_rotate(&s,MI_EN_K2,20);
+    assert(s.video_params[1]==20u);
+    mi_button(&s,MI_B_SEQ,9503);
+    assert(s.rec_bars==2u);
+    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.rec_bars==4u);
+    mi_rotate(&s,MI_EN_PRESETS,-1);
+    assert(s.rec_bars==2u);
+    assert(mi_state_valid(&s));
+    puts("PASS: REC, FMDrum, OSC/FILTER, new FX, LFO destinations, SEL, saved-state bounds");
     return 0;
 }
