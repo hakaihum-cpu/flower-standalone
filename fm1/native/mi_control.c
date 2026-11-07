@@ -177,6 +177,10 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
             }
             if(s->fx_slot)s->fx2=candidate;
             else s->fx=candidate;
+            /* Expose the requested pitch controls immediately when choosing
+             * DREAMY/EUREKA. PRESETS toggles back to MODE/WET/TIME controls. */
+            s->fx_page=(candidate==MI_FX_DREAMY||
+                        candidate==MI_FX_EUREKA)?1u:0u;
             return;
         }
         if(k==1)p=s->fx_slot?&s->wet2:&s->wet;
