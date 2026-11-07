@@ -127,6 +127,14 @@ jobs:
               fm1/native/host_fx_preview.txt /tmp/miyako-host-preflight
             /tmp/fm1-base/miyako/build/host/miyako_host \
               fm1/native/host_eureka_preview.txt /tmp/miyako-host-preflight
+            # Test the real host audio already rendered above. Source VQ
+            # image placeholders do not affect the native sound processing.
+            test -s /tmp/miyako-host-preflight/MIYAKO_FX_PREVIEW.wav
+            test -s /tmp/miyako-host-preflight/MIYAKO_EUREKA_AUDIO.wav
+            python3 fm1/native/tools/check_host_wav.py \
+              /tmp/miyako-host-preflight/MIYAKO_FX_PREVIEW.wav
+            python3 fm1/native/tools/check_eureka_wav.py \
+              /tmp/miyako-host-preflight/MIYAKO_EUREKA_AUDIO.wav
       - run:
           name: Install pinned JieLi compiler and minimum AC79 packaging inputs
           command: |

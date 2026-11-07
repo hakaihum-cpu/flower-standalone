@@ -100,6 +100,11 @@ for smoke in ("host_smoke.txt", "host_fx_preview.txt", "host_eureka_preview.txt"
     assert command in ci, "missing early host preflight: " + smoke
     assert ci.index(command) < ci.index(preflight_name)
 assert ci.index("mkdir -p /tmp/miyako-host-preflight") < ci.index(preflight_name)
+for wav_check in ("check_host_wav.py", "check_eureka_wav.py"):
+    name = "python3 fm1/native/tools/" + wav_check
+    assert name in ci and ci.index(name) < ci.index(preflight_name), (
+        "missing early audio preflight: " + wav_check
+    )
 assert ci.index("Reconstruct all 144 original") < ci.index("Compile FM-1 native platform host")
 assert "grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB'" in ci
 assert "mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/test_mi_audio.c" in ci
