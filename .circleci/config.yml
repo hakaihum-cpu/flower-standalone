@@ -87,8 +87,9 @@ jobs:
             # Use fm1-base's stock backup/resources facility. Preserve all
             # 488 approved photos and never consume the settings sector.
             python3 fm1/native/tools/pack_miyako_resource.py \
-              fm1/native/mi_tile_atlas.h /tmp/fm1-base/miyako/miyako_media.bin
-            test "$(stat -c %s /tmp/fm1-base/miyako/miyako_media.bin)" -eq 92928
+              fm1/native/mi_tile_atlas.h fm1/native/mi_new_two_sheets_vq.h \
+              /tmp/fm1-base/miyako/miyako_media.bin
+            test "$(stat -c %s /tmp/fm1-base/miyako/miyako_media.bin)" -eq 119520
             # Correct product ID BEFORE compiling app code, including the
             # running FM-1 identity, all metadata, and final FWSC markers.
             # The upstream pinned builder defaults to suffix 00.
@@ -244,14 +245,14 @@ jobs:
             test -s /tmp/fm1-base/miyako/build/miyako-res.bin
             cp /tmp/fm1-base/miyako/build/miyako-res.bin \
               fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin
-            test "$(stat -c %s fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin)" -eq 92960
+            test "$(stat -c %s fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin)" -eq 119552
             printf '%s\n' \
               'MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE' \
               'Built without the KARMA application and DSP.' \
               'REEL, DREAMY, DELAY, REVERB and CHORUS are native FM-1 DSP implementations.' \
               'Original 144 EFFECTS and 576 EUREKA source frames are 16-colour VQ.' \
               'Install MIYAKO-FM1-NATIVE-DEV-res.bin with the matching FWSC using the fm1-base installer.' \
-              'The separate resource holds 488 original user-image tiles (same 16-colour VQ).' \
+              'The separate resource holds all 628 original user-image tiles: previous 488 + five-sheet set's additional 140 (same 16-colour VQ).' \
               'REC internal 2s, EUREKA short-buffer 2s, two serial FX with conflict guards.' \
               'This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.' \
               > fm1-dist/README_BEFORE_INSTALL.txt
