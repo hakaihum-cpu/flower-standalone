@@ -61,6 +61,8 @@ void mi_init(mi_state_t *s)
     s->fx_options[MI_FX_DREAMY][1] = 80;
     s->fx_options[MI_FX_EUREKA][0] = 48;
     s->fx_options[MI_FX_EUREKA][1] = 64;
+    s->osc2_wave=0u;s->osc2_level=0u;s->osc2_detune=64u;
+    s->osc2_octave=2u;s->osc_page=0u;
     /* REC editor: IN=0, OUT=127, pitch=0 semitones, level=100. */
     s->seq[0]=0;s->seq[1]=127;s->seq[2]=3;s->seq[3]=100;
 }
@@ -74,7 +76,10 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
     if (!s) return result(MI_ACTION_NONE, 0);
     switch (b) {
     case MI_B_HOME: view(s, MI_HOME); break;
-    case MI_B_EDIT: view(s, MI_OSC); break;
+    case MI_B_EDIT:
+        if(s->view==MI_OSC)s->osc_page^=1u;
+        else{s->osc_page=0u;view(s, MI_OSC);}
+        break;
     case MI_B_FX:
         if(s->view==MI_FX)s->fx_slot^=1u;
         else{view(s,MI_FX);s->fx_slot=0;}
@@ -126,10 +131,17 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         if (k == 3) p = &s->level;
         break;
     case MI_OSC:
-        if (k == 0) { p = &s->wave; hi = 3; }
-        if (k == 1) p = &s->width;
-        if (k == 2) p = &s->sub;
-        if (k == 3) p = &s->crush;
+        if(s->osc_page==0u){
+            if (k == 0) { p = &s->wave; hi = 3; }
+            if (k == 1) p = &s->width;
+            if (k == 2) p = &s->sub;
+            if (k == 3) p = &s->crush;
+        }else{
+            if(k==0){p=&s->osc2_wave;hi=3;}
+            if(k==1)p=&s->osc2_detune;
+            if(k==2)p=&s->osc2_level;
+            if(k==3){p=&s->osc2_octave;hi=4;}
+        }
         break;
     case MI_FX: {
         unsigned mode=s->fx_slot?s->fx2:s->fx;
@@ -191,7 +203,10 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
     if (!s || !steps) return result(MI_ACTION_NONE, 0);
     switch (e) {
     case MI_EN_ALGORITHM:
-        s->wave = (uint8_t)limited(s->wave, steps > 0 ? 1 : -1, 0, 3);
+        if(s->view==MI_OSC&&s->osc_page)
+            s->osc2_wave=(uint8_t)limited(s->osc2_wave,steps>0?1:-1,0,3);
+        else
+            s->wave=(uint8_t)limited(s->wave,steps>0?1:-1,0,3);
         break;
     case MI_EN_PRESETS: {
         unsigned next = (unsigned)limited(s->preset, steps > 0 ? 1 : -1, 0, 5);
@@ -241,7 +256,10 @@ int mi_state_valid(const mi_state_t *s)
         s->global[0] < 40 || s->global[0] > 240 ||
         s->global[1] < 0 || s->global[1] > 100 ||
         s->global[2] < -50 || s->global[2] > 50 ||
-        s->global[3] < 0 || s->global[3] > 2)
+        s->global[3] < 0 || s->global[3] > 2 ||
+        s->osc2_wave>3u || s->osc2_level>127u ||
+        s->osc2_detune>127u || s->osc2_octave>4u ||
+        s->osc_page>1u)
         return 0;
     for (i = 0; i < 4u; ++i) {
         if (s->env[i] > 127u || s->lfo[i] > 127u)
@@ -295,6 +313,10 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
     };
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
     if (s->view == MI_VIDEO) return "";
+    if (s->view==MI_OSC && s->osc_page){
+        static const char *const osc2_names[4]={"WAVE2","DETUNE","MIX2","OCT2"};
+        return osc2_names[k];
+    }
     if (s->view == MI_FX && k >= 2) {
         unsigned fx=s->fx_slot?s->fx2:s->fx;
         if (fx == MI_FX_REEL) return k == 2 ? "WOW" : "FLTR";
@@ -315,7 +337,11 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
     case MI_HOME:
         return k == 0 ? s->wave : k == 1 ? s->fx : k == 2 ? s->wet : s->level;
     case MI_OSC:
-        return k == 0 ? s->wave : k == 1 ? s->width : k == 2 ? s->sub : s->crush;
+        if(s->osc_page)
+            return k==0?s->osc2_wave:
+                   k==1?(int32_t)s->osc2_detune-64:
+                   k==2?s->osc2_level:(int32_t)s->osc2_octave-2;
+        return k==0?s->wave:k==1?s->width:k==2?s->sub:s->crush;
     case MI_VIDEO: return 0;
     case MI_FX: {
         unsigned fx=s->fx_slot?s->fx2:s->fx;
