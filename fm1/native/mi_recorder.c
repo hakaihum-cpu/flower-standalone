@@ -64,8 +64,8 @@ void mi_rec_configure(mi_recorder_t *r,unsigned bpm,unsigned bars,
         step=(float)MI_REC_CAPACITY/(192.f*r->clock_period);
     if(step>0.95f)step=0.95f;
     if(step<0.001f)step=0.001f;
-    if(!r->recording&&!r->playing ||
-       (r->recording&&!r->overdubbing))r->capture_step=step;
+    if((!r->recording && !r->playing) ||
+       (r->recording && !r->overdubbing))r->capture_step=step;
     if(!r->playing&&!r->recording&&!r->armed)r->play_step=step;
     /* Once locked to a MIDI master, playback can follow tempo drift
      * without re-recording or adding storage. */
