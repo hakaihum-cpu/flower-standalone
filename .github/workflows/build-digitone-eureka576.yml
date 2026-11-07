@@ -1,11 +1,11 @@
-name: Digitone PG82 EXCLUSIVE FX + USER EUREKA TILES (PG79 protected)
+name: Digitone PG83 EUREKA YELLOW PADDING (PG79 protected)
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   build:
-    if: github.ref == 'refs/heads/feature/digitone-eureka-user-tiles-20261107'
+    if: github.ref == 'refs/heads/feature/digitone-eureka-yellow-padding-20261107'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -34,8 +34,8 @@ jobs:
           test "$(stat -c '%s' ports/digitone_eureka576/seek.bin)" -eq 98688
           test -s ports/digitone_eureka576/eureka_lcd_preview.png
           python3 ports/digitone_eureka576/tests/verify_user_tiles.py
-          echo 'ef27b3bf8b85a0cdb3b7461df0a5d76b110138ddd7bf1177deb3e8f78d865c47  ports/digitone_eureka576/frames.bin' | sha256sum -c -
-          echo 'd5757d7293d2ef04536518ab07927a7768d52f9db7bbdc7abdc52e7acab049e3  ports/digitone_eureka576/seek.bin' | sha256sum -c -
+          echo 'bd7577db4d789f3a6b5bbae819cd6f5d5604eb4851d0dcf0d7f6a2ac67d4a411  ports/digitone_eureka576/frames.bin' | sha256sum -c -
+          echo '1866938edb4abef475e01e20ffa8a096122637882369173b3c65585476fa8b6d  ports/digitone_eureka576/seek.bin' | sha256sum -c -
           (
             cd ports/digitone_eureka576
             gcc -std=c11 -Wall -Wextra -Werror -Wconversion -O1 -g \
@@ -234,11 +234,11 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_release"
           python3 -m elekloader.patch --stock "$STOCK" --mod "$CORE" \
             --mod "$VISUAL_MOD" --mod "$RACK_MOD" \
-            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_FX_RACK_CPUFIX_USER_TILES_PG82_TRIAL.syx" \
-            --version PG82
+            --out "$GITHUB_WORKSPACE/_release/Digitone_OS1.44_FX_RACK_USER_TILES_YELLOW_PG83_TRIAL.syx" \
+            --version PG83
           (
             cd "$GITHUB_WORKSPACE/_release"
-            sha256sum Digitone_OS1.44_FX_RACK_CPUFIX_USER_TILES_PG82_TRIAL.syx > SHA256SUMS.txt
+            sha256sum Digitone_OS1.44_FX_RACK_USER_TILES_YELLOW_PG83_TRIAL.syx > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
           cp "$VISUAL_MOD" "$RACK_MOD" "$GITHUB_WORKSPACE/_release/"
@@ -250,7 +250,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Digitone-OS1.44-FOUR-FX-USER-TILES-PG82-TRIAL
+          name: Digitone-OS1.44-USER-TILES-YELLOW-PG83-TRIAL
           path: _release/
           if-no-files-found: error
           retention-days: 30
