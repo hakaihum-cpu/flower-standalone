@@ -433,18 +433,20 @@ static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
     if(x+w>240)w=240-x;
     if(w>0&&h>0)cv_rect(x,y,w,h,rgb);
 }
-/* Keep user-supplied photo colors recognizable. Only a conservative blue
- * compensation applies to yellow-biased new sheets, never the face geometry,
- * pixel indices, VQ maps or existing 488-color resource offsets. */
-static uint16_t mi_photo_neutral_rgb(uint16_t rgb)
+/* 16 RGB565 colors extracted from the user's actual reference image.
+ * Recolor old GRAY and yellow-biased palettes without changing source
+ * pixel indices, original faces, animation order, or installed res.bin. */
+static const uint16_t mi_user_reference_rgb565[16]={
+    0x0000u,0x1841u,0x28a2u,0x5101u,0x4184u,0x49c5u,0x6206u,0x7a05u,0x89e4u,0x8b0au,0xa2c6u,0xd2c6u,0xabacu,0xec49u,0xdd50u,0xfdd1u
+};
+static uint16_t mi_photo_reference_rgb(uint16_t rgb)
 {
-    unsigned r=(rgb>>11u)&31u,g=(rgb>>5u)&63u,b=rgb&31u;
-    unsigned g5=(g+1u)/2u;
-    if(r>=g5&&g5>b+1u){
-        unsigned lift=(g5-b+4u)/5u;
-        b=b+lift>31u?31u:b+lift;
-    }
-    return (uint16_t)((r<<11u)|(g<<5u)|b);
+    unsigned r=((unsigned)(rgb>>11u)&31u)*255u/31u;
+    unsigned g=((unsigned)(rgb>>5u)&63u)*255u/63u;
+    unsigned b=((unsigned)rgb&31u)*255u/31u;
+    unsigned luma=(77u*r+150u*g+29u*b)>>8u;
+    unsigned index=(luma*15u+127u)/255u;
+    return mi_user_reference_rgb565[index];
 }
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
 static uint16_t mi_photo_palette[16];
@@ -486,8 +488,7 @@ static void mi_photo_decode(unsigned frame)
             unsigned off=palette_base+clip*32u+i*2u;
             uint16_t rgb=(uint16_t)((uint16_t)res[off]|
                                    ((uint16_t)res[off+1u]<<8));
-            mi_photo_palette[i]=frame>=MI_TILE_NEW_FIRST?
-                                mi_photo_neutral_rgb(rgb):rgb;
+            mi_photo_palette[i]=mi_photo_reference_rgb(rgb);
         }
         for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
             for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
@@ -626,91 +627,40 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
                               int32_t size,int32_t clip_left,float activity)
 {
     const int32_t shift=(int32_t)half*120;
-    const unsigned fx=mi_visual_fx();
+    uint32_t resource_length=0u;
     unsigned sy;
-    /* The approved 628 photos are stored in FM-1's separate CRC-checked
-     * resource area, not in FWSC. An updater that writes FWSC alone leaves
-     * plat_res() absent. Do not silently draw an empty black square in
-     * either SEL or FX: use the already-integrated original DREAMY DOT
-     * animation until the matching resource is installed.
-     * Check even a cached photo, as the host/device resource can disappear.
-     * plat_res() is a cheap validity-gated pointer lookup (device/res.c). */
-    {
-        uint32_t resource_length=0u;
-        if(visual_tile>=MI_TILE_COUNT ||
-           !plat_res(&resource_length) ||
-           resource_length<MI_TILE_DATA_BYTES){
-            mi_photo_cached=-1;
-            mi_dreamy_dot_draw_half(half,px,py,size,clip_left);
-            return;
-        }
+    (void)activity;
+    if(visual_tile>=MI_TILE_COUNT||
+       !plat_res(&resource_length)||
+       resource_length<MI_TILE_DATA_BYTES){
+        mi_photo_cached=-1;
+        mi_dreamy_dot_draw_half(half,px,py,size,clip_left);
+        return;
     }
     mi_photo_decode((unsigned)visual_tile);
     if(mi_photo_cached!=(int16_t)visual_tile){
         mi_dreamy_dot_draw_half(half,px,py,size,clip_left);
         return;
     }
+    /* Original 48x48 pixel map: no line tears, white bars or row shifts. */
     for(sy=0u;sy<MI_TILE_SIDE;sy++){
         int32_t top=py+(int32_t)(sy*(unsigned)size/MI_TILE_SIDE)-shift;
         int32_t bottom=py+(int32_t)((sy+1u)*(unsigned)size/MI_TILE_SIDE)-shift;
-        unsigned sample_row=sy,sx=0u;
-        int32_t tear=0;
+        unsigned sx=0u;
         if(bottom<=0||top>=120)continue;
-        if(activity>0.025f&&((sy+visual_generation)%9u)==0u){
-            tear=(int32_t)((visual_rng>>(sy%16u))&7u)-3;
-            if(fx==MI_FX_CHORUS)tear+=(sy&1u)?2:-2;
-            if(fx==MI_FX_DELAY)tear+=((visual_generation>>1u)&1u)?3:0;
-            if(fx==MI_FX_REEL)tear+=(int32_t)((visual_rng>>(sy&15u))&3u);
-            if(fx==MI_FX_DREAMY)tear/=2;
-        }
-        if(activity>0.15f &&
-           ((visual_rng>>((sy/4u*3u)%24u))&3u)==0u &&
-           (fx==MI_FX_EUREKA||fx==MI_FX_DELAY||fx==MI_FX_REEL))
-            sample_row=(sy+4u)%MI_TILE_SIDE;
         while(sx<MI_TILE_SIDE){
-            unsigned first=sx,idx=0u;
-            int32_t col=(int32_t)sx+tear;
-            if(col>=0&&col<(int32_t)MI_TILE_SIDE)
-                idx=mi_photo_index(sample_row,(unsigned)col);
+            unsigned first=sx,idx=mi_photo_index(sy,sx);
             ++sx;
-            while(sx<MI_TILE_SIDE){
-                unsigned next=0u;
-                col=(int32_t)sx+tear;
-                if(col>=0&&col<(int32_t)MI_TILE_SIDE)
-                    next=mi_photo_index(sample_row,(unsigned)col);
-                if(next!=idx)break;
-                ++sx;
-            }
+            while(sx<MI_TILE_SIDE&&mi_photo_index(sy,sx)==idx)++sx;
             if(idx){
                 int32_t x0=px+(int32_t)(first*(unsigned)size/MI_TILE_SIDE);
                 int32_t x1=px+(int32_t)(sx*(unsigned)size/MI_TILE_SIDE);
-                if(x1>x0)
-                    mi_image_rect(x0,top,x1-x0,bottom-top,
-                                  clip_left,mi_photo_palette[idx]);
+                if(x1>x0)mi_image_rect(x0,top,x1-x0,bottom-top,
+                                       clip_left,mi_photo_palette[idx]);
             }
         }
     }
-    /* Same event-driven native VFX overlay as the previous photo path.
-     * FX OFF shows the original supplied image without FX-specific noise. */
-    if(fx!=MI_FX_OFF&&activity>0.05f){
-        unsigned j,n=activity>0.25f?5u:2u;
-        if(fx==MI_FX_DREAMY)n=1u;
-        for(j=0u;j<n;j++){
-            unsigned q=(visual_rng>>(j*5u))^(visual_generation*127u+j*43u);
-            int32_t y=py+(int32_t)(q%(unsigned)size)-shift;
-            int32_t x=px+(int32_t)((q>>7u)%(unsigned)(size-19));
-            mi_image_rect(x,y,12+(int32_t)(q%8u),1,clip_left,C_WHITE);
-        }
-        if(activity>0.28f){
-            unsigned k=(visual_generation*17u+visual_rng)%81u;
-            int32_t x=px+(int32_t)(k%9u)*(size/10);
-            int32_t y=py+(int32_t)(k/9u)*(size/10)-shift;
-            mi_image_rect(x,y,2,2,clip_left,YELLOW);
-        }
-    }
 }
-
-
 /* Original 144 + 576 VQ frame banks remain available alongside photo tiles.
  * The original encoding is 128x78; its aspect is not distorted here. */
 static void mi_media_draw_scaled_half(unsigned half,int32_t px,int32_t py,
@@ -750,38 +700,6 @@ static void mi_media_draw_scaled_half(unsigned half,int32_t px,int32_t py,
         }
     }
 }
-/* Apply FX-linked analog-video defects to any media bank. The underlying
- * original EFFECTS/EUREKA frame sequence stays untouched. Event-seeded noise
- * is deterministic between played note attacks; never free-running random. */
-static void mi_video_vfx_half(unsigned half,int32_t x,int32_t y,
-                              int32_t w,int32_t h,float activity)
-{
-    unsigned fx=mi_visual_fx(),n,i;
-    int32_t shift=(int32_t)half*120;
-    uint32_t seed=visual_rng^(visual_generation*0x9e3779b9u);
-    if(activity<0.007f)return;
-    n=activity>0.18f?5u:2u;
-    if(fx==MI_FX_DREAMY)n=1u;
-    if(fx==MI_FX_REEL||fx==MI_FX_EUREKA)n+=2u;
-    for(i=0u;i<n;i++){
-        uint32_t q=seed^(i*0x45d9f3bu);
-        int32_t liney=y+(int32_t)(q%(uint32_t)h)-shift;
-        int32_t linex=x+(int32_t)((q>>13u)%(uint32_t)(w-18));
-        int32_t width=8+(int32_t)((q>>7u)%18u);
-        uint16_t color=fx==MI_FX_REVERB?RGB(116,116,116):
-                       fx==MI_FX_DREAMY?RGB(170,170,170):C_WHITE;
-        cv_rect(linex,liney,width,1,color);
-    }
-    if(fx==MI_FX_CHORUS && activity>0.08f){
-        /* Lightweight video-double/ghost line, no second image buffer. */
-        cv_rect(x+3,y+h/2-shift,w-8,1,RGB(122,122,122));
-    }
-    if(fx==MI_FX_REEL && activity>0.08f){
-        /* Tracking line at 8-mm-like field boundary. */
-        cv_rect(x,y+(int32_t)(visual_generation%(uint32_t)h)-shift,w,1,
-                RGB(132,132,132));
-    }
-}
 static void mi_media_draw_half(unsigned half)
 {
     unsigned mode=mi_visual_mode();
@@ -790,83 +708,68 @@ static void mi_media_draw_half(unsigned half)
     else if(mode==8u)mi_dreamy_dot_draw_half(half,0,0,240,0);
     else{
         mi_media_draw_scaled_half(half,0,47,240,146,0,mode==7u);
-        mi_video_vfx_half(half,0,47,240,146,audio_activity);
     }
 }
 /* Intentionally limited by the FM-1's physical 240x240 LCD: 2x2 compact
  * hardware knobs on the left; a live square source tile on the right. */
+/* 240px-wide real video above the four compact K1-K4 readouts.
+ * EUREKA, DREAMY and all user-photo banks use the same enlarged FX area. */
 static void mi_fx_dial(unsigned half,int32_t x,int32_t y,unsigned knob)
 {
-    static const int8_t cx[12]={0,8,14,17,14,8,0,-8,-14,-17,-14,-8};
-    static const int8_t cy[12]={-17,-14,-8,0,8,14,17,14,8,0,-8,-14};
-    static const int8_t hx[11]={-10,-12,-12,-9,-5,0,5,9,12,12,10};
-    static const int8_t hy[11]={10,7,2,-5,-10,-13,-10,-5,2,7,10};
+    static const int8_t cx[12]={0,5,8,10,8,5,0,-5,-8,-10,-8,-5};
+    static const int8_t cy[12]={-10,-8,-5,0,5,8,10,8,5,0,-5,-8};
+    static const int8_t hx[11]={-6,-8,-8,-6,-3,0,3,6,8,8,6};
+    static const int8_t hy[11]={6,4,1,-3,-7,-8,-7,-3,1,4,6};
     char val[16];
-    unsigned i;
-    int32_t oy=y-(int32_t)half*120;
-    int32_t center=x+29,mid=oy+23;
+    unsigned i,fx=state.fx_slot?state.fx2:state.fx;
     const char *label=mi_param_name(&state,knob);
     int32_t v=mi_param_value(&state,knob);
     unsigned dial=(unsigned)(v<0?0:v);
+    int32_t oy=y-(int32_t)half*120,center=x+29,mid=oy+13;
     if(knob==0u&&!state.fx_page){
-        unsigned m=state.fx_slot?state.fx2:state.fx;
-        textcpy(val,mi_fx_name((mi_fx_t)m),sizeof val);
-        dial=m*127u/(MI_FX_COUNT-1u);
+        textcpy(val,mi_fx_name((mi_fx_t)fx),sizeof val);
+        dial=fx*127u/(MI_FX_COUNT-1u);
     }else{
         number(v,val);
-        if(state.fx_page){
-            unsigned fx=state.fx_slot?state.fx2:state.fx;
-            if(fx<MI_FX_COUNT&&knob==0u)
-                dial=state.fx_extra[fx][0]; /* +/-12 st value, 0..127 arc */
-            if(fx<MI_FX_COUNT&&knob==1u)
-                dial=state.fx_extra[fx][1]>=64u?127u:0u;
+        if(state.fx_page&&fx<MI_FX_COUNT){
+            if(knob==0u)dial=state.fx_extra[fx][0];
+            if(knob==1u)dial=state.fx_extra[fx][1]>=64u?127u:0u;
         }
     }
-    cv_rect(x,oy,57,80,C_WHITE);
-    cv_rect(x+1,oy+1,55,1,C_BLACK);
-    cv_rect(x+1,oy+78,55,1,C_BLACK);
+    cv_rect(x,oy,58,57,C_WHITE);
+    cv_rect(x+1,oy+1,56,55,C_BLACK);
     for(i=0;i<12u;i++){
         unsigned next=(i+1u)%12u;
-        cv_line(center+cx[i],mid+cy[i],center+cx[next],mid+cy[next],C_BLACK);
+        cv_line(center+cx[i],mid+cy[i],center+cx[next],mid+cy[next],C_WHITE);
     }
     i=dial*10u/127u;
-    cv_line(center,mid,center+hx[i],mid+hy[i],C_BLACK);
-    cv_text(x+4,oy+43,&FONT_XS,label,C_BLACK);
-    cv_rect(x+3,oy+59,51,17,C_BLACK);
-    cv_text(x+5,oy+61,&FONT_XS,val,C_WHITE);
+    cv_line(center,mid,center+hx[i],mid+hy[i],YELLOW);
+    cv_text(x+3,oy+27,&FONT_XS,label,C_WHITE);
+    cv_text(x+3,oy+42,&FONT_XS,val,YELLOW);
 }
-/* FX preview must show the WHOLE original image inside the right-hand
- * 116x240 field. Height-fill crop discarded 51-70 percent of the source
- * and made faces/scenes unrecognizable. Preserve aspect, accept margins. */
 static void mi_fx_draw_half(unsigned half)
 {
     const int32_t shift=(int32_t)half*120;
     const unsigned mode=mi_visual_mode();
     const unsigned fx=state.fx_slot?state.fx2:state.fx;
     cv_begin(240,120,C_BLACK);
-    cv_text(4,4-shift,&FONT_S,mi_fx_name((mi_fx_t)fx),C_WHITE);
-    cv_text(75,5-shift,&FONT_XS,state.fx_page?"P2":"P1",YELLOW);
-    cv_text(98,5-shift,&FONT_XS,state.fx_slot?"B":"A",C_WHITE);
-    cv_text(4,20-shift,&FONT_XS,
+    cv_text(3,3-shift,&FONT_XS,mi_fx_name((mi_fx_t)fx),C_WHITE);
+    cv_text(67,3-shift,&FONT_XS,state.fx_page?"P2":"P1",YELLOW);
+    cv_text(87,3-shift,&FONT_XS,state.fx_slot?"FX B":"FX A",C_WHITE);
+    cv_text(129,3-shift,&FONT_XS,
             (fx==MI_FX_DREAMY||fx==MI_FX_EUREKA)?
-            "PRESET:PAGE":"FX:A/B",GREY);
-    cv_rect(3,34-shift,117,1,RGB(100,100,100));
-    mi_fx_dial(half,3,36,0u);
-    mi_fx_dial(half,63,36,1u);
-    mi_fx_dial(half,3,123,2u);
-    mi_fx_dial(half,63,123,3u);
+            "PRESET:P1/2":"FX:A/B",GREY);
     if(mi_visual_photo_bank(mode)>=0){
-        /* Full 48x48 original photo: exactly 116x116, centered vertically. */
-        mi_tile_draw_half(half,123,62,116,123,audio_activity);
+        mi_tile_draw_half(half,40,18,160,0,audio_activity);
     }else if(mode==8u){
-        /* Full original DOT portrait; neither side may be cropped. */
-        mi_dreamy_dot_draw_half(half,123,62,116,123);
+        mi_dreamy_dot_draw_half(half,40,18,160,0);
     }else{
-        /* Full 128x78 clip: 116x71 (0.35% AR rounding) fits right side.
-         * No 393px off-screen render; all human faces remain in frame. */
-        mi_media_draw_scaled_half(half,123,84,116,71,123,mode==7u);
-        mi_video_vfx_half(half,123,84,116,71,audio_activity);
+        mi_media_draw_scaled_half(half,0,25,240,146,0,mode==7u);
     }
+    mi_fx_dial(half,1,183,0u);
+    mi_fx_dial(half,61,183,1u);
+    mi_fx_dial(half,121,183,2u);
+    mi_fx_dial(half,181,183,3u);
     cv_blit(0,half*120u);
 }
 static void mi_graph_env(void)
