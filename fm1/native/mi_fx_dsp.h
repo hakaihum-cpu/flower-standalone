@@ -24,6 +24,11 @@ void mi_fx_dsp_reset_shared(mi_fx_dsp_t *p);
 /* EUREKA has a wet-only output. The mixer must keep DRY audible until
  * history containing an actual note (not pre-roll silence) fills TIME+HAZE. */
 int mi_fx_dsp_eureka_ready(const mi_fx_dsp_t *p, unsigned time, unsigned haze);
+/* Extended DSP controls are real: pitch, reverse, density and feedback.
+ * Original two FX parameters and legacy call signature are retained. */
+float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
+                           float sample_rate,unsigned p1,unsigned p2,
+                           const uint8_t extra[4]);
 float mi_fx_dsp_process(mi_fx_dsp_t *p, unsigned mode, float dry,
                         float sample_rate, unsigned p1, unsigned p2);
 #endif
