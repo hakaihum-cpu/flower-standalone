@@ -34,6 +34,37 @@ This section records **source implementation**, NOT FM-1 flashability.
   real source media packaging and user/device acceptance are still unverified.
   No CircleCI pipeline was triggered.
 
+## Audio and storage regression audit
+
+The DSP was replayed as a **separate native C audio simulation**, compiled
+and executed with GCC and Clang AddressSanitizer/UndefinedBehaviorSanitizer,
+then measured via FFT. With a 220 Hz sine input and the main DREAMY or EUREKA
+grain path:
+
+| mode | PITCH min | PITCH centre | PITCH max |
+| --- | --- | --- | --- |
+| DREAMY | dominant 110 Hz | dominant 220 Hz | dominant 442 Hz |
+| EUREKA | dominant 104 Hz | dominant 220 Hz | dominant 442 Hz |
+
+These measured pitch movements are *not proof* that the complete original
+MIYAKO processors, FM-1 target DSP, latency or CPU budget are acceptable.
+Synthetic test wave input and recreated processing equations were used.
+Full native source compile, target link and flash packaging remain blocked.
+
+**Storage API re-audit:** Pinned `fm1-base/device/storage.c` `st_load()`
+truncates its result to a caller-provided maximum, therefore the old-store
+migration must check `plat_store_size(OBJ_SETTINGS)` FIRST. The implementation
+now distinguishes a real legacy 68-byte MI13 stored object from the new
+104-byte saved object and rejects corrupt newer objects rather than
+accidentally accepting their prefix as an old save. Exactly these size
+checks are present in the source; target ABI has not been independently linked.
+
+**CI source contract:** previously referenced the obsolete
+`mi_fx_dsp_process` dispatch in `mi_audio.c`. It now checks the real
+`mi_fx_dsp_process_ex` call with six routed FX parameters to avoid a repeat
+of a stale-source assertion failure. No additional CircleCI test job or build
+was started.
+
 ## One-to-one mapping of eight original requirements
 
 | ID | User requirement | Observed source status at baseline | Acceptance conditions |
