@@ -109,7 +109,13 @@ void app_render(int32_t *lr,uint32_t n,uint32_t master_q12)
      if(sample<0)sample=-sample;
      if(sample>peak)peak=sample;
  }
- audio_activity=(float)peak/8388607.f;
+ /* One audio block can be shorter than the 33-ms video tick. Hold onset
+  * peaks briefly so staccato notes cannot disappear before the UI sees them. */
+ {
+     float value=(float)peak/8388607.f;
+     float retained=audio_activity*0.91f;
+     audio_activity=value>retained?value:retained;
+ }
 }
 void app_say(const char *a,const char *b)
 {
@@ -202,9 +208,9 @@ static void input(void)
      steps=plat_enc((int)i);
      if(steps){
          if(i==EN_SELECT&&(state.view==MI_FX||state.view==MI_VIDEO)){
-             int32_t next=(int32_t)visual_choice+(steps>0?1:-1);
-             if(next<0)next=8;
-             if(next>8)next=0;
+             /* Preserve each hardware detent; large steps must not be lost. */
+             int32_t next=((int32_t)visual_choice+steps)%9;
+             if(next<0)next+=9;
              visual_choice=(uint8_t)next;
              visual_last_mode=255u; /* force new bank selection */
          }else mi_rotate(&state,map_encoder(i),steps);
@@ -514,6 +520,11 @@ static void mi_fx_draw_half(unsigned half)
     mi_fx_dial(half,5,122,2u);
     mi_fx_dial(half,65,122,3u);
     cv_text(133,32-shift,&FONT_XS,"PREVIEW",C_WHITE);
+    if(mode<MI_TILE_BANKS){
+        char ordinal[12];
+        number((int32_t)(visual_tile-(uint16_t)mi_tile_bank_first[mode]+1u),ordinal);
+        cv_text(196,32-shift,&FONT_XS,ordinal,C_WHITE);
+    }
     cv_rect(130,46-shift,108,1,C_WHITE);
     cv_rect(130,46-shift,1,108,C_WHITE);
     cv_rect(237,46-shift,1,108,C_WHITE);
@@ -721,10 +732,12 @@ void app_frame(void)
      video_time=now;
      int16_t old_effects=video.effects_frame,old_eureka=video.eureka_frame;
      unsigned visual_changed=mi_visual_step(audio_activity);
-     mi_video_tick(&video,audio_activity,mi_visual_mode()==7u);
+     unsigned mode=mi_visual_mode();
+     /* Never process off-screen video banks when a photo-tile sheet is chosen. */
+     if(mode>=6u)mi_video_tick(&video,audio_activity,mode==7u);
      if((state.view==MI_VIDEO||state.view==MI_FX) &&
-        (visual_changed||old_effects!=video.effects_frame||
-         old_eureka!=video.eureka_frame))
+        (visual_changed||(mode==6u&&old_effects!=video.effects_frame)||
+         (mode==7u&&old_eureka!=video.eureka_frame)))
          redraw=1;
      if(state.view==MI_SEQ && (audio.recorder.recording||audio.recorder.playing))
          redraw=1;
