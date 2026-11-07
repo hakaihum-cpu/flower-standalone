@@ -311,9 +311,9 @@ static void mi_media_decode(unsigned frame,unsigned eureka)
 /* Six 32x32 black/white banks: each 8x8 source block is mapped to one
  * dictionary entry. Selective base64 byte reads keep only one 9.9 KiB
  * vector atlas in XIP; there is no 488-frame runtime allocation. */
-/* Only the historical 1-bit atlas uses base64. The RGB565 VQ format uses
- * the same C palette/codebook/map arrays as existing EFFECTS directly. */
-#if !defined(MI_TILE_VQ_CLIPS)
+/* Decode bytes directly from the existing EFFECTS RGB565 16-colour
+ * 8x4 VQ stream. Base64 is only the storage wrapper for the unchanged
+ * palette/codebook/index data (not a new image codec). */
 static unsigned mi_atlas_sextet(char c)
 {
     if(c>='A'&&c<='Z')return (unsigned)(c-'A');
@@ -330,7 +330,6 @@ static uint8_t mi_atlas_byte(unsigned pos)
                 mi_atlas_sextet(mi_tile_atlas_base64[i+3u]);
     return (uint8_t)(v>>(16u-8u*(pos%3u)));
 }
-#endif
 /* Display effect follows the actual active FX, independently of which
  * picture bank was selected by the performer. */
 static unsigned mi_visual_fx(void)
@@ -402,29 +401,36 @@ static unsigned mi_visual_step(float activity)
 /* Source-space bitmaps remain square even if the original sheet was 720x720.
  * Nearest-neighbour expansion is deliberately rough: analog video/glitch.
  * Only visible rows of each 120-row LCD half are touched. */
-#if defined(MI_TILE_VQ_CLIPS)
-/* SAME 8x4, 256-code, 16-colour RGB565 VQ as existing EFFECTS.
- * Decode the requested square photo into a 4bpp scratch buffer ONCE per
- * frame; both LCD halves then reuse it. Do not decode base64 per LCD pixel. */
+/* RGB565 / 4bpp VQ: exact SAME 8x4 dictionary/map layout as existing
+ * EFFECTS, stored as one contiguous source data block. Decoder runs only
+ * when the frame changes, never inside the audio callback. */
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
 static uint16_t mi_photo_palette[16];
 static int16_t mi_photo_cached=-1;
 static void mi_photo_decode(unsigned frame)
 {
+    const unsigned palettes=0u;
+    const unsigned books=MI_TILE_VQ_PALETTE_BYTES;
+    const unsigned maps=MI_TILE_VQ_PALETTE_BYTES+MI_TILE_VQ_CODEBOOK_BYTES;
     unsigned clip,ty,tx,row,col,i;
     if(frame>=MI_TILE_COUNT||mi_photo_cached==(int16_t)frame)return;
     clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
-    /* Identical RGB565 palette/8x4 nibble-tile decode as mi_media_decode. */
-    for(i=0u;i<16u;i++)
-        mi_photo_palette[i]=mi_photo_vq_palette[clip][i];
+    if(clip>=MI_TILE_VQ_CLIPS)return;
+    for(i=0u;i<16u;i++){
+        unsigned off=palettes+clip*32u+i*2u;
+        mi_photo_palette[i]=(uint16_t)((uint16_t)mi_atlas_byte(off)|
+                                        ((uint16_t)mi_atlas_byte(off+1u)<<8));
+    }
     for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
         for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
-            unsigned id=mi_photo_vq_maps[frame][ty*MI_TILE_VQ_COLS+tx];
-            const uint8_t *tile=mi_photo_vq_tilebook[clip][id];
+            unsigned map_pos=maps+frame*MI_TILE_VQ_MAP_STRIDE+
+                              ty*MI_TILE_VQ_COLS+tx;
+            unsigned id=mi_atlas_byte(map_pos);
+            unsigned tile_base=books+clip*4096u+id*16u;
             for(row=0u;row<4u;row++)
                 for(col=0u;col<4u;col++){
                     unsigned at=(ty*4u+row)*(MI_TILE_SIDE/2u)+tx*4u+col;
-                    mi_photo_pixels[at]=tile[row*4u+col];
+                    mi_photo_pixels[at]=mi_atlas_byte(tile_base+row*4u+col);
                 }
         }
     mi_photo_cached=(int16_t)frame;
@@ -500,87 +506,7 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
         }
     }
 }
-#else
-/* Compatibility fallback until the already-created 16-colour PHOTO VQ
- * header is committed: old 32x32 data remains loadable and compilable. */
-static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
-                              int32_t size,float activity)
-{
-    const int32_t shift=(int32_t)half*120;
-    const unsigned fx=mi_visual_fx();
-    unsigned sy;
-    for(sy=0;sy<32u;sy++){
-        int32_t top=py+(int32_t)(sy*(unsigned)size/32u)-shift;
-        int32_t bottom=py+(int32_t)((sy+1u)*(unsigned)size/32u)-shift;
-        uint8_t line[4];
-        unsigned sample_row=sy;
-        int32_t tear=0;
-        unsigned bx,sx;
-        if(bottom<=0||top>=120)continue;
-        /* Effects are transformations of user-owned pixels only.
-         * Delay = stagger, Chorus = double-tracking, Reel = jitter,
-         * Eureka = rhythmic large tearing, Dreamy = restrained motion. */
-        if(activity>0.025f&&((sy+visual_generation)%9u)==0u){
-            tear=(int32_t)((visual_rng>>(sy%16u))&7u)-3;
-            if(fx==MI_FX_CHORUS)tear+=sy&1u?2:-2;
-            if(fx==MI_FX_DELAY)tear+=((visual_generation>>1u)&1u)?3:0;
-            if(fx==MI_FX_REEL)tear+=((visual_rng>>(sy&15u))&3u);
-            if(fx==MI_FX_DREAMY)tear/=2;
-        }
-        /* Displace whole 8x8 source blocks on strong attacks, VHS tile split.
-         * No extra image data and no mutations to the original source atlas. */
-        if(activity>0.15f &&
-           ((visual_rng>>(sy/8u*3u))&3u)==0u &&
-           (fx==MI_FX_EUREKA||fx==MI_FX_DELAY||fx==MI_FX_REEL))
-            sample_row=(sy+8u)%32u;
-        for(bx=0;bx<4u;bx++){
-            unsigned map_pos=MI_TILE_CODE_BYTES+(unsigned)visual_tile*16u+
-                             (sample_row/8u)*4u+bx;
-            uint8_t code=mi_atlas_byte(map_pos);
-            line[bx]=mi_atlas_byte((unsigned)code*8u+sample_row%8u);
-        }
-        for(sx=0;sx<32u;){
-            unsigned first=sx;
-            int32_t sample=(int32_t)sx+tear;
-            int whiten=sample>=0&&sample<32&&
-                ((line[(unsigned)sample/8u]>>(7u-((unsigned)sample%8u)))&1u);
-            ++sx;
-            while(sx<32u){
-                int32_t sample2=(int32_t)sx+tear;
-                int next=sample2>=0&&sample2<32&&
-                    ((line[(unsigned)sample2/8u]>>(7u-((unsigned)sample2%8u)))&1u);
-                if(next!=whiten)break;
-                ++sx;
-            }
-            if(whiten){
-                int32_t x0=px+(int32_t)(first*(unsigned)size/32u);
-                int32_t x1=px+(int32_t)(sx*(unsigned)size/32u);
-                if(x1>x0)cv_rect(x0,top,x1-x0,bottom-top,C_WHITE);
-            }
-        }
-    }
-    /* Render a few short, event-seeded VHS tracking tears. They only change
-     * with sound onset, so silence is genuinely frozen, not autonomous noise. */
-    if(activity>0.05f){
-        unsigned n=activity>0.25f?5u:2u,j;
-        if(fx==MI_FX_REEL)n+=2u;
-        if(fx==MI_FX_DREAMY)n=1u;
-        for(j=0;j<n;j++){
-            unsigned h=(visual_rng>>(j*5u))^(visual_generation*127u+j*43u);
-            int32_t y=py+(int32_t)(h%(unsigned)size)-shift;
-            int32_t x=px+(int32_t)((h>>7)%(unsigned)(size-19));
-            cv_rect(x,y,12+(int32_t)(h%8u),1,
-                    fx==MI_FX_REVERB?RGB(160,160,160):C_WHITE);
-        }
-        if(activity>0.28f){
-            unsigned k=(visual_generation*17u+visual_rng)%81u;
-            int32_t x=px+(int32_t)(k%9u)*(size/10);
-            int32_t y=py+(int32_t)(k/9u)*(size/10)-shift;
-            cv_rect(x,y,2,2,YELLOW); /* sparse MIYAKO yellow DOT accent */
-        }
-    }
-}
-#endif
+
 
 /* Original 144 + 576 VQ frame banks remain available alongside photo tiles.
  * The original encoding is 128x78; its aspect is not distorted here. */
