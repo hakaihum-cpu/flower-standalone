@@ -6,7 +6,7 @@ FM-1版 `hakaihum-cpu/flower-standalone@feature/fm1-miyako-recorder-eureka-fx-20
 
 **⑦の確定定義：収録したアニメーションは通常SEL画面で使用する。**
 FXプレビューは同じ画像の副次的な使用先であり、FXがOFFでも通常SELに
-戻れる。通常SELのSELECTで**9バンク**を手動固定できる。
+戻れる。通常SELのSELECTで**10バンク**を手動固定できる。
 
 ## ソース実装済み（実機未確認）
 
@@ -16,6 +16,9 @@ FXプレビューは同じ画像の副次的な使用先であり、FXがOFFで�
   映像データは92,928 bytes。古い32×32・1bit形式は使わない。
   元画像からの生成は非可逆だが、元の488箇所を省略していない。
 - **EFFECTS**: 元の144フレーム、収録済み（62,592 bytes）。
+- **TAPE DOT**：元の `Source/MiyakoPixelMotion.h` の `Scene::Tape` にある
+  65×65 DOT格子、2つのリール、60点の円、3本の回転スポーク、カセットレール。
+  同じ24Hz DOT時計と既存LCD描画を使用。追加の画像アセットなし。
 - **DREAMY DOT**：元の `Source/MiyakoPixelMotion.h` の
   `initPortrait()` 原画60×46ドット・2ビット（デコード690 bytes）、
   `Scene::Dreamy` の涙・粒子ストリーム、24Hzタイマー進行を通常SELに実装。
@@ -27,8 +30,8 @@ FXプレビューは同じ画像の副次的な使用先であり、FXがOFFで�
   同一クリップ内進行、必要時のみクリップ切替、無音・一定音量で静止
   する方式を移植し、GitHubとbyte-for-byte一致したCソースを使った
   GCC/Clang ASan/UBSanテストに合格。
-- 6タイル群、EFFECTS、EUREKA、DREAMY DOTは**通常SELのAUTO再生対象**。
-  SELECTで9バンクを切替可能。FXプレビュー専用ではない。
+- 6タイル群、EFFECTS、EUREKA、DREAMY DOT、TAPE DOTは**通常SELのAUTO再生対象**。
+  SELECTで10バンクを切替可能。FXプレビュー専用ではない。
 
 ## 未移植
 
