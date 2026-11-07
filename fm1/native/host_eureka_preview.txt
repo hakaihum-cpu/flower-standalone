@@ -4,6 +4,9 @@ tap FX
 expect view 2
 turn K1 6
 expect fx 6
+# DREAMY/EUREKA select the PITCH page by default.
+# The existing PRESET encoder opens the original MODE/WET/TIME/HAZE page.
+turn PRESET 1
 turn K2 120
 turn K3 30
 turn K4 75
