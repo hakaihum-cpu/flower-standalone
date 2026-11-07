@@ -68,6 +68,7 @@ void mi_audio_init(mi_audio_t *a,float rate)
     a->arp_random=0x50414e5au;
     mi_fx_dsp_init(&native_fx);
     mi_rec_init(&a->recorder);
+    a->video_effective[2]=64u;a->video_effective[3]=64u;
     a->last_mode=MI_FX_OFF;
 }
 void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
@@ -483,6 +484,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         apply_lfo_destination(&snapshot,s->lfo[3],
             lfo_value(s->lfo[1],a->lfo_phase)*(float)s->lfo[2]/127.f);
     rs=&snapshot;
+    for(k=0u;k<4u;k++)a->video_effective[k]=snapshot.video_params[k];
     float scale=clampf(master_q12/4096.f,0.f,1.f)*clampf(rs->level/127.f,0.f,1.f)*5000000.f;
     uint8_t wave=rs->wave==MI_WAVE_MULTI?rs->osc1_wave:
                  rs->wave>3u?0u:rs->wave;
