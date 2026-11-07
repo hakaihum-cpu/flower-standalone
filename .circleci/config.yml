@@ -79,11 +79,16 @@ jobs:
                fm1/native/mi_video.c fm1/native/mi_video.h \
                fm1/native/mi_fx_dsp.c fm1/native/mi_fx_dsp.h \
                fm1/native/mi_recorder.c fm1/native/mi_recorder.h \
-               fm1/native/mi_memory.h fm1/native/mi_tile_atlas.h \
+               fm1/native/mi_memory.h fm1/native/mi_resource_media.h \
                fm1/native/mi_dreamy_dot_portrait.h \
                /tmp/fm1-base/miyako/
             test -s /tmp/fm1-base/miyako/words.tsv
             grep -q '^# url: https://' /tmp/fm1-base/miyako/words.tsv
+            # Use fm1-base's stock backup/resources facility. Preserve all
+            # 488 approved photos and never consume the settings sector.
+            python3 fm1/native/tools/pack_miyako_resource.py \
+              fm1/native/mi_tile_atlas.h /tmp/fm1-base/miyako/miyako_media.bin
+            test "$(stat -c %s /tmp/fm1-base/miyako/miyako_media.bin)" -eq 92928
             # Correct product ID BEFORE compiling app code, including the
             # running FM-1 identity, all metadata, and final FWSC markers.
             # The upstream pinned builder defaults to suffix 00.
@@ -235,6 +240,11 @@ jobs:
               /tmp/fm1-base/miyako/build/loader/ota.bin \
               --base /tmp/fm1-base --product FM-1_933
             cp /tmp/fm1-base/miyako/build/miyako.fwsc fm1-dist/MIYAKO-FM1-NATIVE-DEV.fwsc
+            # The matching upstream resource installer uses this exact stem.
+            test -s /tmp/fm1-base/miyako/build/miyako-res.bin
+            cp /tmp/fm1-base/miyako/build/miyako-res.bin \
+              fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin
+            test "$(stat -c %s fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin)" -eq 92960
             printf '%s\n' \
               'MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE' \
               'Built without the KARMA application and DSP.' \
@@ -243,7 +253,7 @@ jobs:
               'REC internal 2s, EUREKA short-buffer 2s, two serial FX with conflict guards.' \
               'This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.' \
               > fm1-dist/README_BEFORE_INSTALL.txt
-            (cd fm1-dist && sha256sum *.fwsc > SHA256SUMS)
+            (cd fm1-dist && sha256sum *.fwsc *-res.bin > SHA256SUMS)
       - store_artifacts:
           path: fm1-dist
           destination: fm1
