@@ -1,12 +1,6 @@
 name: Digitone PG82 EXCLUSIVE FX + USER EUREKA TILES (PG79 protected)
 on:
   workflow_dispatch:
-  # User-authorized PG82 single-shot build; immediately disarm after queue.
-  push:
-    branches:
-      - feature/digitone-eureka-user-tiles-20261107
-    paths:
-      - .github/workflows/build-digitone-eureka576.yml
 permissions:
   contents: read
 jobs:
