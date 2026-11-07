@@ -3,6 +3,37 @@
 Date: 2026-11-07. Golden baseline: **branch** `feature/fm1-miyako-recorder-eureka-fx-20261107`; prior latest confirmed `855d01c3a3a670b2cb0fe1a87ac0f08b0a012b48`.
 No changes to `main`. No autonomous CircleCI/GitHub Actions builds. This inventory is a work ledger, not a statement of completed hardware validation.
 
+## Working status — source commit tracking
+
+This section records **source implementation**, NOT FM-1 flashability.
+
+- **⑧ OSC2 — source implemented**: independent `osc2_wave`, `osc2_level`,
+  `osc2_detune` (+/-50 cents), `osc2_octave` (-2..+2) per voice with own
+  phase; original OSC1/SUB/CRUSH left intact. EDIT pressed again in OSC
+  toggles OSC1/OSC2 control pages. AUDIO/MIDI 4-voice ARP paths unchanged.
+- **③ and ④ — source implemented, output fidelity unverified**:
+  DREAMY/EUREKA have six real FX-specific controls and one MODE/WET screen
+  page; PRESETS encoder toggles page 1 (MODE, WET, two original options)
+  and page 2 (PITCH, REVERSE, SPREAD or GRAIN, FEEDBACK).
+  Pitch shifts -12 to +12 st, grain read-head reverses, no dummy controls;
+  original JUCE effect behavior has NOT been established.
+- **Saved user settings**: appended fields retain the MI13 prefix.
+  `app.c` tries new full state, then loads old 68-byte MI13 stored state,
+  copies the original prefix into initialized defaults and validates bounds.
+  New stored state = 104 B (host x86-64 ABI check); old store = 68 B.
+  Confirm FM-1 target ABI independently before release.
+- **Local pre-build verification**: full source textual delimiter / include /
+  reference scan passed for modified C/H; isolated GCC/Clang ASan+UBSan
+  preflight tested pitch ratio across all 128 settings (max abs error
+  0.00001669 versus exp2) and 16,362 DREAMY read-head positions
+  (valid range 2377.5..31498.7 in the 32768-sample ring). Tested selected
+  edge EUREKA parameters for bounded read locations. These are **isolated
+  mathematical replays, not compiling original repo sources**.
+- **Build gate remains RED**: Original-source JieLi target compilation,
+  all-mode audio measurement, actual 240x240 display scan, app link budget,
+  real source media packaging and user/device acceptance are still unverified.
+  No CircleCI pipeline was triggered.
+
 ## One-to-one mapping of eight original requirements
 
 | ID | User requirement | Observed source status at baseline | Acceptance conditions |
