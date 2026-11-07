@@ -578,50 +578,30 @@ static void mi_fx_dial(unsigned half,int32_t x,int32_t y,unsigned knob)
     cv_rect(x+3,oy+59,51,17,C_BLACK);
     cv_text(x+5,oy+61,&FONT_XS,val,C_WHITE);
 }
+/* On the physical 240x240 square LCD, knobs take x=2..120 and the
+ * entire right-hand width x=122..239 belongs to imagery, never captions.
+ * A source-square tile fills 116x116 without stretching its aspect ratio. */
 static void mi_fx_draw_half(unsigned half)
 {
     const int32_t shift=(int32_t)half*120;
     const unsigned mode=mi_visual_mode();
     const unsigned fx=state.fx_slot?state.fx2:state.fx;
-    const char *bankname=mode<MI_TILE_BANKS?mi_tile_bank_name[mode]:
-                         mode==7u?"EUREKA":"EFFECTS";
-    unsigned i;
     cv_begin(240,120,C_BLACK);
-    cv_text(5,5-shift,&FONT_XS,"FX /",C_WHITE);
-    cv_text(38,5-shift,&FONT_S,mi_fx_name((mi_fx_t)fx),C_WHITE);
-    cv_text(163,5-shift,&FONT_XS,state.fx_page?"PG2":"PG1",C_WHITE);
-    cv_text(199,5-shift,&FONT_XS,state.fx_slot?"FX B":"FX A",C_WHITE);
-    cv_rect(4,27-shift,232,1,RGB(110,110,110));
-    mi_fx_dial(half,5,34,0u);
-    mi_fx_dial(half,65,34,1u);
-    mi_fx_dial(half,5,122,2u);
-    mi_fx_dial(half,65,122,3u);
-    cv_text(133,32-shift,&FONT_XS,"PREVIEW",C_WHITE);
+    cv_text(4,4-shift,&FONT_S,mi_fx_name((mi_fx_t)fx),C_WHITE);
+    cv_text(75,5-shift,&FONT_XS,state.fx_page?"P2":"P1",YELLOW);
+    cv_text(98,5-shift,&FONT_XS,state.fx_slot?"B":"A",C_WHITE);
+    cv_rect(3,28-shift,117,1,RGB(100,100,100));
+    mi_fx_dial(half,3,36,0u);
+    mi_fx_dial(half,63,36,1u);
+    mi_fx_dial(half,3,123,2u);
+    mi_fx_dial(half,63,123,3u);
     if(mode<MI_TILE_BANKS){
-        char ordinal[12];
-        number((int32_t)(visual_tile-(uint16_t)mi_tile_bank_first[mode]+1u),ordinal);
-        cv_text(196,32-shift,&FONT_XS,ordinal,C_WHITE);
-    }
-    cv_rect(130,46-shift,108,1,C_WHITE);
-    cv_rect(130,46-shift,1,108,C_WHITE);
-    cv_rect(237,46-shift,1,108,C_WHITE);
-    cv_rect(130,153-shift,108,1,C_WHITE);
-    if(mode<MI_TILE_BANKS){
-        mi_tile_draw_half(half,133,49,102,audio_activity);
+        mi_tile_draw_half(half,123,62,116,audio_activity);
     }else{
-        /* 128:78 remains 128:78, not stretched to a false square. */
-        mi_media_draw_scaled_half(half,133,69,102,62,mode==7u);
-        mi_video_vfx_half(half,133,69,102,62,audio_activity);
+        /* Existing MIYAKO VQ source is 128x78. Keep its actual aspect. */
+        mi_media_draw_scaled_half(half,123,85,116,70,mode==7u);
+        mi_video_vfx_half(half,123,85,116,70,audio_activity);
     }
-    cv_text(133,164-shift,&FONT_XS,visual_choice?"LOCK":"AUTO",YELLOW);
-    cv_text(133,180-shift,&FONT_XS,bankname,C_WHITE);
-    cv_text(133,199-shift,&FONT_XS,"VHS / 8MM",RGB(180,180,180));
-    cv_rect(133,213-shift,102,2,RGB(70,70,70));
-    i=(unsigned)(audio_activity*102.f);
-    if(i>102u)i=102u;
-    if(i)cv_rect(133,213-shift,(int32_t)i,2,YELLOW);
-    cv_rect(3,221-shift,234,1,RGB(100,100,100));
-    cv_text(6,225-shift,&FONT_XS,"PRESETS PAGE / SELECT BANK / SEL FULL",C_WHITE);
     cv_blit(0,half*120u);
 }
 static void mi_graph_env(void)
