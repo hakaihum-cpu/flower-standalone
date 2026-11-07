@@ -908,6 +908,7 @@ static void draw(void)
     cv_begin(240,120,C_BLACK);
     cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
     cv_text(140,10,&FONT_XS,
+            state.view==MI_HOME?mi_wave_name(state.wave):
             state.view==MI_OSC?(state.osc_page?"OSC2":"OSC1"):
             mi_view_name(state.view),GREY);
     cv_rect(8,31,224,1,DIM);
@@ -920,9 +921,7 @@ static void draw(void)
                            (state.osc_page?state.osc2_wave:state.osc1_wave):
                            state.view==MI_OSC&&state.osc_page?
                            state.osc2_wave:state.wave;
-        cv_text(12,35,&FONT_XS,
-                state.view==MI_HOME&&state.wave==MI_WAVE_MULTI?
-                "MULTI":mi_wave_name(show_wave),GREY);
+        cv_text(12,35,&FONT_XS,mi_wave_name(show_wave),GREY);
         /* Live pre-FX OSC audio waveform (SINE/SAW/SQUARE/PULSE). */
         {
             uint32_t head=audio.osc_scope_head;
@@ -961,13 +960,16 @@ static void draw(void)
     for(i=0;i<4u;i++){
         int32_t x=8+(int32_t)i*58;
         cv_text(x,24,&FONT_XS,mi_param_name(&state,i),GREY);
-        if((state.view==MI_OSC||state.view==MI_HOME)&&i==0u)
-            textcpy(val,mi_wave_name(state.view==MI_OSC?
-                  (state.osc_page?state.osc2_wave:
-                   state.wave==MI_WAVE_MULTI?state.osc1_wave:state.wave):
-                   (state.wave==MI_WAVE_MULTI?
-                    (state.osc_page?state.osc2_wave:state.osc1_wave):
-                    state.wave)),sizeof val);
+        if((state.view==MI_OSC&&i==0u)||
+           (state.view==MI_HOME&&(i==0u||
+              (state.wave==MI_WAVE_MULTI&&i==2u))))
+            textcpy(val,mi_wave_name(
+                state.view==MI_OSC?
+                    (state.osc_page?state.osc2_wave:
+                     state.wave==MI_WAVE_MULTI?state.osc1_wave:state.wave):
+                i==0u?state.wave:
+                    (state.osc_page?state.osc2_wave:state.osc1_wave)
+                ),sizeof val);
         else if(state.view==MI_HOME&&state.wave==MI_WAVE_MULTI&&i==1u)
             textcpy(val,state.osc_page?"OSC2":"OSC1",sizeof val);
         else if(state.view==MI_LFO&&i==1u)

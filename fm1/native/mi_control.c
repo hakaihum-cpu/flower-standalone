@@ -138,16 +138,21 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     if (k >= 4) return;
     switch (s->view) {
     case MI_HOME:
-        if(k==0){
+        /* HOME K1 selects the engine (including MULTI), not a nested wave.
+         * WET and MODE are FX parameters and no longer appear on OSC HOME. */
+        if(k==0){p=&s->wave;hi=MI_WAVE_MULTI;}
+        if(k==1){
+            if(s->wave==MI_WAVE_MULTI){p=&s->osc_page;hi=1;}
+            else if(s->wave==3u)p=&s->width;
+            else p=&s->sub;
+        }
+        if(k==2){
             if(s->wave==MI_WAVE_MULTI){
-                /* K1 edits the selected OSC waveform, not MULTI value 4. */
                 p=s->osc_page?&s->osc2_wave:&s->osc1_wave;
                 hi=3;
-            }else{p=&s->wave;hi=MI_WAVE_MULTI;}
+            }else if(s->wave==3u)p=&s->sub;
+            else p=&s->crush;
         }
-        if(k==1){if(s->wave==MI_WAVE_MULTI){p=&s->osc_page;hi=1;}
-                 else{p=&s->fx;hi=MI_FX_COUNT-1;}}
-        if(k==2)p=s->wave==MI_WAVE_MULTI?&s->osc2_detune:&s->wet;
         if(k==3)p=&s->level;
         break;
     case MI_OSC:
@@ -372,9 +377,19 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
     };
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
     if (s->view == MI_VIDEO) return "";
-    if(s->view==MI_HOME&&s->wave==MI_WAVE_MULTI){
-        static const char *const multi[4]={"WAVE1","OSC","DETUNE","LEVEL"};
-        return k==0u&&s->osc_page?"WAVE2":multi[k];
+    if(s->view==MI_HOME){
+        if(s->wave==MI_WAVE_MULTI){
+            static const char *const names[4]={"OSC","SELECT","WAVE1","LEVEL"};
+            return k==2u&&s->osc_page?"WAVE2":names[k];
+        }
+        if(s->wave==3u){
+            static const char *const pulse[4]={"OSC","WIDTH","SUB","LEVEL"};
+            return pulse[k];
+        }
+        {
+            static const char *const normal[4]={"OSC","SUB","CRUSH","LEVEL"};
+            return normal[k];
+        }
     }
     if(s->view==MI_OSC&&s->wave==MI_WAVE_MULTI&&!s->osc_page&&k==0u)
         return "WAVE1";
@@ -409,15 +424,16 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
     switch (s->view) {
     case MI_HOME:
         if(s->wave==MI_WAVE_MULTI){
-            /* Return signed values explicitly: DETUNE may be negative and
-             * MI_WAVE_MULTI is an unsigned macro (4u). */
-            if(k==0u)return (int32_t)(s->osc_page?
-                                      s->osc2_wave:s->osc1_wave);
+            if(k==0u)return (int32_t)s->wave;
             if(k==1u)return (int32_t)s->osc_page;
-            if(k==2u)return (int32_t)s->osc2_detune-64;
+            if(k==2u)return (int32_t)(s->osc_page?
+                                      s->osc2_wave:s->osc1_wave);
             return (int32_t)s->level;
         }
-        return k==0?s->wave:k==1?s->fx:k==2?s->wet:s->level;
+        return k==0?(int32_t)s->wave:
+               k==1?(int32_t)(s->wave==3u?s->width:s->sub):
+               k==2?(int32_t)(s->wave==3u?s->sub:s->crush):
+               (int32_t)s->level;
     case MI_OSC:
         if(s->osc_page)
             return k==0?s->osc2_wave:
