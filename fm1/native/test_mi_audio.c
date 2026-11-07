@@ -120,6 +120,7 @@ int main(void)
    assert(a.v[0].phase2>=0.f&&a.v[0].phase2<1.f);
    mi_audio_panic(&a);
    mi_audio_init(&a,44100.f);
+   s.wave=MI_WAVE_MULTI;s.osc1_wave=0u;
    s.osc2_wave=1u;s.osc2_level=127u;
    s.osc2_detune=81u;s.osc2_octave=3u;
    mi_audio_note_on(&a,69,127);
