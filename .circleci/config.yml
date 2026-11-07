@@ -1,4 +1,4 @@
-# MIYAKO native FM-1 development firmware: no KARMA. EUREKA deferred.
+# MIYAKO native FM-1 development firmware: no KARMA; bounded EUREKA/DREAMY and OSC2 are in progress.
 # Manual ONLY: run_build=true. main and older branches never execute this job.
 version: 2.1
 parameters:
