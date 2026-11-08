@@ -12,6 +12,15 @@ static int32_t limited(int32_t value, int32_t steps, int32_t lo, int32_t hi)
     value += steps;
     return value < lo ? lo : (value > hi ? hi : value);
 }
+/* Physical FM-1 encoder is intentionally coarse: ENV uses 4 units per
+ * detent (~32 clicks full range); other continuous values use 2.
+ * Keep enum selection and stepped pitch/clock rates exactly 1 per click. */
+static int32_t fast_step(int32_t detents,unsigned rate)
+{
+    if(detents>4096)detents=4096;
+    if(detents< -4096)detents=-4096;
+    return detents*(int32_t)rate;
+}
 static mi_result_t result(mi_action_t a, uint8_t slot)
 {
     mi_result_t r = {a, slot};
@@ -245,7 +254,8 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     case MI_CONFIG: {
         static const int16_t mn[] = {40, 0, -50, 0};
         static const int16_t mx[] = {240, 100, 50, 2};
-        s->global[k] = (int16_t)limited(s->global[k], d, mn[k], mx[k]);
+        s->global[k] = (int16_t)limited(s->global[k],
+                                     k==3u?d:fast_step(d,2u),mn[k],mx[k]);
         return;
     }
     case MI_SAVE:
@@ -253,7 +263,22 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         break;
     default: break;
     }
-    if (p) *p = (uint8_t)limited(*p, d, lo, hi);
+    if(p){
+        unsigned rate=s->view==MI_ENV?4u:2u;
+        /* Choice knobs must never skip waveforms, FX, rhythm or octaves. */
+        if((s->view==MI_HOME &&
+            ((s->wave==MI_WAVE_MULTI&&k<2u)||
+             (s->wave!=MI_WAVE_MULTI&&k==0u)))||
+           (s->view==MI_OSC&&
+            ((s->osc_page==0u&&k==0u&&s->wave!=MI_WAVE_FMDRUM)||
+             (s->osc_page==1u&&(k==0u||k==3u))))||
+           (s->view==MI_LFO&&(k==1u||k==3u))||
+           (s->view==MI_ARP&&k!=2u)||
+           (s->view==MI_SEQ&&k==2u)||
+           (s->view==MI_SAVE))
+            rate=1u;
+        *p=(uint8_t)limited(*p,fast_step(d,rate),lo,hi);
+    }
     if(s->view==MI_HOME&&k==0u &&
        previous_wave!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
         s->osc1_wave=previous_wave;
