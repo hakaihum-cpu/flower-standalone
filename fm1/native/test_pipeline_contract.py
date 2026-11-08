@@ -4,6 +4,90 @@ from pathlib import Path
 import re
 
 root = Path(__file__).resolve().parents[2]
+
+# Catch stale TEST expectations before executing the rest of this contract.
+# The #298 failure was an assertion for a removed grayscale renderer even
+# though source-RGB had already been adopted. Inspect literal "in"/"not in"
+# source contracts against the CURRENT files, including both video encoders.
+# This runs in the existing source-only CircleCI step, with no new CI job.
+def _audit_stale_literal_contracts():
+    import ast
+    aliases = {
+        "ci": [".circleci/config.yml"],
+        "ui": ["fm1/native/app.c"],
+        "app_source": ["fm1/native/app.c"],
+        "resource_header": ["fm1/native/mi_resource_media.h"],
+        "header": ["fm1/native/mi_resource_media.h"],
+        "resource_packer": ["fm1/native/tools/pack_miyako_resource.py"],
+        "vq": ["fm1/native/tools/pack_effects_vq_candidate.py"],
+        "eureka_vq": ["fm1/native/tools/pack_eureka_vq_candidate.py"],
+        "encoder": [
+            "fm1/native/tools/pack_effects_vq_candidate.py",
+            "fm1/native/tools/pack_eureka_vq_candidate.py",
+        ],
+        "color_source": [
+            "fm1/native/tools/mi_palette.py",
+            "fm1/native/tools/pack_eureka_frames.py",
+        ],
+        "color_encoder": ["fm1/native/tools/mi_reference_palette.py"],
+        "ref_palette": ["fm1/native/tools/mi_reference_palette.py"],
+        "frame_guard": ["fm1/native/tools/black_frame_guard.py"],
+        "frame_guard_test": ["fm1/native/tools/test_black_frame_guard.py"],
+        "native_audit": ["fm1/native/verify_standalone.py"],
+        "manifest": ["fm1/native/fm1.toml"],
+        "app_header": ["fm1/native/app.h"],
+        "id_patch": ["fm1/native/tools/set_miyako_product_id.py"],
+        "verify_fwsc": ["fm1/native/tools/verify_fwsc.py"],
+        "mem": ["fm1/native/mi_memory.h"],
+        "audio": ["fm1/native/mi_audio.c"],
+        "audio_h": ["fm1/native/mi_audio.h"],
+        "audio_test": ["fm1/native/test_mi_audio.c"],
+        "controls": ["fm1/native/mi_control.c"],
+        "fxcode": ["fm1/native/mi_fx_dsp.c"],
+        "fx_test": ["fm1/native/test_mi_fx_dsp.c"],
+        "recorder": ["fm1/native/mi_recorder.c"],
+        "env90_builder": ["fm1/native/tools/build_ui_anim_header.py"],
+        "letter_script": ["fm1/native/tools/build_letter_anim_header.py"],
+        "smoke": ["fm1/native/host_smoke.txt"],
+        "host_smoke": ["fm1/native/host_smoke.txt"],
+        "host_fx": ["fm1/native/host_fx_preview.txt"],
+        "host_eureka": ["fm1/native/host_eureka_preview.txt"],
+    }
+    sources = {p: (root / p).read_text(encoding="utf-8")
+               for paths in aliases.values() for p in paths}
+    checked = 0
+    for test_path in (
+        "fm1/native/test_pipeline_contract.py",
+        "fm1/native/tools/test_video_palette_natural.py",
+    ):
+        code = (root / test_path).read_text(encoding="utf-8")
+        tree = ast.parse(code, filename=test_path)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assert):
+                continue
+            for check in ast.walk(node.test):
+                if not (isinstance(check, ast.Compare) and
+                        len(check.ops) == 1 and len(check.comparators) == 1):
+                    continue
+                if not (isinstance(check.left, ast.Constant) and
+                        isinstance(check.left.value, str) and
+                        isinstance(check.comparators[0], ast.Name) and
+                        isinstance(check.ops[0], (ast.In, ast.NotIn))):
+                    continue
+                wanted = isinstance(check.ops[0], ast.In)
+                for source in aliases.get(check.comparators[0].id, ()):
+                    found = check.left.value in sources[source]
+                    if found != wanted:
+                        raise AssertionError(
+                            f"STALE TEST: {test_path}:{node.lineno} "
+                            f"contradicts {source}: {check.left.value!r}"
+                        )
+                    checked += 1
+    if checked < 200:
+        raise AssertionError("STALE TEST audit unexpectedly lost coverage")
+    print(f"PASS: {checked} current-source contract comparisons")
+
+_audit_stale_literal_contracts()
 ci = (root / ".circleci/config.yml").read_text(encoding="utf-8")
 required = (
     "version: 2.1",
