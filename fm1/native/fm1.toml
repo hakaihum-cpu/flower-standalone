@@ -1,7 +1,7 @@
 # Independent MIYAKO app on the MPL-2.0 fm1-base hardware layer.
 name = "MIYAKO"
-# Development FWSC revision FM-1_938 (baseline identity FM-1_934).
-# fm1-base normally appends "00"; pinned build.py patch changes suffix to "38".
+# Monotonic 3-digit FWSC identity is set from CIRCLE_PIPELINE_NUMBER.
+# fm1-base's default "00" suffix is patched BEFORE every host/target build.
 id_prefix = "FM-1_9"
 usb_manufacturer = "MIYAKO"
 usb_product = "MIYAKO FM-1"
