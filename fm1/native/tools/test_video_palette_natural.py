@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mi_palette import clip_pixels as effects_palette
 from pack_eureka_frames import clip_pixels as eureka_palette
 from mi_reference_palette import REFERENCE_565
+from pack_miyako_resource import PHOTO_RGB565
 import re
 
 # FM-1 photo frames load their 16 RGB565 colours from the separately
@@ -20,10 +21,11 @@ import re
 # reference against the EFFECTS/EUREKA encoder's reference palette.
 from test_miyako_resource96 import REFERENCE as RESOURCE_REFERENCE
 app_source = (Path(__file__).resolve().parents[1] / "app.c").read_text()
-assert RESOURCE_REFERENCE == REFERENCE_565, (
-    "resource photo palette differs from EFFECTS/EUREKA palette"
+assert RESOURCE_REFERENCE == PHOTO_RGB565, (
+    "installed res.bin must use the revised non-sepia photo palette"
 )
-assert len(set(REFERENCE_565)) == 16
+assert PHOTO_RGB565 != REFERENCE_565
+assert len(set(PHOTO_RGB565)) == 16
 assert re.search(r"static\s+uint16_t\s+mi_photo_palette\[16\];", app_source)
 assert "res=plat_res(&length);" in app_source
 assert "unsigned off=MI_TILE_VQ_PALETTE_OFFSET+clip*32u+i*2u;" in app_source
@@ -54,7 +56,7 @@ before = [im.tobytes() for im in frames]
 for name, run in (("EFFECTS", effects_palette), ("EUREKA", eureka_palette)):
     palette, coded = run(frames)
     assert len(palette) == 16
-    assert tuple(palette) == REFERENCE_565
+    assert tuple(palette) != REFERENCE_565, (name, "old sepia palette still applied")
     assert len(coded) == 36 and all(len(b) == W * H // 2 for b in coded)
     assert all(0 <= c <= 65535 for c in palette)
     assert len(set(palette)) >= 12, (name, "too few distinct palette colors")
