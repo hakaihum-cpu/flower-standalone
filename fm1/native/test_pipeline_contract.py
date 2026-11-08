@@ -466,7 +466,15 @@ assert "spin PRESET 1" not in host_fx
 assert "bb5345df9b9e4118052b2feac603e38f16db0fccd5af49223e52b08115a1cc40" in resource_packer
 assert "RESOURCE_CAPACITY = 69 * 4096 - 32" in resource_packer
 assert "photo96_rebuild.py" in (root / "fm1/native/tools/PHOTO96_REBUILD.md").read_text()
-assert "mi_photo_palette[i]=(uint16_t)" in ui
+assert "original||legacy" in ui
+assert "mi_photo_source_palette[16]" in resource_header
+assert "0x1841u,0x28a2u,0x5101u" in resource_header
+assert "0x89e4u,0x8b0au,0xa2c6u" in resource_header
+assert "0xabacu,0xec49u,0xdd50u,0xfdd1u" in resource_header
+assert "PHOTO_RGB565 = (" in resource_packer
+assert "return result" in resource_packer
+assert "transformed = bytearray(result)" not in resource_packer
+assert "mi_photo_palette[i]=mi_photo_source_palette[i]" in ui
 assert "clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP" in ui
 assert "mi_visual_photo_bank(mode)" in ui
 assert "MIYAKO_FX_DREAMY_LARGE.png" in ci
@@ -487,7 +495,7 @@ assert "mi_media_draw_scaled_half(half,123,84,116,71" not in ui
 assert "if(x<clip_left)" in ui and "mi_image_rect(" in ui
 assert "mi_photo_reference_rgb(rgb)" not in ui
 assert "mi_user_reference_rgb565[16]" not in ui
-assert "mi_photo_palette[i]=(uint16_t)" in ui
+assert "mi_photo_palette[i]=mi_photo_source_palette[i]" in ui
 assert "mi_tile_bank_first[8]" in resource_header
 for source in ("mi_palette.py", "pack_eureka_frames.py"):
     color_source = (root / "fm1/native/tools" / source).read_text()
