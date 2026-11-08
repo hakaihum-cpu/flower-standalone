@@ -94,11 +94,13 @@ jobs:
             python3 fm1/native/tools/pack_miyako_resource.py \
               /tmp/fm1-base/miyako/miyako_media.bin
             test "$(stat -c %s /tmp/fm1-base/miyako/miyako_media.bin)" -eq 279936
-            # Correct product ID BEFORE compiling app code, including the
-            # running FM-1 identity, all metadata, and final FWSC markers.
-            # The upstream pinned builder defaults to suffix 00.
+            # CircleCI pipeline number drives the running UI version, OTA
+            # loader and FWSC product marker; fixed 938 is forbidden.
             python3 fm1/native/tools/set_miyako_product_id.py --base /tmp/fm1-base
-            grep -q 'PRODUCT = prefix + "38"' /tmp/fm1-base/tools/build.py
+            test -s /tmp/fm1_product_id.txt
+            product="$(cat /tmp/fm1_product_id.txt)"
+            grep -Fq "PRODUCT = prefix + \"\${product#FM-1_9}\"" /tmp/fm1-base/tools/build.py
+            grep -Fq "#define APP_VERSION \"$product\"" /tmp/fm1-base/miyako/app.h
             # Fail early on fonts: never reach the C build with untested
             # Pillow Raqm or a missing upstream bitmap asset.
             test -s /tmp/fm1-base/assets/fonts/ter-u12n.bdf
@@ -276,7 +278,7 @@ jobs:
               /tmp/fm1-base/miyako/build/miyako.fwsc \
               /tmp/fm1-base/miyako/build/miyako.bin \
               /tmp/fm1-base/miyako/build/loader/ota.bin \
-              --base /tmp/fm1-base --product FM-1_938
+              --base /tmp/fm1-base --product "$(cat /tmp/fm1_product_id.txt)"
             cp /tmp/fm1-base/miyako/build/miyako.fwsc fm1-dist/MIYAKO-FM1-NATIVE-DEV.fwsc
             # The matching upstream resource installer uses this exact stem.
             test -s /tmp/fm1-base/miyako/build/miyako-res.bin
