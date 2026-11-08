@@ -18,10 +18,10 @@ PAYLOAD_BYTES = 279936
 SHA256 = 'bb5345df9b9e4118052b2feac603e38f16db0fccd5af49223e52b08115a1cc40'
 RESOURCE_CAPACITY = 69 * 4096 - 32
 FILES = 12
-# Restore the ORIGINAL indexed 16-colour RGB565 source palette from
-# Resources/fm1_photo_96_chunks/manifest.json. The previous implementation
-# rewrote all 24 palettes to one unrelated blue/purple table, changing colours
-# in all 628 user-supplied photos. Do not recolour user original pixels.
+# Preserve the archival index palette from the 628-frame VQ manifest.
+# It reflects an earlier artificial colourisation of monochrome source photos.
+# The native LCD reconstructs source-faithful greyscale by image bank;
+# changing flash colour tables is unnecessary and risks stale-resource bugs.
 PHOTO_RGB565 = (
     0x0000, 0x1841, 0x28A2, 0x5101,
     0x4184, 0x49C5, 0x6206, 0x7A05,
@@ -62,7 +62,7 @@ def main() -> None:
     data = read_payload(args.chunk_dir)
     args.resource_payload.parent.mkdir(parents=True, exist_ok=True)
     args.resource_payload.write_bytes(data)
-    print(f'PASS: 628 original-source 96x96 photos, 16 ORIGINAL RGB565 colours, {len(data)}B, '
+    print(f'PASS: 628 original-source 96x96 photos, 16 archival RGB565 index colours, {len(data)}B, '
           f'archive SHA256 {SHA256}, output SHA256 {hashlib.sha256(data).hexdigest()}')
 
 
