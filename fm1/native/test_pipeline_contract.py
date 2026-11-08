@@ -259,16 +259,22 @@ assert "a->osc_scope_active=scope_audible;" in audio
 assert "MIYAKO_OSC_LIVE_SINE.png" in ci
 assert "expect osc_scope_active 1" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "state.osc_page" in ui and "state.osc2_wave" in ui
-# HOME MULTI uses an actual selected OSC1/OSC2 waveform.
-assert "mi_wave_name(i==0u?state.osc1_wave:state.osc2_wave)" in ui
+# HOME MULTI: PRESET controls OSC1/OSC2 selection without applying
+# a global preset (which previously reset WAVE and the chosen oscillator).
+# Four physical K knobs edit the selected wave / SUB or DETUNE / MIX2 / LEVEL.
+assert "mi_wave_name(state.osc_page==1u?" in ui
+assert "state.osc2_wave:state.osc1_wave),sizeof val" in ui
 assert "state.wave==MI_WAVE_MULTI" in ui
-assert "state.osc1_wave" in ui
-# HOME K1 and K2 independently change OSC1/OSC2 in MULTI.
-assert "s->wave==MI_WAVE_MULTI&&s->osc_page<2u" in controls
-assert 'static const char *const multi[4]={"OSC1","OSC2","MIX2","LEVEL"};' in controls
+assert "state.osc1_wave" in ui and "state.osc2_wave" in ui
+assert 'static const char *const multi1[4]={"WAVE","SUB","MIX2","LEVEL"};' in controls
+assert 'static const char *const multi2[4]={"WAVE","DETUNE","MIX2","LEVEL"};' in controls
+assert "s->view==MI_HOME&&s->wave==MI_WAVE_MULTI" in controls
+assert "if(s->osc_page>1u)s->osc_page=0u;" in controls
+assert 'cv_text(104,35,&FONT_XS,"OSC",GREY);' in ui
 assert 'mi_streq(what,"osc1_wave")' in ui
 assert 'mi_streq(what,"osc2_wave")' in ui
-assert "expect osc1_wave 3" in (root / "fm1/native/host_smoke.txt").read_text()
+assert "expect osc1_wave 0" in (root / "fm1/native/host_smoke.txt").read_text()
+assert "expect osc2_wave 3" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "expect osc2_wave 2" in (root / "fm1/native/host_smoke.txt").read_text()
 # FX SELECT restores page navigation; only SEL changes photo banks.
 assert 'if(i==EN_SELECT&&state.view==MI_VIDEO)' in ui
