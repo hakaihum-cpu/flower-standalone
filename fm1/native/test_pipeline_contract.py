@@ -463,4 +463,47 @@ assert "s->fx2" in controls and "s->fx_slot" in controls
 assert "fx_stage(a,s,second" in audio
 assert "RECORDING" in ui and "LOOP PLAY" in ui
 assert "mi_recorder.c" in (root / "fm1/native/fm1.toml").read_text()
+# MI17: real persistent 4-slot patch data, not four labels pointing to
+# the same one-slot OBJ_SETTINGS object. Old MI16/15/14/13 still migrate.
+assert "mi_state_t slots[4];" in ui
+assert "#define SAVED_MAGIC_M16" in ui
+assert "sizeof(saved_mi16_t)" in ui
+assert "MI16_STATE_BYTES" in ui
+assert "sizeof(saved_bank_t)<=3840u" in ui
+assert "mi_store_bank(void)" in ui
+assert "mi_store_slot(void)" in ui and "mi_load_slot(void)" in ui
+assert "saved_bank.valid_mask" in ui
+assert "mi_state_valid(&saved_bank.slots[index])" in ui
+assert "saved_t save;" not in ui
+# Dedicated pages and physical controls; no generic OSC/FX column UI.
+assert "static void mi_draw_config(void)" in ui
+assert "static void mi_draw_save(void)" in ui
+assert "state.view==MI_CONFIG){mi_draw_config();return;" in ui
+assert "state.view==MI_SAVE){mi_draw_save();return;" in ui
+assert "state.config_load_armed" in ui
+assert "MI_ACTION_LOAD" in ui and "MI_ACTION_LOAD" in controls
+assert "s->midi_channel" in controls
+assert 'static const char *const names[MI_VIEW_COUNT][4]' in controls
+assert '"MIDI CH","CLOCK","PRESET","LOAD"' in controls
+assert '"SLOT","ACTION","CONFIRM",""' in controls
+# Clock setting applies to SEQ only. The existing REC MIDI auto-sync is
+# untouched, and CC21 continues to accept all incoming MIDI channels.
+assert "if(s->global[3]!=1)return" in audio
+assert "mi_rec_external_tick(&a->recorder,a->rendered_samples)" in audio
+assert "note_channel==state.midi_channel" in ui
+assert "note==MI_REC_PITCH_CC" in ui
+# DRUM is summed after synth FILTER and FX but before REC capture.
+assert "drum_mix+=drum" in audio
+assert "sample=effect(a,rs,sample);" in audio
+assert "sample=mi_soft_limit(sample+drum_mix);" in audio
+assert "mi_rec_tick(&a->recorder,sample,rs->seq)" in audio
+assert "if(r->armed && ((r->clock_ticks-1u)%96u)==0u)" in recorder
+# Real host screenshots plus flash-reboot/load assertions.
+for name in ("MIYAKO_GLOBAL.png","MIYAKO_GLOBAL_MIDI.png",
+             "MIYAKO_SAVE_LOAD.png"):
+    assert name in ci and name in host_smoke
+assert "expect save_mask 3" in host_smoke
+assert "expect midi_channel 2" in host_smoke
+assert "expect clock_mode 1" in host_smoke
+assert "expect wave 5" in host_smoke
 print("PASS: manual Phase 3 REC + EUREKA 2sec/576 frames + guarded dual-FX")
