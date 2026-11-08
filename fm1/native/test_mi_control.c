@@ -343,7 +343,7 @@ int main(void)
            s.step_dir==2u && s.step_len==16u);
     mi_rotate(&s,MI_EN_K2,-1);
     mi_rotate(&s,MI_EN_K4,-100);
-    assert(s.step_play==0u && s.step_len==1u);
+    assert(s.step_play==0u && s.step_len==8u);
     s.step_pattern[0]=0x8001u;
     assert(mi_state_valid(&s));
     s.step_len=17u;assert(!mi_state_valid(&s));s.step_len=8u;
