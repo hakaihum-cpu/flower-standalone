@@ -169,6 +169,21 @@ def train_clip(original, palette565, loops=6, frame_balance=0.0, seed=0, free_ze
     return codebook, ids, restored, (psnr.min(), psnr.mean(), original_unique, recon_unique)
 
 
+def improves_both(candidate, prior):
+    """Never trade worse clip-average VQ quality for one better worst frame.
+
+    Both scores are *actual reconstructed RGB* PSNR for all original frames.
+    We leave room for a 0.02 dB numerical tie, not perceptible degradation.
+    The historical candidate remains the fallback on any ambiguity.
+    """
+    new_worst, new_mean = candidate[:2]
+    old_worst, old_mean = prior[:2]
+    eps = 0.02
+    return (new_worst >= old_worst - eps and
+            new_mean >= old_mean - eps and
+            (new_worst > old_worst + eps or new_mean > old_mean + eps))
+
+
 def pack_nibbles(values):
     v = np.asarray(values, dtype=np.uint8).reshape(-1)
     if len(v) % 2 or v.max() >= 16:
@@ -278,7 +293,7 @@ def main():
             trial = train_clip(idx, palette, loops=12,
                                frame_balance=3.0, seed=clip * 100 + seed,
                                free_zero=True)
-            if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
+            if improves_both(trial[3], chosen[3]):
                 chosen, selected = trial, f"full-dictionary balanced {seed}"
         book, ids, recon, quality = chosen
         # Keep source clip/codec intact. Blank source or decoded frames reuse
