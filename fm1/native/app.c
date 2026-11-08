@@ -489,6 +489,8 @@ static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
 {
     if(x<clip_left){w-=clip_left-x;x=clip_left;}
     if(x+w>240)w=240-x;
+    if(y<0){h+=y;y=0;}
+    if(y+h>120)h=120-y;
     if(w>0&&h>0)cv_rect(x,y,w,h,rgb);
 }
 /* Real fixed 16 RGB565 colours are encoded in the NEW original-source
