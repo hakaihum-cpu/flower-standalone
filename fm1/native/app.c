@@ -945,6 +945,7 @@ static void draw(void)
             state.view==MI_OSC?(state.osc_page==2u?"FILTER":
                 state.wave==MI_WAVE_FMDRUM?"FMDRUM":
                 state.osc_page==1u?"OSC2":"OSC1"):
+            state.view==MI_HOME?"HOME / OSC":
             mi_view_name(state.view),GREY);
     cv_rect(8,31,224,1,DIM);
     if(now<message_until){
@@ -959,6 +960,13 @@ static void draw(void)
         cv_text(12,35,&FONT_XS,
                 state.view==MI_HOME&&state.wave==MI_WAVE_MULTI?
                 "MULTI":mi_wave_name(show_wave),GREY);
+        /* The fifth HOME parameter is OSC selection via the PRESET encoder.
+         * Show the active target explicitly; the four main knobs stay below. */
+        if(state.view==MI_HOME&&state.wave==MI_WAVE_MULTI){
+            cv_text(104,35,&FONT_XS,"OSC",GREY);
+            cv_text(133,33,&FONT_B,state.osc_page==1u?"2":"1",YELLOW);
+            cv_text(171,35,&FONT_XS,"PRESET",GREY);
+        }
         /* Live pre-FX OSC audio waveform (SINE/SAW/SQUARE/PULSE). */
         {
             uint32_t head=audio.osc_scope_head;
@@ -997,9 +1005,9 @@ static void draw(void)
     for(i=0;i<4u;i++){
         int32_t x=8+(int32_t)i*58;
         cv_text(x,24,&FONT_XS,mi_param_name(&state,i),GREY);
-        if(state.view==MI_HOME&&state.wave==MI_WAVE_MULTI&&i<2u)
-            textcpy(val,mi_wave_name(i==0u?state.osc1_wave:state.osc2_wave),
-                    sizeof val);
+        if(state.view==MI_HOME&&state.wave==MI_WAVE_MULTI&&i==0u)
+            textcpy(val,mi_wave_name(state.osc_page==1u?
+                    state.osc2_wave:state.osc1_wave),sizeof val);
         else if(state.view==MI_HOME&&i==0u)
             textcpy(val,mi_wave_name(state.wave),sizeof val);
         else if(state.view==MI_OSC&&state.osc_page<2u&&
