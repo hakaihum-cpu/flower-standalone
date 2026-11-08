@@ -460,4 +460,29 @@ assert "s->fx2" in controls and "s->fx_slot" in controls
 assert "fx_stage(a,s,second" in audio
 assert "RECORDING" in ui and "LOOP PLAY" in ui
 assert "mi_recorder.c" in (root / "fm1/native/fm1.toml").read_text()
+# Audit the entire existing CI test suite for OLD implementation contracts.
+# A detached legacy assumption must not survive simply because the current
+# renderer/source contract test was corrected. This is read-only: no new
+# workflow, environment or build action.
+ci_tests = (
+    "test_mi_control.c", "test_mi_audio.c", "test_mi_fx_dsp.c",
+    "test_mi_recorder.c", "test_mi_video.c", "test_media_crc.c",
+    "tools/test_black_frame_guard.py", "tools/test_miyako_resource96.py",
+    "tools/test_video_palette_natural.py", "host_smoke.txt",
+    "host_fx_preview.txt", "host_eureka_preview.txt",
+)
+obsolete_contracts = (
+    "mi_tile_atlas.h", "mi_user_reference_rgb565",
+    "mi_photo_vq_maps[488]", "mi_photo_vq_tilebook",
+    "mi_photo_vq_palette", "MI_TILE_SIDE 48u", "MI_TILE_COUNT 488u",
+    "MI_TILE_VQ_MAP_STRIDE 72u",
+)
+for test_name in ci_tests:
+    test_path = root / "fm1/native" / test_name
+    assert test_path.is_file(), f"missing CI regression test: {test_name}"
+    test_body = test_path.read_text(encoding="utf-8")
+    for obsolete in obsolete_contracts:
+        assert obsolete not in test_body, (
+            f"obsolete photo implementation test contract: {test_name}: {obsolete}"
+        )
 print("PASS: manual Phase 3 REC + EUREKA 2sec/576 frames + guarded dual-FX")
