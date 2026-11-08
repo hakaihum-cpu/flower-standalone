@@ -98,6 +98,9 @@ void mi_init(mi_state_t *s)
 static void view(mi_state_t *s, mi_view_t v)
 {
     s->view = v;
+    /* All routes back to HOME (including SELECT) must leave FILTER mode. */
+    if(v==MI_HOME&&s->wave==MI_WAVE_MULTI&&s->osc_page>1u)
+        s->osc_page=0u;
     if(v!=MI_SEQ)s->step_editor=0u;
     s->save_armed = 0;
 }
