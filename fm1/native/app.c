@@ -16,6 +16,7 @@
 #include "mi_effects_vq_frames.h" /* 144 source frames */
 #include "mi_eureka_vq_frames.h" /* 576 source frames */
 #include "mi_letter_anim.h" /* exact 72 user-source paper-airplane frames */
+#include "mi_ui_media.h" /* 100 ENV / 100 LFO, header logo and startup */
 #include "mi_memory.h"
 #include <stddef.h>
 #define YELLOW RGB(255,209,12)
@@ -119,6 +120,12 @@ static mi_view_t visual_previous_view=MI_HOME;
 static uint16_t visual_tile;
 static uint8_t normal_visual_bank; /* SEL independent integrated playlist */
 static uint8_t mi_letter_decoded_frame=255u;
+/* ENV/LFO image frame follows the most recently edited parameter only.
+ * It never changes actual ADSR/LFO DSP values or routes. */
+static uint8_t mi_env_visual_param,mi_lfo_visual_param;
+static uint8_t mi_ui_motion_kind=255u,mi_ui_motion_frame=255u;
+static uint8_t mi_ui_motion_map[MI_UI_MOTION_MAP_BYTES];
+static uint32_t mi_ui_splash_until;
 static uint8_t mi_letter_tile_map[MI_LETTER_MAP_SIZE];
 static float visual_last_activity;
 static uint32_t visual_rng=0x6d697961u,visual_generation;
@@ -244,6 +251,9 @@ void app_init(void)
  visual_last_activity=0.f;visual_tile=0u;normal_visual_bank=6u;
  visual_previous_view=MI_HOME;
  mi_letter_decoded_frame=255u;
+ mi_env_visual_param=mi_lfo_visual_param=0u;
+ mi_ui_motion_kind=255u;mi_ui_motion_frame=255u;
+ mi_ui_splash_until=0u;
  mi_memzero(held_note,sizeof held_note);redraw=1;
  message_until=0;line_a[0]=line_b[0]=0;
 }
