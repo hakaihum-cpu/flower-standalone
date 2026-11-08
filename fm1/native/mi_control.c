@@ -152,10 +152,25 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     if (k >= 4) return;
     switch (s->view) {
     case MI_HOME:
-        if(k==0){p=&s->wave;hi=MI_WAVE_FMDRUM;}
-        if(k==1){if(s->wave==MI_WAVE_MULTI){p=&s->osc_page;hi=1;}
-                 else{p=&s->fx;hi=MI_FX_COUNT-1;}}
-        if(k==2)p=s->wave==MI_WAVE_MULTI?&s->osc2_detune:&s->wet;
+        /* HOME edits OSCILLATOR controls, never hidden audio FX.
+         * In MULTI, K1/K2 independently choose OSC1/OSC2 waveforms. */
+        if(s->wave==MI_WAVE_MULTI){
+            if(k==0){p=&s->osc1_wave;hi=3;}
+            if(k==1){p=&s->osc2_wave;hi=3;}
+            if(k==2)p=&s->osc2_level;
+        }else{
+            if(k==0){p=&s->wave;hi=MI_WAVE_FMDRUM;}
+            if(s->wave==MI_WAVE_FMDRUM){
+                if(k==1)p=&s->drum_tone;
+                if(k==2)p=&s->drum_decay;
+            }else if(s->wave==3u){
+                if(k==1)p=&s->width;
+                if(k==2)p=&s->sub;
+            }else{
+                if(k==1)p=&s->sub;
+                if(k==2)p=&s->crush;
+            }
+        }
         if(k==3)p=&s->level;
         break;
     case MI_OSC:
@@ -419,9 +434,14 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         static const char *const d[4]={"TONE","DECAY","COLOR","D LEVEL"};
         return d[k];
     }
-    if(s->view==MI_HOME&&s->wave==MI_WAVE_MULTI){
-        static const char *const multi[4]={"WAVE","OSC","DETUNE","LEVEL"};
-        return multi[k];
+    if(s->view==MI_HOME){
+        static const char *const multi[4]={"OSC1","OSC2","MIX2","LEVEL"};
+        static const char *const pulse[4]={"WAVE","WIDTH","SUB","LEVEL"};
+        static const char *const single[4]={"WAVE","SUB","CRUSH","LEVEL"};
+        static const char *const drums[4]={"FMDRUM","TONE","DECAY","LEVEL"};
+        if(s->wave==MI_WAVE_MULTI)return multi[k];
+        if(s->wave==MI_WAVE_FMDRUM)return drums[k];
+        return s->wave==3u?pulse[k]:single[k];
     }
     if(s->view==MI_OSC&&s->wave==3u&&s->osc_page==0u&&k==1u)
         return "PWIDTH";
@@ -459,15 +479,16 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
     if (!s || k > 3) return 0;
     switch (s->view) {
     case MI_HOME:
-        if(s->wave==MI_WAVE_MULTI){
-            /* Return signed values explicitly: DETUNE may be negative and
-             * MI_WAVE_MULTI is an unsigned macro (4u). */
-            if(k==0u)return MI_WAVE_MULTI;
-            if(k==1u)return (int32_t)s->osc_page;
-            if(k==2u)return (int32_t)s->osc2_detune-64;
-            return (int32_t)s->level;
-        }
-        return k==0?s->wave:k==1?s->fx:k==2?s->wet:s->level;
+        if(s->wave==MI_WAVE_MULTI)
+            return k==0?s->osc1_wave:k==1?s->osc2_wave:
+                   k==2?s->osc2_level:s->level;
+        if(s->wave==MI_WAVE_FMDRUM)
+            return k==0?s->wave:k==1?s->drum_tone:
+                   k==2?s->drum_decay:s->level;
+        if(s->wave==3u)
+            return k==0?s->wave:k==1?s->width:
+                   k==2?s->sub:s->level;
+        return k==0?s->wave:k==1?s->sub:k==2?s->crush:s->level;
     case MI_OSC:
         if(s->osc_page==2u)return k==0?s->filter_cutoff:
             k==1?s->filter_resonance:k==2?s->level:s->crush;
