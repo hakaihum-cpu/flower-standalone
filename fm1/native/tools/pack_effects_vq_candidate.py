@@ -331,6 +331,18 @@ def main():
         books.append(blob)
         maps.append(ids.tobytes())
         worst.append(float(quality[0]))
+        # Audit BOTH losses: 24-bit user JPEG -> 16-colour RGB565 ->
+        # 256-tile VQ. A quantized-only preview conceals palette damage.
+        full_source = np.stack([np.asarray(im, dtype=np.float32)
+                                for im in images])
+        decoded_rgb = rgb_palette(palette)[recon[:, :HEIGHT]].astype(np.float32)
+        full_mse = np.mean((full_source - decoded_rgb) ** 2,
+                           axis=(1, 2, 3))
+        full_psnr = np.array([10 * math.log10(255 * 255 / max(float(e), 1e-9))
+                              for e in full_mse])
+        print(f"INFO FULL-SOURCE EFFECTS clip {clip+1}/{CLIPS} "
+              f"RGB PSNR worst={full_psnr.min():.2f} "
+              f"mean={full_psnr.mean():.2f}; includes palette+VQ", flush=True)
         print(f"INFO clip {clip+1}/{CLIPS} RGB PSNR worst={quality[0]:.2f} "
               f"mean={quality[1]:.2f} distinct={quality[3]}/36 vs input={quality[2]}/36 "
               f"dictionary={selected}", flush=True)
@@ -340,8 +352,7 @@ def main():
             # A single clip-first preview hides motion-dependent VQ damage.
             for row, frame in enumerate((0, FRAMES//2, FRAMES-1)):
                 top = (clip * 3 + row) * HEIGHT
-                montage.paste(Image.fromarray(pal[idx[frame, :HEIGHT]]),
-                              (0, top))
+                montage.paste(images[frame], (0, top))
                 montage.paste(Image.fromarray(pal[recon[frame, :HEIGHT]]),
                               (WIDTH, top))
     if reconstructed != CLIPS * FRAMES or len(palettes) != CLIPS:
