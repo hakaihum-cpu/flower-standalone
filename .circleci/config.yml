@@ -27,7 +27,7 @@ jobs:
           name: Verify exact MIYAKO branch and zero KARMA source closure
           command: |
             set -eu
-            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-osc-attack-letter-version-20261108"
+            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-video-opaque-letter-sub-20261108"
             # Reject missing pipeline metadata before media/resource work.
             case "${CIRCLE_PIPELINE_NUMBER:-}" in
               ""|*[!0-9]*) echo "FAIL: CircleCI pipeline.number was not supplied" >&2; exit 1 ;;
@@ -100,7 +100,7 @@ jobs:
                /tmp/fm1-base/miyako/
             test -s /tmp/fm1-base/miyako/words.tsv
             grep -q '^# url: https://' /tmp/fm1-base/miyako/words.tsv
-            # Materialize the 72-frame user-supplied ATTACK animation before
+            # Materialize the 72-frame user-supplied SUB animation before
             # either host or target builds; the exact source SHA is verified.
             python3 fm1/native/tools/build_letter_anim_header.py \
               --out /tmp/fm1-base/miyako/mi_letter_anim.h
@@ -272,8 +272,11 @@ jobs:
             test -s fm1-dist/MIYAKO_FX_DUAL.png
             test -s fm1-dist/MIYAKO_OSC_SILENCE.png
             test -s fm1-dist/MIYAKO_OSC_LIVE_SINE.png
-            test -s fm1-dist/MIYAKO_OSC_ATTACK_0.png
-            test -s fm1-dist/MIYAKO_OSC_ATTACK_127.png
+            test -s fm1-dist/MIYAKO_OSC_SUB_0.png
+            test -s fm1-dist/MIYAKO_OSC_SUB_127.png
+            test -s fm1-dist/MIYAKO_NORMAL_SEL_ACTIVE.png
+            test -s fm1-dist/MIYAKO_NORMAL_SEL_RETURN.png
+            test -s fm1-dist/MIYAKO_NORMAL_SEL_FROM_FX.png
             test -s fm1-dist/MIYAKO_FX_DREAMY_LARGE.png
             test -s fm1-dist/MIYAKO_FX_EUREKA_LARGE.png
             test -s fm1-dist/MIYAKO_RECORDER.png
@@ -334,4 +337,4 @@ workflows:
       - fm1_native_build:
           filters:
             branches:
-              only: feature/fm1-miyako-osc-attack-letter-version-20261108
+              only: feature/fm1-miyako-video-opaque-letter-sub-20261108
