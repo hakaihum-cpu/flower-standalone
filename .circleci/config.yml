@@ -24,7 +24,7 @@ jobs:
           name: Verify exact MIYAKO branch and zero KARMA source closure
           command: |
             set -eu
-            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-knob-env-fx-drum-rec-20261108"
+            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-4track-16step-sequencer-20261108"
             # Parse-check EVERY CircleCI run script before any build work.
             python3 fm1/native/tools/check_ci_run_shell.py
             python3 -m compileall -q fm1/native
@@ -306,4 +306,4 @@ workflows:
       - fm1_native_build:
           filters:
             branches:
-              only: feature/fm1-miyako-knob-env-fx-drum-rec-20261108
+              only: feature/fm1-miyako-4track-16step-sequencer-20261108
