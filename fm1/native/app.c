@@ -16,7 +16,7 @@
 #include "mi_effects_vq_frames.h" /* 144 source frames */
 #include "mi_eureka_vq_frames.h" /* 576 source frames */
 #include "mi_letter_anim.h" /* exact 72 user-source paper-airplane frames */
-#include "mi_ui_media.h" /* 100 ENV / 100 LFO, header logo and startup */
+#include "mi_ui_media.h" /* 90 ENV / 100 LFO, header logo and startup */
 #include "mi_memory.h"
 #include <stddef.h>
 #define YELLOW RGB(255,209,12)
