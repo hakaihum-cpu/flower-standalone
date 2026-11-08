@@ -250,47 +250,72 @@ expect step_play 0
 tap SEQ
 expect step_editor 0
 expect view 7
+# The fm1-base host "midi" command advances only 2 ms while each audio
+# callback renders ~5.8 ms. Wait for one REAL callback before assertions,
+# and space F8 at 20 ms/clock (125 BPM, 24 PPQN), like an actual MIDI master.
 # CC21 (hex 15), any MIDI channel, changes only REC PITCH's 7 choices.
 midi USB B0 15 7F
+wait 12
 expect rec_pitch 6
 midi USB B5 15 40
+wait 12
 expect rec_pitch 3
 midi USB B9 15 00
+wait 12
 expect rec_pitch 0
-# Clock runs the same four-track pattern with transport from external master.
-# The selected reverse/16-step pattern was retained after leaving SEQ.
+# Start reinitializes the first step; no beat is generated before Clock.
 midi USB FA 00 00
+wait 12
 expect step_play 1
 expect step_midi_mode 1
 midi USB F8 00 00
-wait 20
+wait 18
 expect step_current 15
 expect step_clock_phase 1
+# Five more MIDI ticks complete the first six-clock (1/16) period.
 midi USB F8 00 00
+wait 18
 midi USB F8 00 00
+wait 18
 midi USB F8 00 00
+wait 18
 midi USB F8 00 00
+wait 18
 midi USB F8 00 00
+wait 18
 expect step_current 15
 expect step_clock_phase 0
 midi USB F8 00 00
-wait 20
+wait 18
 expect step_current 14
+# Stop freezes the next step. A clock while stopped MUST NOT advance it.
 midi USB FC 00 00
+wait 12
 expect step_play 0
 midi USB F8 00 00
+wait 18
 expect step_current 14
+# MIDI Continue after a long paused interval must resume, not reset.
+wait 1100
+expect step_midi_mode 1
 midi USB FB 00 00
+wait 12
 expect step_play 1
 midi USB F8 00 00
+wait 18
 midi USB F8 00 00
+wait 18
 midi USB F8 00 00
+wait 18
 midi USB F8 00 00
+wait 18
 midi USB F8 00 00
+wait 18
 midi USB F8 00 00
-wait 20
+wait 18
 expect step_current 13
 midi USB FC 00 00
+wait 12
 expect step_play 0
-wait 1100
-expect step_midi_mode 0
+# After Stop, MIDI ownership is retained until a new Start or Continue.
+expect step_midi_mode 1
