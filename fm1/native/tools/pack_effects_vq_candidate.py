@@ -65,7 +65,7 @@ def tile_expand(codebook, ids):
     return codebook[ids].reshape(FRAMES, 20, 16, 4, 8).transpose(0, 1, 3, 2, 4).reshape(FRAMES, PAD_H, WIDTH)
 
 
-def train_clip(original, palette565, loops=6, frame_balance=0.0, seed=0):
+def train_clip(original, palette565, loops=6, frame_balance=0.0, seed=0, free_zero=False):
     """Deterministic RGB-aware K-means; 256 codebook tiles per 36-frame clip."""
     tiles = tile_extract(original)
     unique = np.unique(tiles, axis=0)
@@ -100,7 +100,13 @@ def train_clip(original, palette565, loops=6, frame_balance=0.0, seed=0):
         codebook = unique[rng.choice(len(unique), DICT_SIZE, replace=False)].copy()
     else:
         codebook = unique[np.linspace(0, len(unique) - 1, DICT_SIZE, dtype=np.int32)].copy()
-    codebook[0] = 0
+    # An 8x4 VQ codeword is NOT a palette index or transparent pixel.
+    # Previous encoders wasted entry 0 on 32 forced-black pixels, even
+    # though the native renderer treats every palette entry as opaque.
+    # Keep the old result as a baseline and test a fully trainable variant.
+    start = 0 if free_zero else 1
+    if not free_zero:
+        codebook[0] = 0
     ids = np.zeros(len(tiles), dtype=np.uint8)
     for it in range(loops):
         if it == 0 or (it + 1) % 3 == 0:
@@ -111,7 +117,7 @@ def train_clip(original, palette565, loops=6, frame_balance=0.0, seed=0):
         dist = norms[:, None] + cnorms[None, :] - 2 * (v @ centroids.T)
         ids = np.argmin(dist, axis=1).astype(np.uint8)
         means = np.empty((DICT_SIZE, TILE_PIXELS * 3), dtype=np.float32)
-        means[0] = 0
+        means[:start] = 0
         if frame_balance > 0:
             # Still a SINGLE 256-entry dictionary per clip and 8x4 tiles.
             # Bias Lloyd updates toward the frame with the highest error.
@@ -129,17 +135,18 @@ def train_clip(original, palette565, loops=6, frame_balance=0.0, seed=0):
             np.add.at(weighted_sum, ids, v * tile_weights[:, None])
             weight_totals = np.bincount(ids, weights=tile_weights,
                                         minlength=DICT_SIZE)
-            means[1:] = np.where(weight_totals[1:, None] > 0,
-                weighted_sum[1:] / np.maximum(weight_totals[1:, None], 1e-9),
-                centroids[1:])
+            means[start:] = np.where(weight_totals[start:, None] > 0,
+                weighted_sum[start:] / np.maximum(weight_totals[start:, None], 1e-9),
+                centroids[start:])
         else:
-            for i in range(1, DICT_SIZE):
+            for i in range(start, DICT_SIZE):
                 group = v[ids == i]
                 means[i] = group.mean(axis=0) if len(group) else centroids[i]
         means = means.reshape(DICT_SIZE, TILE_PIXELS, 3)
         cost = ((means[:, :, None, :] - pal[None, None, :, :]) ** 2).sum(axis=3)
-        codebook[1:] = np.argmin(cost[1:], axis=2).astype(np.uint8)
-        codebook[0] = 0
+        codebook[start:] = np.argmin(cost[start:], axis=2).astype(np.uint8)
+        if not free_zero:
+            codebook[0] = 0
     # The final Lloyd update changes codebook entries after the last selector
     # assignment. Re-evaluate all 8x4 tile IDs against the ACTUAL dictionary
     # that will be stored in firmware. Otherwise an outdated selector map is
@@ -283,9 +290,10 @@ def main():
         for seed in (11, 17):
             trial = train_clip(idx, palette, loops=18,
                                frame_balance=6.0,
-                               seed=-(clip * 100 + seed))
+                               seed=-(clip * 100 + seed),
+                               free_zero=True)
             if (trial[3][0], trial[3][1]) > (chosen[3][0], chosen[3][1]):
-                chosen, selected = trial, f"spread-start {seed}"
+                chosen, selected = trial, f"full-dictionary spread-start {seed}"
         book, ids, recon, quality = chosen
         # Keep source clip/codec intact. Blank source or decoded frames reuse
         # only the closest nonblank selector map from this same 36-frame clip.
