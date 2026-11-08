@@ -854,17 +854,21 @@ static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
 static uint16_t mi_photo_palette[16];
 static int16_t mi_photo_cached=-1;
-/* Same size as the old amber res.bin: distinguish by its palette bytes.
- * FWSC-only updates must never silently display the obsolete image colours. */
+/* Accept both authentic user-source and prior palette-overridden
+ * res.bin. Both have the SAME 628 VQ codebooks and selector maps, and
+ * their palette indexes are restored to the source colours below. */
 static const uint8_t *mi_photo_source(uint32_t *length)
 {
     const uint8_t *res=plat_res(length);
-    if(!res||*length<MI_TILE_DATA_BYTES||
-       res[2u]!=0xC4u||res[3u]!=0x18u||
-       res[16u]!=0x35u||res[17u]!=0x4Cu||
-       res[30u]!=0x9Du||res[31u]!=0xF7u)
-        return 0;
-    return res;
+    int original,legacy;
+    if(!res||*length<MI_TILE_DATA_BYTES)return 0;
+    original=(res[2u]==0x41u&&res[3u]==0x18u&&
+              res[16u]==0xE4u&&res[17u]==0x89u&&
+              res[30u]==0xD1u&&res[31u]==0xFDu);
+    legacy=(res[2u]==0xC4u&&res[3u]==0x18u&&
+            res[16u]==0x35u&&res[17u]==0x4Cu&&
+            res[30u]==0x9Du&&res[31u]==0xF7u);
+    return (original||legacy)?res:0;
 }
 static void mi_photo_decode(unsigned frame)
 {
@@ -872,17 +876,16 @@ static void mi_photo_decode(unsigned frame)
     const uint8_t *res;
     unsigned clip,ty,tx,row,col,i;
     if(frame>=MI_TILE_COUNT||mi_photo_cached==(int16_t)frame)return;
-    /* FM-1_938 requires its revised 279936-byte photo resource.
-     * Old sepia resources (even if 279936 bytes) use EFFECTS fallback. */
+    /* Keep authentic 628-frame photo colours across new and previous
+     * resource installations. Never require an unrelated flash format. */
     res=mi_photo_source(&length);
     if(!res){mi_photo_cached=-1;return;}
     clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
     if(clip>=MI_TILE_VQ_CLIPS){mi_photo_cached=-1;return;}
-    for(i=0u;i<16u;i++){
-        unsigned off=MI_TILE_VQ_PALETTE_OFFSET+clip*32u+i*2u;
-        mi_photo_palette[i]=(uint16_t)((uint16_t)res[off]|
-                                      ((uint16_t)res[off+1u]<<8u));
-    }
+    /* The user-source VQ codebooks were indexed to this original
+     * RGB565 palette. Earlier resource packaging changed its colour table
+     * to blue/purple but never changed the underlying selector indices. */
+    for(i=0u;i<16u;i++)mi_photo_palette[i]=mi_photo_source_palette[i];
     for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
         for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
             unsigned id=res[MI_TILE_VQ_MAP_OFFSET+
