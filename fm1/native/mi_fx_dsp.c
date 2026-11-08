@@ -254,7 +254,7 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
         return bounded(p->dreamy_filter,-1.f,1.f);
     }
     if(mode==MI_FX_DELAY) {
-        /* 40..680 ms; one tap; 0..0.85 feedback */
+        /* 40..680 ms (fixed FM-1 buffer); one tap; 0..0.96 feedback */
         float ms=40.f+640.f*(p1/127.f);
         uint32_t n=(uint32_t)(sample_rate*ms/1000.f);
         if(n<2u)n=2u;
@@ -265,7 +265,7 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
          * single impulse, producing no echo (observed in CI #264). */
         float delayed=p->delay_valid>=n?
             read16(delay_memory[(p->delay_write-n)&(MI_DELAY_N-1u)]):0.f;
-        float feedback=0.85f*(p2/127.f);
+        float feedback=0.96f*(p2/127.f);
         delay_memory[pos]=quant(dry+delayed*feedback);
         ++p->delay_write;
         if(p->delay_valid<MI_DELAY_N)++p->delay_valid;
@@ -289,14 +289,14 @@ float mi_fx_dsp_process_ex(mi_fx_dsp_t *p,unsigned mode,float dry,
     }
     if(mode==MI_FX_REVERB) {
         static const unsigned dlen[4]={1423u,2017u,2789u,3911u};
-        float sum=0.f,feedback=0.45f+0.44f*(p1/127.f);
+        float sum=0.f,feedback=0.50f+0.465f*(p1/127.f);
         float damping=0.04f+0.85f*(p2/127.f);
         unsigned i;
         for(i=0;i<4u;i++) {
             uint32_t at=p->reverb_write[i]&(MI_REVERB_N-1u);
             float value=read16(reverb_memory[i][(p->reverb_write[i]-dlen[i])&(MI_REVERB_N-1u)]);
             p->reverb_damp[i]+=(value-p->reverb_damp[i])*(1.f-damping);
-            reverb_memory[i][at]=quant(dry*0.35f+p->reverb_damp[i]*feedback);
+            reverb_memory[i][at]=quant(dry*0.48f+p->reverb_damp[i]*feedback);
             ++p->reverb_write[i];
             sum+=value*0.25f;
         }
