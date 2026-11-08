@@ -170,7 +170,9 @@ def main():
         (root / "old.bin").write_bytes(old)
         (root / "new.bin").write_bytes(new)
         cmd = [
-            args.cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2",
+            args.cc, "-std=c99", "-O1", "-g", "-Wall", "-Wextra", "-Werror",
+            "-fno-pie", "-no-pie",
+            "-fsanitize=address,undefined", "-fno-sanitize-recover=all",
             "-I", str(ROOT / "fm1/native"),
             str(ROOT / "fm1/native/mi_shared_tile_codec_poc.c"),
             str(ROOT / "fm1/native/test_mi_shared_tile_codec_poc.c"),
