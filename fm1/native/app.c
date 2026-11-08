@@ -856,7 +856,7 @@ static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
 static uint16_t mi_photo_palette[16];
 /* MTL1 uses one 4 KiB 8x4 tile dictionary and one 288-byte index map.
  * Reused between frames and both LCD 120-row passes; no malloc/audio IRQ. */
-static uint8_t mi_photo_tilebook[MI_TP_BOOK_BYTES];
+static uint8_t mi_photo_tilebook[MI_TP_BOOK_BYTES] PLAT_POOL;
 static uint8_t mi_photo_tilemap[MI_TP_MAP_BYTES];
 static int16_t mi_photo_book_clip=-1; /* avoid inflating same 4 KiB book per frame */
 static int16_t mi_photo_cached=-1;
