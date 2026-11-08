@@ -37,6 +37,10 @@ typedef struct {
     uint32_t rendered_samples; /* MIDI-clock timestamp in output samples */
     mi_recorder_t recorder;
     volatile uint8_t rec_command;
+    /* Audio-sample-accurate FMDrum step sequencer (independent of OSC page). */
+    uint32_t step_wait, step_random;
+    uint8_t step_active, step_next, step_last_dir, step_last_len;
+    volatile uint8_t step_current; /* UI playhead; 0..15 */
     float sample_rate, wow, flutter, wet_current,wet_current2;
     float rec_monitor_mix; /* existing wet-smoothing approach for REC monitor */
     /* Audio writer/UI reader: actual pre-FX voice output, never UI sine. */
