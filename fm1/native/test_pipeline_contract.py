@@ -504,7 +504,14 @@ assert 'test_shared_photo_tiles_poc.py' in ci
 assert '--shared-tile-poc' in ci
 assert 'mi_shared_tile_codec_poc.c' in ci and 'mi_shared_tile_codec_poc.h' in ci
 assert '#include \"mi_shared_tile_codec_poc.h\"' in ui
-assert 'mi_tp_decode_frame(res,length' in ui
+assert 'mi_tp_decode_frame_cached(res,length' in ui
+assert 'static uint8_t mi_photo_tilebook[MI_TP_BOOK_BYTES] PLAT_POOL;' in ui
+assert 'mi_photo_book_clip=-1; /* resource absent:' in ui
+assert 'test_shared_photo_tiles_poc.py' in ci
+assert '-fsanitize=address,undefined' in (
+    root / "fm1/native/tools/test_shared_photo_tiles_poc.py").read_text()
+assert 'mi_tp_decode_frame_cached(' in (
+    root / "fm1/native/mi_shared_tile_codec_poc.c").read_text()
 assert '#include "mi_resource_media.h"' in ui and 'mi_photo_source(&length)' in ui
 assert "mi_resource_media.h" in ci
 assert "pack_miyako_resource.py" in ci
