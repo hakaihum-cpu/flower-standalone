@@ -291,6 +291,8 @@ jobs:
               'REC internal 2s, EUREKA short-buffer 2s, two serial FX with conflict guards.' \
               'SEQ short press: RECORDER. SEQ hold (650ms): 4-track FMDrum step sequencer.' \
               '16 white keys toggle steps 1-16. K1 track, K2 play/stop, K3 direction, K4 length 8-16.' \
+              'SEQ MIDI input: F8 24-PPQN Clock, six clocks per step, FA Start, FB Continue, FC Stop. Internal BPM if clock is lost.' \
+              'REC Pitch responds to MIDI CC21 on any channel. Values map to existing semitone choices -12, -7, -5, 0, +5, +7, +12.' \
               'This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.' \
               > fm1-dist/README_BEFORE_INSTALL.txt
             (cd fm1-dist && sha256sum *.fwsc *-res.bin > SHA256SUMS)
