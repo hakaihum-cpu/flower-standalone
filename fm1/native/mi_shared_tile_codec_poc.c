@@ -63,11 +63,12 @@ static int load_block(const uint8_t *payload, uint32_t len, uint32_t dir,
     return 0;
 }
 
-int mi_tp_decode_frame(const uint8_t *payload,uint32_t len,uint16_t frame,
-                       uint16_t palette[MI_TP_PALETTE],
-                       uint8_t pixels[MI_TP_PIXELS_BYTES],
-                       uint8_t book[MI_TP_BOOK_BYTES],
-                       uint8_t selectors[MI_TP_MAP_BYTES])
+int mi_tp_decode_frame_cached(const uint8_t *payload,uint32_t len,uint16_t frame,
+                              uint16_t palette[MI_TP_PALETTE],
+                              uint8_t pixels[MI_TP_PIXELS_BYTES],
+                              uint8_t book[MI_TP_BOOK_BYTES],
+                              uint8_t selectors[MI_TP_MAP_BYTES],
+                              int16_t *cached_clip)
 {
     uint32_t clip,ty,tx,row,col,b,at,i;
     if(!payload||!palette||!pixels||!book||!selectors ||
@@ -78,9 +79,19 @@ int mi_tp_decode_frame(const uint8_t *payload,uint32_t len,uint16_t frame,
        rd32(payload+12)!=MI_TP_PAL||rd32(payload+16)!=MI_TP_BOOKDIR||
        rd32(payload+20)!=MI_TP_MAPDIR||rd32(payload+24)!=MI_TP_DATA)return -1;
     clip=frame/MI_TP_STEP;
-    if(load_block(payload,len,MI_TP_BOOKDIR+clip*8u,book,MI_TP_BOOK_BYTES)!=0||
-       load_block(payload,len,MI_TP_MAPDIR+(uint32_t)frame*8u,
-                  selectors,MI_TP_MAP_BYTES)!=0)return -1;
+    if(!cached_clip || *cached_clip!=(int16_t)clip){
+        if(load_block(payload,len,MI_TP_BOOKDIR+clip*8u,
+                      book,MI_TP_BOOK_BYTES)!=0){
+            if(cached_clip)*cached_clip=-1;
+            return -1;
+        }
+    }
+    if(load_block(payload,len,MI_TP_MAPDIR+(uint32_t)frame*8u,
+                  selectors,MI_TP_MAP_BYTES)!=0){
+        if(cached_clip)*cached_clip=-1;
+        return -1;
+    }
+    if(cached_clip)*cached_clip=(int16_t)clip;
     for(i=0;i<MI_TP_PALETTE;i++)
         palette[i]=rd16(payload+MI_TP_PAL+clip*32u+i*2u);
     for(ty=0u;ty<24u;ty++){
@@ -93,4 +104,15 @@ int mi_tp_decode_frame(const uint8_t *payload,uint32_t len,uint16_t frame,
         }
     }
     return 0;
+}
+
+/* Original noncached ABI retained for host parity and independent callers. */
+int mi_tp_decode_frame(const uint8_t *payload,uint32_t len,uint16_t frame,
+                       uint16_t palette[MI_TP_PALETTE],
+                       uint8_t pixels[MI_TP_PIXELS_BYTES],
+                       uint8_t book[MI_TP_BOOK_BYTES],
+                       uint8_t selectors[MI_TP_MAP_BYTES])
+{
+    return mi_tp_decode_frame_cached(payload,len,frame,palette,pixels,
+                                     book,selectors,0);
 }
