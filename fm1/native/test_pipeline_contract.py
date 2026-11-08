@@ -631,13 +631,16 @@ assert "mi_photo_palette[i]=(uint16_t)((uint16_t)res[offset]|" in ui
 assert "((uint16_t)res[offset+1u]<<8u)" in ui
 assert "clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP" in ui
 assert "mi_tile_bank_first[8]" in resource_header
+# Repeated gamma, edge sharpening and blue-channel alterations harmed
+# user JPEGs before the 16-colour/VQ stage. Verify every encoder now passes
+# original 36-frame RGB pixels to the source-aware RGB565 palette generator.
 for source in ("mi_palette.py", "pack_eureka_frames.py"):
     color_source = (root / "fm1/native/tools" / source).read_text()
-    assert "ImageStat" in color_source and "blue_lut" in color_source
-    assert "ImageFilter.UnsharpMask" in color_source
-    assert "gain = min(1.10," in color_source
-    assert "** 0.86" in color_source
+    assert "return natural_pixels(frames)" in color_source
     assert "from mi_reference_palette import natural_pixels" in color_source
+    for obsolete in ("ImageStat.", "ImageFilter.UnsharpMask(",
+                     "blue_lut =", "gain = min(1.10,", "** 0.86"):
+        assert obsolete not in color_source
 ref_palette = (root / "fm1/native/tools/mi_reference_palette.py").read_text()
 assert "REFERENCE_RGB = (" in ref_palette
 assert "REFERENCE_565" in ref_palette
