@@ -147,6 +147,26 @@ assert ci.index("test_video_palette_natural.py") < ci.index("Reconstruct all 144
 assert ci.index("test_black_frame_guard.py") < ci.index("Reconstruct all 144 original")
 assert "visible<32u" in (root / "fm1/native/test_media_crc.c").read_text()
 assert (root / "fm1/native/tools/black_frame_guard.py").is_file()
+# The same 128x78 16-colour media footprint is preserved. Quality
+# candidates may use ALL 256 opaque VQ entries, but may never replace the
+# historical candidate with worse measured worst- or mean-frame PSNR.
+for name, count, media_size in (
+    ("pack_effects_vq_candidate.py", "144u", "62592"),
+    ("pack_eureka_vq_candidate.py", "576u", "250368"),
+):
+    encoder = (root / "fm1/native/tools" / name).read_text()
+    assert "free_zero=True" in encoder
+    assert "start = 0 if free_zero else 1" in encoder
+    assert "def improves_both(candidate, prior):" in encoder
+    assert "if improves_both(trial[3], chosen[3]):" in encoder
+    assert "for row, frame in enumerate((0, FRAMES//2, FRAMES-1)):" in encoder
+    assert count in encoder and media_size in encoder
+color_encoder = (root / "fm1/native/tools/mi_reference_palette.py").read_text()
+assert "Image.Quantize.MEDIANCUT" in color_encoder
+assert "Image.Quantize.FASTOCTREE" in color_encoder
+assert "Image.Quantize.MAXCOVERAGE" in color_encoder
+assert "dtype=np.int32" in color_encoder  # no RGB luma overflow
+assert "frame_loss.max()" in color_encoder
 # Index zero is an opaque RGB565 palette colour. Treating it as alpha
 # discarded real frames from BOTH FX and EUREKA.
 frame_guard = (root / "fm1/native/tools/black_frame_guard.py").read_text()
