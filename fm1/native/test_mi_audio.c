@@ -274,6 +274,7 @@ int main(void)
  mi_init(&s);mi_audio_init(&a,44100.f);
  s.step_pattern[0]=0xFFFFu;
  s.global[0]=120;
+ s.global[3]=1; /* GLO CLOCK=MIDI explicitly enables sequencer transport */
  mi_audio_midi_clock(&a,&s,0xFAu);
  assert(s.step_play && a.step_midi_mode && a.step_clock_phase==0u);
  mi_audio_render(&a,&s,lr,256u,4096u);
@@ -316,11 +317,33 @@ int main(void)
  mi_audio_midi_clock(&a,&s,0xF8u);
  mi_audio_render(&a,&s,lr,256u,4096u);
  assert(a.step_current==15u && a.step_next==14u);
- /* Losing MIDI Clock returns to the existing internal tempo engine. */
+ /* Explicit MIDI mode must not silently free-run when the master pauses. */
  a.step_last_clock_sample=0u;
  a.rendered_samples=(uint32_t)a.sample_rate+2000u;
  mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.step_midi_mode && s.step_play && a.step_current==15u);
+ /* GLO CLOCK=INTERNAL really selects the internal BPM engine. */
+ s.global[3]=0;
+ mi_audio_render(&a,&s,lr,256u,4096u);
  assert(!a.step_midi_mode && s.step_play && a.step_current==15u);
- puts("PASS: eight voices, FMDrum-to-REC PCM, 4x16 SEQ MIDI Clock/transport, filter, LFO, FX");
+ /* FMDrum input bypasses the entire synth FILTER/FX chain but is still
+  * mixed to output; identical dry audio must result with REVERB on/off. */
+ {
+    int32_t dry[512];
+    unsigned j;
+    mi_init(&s);mi_audio_init(&a,44100.f);
+    s.wave=MI_WAVE_FMDRUM;
+    s.fx=MI_FX_OFF;
+    mi_audio_input_on(&a,&s,53u,120u);
+    mi_audio_render(&a,&s,lr,256u,4096u);
+    for(j=0u;j<512u;j++)dry[j]=lr[j];
+    mi_audio_init(&a,44100.f);
+    s.fx=MI_FX_REVERB;s.wet=127u;
+    s.filter_cutoff=10u;
+    mi_audio_input_on(&a,&s,53u,120u);
+    mi_audio_render(&a,&s,lr,256u,4096u);
+    for(j=0u;j<512u;j++)assert(lr[j]==dry[j]);
+ }
+ puts("PASS: eight voices, FMDrum dry FX bypass and REC, 4x16 SEQ explicit MIDI Clock/transport");
  return 0;
 }
