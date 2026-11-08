@@ -488,9 +488,16 @@ assert "RESOURCE_CAPACITY = 69 * 4096 - 32" in resource_packer
 assert "photo96_rebuild.py" in (root / "fm1/native/tools/PHOTO96_REBUILD.md").read_text()
 assert "original||legacy" in ui
 assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in resource_header
-assert "0x0000u,0x10a2u,0x2945u" in resource_header
-assert "0x8410u,0x9492u,0xa534u" in resource_header
-assert "0xd6bau,0xce59u,0xffdfu,0xf7beu" in resource_header
+# Match all 8 x 16 source-calibrated shades, not three arbitrary
+# colour triplets. Index order is essential to the archival VQ maps.
+photo_palette = resource_header.split(
+    "mi_photo_grayscale_palette[MI_TILE_BANKS][16] = {", 1)[1].split("};", 1)[0]
+palette_rows = [line for line in photo_palette.splitlines()
+                if line.strip().startswith("{")]
+assert len(palette_rows) == 8
+assert all(len(re.findall(r"0x[0-9a-f]{4}u", row)) == 16
+           for row in palette_rows)
+assert "SHA256 bb5345df9b9e4118052b2feac603e38f16db0fccd5af49223e52b08115a1cc40" in resource_header
 assert "PHOTO_RGB565 = (" in resource_packer
 assert "return result" in resource_packer
 assert "transformed = bytearray(result)" not in resource_packer
