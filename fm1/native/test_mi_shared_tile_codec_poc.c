@@ -9,9 +9,11 @@ static uint8_t coded[MI_TP_MAX_PAYLOAD];
 static uint8_t out[MI_TP_PIXELS_BYTES], book[MI_TP_BOOK_BYTES], ids[MI_TP_MAP_BYTES];
 static uint8_t ref[MI_TP_PIXELS_BYTES];
 static uint16_t colors[16];
+static int16_t cached_clip=-1;
 static int verify(unsigned frame,unsigned size){
  unsigned clip=frame/27u,ty,tx,row,col,k,i;
- if(mi_tp_decode_frame(coded,size,(uint16_t)frame,colors,out,book,ids))return -1;
+ if(mi_tp_decode_frame_cached(coded,size,(uint16_t)frame,colors,out,book,ids,
+                             &cached_clip))return -1;
  for(i=0;i<16;i++){
   k=current[clip*32u+i*2u]|((unsigned)current[clip*32u+i*2u+1u]<<8u);
   if(colors[i]!=(uint16_t)k)return -2;
@@ -38,6 +40,13 @@ int main(int argc,char **argv){
   f=(i*237u)%MI_TP_FRAMES; /* coprime multiplier: all 628 frames exactly once */
   if(verify(f,(unsigned)n)){printf("bad random %u\n",f);return 12;}
  }
+ cached_clip=-1;
+ for(i=0;i<MI_TP_FRAMES;i++){
+  f=MI_TP_FRAMES-1u-i;
+  if(verify(f,(unsigned)n)){printf("bad reverse %u\n",f);return 15;}
+ }
+ /* Uncached API must remain bit-identical for independent legacy tests. */
+ if(mi_tp_decode_frame(coded,(unsigned)n,0,colors,out,book,ids))return 16;
  coded[0]^=0xffu;
  if(mi_tp_decode_frame(coded,(unsigned)n,0,colors,out,book,ids)==0)return 13;
  coded[0]^=0xffu;
@@ -46,6 +55,6 @@ int main(int argc,char **argv){
  coded[28u+24u*32u+24u*8u+2u]=0xffu;
  coded[28u+24u*32u+24u*8u+3u]=0xffu;
  if(mi_tp_decode_frame(coded,(unsigned)n,0,colors,out,book,ids)==0)return 14;
- printf("PASS: 628 sequential and 628 non-sequential VQ-exact frames; malformed input rejected; bytes %ld\n",n);
+ printf("PASS: cached 628 sequential + 628 shuffled + 628 reverse, legacy API and corrupt-input checks; bytes %ld\n",n);
  return 0;
 }
