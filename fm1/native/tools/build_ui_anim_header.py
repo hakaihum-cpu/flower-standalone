@@ -4,7 +4,7 @@
 The binary pack is checked into the same repository; no source downloads,
 external packages, AI image generation, or runtime zlib dependencies.
 Exact source input: env.png, LFO.png, logo.png, start.png supplied by user.
-All 100 frames of ENV and LFO are present in their original tile order.
+All 90 ENV (9x10) and 100 LFO (10x10) original frames retain their order.
 """
 from __future__ import annotations
 import argparse
