@@ -172,6 +172,7 @@ assert (root / "fm1/native/mi_memory.h").is_file()
 # derive from the same CircleCI pipeline number; fixed 938 never passes CI.
 manifest = (root / "fm1/native/fm1.toml").read_text(encoding="utf-8")
 app_header = (root / "fm1/native/app.h").read_text(encoding="utf-8")
+ui = (root / "fm1/native/app.c").read_text(encoding="utf-8")
 id_patch = (root / "fm1/native/tools/set_miyako_product_id.py").read_text(encoding="utf-8")
 verify_fwsc = (root / "fm1/native/tools/verify_fwsc.py").read_text(encoding="utf-8")
 assert 'id_prefix = "FM-1_9"' in manifest
@@ -215,7 +216,6 @@ assert "rm -rf /tmp/fm1-base/miyako/build" in ci
 assert ci.index("rm -rf /tmp/fm1-base/miyako/build") < ci.index(
     "Reconstruct all 144 original MIYAKO EFFECTS source frames")
 # Feature coverage: reject a UI-only placebo update to the proven baseline.
-ui = (root / "fm1/native/app.c").read_text(encoding="utf-8")
 audio = (root / "fm1/native/mi_audio.c").read_text(encoding="utf-8")
 audio_h = (root / "fm1/native/mi_audio.h").read_text(encoding="utf-8")
 audio_test = (root / "fm1/native/test_mi_audio.c").read_text(encoding="utf-8")
