@@ -20,7 +20,7 @@ from pathlib import Path
 
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image
 
 from pack_eureka_frames import clip_pixels
 from black_frame_guard import replace_black_frames
@@ -186,10 +186,10 @@ def jpeg_frames(pack, clip):
             raise ValueError("EUREKA: corrupt JPEG " + str(f))
         with Image.open(io.BytesIO(data)) as im:
             im.load()
-            fitted = ImageOps.contain(im.convert("RGB"), (WIDTH, HEIGHT), Image.Resampling.LANCZOS)
-            canvas = Image.new("RGB", (WIDTH, HEIGHT), (0, 0, 0))
-            canvas.paste(fitted, ((WIDTH - fitted.width) // 2, (HEIGHT - fitted.height) // 2))
-            frames.append(canvas)
+            # Preserve EVERY source pixel and eliminate baked-in black bars.
+            # LCD render restores the 128x78 intermediate to full 240x240.
+            frames.append(im.convert("RGB").resize(
+                (WIDTH, HEIGHT), Image.Resampling.LANCZOS))
     return frames
 
 
