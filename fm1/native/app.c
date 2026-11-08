@@ -704,7 +704,6 @@ static void mi_fx_dial(unsigned half,int32_t x,int32_t y,unsigned knob)
 }
 static void mi_fx_draw_half(unsigned half)
 {
-    const int32_t shift=(int32_t)half*120;
     const unsigned mode=mi_visual_mode();
     const unsigned fx=state.fx_slot?state.fx2:state.fx;
     cv_begin(240,120,C_BLACK);
@@ -713,13 +712,15 @@ static void mi_fx_draw_half(unsigned half)
     }else{
         mi_media_draw_scaled_half(half,0,0,240,240,0,mode==7u);
     }
-    cv_rect(0,0-shift,240,16,C_BLACK);
-    cv_text(3,3-shift,&FONT_XS,mi_fx_name((mi_fx_t)fx),C_WHITE);
-    cv_text(67,3-shift,&FONT_XS,state.fx_page?"P2":"P1",YELLOW);
-    cv_text(87,3-shift,&FONT_XS,state.fx_slot?"FX B":"FX A",C_WHITE);
-    cv_text(129,3-shift,&FONT_XS,
-            (fx==MI_FX_DREAMY||fx==MI_FX_EUREKA)?
-            "PRESET:P1/2":"FX:A/B",GREY);
+    if(half==0u){
+        cv_rect(0,0,240,16,C_BLACK);
+        cv_text(3,3,&FONT_XS,mi_fx_name((mi_fx_t)fx),C_WHITE);
+        cv_text(67,3,&FONT_XS,state.fx_page?"P2":"P1",YELLOW);
+        cv_text(87,3,&FONT_XS,state.fx_slot?"FX B":"FX A",C_WHITE);
+        cv_text(129,3,&FONT_XS,
+                (fx==MI_FX_DREAMY||fx==MI_FX_EUREKA)?
+                "PRESET:P1/2":"FX:A/B",GREY);
+    }
     mi_fx_dial(half,1,183,0u);
     mi_fx_dial(half,61,183,1u);
     mi_fx_dial(half,121,183,2u);
