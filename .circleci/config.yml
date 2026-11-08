@@ -27,7 +27,7 @@ jobs:
           name: Verify exact MIYAKO branch and zero KARMA source closure
           command: |
             set -eu
-            test "$CIRCLE_BRANCH" = "feature/fm1-letter-highdetail-20261108"
+            test "$CIRCLE_BRANCH" = "feature/fm1-photo-shared-tile-poc-20261109"
             # Reject missing pipeline metadata before media/resource work.
             case "${CIRCLE_PIPELINE_NUMBER:-}" in
               ""|*[!0-9]*) echo "FAIL: CircleCI pipeline.number was not supplied" >&2; exit 1 ;;
@@ -48,6 +48,8 @@ jobs:
             grep -Fq "#define MI_UI_ENV_COUNT 90u" /tmp/mi_ui_preflight.h
             grep -Fq "mi_ui_start_maps" /tmp/mi_ui_preflight.h
             python3 fm1/native/tools/test_miyako_resource96.py
+            # Independent exact-pixel MTL1 verification and host-only C decoder.
+            python3 fm1/native/tools/test_shared_photo_tiles_poc.py
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
               fm1/native/mi_control.c fm1/native/test_mi_control.c \
@@ -102,6 +104,8 @@ jobs:
                fm1/native/mi_fx_dsp.c fm1/native/mi_fx_dsp.h \
                fm1/native/mi_recorder.c fm1/native/mi_recorder.h \
                fm1/native/mi_memory.h fm1/native/mi_resource_media.h \
+               fm1/native/mi_shared_tile_codec_poc.h \
+               fm1/native/mi_shared_tile_codec_poc.c \
                /tmp/fm1-base/miyako/
             test -s /tmp/fm1-base/miyako/words.tsv
             grep -q '^# url: https://' /tmp/fm1-base/miyako/words.tsv
@@ -116,10 +120,10 @@ jobs:
             grep -Fq "#define MI_UI_MOTION_COUNT 100u" /tmp/fm1-base/miyako/mi_ui_media.h
             grep -Fq "#define MI_UI_ENV_COUNT 90u" /tmp/fm1-base/miyako/mi_ui_media.h
             # Standard CRC-protected res.bin, 96x96 original-source images.
-            # 279936 + 32-byte header fits in 69 sectors; saved data untouched.
+            # 272521 + 32-byte header fits in 69 sectors; saved data untouched.
             python3 fm1/native/tools/pack_miyako_resource.py \
-              /tmp/fm1-base/miyako/miyako_media.bin
-            test "$(stat -c %s /tmp/fm1-base/miyako/miyako_media.bin)" -eq 279936
+              --shared-tile-poc /tmp/fm1-base/miyako/miyako_media.bin
+            test "$(stat -c %s /tmp/fm1-base/miyako/miyako_media.bin)" -eq 272521
             # CircleCI pipeline number drives the running UI version, OTA
             # loader and FWSC product marker; fixed 938 is forbidden.
             python3 fm1/native/tools/set_miyako_product_id.py --base /tmp/fm1-base
@@ -192,7 +196,7 @@ jobs:
             test -x "$CLC"
             # All four independent MIYAKO native DSP / video objects.
             # Same CPU, FPU, standard, builtin and optimization policy as fm1-base.
-            for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_control.c mi_video.c; do
+            for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_control.c mi_video.c mi_shared_tile_codec_poc.c; do
               "$CLC" -fsyntax-only -std=c99 -Os -mcpu=r3 -mfprev1 -ffp-contract=off \
                 -fno-builtin -Wall -Werror=implicit-function-declaration \
                 -I /tmp/fm1-base/miyako -I /tmp/fm1-base/include \
@@ -322,7 +326,7 @@ jobs:
             test -s /tmp/fm1-base/miyako/build/miyako-res.bin
             cp /tmp/fm1-base/miyako/build/miyako-res.bin \
               fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin
-            test "$(stat -c %s fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin)" -eq 279968
+            test "$(stat -c %s fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin)" -eq 272553
             printf '%s\n' \
               'MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE' \
               'Built without the KARMA application and DSP.' \
@@ -330,7 +334,7 @@ jobs:
               'Original 144 EFFECTS and 576 EUREKA source frames are 16-colour VQ.' \
               'To see all 628 photo tiles, install the matching MIYAKO-FM1-NATIVE-DEV-res.bin with the existing fm1-base resource installer; FWSC-only updates do not include photos.' \
               'The 628 user photo frames retain their real RGB colours (including sepia sunsets) with 24 per-clip 16-colour palettes in the unchanged stock VQ format.' \
-              'The exact matching 279968-byte MIYAKO-FM1-NATIVE-DEV-res.bin MUST be installed together with this FWSC; old image resources, even when the same size, have different VQ codebooks and are rejected. Use the original resource installer.' \
+              'The exact matching 272553-byte MIYAKO-FM1-NATIVE-DEV-res.bin MUST be installed together with this FWSC; old image resources, even when the same size, have different VQ codebooks and are rejected. Use the original resource installer.' \
               'REC internal 2s, EUREKA short-buffer 2s, two serial FX with conflict guards.' \
               'SEQ short press: RECORDER. SEQ hold (650ms): 4-track FMDrum step sequencer.' \
               '16 white keys toggle steps 1-16. K1 track, K2 play/stop, K3 direction, K4 length 8-16.' \
@@ -354,4 +358,4 @@ workflows:
       - fm1_native_build:
           filters:
             branches:
-              only: feature/fm1-letter-highdetail-20261108
+              only: feature/fm1-photo-shared-tile-poc-20261109
