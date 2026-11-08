@@ -21,10 +21,27 @@ void mi_rec_init(mi_recorder_t *r)
     r->capture_step=0.5f; /* legacy standalone host calls: 22.05kHz */
     r->play_step=0.5f;
 }
+/* A new take starts playback from its first sample; OVERDUB, including
+ * manual stop, clock stop and 192-tick completion, never rewinds the loop. */
 static void finish(mi_recorder_t *r)
 {
+    uint8_t was_overdubbing=r->overdubbing;
     r->recording=0u;r->overdubbing=0u;r->armed=0u;
-    if(r->count>=4u){r->playing=1u;r->playback_pos=0.f;}
+    if(r->count>=4u){
+        r->playing=1u;
+        if(!was_overdubbing)r->playback_pos=0.f;
+    }
+}
+/* Align the overdub write head to the CURRENT playback position.
+ * Never reset the playback head or clear the existing recording. */
+static void begin_overdub(mi_recorder_t *r)
+{
+    if(r->playback_pos<0.f||r->playback_pos>=(float)r->count)
+        r->playback_pos=0.f;
+    r->write_pos=(uint32_t)r->playback_pos;
+    r->overdubbing=1u;r->recording=1u;r->playing=1u;
+    r->capture_step=r->play_step;
+    r->capture_sum=0.f;r->capture_samples=0u;r->accumulator=0.f;
 }
 void mi_rec_stop(mi_recorder_t *r)
 {
@@ -75,9 +92,8 @@ void mi_rec_configure(mi_recorder_t *r,unsigned bpm,unsigned bars,
     }
     /* Lost-clock fallback never leaves REC armed indefinitely. */
     if(r->armed&&!r->clock_active){
-        r->armed=0u;r->recording=1u;r->write_pos=0u;
-        r->capture_sum=0.f;r->capture_samples=0u;r->accumulator=0.f;
-        if(r->count>=4u)r->overdubbing=1u;
+        r->armed=0u;
+        if(r->count>=4u)begin_overdub(r);
         else{mi_rec_clear(r);r->recording=1u;}
     }
 }
@@ -97,13 +113,15 @@ void mi_rec_external_tick(mi_recorder_t *r,uint32_t sample_clock)
     if(r->armed && ((r->clock_ticks-1u)%96u)==0u){
         uint8_t overdub=r->count>=4u;
         if(!overdub)mi_rec_clear(r);
-        r->armed=0u;r->recording=1u;r->overdubbing=overdub;
-        r->playing=overdub;
-        r->write_pos=0u;r->playback_pos=0.f;
-        r->capture_sum=0.f;r->capture_samples=0u;r->accumulator=0.f;
+        r->armed=0u;
+        if(overdub)begin_overdub(r);
+        else{
+            r->recording=1u;r->overdubbing=0u;r->playing=0u;
+            r->write_pos=0u;r->playback_pos=0.f;
+            r->capture_sum=0.f;r->capture_samples=0u;r->accumulator=0.f;
+        }
         r->clock_start_tick=r->clock_ticks;
-        if(overdub)r->capture_step=r->play_step;
-        else if(r->clock_period>1.f)
+        if(!overdub&&r->clock_period>1.f)
             r->capture_step=clamp((float)MI_REC_CAPACITY/
                                   (192.f*r->clock_period),0.001f,0.95f);
     }else if(r->recording &&
@@ -126,10 +144,7 @@ void mi_rec_toggle_record(mi_recorder_t *r)
     if(r->clock_active){r->armed=1u;return;}
     clock=r->clock_active;
     if(r->count>=4u){
-        r->overdubbing=1u;r->recording=1u;r->playing=1u;
-        r->write_pos=0u;r->playback_pos=0.f;
-        r->capture_step=r->play_step;
-        r->capture_sum=0.f;r->capture_samples=0u;r->accumulator=0.f;
+        begin_overdub(r);
         return;
     }
     mi_rec_clear(r);
