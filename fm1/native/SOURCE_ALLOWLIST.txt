@@ -6,3 +6,4 @@ fm1/native/app.c
 fm1/native/mi_video.c
 fm1/native/mi_fx_dsp.c
 fm1/native/mi_recorder.c
+fm1/native/mi_shared_tile_codec_poc.c
