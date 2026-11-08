@@ -94,6 +94,8 @@ void mi_init(mi_state_t *s)
     /* REC editor: IN=0, OUT=127, pitch=0 semitones, level=100. */
     s->seq[0]=0;s->seq[1]=127;s->seq[2]=3;s->seq[3]=100;
     s->step_len=8u; /* 4 silent FMDrum tracks, ready for white-key toggles */
+    s->midi_channel=1u; /* default MIDI note input channel 1 */
+    s->global[3]=0;     /* clock source: 0=INTERNAL, 1=MIDI */
 }
 static void view(mi_state_t *s, mi_view_t v)
 {
@@ -102,6 +104,7 @@ static void view(mi_state_t *s, mi_view_t v)
     if(v==MI_HOME&&s->wave==MI_WAVE_MULTI&&s->osc_page>1u)
         s->osc_page=0u;
     if(v!=MI_SEQ)s->step_editor=0u;
+    if(v!=MI_CONFIG)s->config_load_armed=0u;
     s->save_armed = 0;
 }
 mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
@@ -151,13 +154,15 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
     case MI_B_SAVE:
         if (s->view != MI_SAVE) {
             view(s, MI_SAVE);
+            s->save_action=0u;
         } else if (!s->save_armed ||
                    (uint32_t)(now_ms - s->save_armed_ms) > 4000u) {
             s->save_armed = 1;
             s->save_armed_ms = now_ms;
         } else {
             s->save_armed = 0;
-            return result(MI_ACTION_SAVE, s->project_slot);
+            return result(s->save_action?MI_ACTION_LOAD:MI_ACTION_SAVE,
+                          s->project_slot);
         }
         break;
     default: break;
@@ -271,16 +276,20 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         if(k==1)lo=(int32_t)s->seq[0]+1;
         if(k==2)hi=6;
         break;
-    case MI_CONFIG: {
-        static const int16_t mn[] = {40, 0, -50, 0};
-        static const int16_t mx[] = {240, 100, 50, 2};
-        s->global[k] = (int16_t)limited(s->global[k],
-                                     k==3u?d:fast_step(d,2u),mn[k],mx[k]);
+    case MI_CONFIG:
+        if(k==0u)
+            s->midi_channel=(uint8_t)limited(s->midi_channel,d,1,16);
+        else if(k==1u)
+            s->global[3]=(int16_t)limited(s->global[3],d,0,1);
+        else if(k==2u)
+            s->project_slot=(uint8_t)limited(s->project_slot,d,1,4);
+        if(k<3u)s->config_load_armed=0u;
         return;
-    }
     case MI_SAVE:
-        if (k == 0) { p = &s->project_slot; lo = 1; hi = 4; }
-        break;
+        if(k==0u) {s->project_slot=(uint8_t)limited(s->project_slot,d,1,4);}
+        if(k==1u) {s->save_action=(uint8_t)limited(s->save_action,d,0,1);}
+        s->save_armed=0u; /* switching slot/action cancels confirmation */
+        return;
     default: break;
     }
     if(p){
@@ -343,6 +352,12 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
                                         steps>0?1:-1,0,1);
             break;
         }
+        if(s->view==MI_CONFIG||s->view==MI_SAVE){
+            s->project_slot=(uint8_t)limited(s->project_slot,
+                                           steps>0?1:-1,1,4);
+            s->config_load_armed=0u;s->save_armed=0u;
+            break;
+        }
         if(s->view==MI_SEQ){
             if(steps!=0)s->rec_bars=s->rec_bars==2u?4u:2u;
             break;
@@ -365,6 +380,16 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
         break;
     }
     case MI_EN_K1: case MI_EN_K2: case MI_EN_K3: case MI_EN_K4:
+        if(s->view==MI_CONFIG&&e==MI_EN_K4){
+            /* Two explicit clockwise detents required for patch LOAD.
+             * A counter-clockwise detent cancels the pending action. */
+            if(steps<0)s->config_load_armed=0u;
+            else if(s->config_load_armed){
+                s->config_load_armed=0u;
+                return result(MI_ACTION_LOAD,s->project_slot);
+            }else s->config_load_armed=1u;
+            break;
+        }
         knob(s, (unsigned)(e - MI_EN_K1), steps);
         break;
     default: break;
@@ -406,7 +431,7 @@ int mi_state_valid(const mi_state_t *s)
         s->global[0] < 40 || s->global[0] > 240 ||
         s->global[1] < 0 || s->global[1] > 100 ||
         s->global[2] < -50 || s->global[2] > 50 ||
-        s->global[3] < 0 || s->global[3] > 2 ||
+        s->global[3] < 0 || s->global[3] > 1 ||
         s->osc2_wave>3u || s->osc2_level>127u ||
         s->osc2_detune>127u || s->osc2_octave>4u ||
         s->osc_page>2u || s->fx_page>1u ||
@@ -415,7 +440,9 @@ int mi_state_valid(const mi_state_t *s)
         s->drum_color>127u||s->drum_level>127u||
         (s->rec_bars!=2u&&s->rec_bars!=4u)||
         s->step_track>=4u||s->step_play>1u||s->step_dir>2u||
-        s->step_len<8u||s->step_len>16u||s->step_editor>1u)
+        s->step_len<8u||s->step_len>16u||s->step_editor>1u||
+        s->midi_channel<1u||s->midi_channel>16u||
+        s->save_action>1u||s->config_load_armed>1u)
         return 0;
     for (i = 0; i < 4u; ++i) {
         if (s->env[i] > 127u || s->lfo[i] > 127u || s->video_params[i]>127u)
@@ -475,7 +502,8 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         {"MODE","WET","P3","P4"}, {"MODE","WET","P3","P4"},
         {"ATK","DEC","SUS","REL"}, {"RATE","WAVE","DEPTH","DEST"},
         {"MODE","RATE","GATE","OCT"}, {"IN","OUT","PITCH","LEVEL"},
-        {"BPM","SWING","TUNE","CLOCK"}, {"SLOT","","",""}
+        {"MIDI CH","CLOCK","PRESET","LOAD"},
+        {"SLOT","ACTION","CONFIRM",""}
     };
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
     if(s->view==MI_SEQ&&s->step_editor){
@@ -583,8 +611,10 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
             return k==0?s->step_track+1u:k==1?s->step_play:
                    k==2?s->step_dir:s->step_len;
         return s->seq[k];
-    case MI_CONFIG: return s->global[k];
-    case MI_SAVE: return k == 0 ? s->project_slot : 0;
+    case MI_CONFIG: return k==0?s->midi_channel:k==1?s->global[3]:
+                          k==2?s->project_slot:s->config_load_armed;
+    case MI_SAVE: return k==0?s->project_slot:k==1?s->save_action:
+                        k==2?s->save_armed:0;
     default: return 0;
     }
 }
