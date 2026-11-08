@@ -239,6 +239,10 @@ spin K3 1
 expect step_dir 1
 spin K2 1
 expect step_play 1
+# The FM-1 host's spin advances only 1 ms: control state changes before
+# the next audio block can initialize the playhead. Allow one audio block,
+# but stay well inside the first 1/16-note step at BPM 90 (166.7 ms).
+wait 20
 expect step_current 15
 shot MIYAKO_STEP_SEQ.png
 spin K2 -1
