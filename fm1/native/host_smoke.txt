@@ -263,6 +263,16 @@ expect rec_pitch 3
 midi USB B9 15 00
 wait 12
 expect rec_pitch 0
+# GLO explicitly switches the SEQUENCER from INTERNAL to MIDI Clock.
+# The RECORDER's original auto-MIDI clock handling is unchanged.
+tap GLO
+expect view 8
+expect midi_channel 1
+expect clock_mode 0
+shot MIYAKO_GLOBAL.png
+turn K2 1
+expect clock_mode 1
+tap SEQ
 # Start reinitializes the first step; no beat is generated before Clock.
 midi USB FA 00 00
 wait 12
@@ -319,3 +329,59 @@ wait 12
 expect step_play 0
 # After Stop, MIDI ownership is retained until a new Start or Continue.
 expect step_midi_mode 1
+# Dedicated four-slot persistent SAVE/LOAD and GLO preset recall.
+tap GLO
+expect view 8
+expect midi_channel 1
+expect clock_mode 1
+turn K1 1
+expect midi_channel 2
+turn K3 1
+expect slot 2
+shot MIYAKO_GLOBAL_MIDI.png
+tap SAVE
+expect view 9
+expect slot 2
+expect save_action 0
+shot MIYAKO_SAVE_LOAD.png
+tap SAVE
+expect save_armed 1
+tap SAVE
+expect save_armed 0
+expect save_mask 3
+tap HOME
+expect wave 4
+turn ALGO 1
+expect wave 5
+tap GLO
+expect view 8
+turn K4 1
+expect config_load_armed 1
+turn K4 1
+expect config_load_armed 0
+expect wave 4
+expect slot 2
+tap HOME
+turn ALGO 1
+expect wave 5
+tap SAVE
+expect view 9
+turn K2 1
+expect save_action 1
+tap SAVE
+expect save_armed 1
+tap SAVE
+expect wave 4
+expect save_action 0
+expect save_mask 3
+tap GLO
+expect midi_channel 2
+expect clock_mode 1
+reboot
+wait 100
+expect view 0
+expect slot 2
+expect wave 4
+expect midi_channel 2
+expect clock_mode 1
+expect save_mask 3
