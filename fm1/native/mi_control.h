@@ -55,6 +55,14 @@ typedef struct {
     uint8_t drum_tone,drum_decay,drum_color,drum_level;
     uint8_t rec_bars; /* 2(default) or 4; external MIDI clock forces 2 */
     uint8_t video_params[4]; /* glitch, tile, xshift, yshift */
+    /* MI16: FMDrum 4-track x 16-step pattern. Append only: all MI15
+     * persisted fields retain their exact byte offsets. */
+    uint16_t step_pattern[4]; /* bit 0 = first white key, per track */
+    uint8_t step_track;       /* selected track 0..3 */
+    uint8_t step_play;        /* K2: clockwise starts, CCW stops */
+    uint8_t step_dir;         /* K3: 0=FWD, 1=REV, 2=RND */
+    uint8_t step_len;         /* K4: 1..16; default 8 */
+    uint8_t step_editor;      /* SEQ long hold UI, transient */
 } mi_state_t;
 typedef struct {
     mi_action_t action;
