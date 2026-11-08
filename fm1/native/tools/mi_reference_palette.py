@@ -51,7 +51,7 @@ def natural_pixels(frames: list[Image.Image]) -> tuple[list[int], list[bytes]]:
     # images; keep the baseline unless worst-frame and mean RGB565 colour
     # fidelity objectively improve. No image synthesis or extra ROM.
     import numpy as np
-    original = np.stack([np.asarray(im.convert("RGB"), dtype=np.int16)
+    original = np.stack([np.asarray(im.convert("RGB"), dtype=np.int32)
                          for im in frames])
     # Weight color errors at genuine source edges, where facial lines and
     # small details are disproportionately harmed by palette collapse.
