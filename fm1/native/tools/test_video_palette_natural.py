@@ -15,10 +15,10 @@ from mi_reference_palette import REFERENCE_565
 from pack_miyako_resource import PHOTO_RGB565
 import re
 
-# FM-1 photo frames load their 16 RGB565 colours from the separately
-# flashed resource, not from a compile-time C array.  Verify the real
-# renderer decoding contract and the existing independently audited resource
-# reference against the EFFECTS/EUREKA encoder's reference palette.
+# The archive keeps the original VQ selectors and codebooks. Original
+# photographs are monochrome, so the native LCD maps indices back into
+# eight original-source greyscale palette tables. Both the earlier blue
+# recolour and the historical warm res.bin retain compatible frame maps.
 from test_miyako_resource96 import REFERENCE as RESOURCE_REFERENCE
 app_source = (Path(__file__).resolve().parents[1] / "app.c").read_text()
 assert RESOURCE_REFERENCE == PHOTO_RGB565, (
@@ -37,8 +37,8 @@ assert "mi_photo_palette[i]=mi_photo_grayscale_palette[bank][i]" in app_source
 assert "for(i=1u;i<MI_TILE_BANKS;i++)" in app_source
 assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in (Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
 header=(Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
-assert "mi_photo_source_palette[16]" in header
-for entry in ("0x1841u", "0x5101u", "0x89e4u", "0xfdd1u"):
+assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in header
+for entry in ("0x0020u", "0x10a2u", "0x2945u", "0xc618u", "0xf7beu"):
     assert entry in header
 assert "mi_photo_palette[idx]" in app_source
 
