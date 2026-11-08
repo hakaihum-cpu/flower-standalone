@@ -858,6 +858,7 @@ static uint16_t mi_photo_palette[16];
  * Reused between frames and both LCD 120-row passes; no malloc/audio IRQ. */
 static uint8_t mi_photo_tilebook[MI_TP_BOOK_BYTES];
 static uint8_t mi_photo_tilemap[MI_TP_MAP_BYTES];
+static int16_t mi_photo_book_clip=-1; /* avoid inflating same 4 KiB book per frame */
 static int16_t mi_photo_cached=-1;
 /* The original user images have been re-encoded in the existing VQ
  * format. Old res.bin codebooks/selectors are NOT interchangeable. Reject
@@ -890,17 +891,19 @@ static void mi_photo_decode(unsigned frame)
     /* All 628 frames require the matching CRC-validated res.bin with its
      * real original-source, clip-specific RGB565 palette and VQ maps. */
     res=mi_photo_source(&length);
-    if(!res){mi_photo_cached=-1;return;}
+    if(!res){mi_photo_cached=-1;mi_photo_book_clip=-1;return;}
     if(res[0u]=='M'&&res[1u]=='T'&&res[2u]=='L'&&res[3u]=='1'){
-        if(mi_tp_decode_frame(res,length,(uint16_t)frame,mi_photo_palette,
-                              mi_photo_pixels,mi_photo_tilebook,
-                              mi_photo_tilemap)!=0){
+        if(mi_tp_decode_frame_cached(res,length,(uint16_t)frame,mi_photo_palette,
+                                     mi_photo_pixels,mi_photo_tilebook,
+                                     mi_photo_tilemap,&mi_photo_book_clip)!=0){
             mi_photo_cached=-1;
+            mi_photo_book_clip=-1;
             return;
         }
         mi_photo_cached=(int16_t)frame;
         return;
     }
+    mi_photo_book_clip=-1; /* never carry MTL1 dictionary into old VQ */
     clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
     if(clip>=MI_TILE_VQ_CLIPS){mi_photo_cached=-1;return;}
     /* Clip palette is stored alongside its codebook in the existing
