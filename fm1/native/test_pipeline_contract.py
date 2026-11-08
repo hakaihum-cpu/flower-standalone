@@ -9,7 +9,7 @@ required = (
     "version: 2.1",
     "default: false",
     "when: << pipeline.parameters.run_build >>",
-    "only: feature/fm1-miyako-osc-attack-letter-version-20261108",
+    "only: feature/fm1-miyako-video-opaque-letter-sub-20261108",
     "fm1_native_build",
     "MIYAKO-FM1-NATIVE-DEV.fwsc",
     "MI_EFFECTS_ASSET_COUNT 144u",
@@ -74,7 +74,7 @@ assert ci.index("python3 fm1/native/tools/check_ci_run_shell.py") < ci.index(
     "python3 -m compileall -q fm1/native")
 assert "five-sheet set's" not in ci
 assert (root / "fm1/native/tools/check_ci_run_shell.py").is_file()
-assert re.search(r"^\s+only: feature/fm1-miyako-osc-attack-letter-version-20261108\s*$", ci, re.M)
+assert re.search(r"^\s+only: feature/fm1-miyako-video-opaque-letter-sub-20261108\s*$", ci, re.M)
 assert "/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako" in ci
 assert "test_media_crc.c" in ci
 assert "pack_effects_vq_candidate.py" in ci
@@ -517,20 +517,37 @@ assert 'RAW_SHA256 = "8e4a5b1f02d6dcf424e9ca28b7d1813e6837432ed23a56fd4f565400ad
 assert '#include "mi_letter_anim.h"' in ui
 assert 'mi_letter_maps[frame*200u+' in ui
 assert 'mi_letter_book[block*8u+' in ui
-assert 'mi_letter_palette[previous]' in ui
-assert 'state.env[0]*(MI_LETTER_FRAMES-1u)+63u' in ui
-assert 'mi_draw_attack_scene();' in ui
+assert 'mi_letter_brightness(mi_letter_palette[p])' in ui
+assert 'previous?YELLOW:C_BLACK' in ui
+assert 'state.sub*(MI_LETTER_FRAMES-1u)+63u' in ui
+assert 'mi_draw_sub_scene();' in ui
 assert 'mi_draw_letter_waveform();' in ui
 assert 'audio.osc_scope[idx]*18/127' in ui
-assert '"attack_frame"' in ui
+assert '"sub_frame"' in ui
+assert '"sub"' in ui
 assert 'mi_letter_anim.h' in (root / "fm1/native/verify_standalone.py").read_text()
 assert "build_letter_anim_header.py --out /tmp/mi_letter_preflight.h" in ci
 assert '--out /tmp/fm1-base/miyako/mi_letter_anim.h' in ci
 assert "test_miyako_dynamic_version.py" in ci
-assert "MIYAKO_OSC_ATTACK_0.png" in ci and "MIYAKO_OSC_ATTACK_127.png" in ci
-assert "expect attack_frame 0" in host_smoke
-assert "expect attack_frame 71" in host_smoke
+assert "MIYAKO_OSC_SUB_0.png" in ci and "MIYAKO_OSC_SUB_127.png" in ci
+assert "expect sub_frame 0" in host_smoke
+assert "expect sub_frame 71" in host_smoke
+assert "expect sub 127" in host_smoke
+assert "MIYAKO_NORMAL_SEL_RETURN.png" in ci and "MIYAKO_NORMAL_SEL_FROM_FX.png" in ci
+assert "MIYAKO_NORMAL_SEL_RETURN.png" in host_smoke
+assert "MIYAKO_NORMAL_SEL_FROM_FX.png" in host_smoke
+# All source palettes, including zero, are opaque; no accidental black holes.
+assert "if(idx==0u)continue;" not in ui
+assert "if(idx){" not in ui
+assert "clip_left,mi_photo_palette[idx]);" in ui
+assert "clip_left,mi_media_palette[idx]);" in ui
+# Re-entering the video screen resets only display scheduling state.
+assert "if(state.view!=visual_previous_view)" in ui
+assert "if(state.view==MI_VIDEO||state.view==MI_FX){" in ui
+assert "visual_last_mode=255u;" in ui
+assert "video.effects_cooldown=0u;" in ui
+assert "video.eureka_previous=0.f;" in ui
 # Repeat the manual gating and branch controls after introducing the assets.
 assert "when: << pipeline.parameters.run_build >>" in ci
-assert "only: feature/fm1-miyako-osc-attack-letter-version-20261108" in ci
+assert "only: feature/fm1-miyako-video-opaque-letter-sub-20261108" in ci
 print("PASS: manual Phase 3 REC + EUREKA 2sec/576 frames + guarded dual-FX")
