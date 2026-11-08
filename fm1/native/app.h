@@ -6,11 +6,11 @@
 #include "plat.h"
 #define APP_NAME "MIYAKO"
 #define APP_TAGLINE "NATIVE TRIAL"
-/* Version display is explicit for all development builds.
- * Release builds may override with -DAPP_VERSION from fm1-base.
- * This is distinct from the FWSC package identity FM-1_938. */
+/* The existing CircleCI preflight replaces this sentinel with the same
+ * monotonic FM-1_9xx ID used by FWSC/OTA and the actual device firmware.
+ * No hardcoded release number remains in source or the screen. */
 #ifndef APP_VERSION
-#define APP_VERSION "0.3.5-DEV"
+#define APP_VERSION "UNVERSIONED"
 #endif
 #define APP_SPLASH_RGB RGB(255, 209, 12)
 #define APP_BLOCK 256u
