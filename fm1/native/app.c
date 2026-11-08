@@ -314,6 +314,72 @@ void app_say(const char *a,const char *b)
  message_until=plat_ms()+1300u;
  redraw=1;
 }
+/* SAVE/LOAD use the same OBJ_SETTINGS flash object that formerly held one
+ * snapshot. Four independent slots fit within the platform 3840B limit. */
+static int mi_store_bank(void)
+{
+    saved_bank.magic=SAVED_MAGIC;
+    saved_bank.active_slot=state.project_slot;
+    saved_bank.midi_channel=state.midi_channel;
+    saved_bank.clock_mode=(uint8_t)state.global[3];
+    return !backup_hold &&
+           plat_store_save(OBJ_SETTINGS,&saved_bank,sizeof saved_bank)==0;
+}
+static void mi_store_slot(void)
+{
+    unsigned index=(unsigned)state.project_slot-1u;
+    mi_state_t before;
+    uint8_t oldmask=saved_bank.valid_mask;
+    if(index>=4u){app_say("BAD SLOT","");return;}
+    before=saved_bank.slots[index];
+    saved_bank.slots[index]=state;
+    /* Do not resume recording, sequencer or an armed flash operation
+     * automatically when a saved sound is recalled or booted. */
+    saved_bank.slots[index].view=MI_HOME;
+    saved_bank.slots[index].save_armed=0u;
+    saved_bank.slots[index].save_action=0u;
+    saved_bank.slots[index].config_load_armed=0u;
+    saved_bank.slots[index].step_play=0u;
+    saved_bank.slots[index].step_editor=0u;
+    saved_bank.slots[index].playing=0u;
+    saved_bank.slots[index].recording=0u;
+    saved_bank.valid_mask=(uint8_t)(oldmask|(1u<<index));
+    if(mi_store_bank()){
+        config_dirty=0u;
+        app_say("PRESET SAVED","");
+    }else{
+        saved_bank.slots[index]=before;
+        saved_bank.valid_mask=oldmask;
+        app_say("SAVE FAILED","");
+    }
+}
+static void mi_load_slot(void)
+{
+    unsigned index=(unsigned)state.project_slot-1u;
+    uint8_t midi=state.midi_channel;
+    int16_t clock=state.global[3];
+    mi_view_t current=state.view;
+    if(index>=4u||!(saved_bank.valid_mask&(1u<<index))){
+        app_say("EMPTY SLOT","NOT LOADED");return;
+    }
+    if(!mi_state_valid(&saved_bank.slots[index])){
+        app_say("INVALID SLOT","NOT LOADED");return;
+    }
+    mi_audio_panic(&audio); /* no stuck notes from the previous preset */
+    state=saved_bank.slots[index];
+    state.project_slot=(uint8_t)(index+1u);
+    state.midi_channel=midi;   /* GLOBAL settings are not patch parameters */
+    state.global[3]=clock;
+    state.save_armed=0u;state.save_action=0u;
+    state.config_load_armed=0u;
+    state.step_play=0u;state.step_editor=0u;
+    state.playing=0u;state.recording=0u;
+    state.view=current;        /* stay on CONFIG or SAVE for clear feedback */
+    if(mi_store_bank()){
+        config_dirty=0u;
+        app_say("PRESET LOADED","");
+    }else app_say("LOADED","NOT STORED");
+}
 static mi_button_t map_button(unsigned k)
 {
  switch(k){
