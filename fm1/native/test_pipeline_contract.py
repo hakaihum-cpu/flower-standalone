@@ -168,39 +168,32 @@ for target in list((root / "fm1/native").glob("mi_*.c")) + [
             f"target still calls unavailable hosted libc: {target.name}"
         )
 assert (root / "fm1/native/mi_memory.h").is_file()
-# The FWSC package identity and app-visible release/version text are
-# separate fields. Neither is permitted to be empty or implicit "DEV".
+# Current visible version, FWSC model and installed device identity MUST
+# derive from the same CircleCI pipeline number; fixed 938 never passes CI.
 manifest = (root / "fm1/native/fm1.toml").read_text(encoding="utf-8")
 app_header = (root / "fm1/native/app.h").read_text(encoding="utf-8")
-assert 'id_prefix = "FM-1_9"' in manifest
-assert '#define APP_VERSION "0.3.5-DEV"' in app_header
-assert 'APP_TAGLINE "NATIVE TRIAL"' in app_header
-assert "--product FM-1_938" in ci
-# Keep package header marker and running firmware FELUCCA_ID in sync by
-# patching the pinned original builder BEFORE ANY compilation step.
 id_patch = (root / "fm1/native/tools/set_miyako_product_id.py").read_text(encoding="utf-8")
-assert 'TARGET = "FM-1_938"' in id_patch
+verify_fwsc = (root / "fm1/native/tools/verify_fwsc.py").read_text(encoding="utf-8")
+assert 'id_prefix = "FM-1_9"' in manifest
+assert '#define APP_VERSION "UNVERSIONED"' in app_header
+assert 'APP_TAGLINE "NATIVE TRIAL"' in app_header
+assert "CIRCLE_PIPELINE_NUMBER" in id_patch
+assert "PIPELINE_OFFSET = 650" in id_patch
+assert 'APP_OLD = \'#define APP_VERSION "UNVERSIONED"\'' in id_patch
+assert "product_for_pipeline" in id_patch
+assert "939 <= value <= 999" in id_patch
 assert 'OLD = \'    PRODUCT = prefix + "00"\'' in id_patch
-assert 'NEW = \'    PRODUCT = prefix + "38"' in id_patch
-# Check the package product ID against the actual pinned build patch,
-# rather than maintaining two contradictory hard-coded CI expectations.
-actual_product = re.search(r'^TARGET = "(FM-1_[0-9]+)"', id_patch, re.M)
-assert actual_product, "FM-1 product version must exist in the build patch"
-expected_product = actual_product.group(1)
-assert len(expected_product.split("_")[1]) == 3, (
-    "M-UPGRADE accepts only three numeric product/version digits"
-)
-assert "--product " + expected_product in ci
-# Prevent repeats of the stale assertion that stopped the prior pipeline.
-for n, line in enumerate(Path(__file__).read_text(encoding="utf-8").splitlines(), 1):
-    if line.strip().startswith("assert ") and "--product FM-1_" in line and " in ci" in line:
-        assert expected_product in line, (
-            f"conflicting product-ID assertion at line {n}: {line.strip()}"
-        )
-assert 'set_miyako_product_id.py --base /tmp/fm1-base' in ci
-assert ci.index('set_miyako_product_id.py') < ci.index('tools/build.py /tmp/fm1-base/miyako --host')
-assert "FM-1_9100" not in ci
-assert (root / "fm1/native/tools/verify_fwsc.py").read_text().count('FM-1_938') >= 1
+assert "set_miyako_product_id.py --base /tmp/fm1-base" in ci
+assert 'test -s /tmp/fm1_product_id.txt' in ci
+assert 'grep -Fq "#define APP_VERSION' in ci
+assert '--product "$(cat /tmp/fm1_product_id.txt)"' in ci
+assert 'ap.add_argument("--product", required=True)' in verify_fwsc
+assert "FM-1_938" not in ci and "FM-1_938" not in app_header
+assert "PRODUCT = prefix + \\"38\\"" not in ci
+assert ci.index('set_miyako_product_id.py') < ci.index(
+    'tools/build.py /tmp/fm1-base/miyako --host')
+# Firmware UI renders the exact generated identity rather than static 0.3.x.
+assert 'cv_text(75,11,&FONT_XS,APP_VERSION,GREY);' in ui
 
 # Root issue from the current build log: fm1-base's own mmio_check()
 # correctly rejects a volatile pointer cast outside the BSP, even though
