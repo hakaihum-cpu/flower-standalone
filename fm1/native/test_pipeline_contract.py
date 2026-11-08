@@ -54,11 +54,17 @@ native_audit = (root / "fm1/native/verify_standalone.py").read_text(encoding="ut
 for retired in ("ENG_PHYS", "ENG_ELEM", "ENG_PRISM", "EM_BOUNCE",
                 "EM_PICK", "PRM_FOLD", "PRM_WAVE", "PRM_HARM"):
     assert retired in native_audit, f"regression #251: guard missing {retired}"
-# CircleCI expands <<...>> even in YAML block-scalar scripts. Only this
-# valid workflow parameter marker may remain; unescaped shell here-documents
-# cause configuration failure before ANY job or project test can execute.
-assert "<<" not in ci.replace("<< pipeline.parameters.run_build >>", ""), (
-    "CircleCI 2.1 unclosed << tag: replace shell here-documents with printf"
+# CircleCI expands <<...>> at config compile time. Permit precisely
+# two documented placeholders: run_build and the pipeline's number. The
+# latter is explicitly injected into the job environment for the version
+# generator; CIRCLE_PIPELINE_NUMBER is not a built-in job variable.
+assert ci.count("<< pipeline.number >>") == 1
+assert "CIRCLE_PIPELINE_NUMBER: << pipeline.number >>" in ci
+assert 'case "${CIRCLE_PIPELINE_NUMBER:-}" in' in ci
+assert "PASS: CircleCI pipeline #$CIRCLE_PIPELINE_NUMBER" in ci
+assert "<<" not in ci.replace("<< pipeline.parameters.run_build >>", "").replace(
+    "<< pipeline.number >>", ""), (
+    "CircleCI 2.1 unclosed or unapproved << tag: use only documented tokens"
 )
 assert "printf '%s\\n'" in ci, "README must use a CircleCI-safe printf"
 # #275 built and verified a valid FWSC, then failed on a README quote.
@@ -179,6 +185,7 @@ assert 'id_prefix = "FM-1_9"' in manifest
 assert '#define APP_VERSION "UNVERSIONED"' in app_header
 assert 'APP_TAGLINE "NATIVE TRIAL"' in app_header
 assert "CIRCLE_PIPELINE_NUMBER" in id_patch
+assert "CIRCLE_PIPELINE_NUMBER: << pipeline.number >>" in ci
 assert "PIPELINE_OFFSET = 650" in id_patch
 assert 'APP_OLD = \'#define APP_VERSION "UNVERSIONED"\'' in id_patch
 assert "product_for_pipeline" in id_patch
