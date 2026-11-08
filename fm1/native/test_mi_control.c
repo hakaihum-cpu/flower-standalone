@@ -327,6 +327,33 @@ int main(void)
     mi_rotate(&s,MI_EN_PRESETS,-1);
     assert(s.rec_bars==2u);
     assert(mi_state_valid(&s));
-    puts("PASS: REC, FMDrum, OSC/FILTER, new FX, LFO destinations, SEL, saved-state bounds");
+    /* Short SEQ remains the RECORDER; the long-hold editor has independent
+     * discrete controls and all 16 step positions without touching REC. */
+    mi_init(&s);
+    mi_button(&s,MI_B_SEQ,9700u);
+    assert(s.view==MI_SEQ && !s.step_editor && s.step_len==8u);
+    s.step_editor=1u;
+    assert(!strcmp(mi_param_name(&s,0),"TRACK"));
+    assert(!strcmp(mi_param_name(&s,3),"STEPS"));
+    mi_rotate(&s,MI_EN_K1,1);
+    mi_rotate(&s,MI_EN_K2,1);
+    mi_rotate(&s,MI_EN_K3,2);
+    mi_rotate(&s,MI_EN_K4,8);
+    assert(s.step_track==1u && s.step_play==1u &&
+           s.step_dir==2u && s.step_len==16u);
+    mi_rotate(&s,MI_EN_K2,-1);
+    mi_rotate(&s,MI_EN_K4,-100);
+    assert(s.step_play==0u && s.step_len==1u);
+    s.step_pattern[0]=0x8001u;
+    assert(mi_state_valid(&s));
+    s.step_len=17u;assert(!mi_state_valid(&s));s.step_len=8u;
+    s.step_track=4u;assert(!mi_state_valid(&s));s.step_track=1u;
+    s.step_dir=3u;assert(!mi_state_valid(&s));s.step_dir=2u;
+    s.step_editor=2u;assert(!mi_state_valid(&s));s.step_editor=1u;
+    mi_button(&s,MI_B_HOME,9701u);
+    assert(s.view==MI_HOME && s.step_editor==0u);
+    mi_button(&s,MI_B_SEQ,9702u);
+    assert(s.view==MI_SEQ && s.step_editor==0u);
+    puts("PASS: REC, FMDrum, OSC/FILTER, new FX, SEL, 4x16 sequencer and state bounds");
     return 0;
 }
