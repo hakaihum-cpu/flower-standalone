@@ -19,7 +19,9 @@ def visible_pixel_counts(frames, palette565):
     if pal.shape != (16,):
         raise ValueError("expected one 16-colour RGB565 palette")
     visible = ((pal >> 11) >= 4) | (((pal >> 5) & 63) >= 7) | ((pal & 31) >= 4)
-    visible[0] = False  # The FM-1 renderer skips palette-index 0.
+    # Palette entry zero is an OPAQUE colour in the native FM-1 renderer,
+    # not an alpha key. It is visible whenever its RGB565 is non-dark.
+    # Never replace a real source frame merely because it uses index zero.
     return np.count_nonzero(visible[frames[:, :HEIGHT, :]], axis=(1, 2))
 
 
