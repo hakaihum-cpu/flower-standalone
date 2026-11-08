@@ -218,27 +218,38 @@ int main(void)
     assert(s.fx==MI_FX_EUREKA && s.fx2==MI_FX_REVERB);
     assert(mi_fx_pair_supported(s.fx,s.fx2));
 
-    /* HOME K1 now chooses the program MULTI (never hides it by
-     * changing OSC waveform). K2 selects the OSC edit target. */
+    /* HOME K1/K2 independently edit actual MULTI OSC1/OSC2 waveforms,
+     * K3 edits MIX2; none of these controls secretly modifies FX. */
     mi_init(&s);
+    assert(!strcmp(mi_param_name(&s,1),"SUB"));
+    assert(!strcmp(mi_param_name(&s,2),"CRUSH"));
+    mi_rotate(&s,MI_EN_K2,12);
+    mi_rotate(&s,MI_EN_K3,6);
+    assert(s.sub==12u&&s.crush==6u&&s.fx==MI_FX_OFF);
     mi_rotate(&s,MI_EN_K1,4);
     assert(s.wave==MI_WAVE_MULTI&&s.osc2_level==64u);
-    assert(!strcmp(mi_param_name(&s,0),"WAVE"));
-    assert(mi_param_value(&s,0)==MI_WAVE_MULTI);
-    assert(!strcmp(mi_param_name(&s,1),"OSC"));
-    mi_rotate(&s,MI_EN_K2,1);
-    assert(s.osc_page==1u);
-    mi_rotate(&s,MI_EN_K3,10);
-    assert(s.osc2_detune==74u&&mi_param_value(&s,2)==10);
-    mi_button(&s,MI_B_EDIT,9300);
-    assert(s.view==MI_OSC&&s.osc_page==1u);
-    mi_rotate(&s,MI_EN_K1,3);
-    assert(s.osc2_wave==3u);
-    mi_button(&s,MI_B_EDIT,9301);
-    assert(s.osc_page==2u&&!strcmp(mi_param_name(&s,1),"RES"));
-    mi_button(&s,MI_B_EDIT,9302);
-    assert(s.osc_page==0u);
+    assert(!strcmp(mi_param_name(&s,0),"OSC1"));
+    assert(!strcmp(mi_param_name(&s,1),"OSC2"));
+    assert(!strcmp(mi_param_name(&s,2),"MIX2"));
     mi_rotate(&s,MI_EN_K1,2);
+    mi_rotate(&s,MI_EN_K2,2);
+    assert(s.wave==MI_WAVE_MULTI&&s.osc1_wave==2u&&s.osc2_wave==2u);
+    assert(mi_param_value(&s,0)==2&&mi_param_value(&s,1)==2);
+    mi_rotate(&s,MI_EN_K3,10);
+    assert(s.osc2_level==74u&&mi_param_value(&s,2)==74);
+    mi_button(&s,MI_B_EDIT,9300);
+    assert(s.view==MI_OSC&&s.osc_page==0u);
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.osc1_wave==3u&&s.osc2_wave==2u);
+    mi_button(&s,MI_B_EDIT,9301);
+    assert(s.osc_page==1u);
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.osc1_wave==3u&&s.osc2_wave==3u);
+    mi_button(&s,MI_B_EDIT,9302);
+    assert(s.osc_page==2u&&!strcmp(mi_param_name(&s,1),"RES"));
+    mi_button(&s,MI_B_EDIT,9303);
+    assert(s.osc_page==0u);
+    mi_rotate(&s,MI_EN_K1,-1);
     assert(s.osc1_wave==2u&&s.osc2_wave==3u);
     mi_button(&s,MI_B_HOME,9303);
     mi_rotate(&s,MI_EN_ALGORITHM,-1);
