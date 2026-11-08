@@ -9,7 +9,7 @@ required = (
     "version: 2.1",
     "default: false",
     "when: << pipeline.parameters.run_build >>",
-    "only: feature/fm1-miyako-video-opaque-letter-sub-20261108",
+    "only: feature/fm1-letter-highdetail-20261108",
     "fm1_native_build",
     "MIYAKO-FM1-NATIVE-DEV.fwsc",
     "MI_EFFECTS_ASSET_COUNT 144u",
@@ -74,7 +74,7 @@ assert ci.index("python3 fm1/native/tools/check_ci_run_shell.py") < ci.index(
     "python3 -m compileall -q fm1/native")
 assert "five-sheet set's" not in ci
 assert (root / "fm1/native/tools/check_ci_run_shell.py").is_file()
-assert re.search(r"^\s+only: feature/fm1-miyako-video-opaque-letter-sub-20261108\s*$", ci, re.M)
+assert re.search(r"^\s+only: feature/fm1-letter-highdetail-20261108\s*$", ci, re.M)
 assert "/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako" in ci
 assert "test_media_crc.c" in ci
 assert "pack_effects_vq_candidate.py" in ci
@@ -506,30 +506,37 @@ assert "expect save_mask 3" in host_smoke
 assert "expect midi_channel 2" in host_smoke
 assert "expect clock_mode 1" in host_smoke
 assert "expect wave 5" in host_smoke
-# Exact user-supplied 8x9 animation: 72 real frames, RGB565/16 colour,
-# 80x40 scene-only. The existing OSC scope MUST remain visibly overlaid
-# between the original postbox and letter; no invented artwork.
+# Source-derived 72-frame high-detail 160x72 paper-airplane display,
+# not the previous illegible 80x40 4x4 16-colour source. The original
+# screenshot is owned by the user; no AI-generated images replace it.
 letter_script = (root / "fm1/native/tools/build_letter_anim_header.py").read_text()
-letter_data = root / "fm1/native/tools/mi_letter_72frames.b64"
-assert letter_data.is_file() and letter_data.stat().st_size > 4000
-assert 'RAW_LENGTH = 32 + 256 * 8 + 72 * 200' in letter_script
-assert 'RAW_SHA256 = "8e4a5b1f02d6dcf424e9ca28b7d1813e6837432ed23a56fd4f565400ad905e72"' in letter_script
+letter_data = root / "fm1/native/tools/mi_letter_highdetail_160x72.b64"
+assert letter_data.is_file() and letter_data.stat().st_size > 16000
+assert 'W, H = 160, 72' in letter_script
+assert 'MAP_BYTES = (W // 4) * (H // 4)' in letter_script
+assert 'FRAMES_PER_CLIP = 9' in letter_script
+assert 'RAW_SHA256 = "86b64e4affac514ed05057b31087ddb28e9e830979524a1effc05e5dc702de51"' in letter_script
+assert 'DECODED_CRC32 = 0x3141B600' in letter_script
+assert 'checksum = zlib.crc32(bits, checksum)' in letter_script
 assert '#include "mi_letter_anim.h"' in ui
-assert 'mi_letter_maps[frame*200u+' in ui
-assert 'mi_letter_book[block*8u+' in ui
-assert 'mi_letter_brightness(mi_letter_palette[p])' in ui
-assert 'previous?YELLOW:C_BLACK' in ui
+assert 'static void mi_letter_map_decode(unsigned frame)' in ui
+assert 'mi_letter_bases+clip*MI_LETTER_MAP_SIZE' in ui
+assert 'mi_letter_books[clip*256u+mi_letter_tile_map[idx]]' in ui
+assert 'uint16_t mask=mi_letter_books' in ui
+assert 'int32_t top=48+(int32_t)y;' in ui
+assert 'old?YELLOW:C_BLACK' in ui
 assert 'state.sub*(MI_LETTER_FRAMES-1u)+63u' in ui
 assert 'mi_draw_sub_scene();' in ui
 assert 'mi_draw_letter_waveform();' in ui
 assert 'audio.osc_scope[idx]*18/127' in ui
-assert '"sub_frame"' in ui
-assert '"sub"' in ui
+assert '"sub_frame"' in ui and '"sub"' in ui
 assert 'mi_letter_anim.h' in (root / "fm1/native/verify_standalone.py").read_text()
 assert "build_letter_anim_header.py --out /tmp/mi_letter_preflight.h" in ci
 assert '--out /tmp/fm1-base/miyako/mi_letter_anim.h' in ci
 assert "test_miyako_dynamic_version.py" in ci
 assert "MIYAKO_OSC_SUB_0.png" in ci and "MIYAKO_OSC_SUB_127.png" in ci
+assert "check_letter_quality.py" in ci
+assert (root / "fm1/native/tools/check_letter_quality.py").is_file()
 assert "expect sub_frame 0" in host_smoke
 assert "expect sub_frame 71" in host_smoke
 assert "expect sub 127" in host_smoke
@@ -549,5 +556,5 @@ assert "video.effects_cooldown=0u;" in ui
 assert "video.eureka_previous=0.f;" in ui
 # Repeat the manual gating and branch controls after introducing the assets.
 assert "when: << pipeline.parameters.run_build >>" in ci
-assert "only: feature/fm1-miyako-video-opaque-letter-sub-20261108" in ci
+assert "only: feature/fm1-letter-highdetail-20261108" in ci
 print("PASS: manual Phase 3 REC + EUREKA 2sec/576 frames + guarded dual-FX")
