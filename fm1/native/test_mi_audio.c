@@ -238,6 +238,37 @@ int main(void)
  mi_audio_render(&a,&s,lr,256u,4096u);
  assert(!a.recorder.recording && a.recorder.playing &&
         a.recorder.count>200u);
- puts("PASS: eight voices, FMDrum-to-REC PCM, filter, LFO routing, FX, adaptive REC");
+ /* The four FMDrum sequencer tracks fire simultaneously, independent
+  * of the selected OSC waveform, and are captured by the existing REC bus. */
+ mi_init(&s);mi_audio_init(&a,44100.f);
+ s.wave=0u; /* live OSC stays SINE; sequencer still uses FMDrum */
+ s.step_pattern[0]=s.step_pattern[1]=
+     s.step_pattern[2]=s.step_pattern[3]=0x0001u;
+ s.step_play=1u;s.global[0]=120;
+ mi_audio_rec_request(&a,1u);
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.step_active && a.step_current==0u && a.recorder.recording);
+ assert(a.v[0].drum_type==1u && a.v[1].drum_type==2u &&
+        a.v[2].drum_type==3u && a.v[3].drum_type==6u);
+ {
+     unsigned audible=0u;
+     for(i=0u;i<a.recorder.count;i++){
+         int16_t pcm=mi_rec_sample(i);
+         if(pcm>64 || pcm< -64)++audible;
+     }
+     assert(audible>5u);
+ }
+ for(i=0u;i<22u;i++)mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.step_current==1u);
+ s.step_play=0u;
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(!a.step_active);
+ s.step_play=1u;s.step_dir=1u;
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.step_current==7u);
+ s.step_dir=2u;s.step_len=16u;
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.step_current<16u);
+ puts("PASS: eight voices, FMDrum-to-REC PCM, 4x16 step sequencer, filter, LFO, FX");
  return 0;
 }
