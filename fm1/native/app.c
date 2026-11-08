@@ -206,9 +206,17 @@ static void mi_ui_motion_decode(unsigned kind,unsigned frame)
 static unsigned mi_ui_motion_index(unsigned kind,unsigned x,unsigned y)
 {
     const uint8_t *books=kind?mi_ui_lfo_books:mi_ui_env_books;
-    unsigned tile=mi_ui_motion_map[(y/3u)*16u+(x/3u)];
+    const uint8_t *matte=kind?mi_ui_lfo_matte:mi_ui_env_matte;
+    unsigned cell=(y/3u)*16u+(x/3u);
+    unsigned tile=mi_ui_motion_map[cell];
     unsigned pixel=(y%3u)*3u+(x%3u);
     unsigned packed=books[tile*5u+(pixel>>1u)];
+    /* 190 frame-accurate masks come from the user's ORIGINAL photos.
+     * Do not infer transparency from the 16-colour palette: the brown
+     * background shares indices with hair, skirts and UFO shadows.
+     * Index 16 is a sentinel drawn black, never an array subscript. */
+    unsigned alpha_byte=(unsigned)mi_ui_motion_frame*32u+(cell>>3u);
+    if(!(matte[alpha_byte]&(0x80u>>(cell&7u))))return 16u;
     return (pixel&1u)?packed&15u:packed>>4u;
 }
 static void mi_ui_draw_motion(unsigned kind,unsigned frame)
@@ -225,7 +233,8 @@ static void mi_ui_draw_motion(unsigned kind,unsigned frame)
             unsigned idx=x==MI_UI_MOTION_W?16u:mi_ui_motion_index(kind,x,y);
             if(idx!=prior){
                 cv_rect(96+(int32_t)start,72+(int32_t)y,
-                        (int32_t)(x-start),1,colors[prior]);
+                        (int32_t)(x-start),1,
+                        prior<16u?colors[prior]:C_BLACK);
                 start=x;prior=idx;
             }
         }
