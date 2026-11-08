@@ -1,6 +1,6 @@
 {
-  "format": "FM1 VQ palette16 fixed RGB565 8x4 tiles 96x96",
-  "source": "the eight user-provided sheets",
+  "format": "FM1 source-RGB RGB565 16-per-clip 8x4 VQ 96x96",
+  "source": "the eight exact user-provided sheets, SHA256 verified; includes real yellow/sunset RGB scenes",
   "frames": 628,
   "side": 96,
   "clip_length": 27,
@@ -10,25 +10,7 @@
   "book_offset": 768,
   "map_offset": 99072,
   "payload_bytes": 279936,
-  "payload_sha256": "bb5345df9b9e4118052b2feac603e38f16db0fccd5af49223e52b08115a1cc40",
-  "palette_hex_565": [
-    "0x0000",
-    "0x1841",
-    "0x28a2",
-    "0x5101",
-    "0x4184",
-    "0x49c5",
-    "0x6206",
-    "0x7a05",
-    "0x89e4",
-    "0x8b0a",
-    "0xa2c6",
-    "0xd2c6",
-    "0xabac",
-    "0xec49",
-    "0xdd50",
-    "0xfdd1"
-  ],
+  "payload_sha256": "df517e2d8c7902bed076610a07876dee660890799ba5dec6bc12bf366783bcf4",
   "files": [
     {
       "name": "file_000000008e98820690554a4b75774ed5.png",
@@ -134,5 +116,10 @@
       ],
       "sha256": "85e11797296b3ef801e571a804e15db3c368273701b2a6cc764ef6442e72674e"
     }
-  ]
+  ],
+  "palette_entries_per_clip": 16,
+  "palette_clip_count": 24,
+  "encoder": "original RGB source frames quantized per 27-frame clip; existing 256-tile 8x4 VQ layout",
+  "resource_bytes_with_crc": 279968,
+  "quality_validation": "628 original RGB source frames, all 24 clips improved in full-frame RGB PSNR against previous archive rendered with neutral tones; +0.30 to +2.09 dB per clip, mean +0.72 dB"
 }
