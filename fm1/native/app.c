@@ -15,6 +15,7 @@
 #include "mi_resource_media.h"
 #include "mi_effects_vq_frames.h" /* 144 source frames */
 #include "mi_eureka_vq_frames.h" /* 576 source frames */
+#include "mi_letter_anim.h" /* exact 72 user-source paper-airplane frames */
 #include "mi_memory.h"
 #include <stddef.h>
 #define YELLOW RGB(255,209,12)
@@ -1130,6 +1131,55 @@ static void mi_draw_save(void)
     cv_text(12,103,&FONT_XS,"SAVE KEY: CONFIRM",GREY);
     cv_blit(0,120);
 }
+/* Reuse 72 ordered scene frames from the user's 8x9 montage.
+ * Attack 0 -> tile 0; Attack 127 -> tile 71. The four-bit 16-colour
+ * dictionary was generated and SHA-verified from the provided PNG.
+ * Scene renders below the MIYAKO title and above the four K parameters. */
+static unsigned mi_letter_scene_pixel(unsigned frame,unsigned x,unsigned y)
+{
+    unsigned block=mi_letter_maps[frame*200u+(y>>2u)*20u+(x>>2u)];
+    unsigned pair=mi_letter_book[block*8u+((y&3u)<<1u)+((x&3u)>>1u)];
+    return (x&1u)?pair&15u:pair>>4u;
+}
+static void mi_draw_attack_scene(void)
+{
+    unsigned frame=((unsigned)state.env[0]*(MI_LETTER_FRAMES-1u)+63u)/127u;
+    unsigned y,x;
+    if(frame>=MI_LETTER_FRAMES)frame=MI_LETTER_FRAMES-1u;
+    for(y=0u;y<MI_LETTER_H;y++){
+        int32_t top=41+(int32_t)(y*66u/MI_LETTER_H);
+        int32_t bottom=41+(int32_t)((y+1u)*66u/MI_LETTER_H);
+        unsigned from=0u,previous=mi_letter_scene_pixel(frame,0u,y);
+        for(x=1u;x<=MI_LETTER_W;x++){
+            unsigned color=x==MI_LETTER_W?16u:mi_letter_scene_pixel(frame,x,y);
+            if(color!=previous){
+                int32_t x0=8+(int32_t)(from*224u/MI_LETTER_W);
+                int32_t x1=8+(int32_t)(x*224u/MI_LETTER_W);
+                if(x1>x0&&bottom>top)
+                    cv_rect(x0,top,x1-x0,bottom-top,
+                            mi_letter_palette[previous]);
+                from=x;
+                previous=color;
+            }
+        }
+    }
+}
+static void mi_draw_letter_waveform(void)
+{
+    unsigned i;
+    int32_t previous=75;
+    uint32_t head=audio.osc_scope_head;
+    unsigned stride=audio.osc_scope_stride;
+    if(stride<1u||stride>4u)stride=1u;
+    /* The existing live oscillator scope sits BETWEEN the postbox on
+     * the left and the approaching letter, rather than over the woman. */
+    for(i=0u;i<89u;i++){
+        uint32_t idx=(head-1u-(88u-i)*stride)&(MI_OSC_SCOPE_SAMPLES-1u);
+        int32_t y=75-(int32_t)audio.osc_scope[idx]*18/127;
+        if(i)cv_line((int32_t)i+61,previous,(int32_t)i+62,y,YELLOW);
+        previous=y;
+    }
+}
 static void draw(void)
 {
     uint32_t i,now=plat_ms();
@@ -1172,7 +1222,6 @@ static void draw(void)
         cv_text(12,50,&FONT_B,line_a,YELLOW);
         cv_text(12,76,&FONT_XS,line_b,GREY);
     }else if(state.view==MI_OSC||state.view==MI_HOME){
-        int32_t prior=80;
         unsigned show_wave=state.wave==MI_WAVE_MULTI?
                            (state.osc_page?state.osc2_wave:state.osc1_wave):
                            state.view==MI_OSC&&state.osc_page?
@@ -1187,21 +1236,10 @@ static void draw(void)
             cv_text(133,33,&FONT_B,state.osc_page==1u?"2":"1",YELLOW);
             cv_text(171,35,&FONT_XS,"PRESET",GREY);
         }
-        /* Live pre-FX OSC audio waveform (SINE/SAW/SQUARE/PULSE). */
-        {
-            uint32_t head=audio.osc_scope_head;
-            unsigned stride=audio.osc_scope_stride;
-            if(stride<1u||stride>4u)stride=1u;
-            cv_line(8,76,232,76,DIM);
-            for(i=0;i<224u;i++){
-                uint32_t idx=(head-1u-(223u-i)*stride)&
-                             (MI_OSC_SCOPE_SAMPLES-1u);
-                int32_t y=76-(int32_t)audio.osc_scope[idx]*24/127;
-                if(i)cv_line((int32_t)i+7,prior,
-                             (int32_t)i+8,y,YELLOW);
-                prior=y;
-            }
-        }
+        /* Paper-airplane source animation driven by ENV ATTACK; the
+         * same live waveform remains overlaid between postbox/letter. */
+        mi_draw_attack_scene();
+        mi_draw_letter_waveform();
     }else if(state.view==MI_FX){
         unsigned mode=state.fx_slot?state.fx2:state.fx;
         cv_text(12,36,&FONT_XS,state.fx_slot?"FX B":"FX A",GREY);
