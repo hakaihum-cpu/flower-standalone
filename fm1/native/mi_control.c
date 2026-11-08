@@ -271,7 +271,8 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
              (s->wave!=MI_WAVE_MULTI&&k==0u)))||
            (s->view==MI_OSC&&
             ((s->osc_page==0u&&k==0u&&s->wave!=MI_WAVE_FMDRUM)||
-             (s->osc_page==1u&&(k==0u||k==3u))))||
+             (s->osc_page==1u&&s->wave!=MI_WAVE_FMDRUM&&
+              (k==0u||k==3u))))||
            (s->view==MI_LFO&&(k==1u||k==3u))||
            (s->view==MI_ARP&&k!=2u)||
            (s->view==MI_SEQ&&k==2u)||
