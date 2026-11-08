@@ -15,20 +15,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 CHUNK_DIR = ROOT / 'Resources' / 'fm1_photo_96_chunks'
 PAYLOAD_BYTES = 279936
-SHA256 = 'bb5345df9b9e4118052b2feac603e38f16db0fccd5af49223e52b08115a1cc40'
+SHA256 = 'df517e2d8c7902bed076610a07876dee660890799ba5dec6bc12bf366783bcf4'
 RESOURCE_CAPACITY = 69 * 4096 - 32
 FILES = 12
-# Preserve the archival index palette from the 628-frame VQ manifest.
-# It reflects an earlier artificial colourisation of monochrome source photos.
-# The native LCD reconstructs source-faithful greyscale by image bank;
-# changing flash colour tables is unnecessary and risks stale-resource bugs.
-PHOTO_RGB565 = (
-    0x0000, 0x1841, 0x28A2, 0x5101,
-    0x4184, 0x49C5, 0x6206, 0x7A05,
-    0x89E4, 0x8B0A, 0xA2C6, 0xD2C6,
-    0xABAC, 0xEC49, 0xDD50, 0xFDD1,
-)
-assert len(set(PHOTO_RGB565)) == 16
+# All 24 clip palettes are sourced from the eight exact uploaded images.
+# Six near-monochrome sheets, one mostly monochrome and one with real yellow/
+# sunset colours. A single fake 16-colour table must NOT overwrite them.
+# The native LCD decodes each RGB565 table using the existing res.bin format.
+PALETTE_CLIPS = 24
+PALETTE_ENTRIES = 16
 
 def read_payload(directory: Path) -> bytes:
     files = sorted(directory.glob('part_????.b64'))
@@ -43,14 +38,17 @@ def read_payload(directory: Path) -> bytes:
     digest = hashlib.sha256(result).hexdigest()
     if digest != SHA256:
         raise ValueError('FM-1 96x96 original-source resource SHA256 mismatch')
-    # Archive SHA256 authenticates palette, VQ books and all frame maps.
-    # Preserve the entire user-source resource byte-for-byte.
-    for clip in range(24):
+    # Archive SHA256 authenticates palette, all 24 VQ dictionaries and
+    # the exact 628 chronological frame maps. Never recolour the archive.
+    # Minimum 13 colours per frame is checked independently by the decoder.
+    unique = []
+    for clip in range(PALETTE_CLIPS):
         palette = tuple(int.from_bytes(
-            result[clip*32 + i*2:clip*32 + i*2 + 2], "little")
-            for i in range(16))
-        if palette != PHOTO_RGB565:
-            raise ValueError(f"FM-1 original-source palette changed in clip {clip}")
+            result[clip * 32 + i * 2:clip * 32 + i * 2 + 2], 'little')
+            for i in range(PALETTE_ENTRIES))
+        unique.append(len(set(palette)))
+    if min(unique) < 15:
+        raise ValueError('FM-1 source RGB565 palette lost colour entries')
     return result
 
 
@@ -62,7 +60,7 @@ def main() -> None:
     data = read_payload(args.chunk_dir)
     args.resource_payload.parent.mkdir(parents=True, exist_ok=True)
     args.resource_payload.write_bytes(data)
-    print(f'PASS: 628 original-source 96x96 photos, 16 archival RGB565 index colours, {len(data)}B, '
+    print(f'PASS: 628 original-source 96x96 photos, 24 clip-specific 16-colour RGB565 palettes, {len(data)}B, '
           f'archive SHA256 {SHA256}, output SHA256 {hashlib.sha256(data).hexdigest()}')
 
 
