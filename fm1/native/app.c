@@ -92,11 +92,8 @@ static volatile float audio_activity;
 static uint8_t osc_scope_last_active;
 static uint32_t last_keys,last_buttons,rec_pressed_at,seq_pressed_at;
 static uint8_t rec_long_done,seq_long_done;
-/* Left-to-right 16 FM-1 white keys within its 27 semitone keyboard. */
-static const uint8_t seq_white_keys[16]={
-    0u,2u,4u,6u,7u,9u,11u,12u,
-    14u,16u,18u,19u,21u,23u,24u,26u
-};
+/* Authoritative physical FM-1 white-key order from fm1-base plat.h. */
+static const uint8_t seq_white_keys[16]=PLAT_WHITE_KEYS;
 static uint8_t backup_hold;
 /* Visual selection is independent of audio FX.
  * 0=AUTO, 1..6=original photo sheets, 7=EFFECTS, 8=EUREKA,
