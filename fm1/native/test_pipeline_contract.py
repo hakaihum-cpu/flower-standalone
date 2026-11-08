@@ -158,7 +158,10 @@ for name, count, media_size in (
     assert "free_zero=True" in encoder
     assert "start = 0 if free_zero else 1" in encoder
     assert "def improves_both(candidate, prior):" in encoder
-    assert "if improves_both(trial[3], chosen[3]):" in encoder
+    assert "def source_quality(reconstruction):" in encoder
+    assert "original_rgb = np.stack" in encoder
+    assert "improves_both(source_quality(trial[2]), source_quality(chosen[2]))" in encoder
+    assert "improves_both(trial[3], chosen[3])" in encoder
     assert "for row, frame in enumerate((0, FRAMES//2, FRAMES-1)):" in encoder
     assert count in encoder and media_size in encoder
 color_encoder = (root / "fm1/native/tools/mi_reference_palette.py").read_text()
