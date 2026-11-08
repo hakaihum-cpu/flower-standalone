@@ -38,7 +38,7 @@ assert "for(i=1u;i<MI_TILE_BANKS;i++)" in app_source
 assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in (Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
 header=(Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
 assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in header
-for entry in ("0x0020u", "0x10a2u", "0x2945u", "0xc618u", "0xf7beu"):
+for entry in ("0x0000u", "0x10a2u", "0x2945u", "0xc618u", "0xf7beu"):
     assert entry in header
 assert "mi_photo_palette[idx]" in app_source
 
