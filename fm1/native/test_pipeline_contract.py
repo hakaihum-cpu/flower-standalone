@@ -389,6 +389,22 @@ assert "test -s /tmp/fm1-base/miyako/mi_ui_media.h" in ci
 assert "MI_UI_MOTION_COUNT 100u" in ci
 assert (root / "fm1/native/tools/build_ui_anim_header.py").is_file()
 assert (root / "fm1/native/tools/mi_ui_env_lfo_logo_start_16color.b64").is_file()
+# The supplied ENV atlas has 9 columns x 10 rows, NOT 10x10. Never use
+# the old 100 ENV slices as the visible animation again.
+env90_pack = root / "fm1/native/tools/mi_ui_env_9x10_16color.b64"
+env90_builder = (root / "fm1/native/tools/build_ui_anim_header.py").read_text()
+assert env90_pack.is_file() and env90_pack.stat().st_size > 18000
+assert 'ENV90_RAW_SHA256 = "d0074a610d8eb39aad0bbfe34b2c2584043aea966c8fcf3dbc2efc1234422d7d"' in env90_builder
+assert 'verify_motion("env9x10", ebooks, ebases, eoffsets, edeltas, count=90)' in env90_builder
+assert "MI_UI_ENV_COUNT 90u" in ci
+assert "MI_UI_ENV_COUNT" in ui and "MI_UI_MOTION_COUNT" in ui
+# Only the second LCD pass may render the original-frame girl sprites.
+assert 'cv_rect(96+(int32_t)start,72+(int32_t)y,' in ui
+assert 'mi_ui_draw_motion(0u,mi_ui_param_frame(0u));' in ui
+assert 'mi_ui_draw_motion(1u,mi_ui_param_frame(1u));' in ui
+assert 'check_ui_sprite_layout.py' in ci
+assert 'MIYAKO_ENV.png fm1-dist/MIYAKO_LFO.png' in ci
+assert (root / "fm1/native/tools/check_ui_sprite_layout.py").is_file()
 # Photo bank requires the CRC-checked separate resource. Both SEL and FX
 # must display a visible existing EFFECTS frame when FWSC is installed alone.
 assert "mi_media_draw_scaled_half(half,px,py,size,size,clip_left,0);" in ui
