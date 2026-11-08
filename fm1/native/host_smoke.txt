@@ -146,6 +146,9 @@ expect fx 6
 expect fx_page 0
 tap SEL
 expect view 3
+# Explicitly choose original EUREKA bank; AUTO is deliberately independent.
+turn SELECT 8
+expect visual_choice 8
 midi USB 90 45 7F
 wait 300
 shot MIYAKO_EUREKA_VIDEO.png
