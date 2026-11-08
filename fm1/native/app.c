@@ -1392,6 +1392,8 @@ int app_expect(const char *what,int *got)
   }
   else if(mi_streq(what,"rec_samples")) *got=(int)audio.recorder.count;
   else if(mi_streq(what,"rec_pitch")) *got=(int)state.seq[2];
+ else if(mi_streq(what,"attack_frame"))
+     *got=(int)(((unsigned)state.env[0]*(MI_LETTER_FRAMES-1u)+63u)/127u);
   else if(mi_streq(what,"preset")) *got=(int)state.preset;
  else if(mi_streq(what,"slot")) *got=(int)state.project_slot;
  else if(mi_streq(what,"midi_channel")) *got=(int)state.midi_channel;
