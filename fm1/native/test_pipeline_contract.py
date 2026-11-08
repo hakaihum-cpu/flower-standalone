@@ -488,7 +488,7 @@ assert "RESOURCE_CAPACITY = 69 * 4096 - 32" in resource_packer
 assert "photo96_rebuild.py" in (root / "fm1/native/tools/PHOTO96_REBUILD.md").read_text()
 assert "original||legacy" in ui
 assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in resource_header
-assert "0x0020u,0x10a2u,0x2945u" in resource_header
+assert "0x0000u,0x10a2u,0x2945u" in resource_header
 assert "0x8410u,0x9492u,0xa534u" in resource_header
 assert "0xd6bau,0xce59u,0xffdfu,0xf7beu" in resource_header
 assert "PHOTO_RGB565 = (" in resource_packer
