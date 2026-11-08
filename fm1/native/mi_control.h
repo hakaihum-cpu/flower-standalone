@@ -61,7 +61,7 @@ typedef struct {
     uint8_t step_track;       /* selected track 0..3 */
     uint8_t step_play;        /* K2: clockwise starts, CCW stops */
     uint8_t step_dir;         /* K3: 0=FWD, 1=REV, 2=RND */
-    uint8_t step_len;         /* K4: 1..16; default 8 */
+    uint8_t step_len;         /* K4: 8..16; default 8 */
     uint8_t step_editor;      /* SEQ long hold UI, transient */
 } mi_state_t;
 typedef struct {
