@@ -12,6 +12,9 @@ jobs:
       - image: cimg/base:2024.08-22.04
     resource_class: medium
     environment:
+      # pipeline.number is a CircleCI compile-time value, NOT a built-in
+      # CIRCLE_PIPELINE_NUMBER runtime env var. Pass it explicitly.
+      CIRCLE_PIPELINE_NUMBER: << pipeline.number >>
       JIELI_TOOLCHAIN: "/home/circleci/.jieli/toolchain"
       AC79_SDK: "/home/circleci/fw-AC79_AIoT_SDK"
       # fm1-base's default Barlow TTF requires Pillow libraqm for 'tnum'.
@@ -25,6 +28,11 @@ jobs:
           command: |
             set -eu
             test "$CIRCLE_BRANCH" = "feature/fm1-miyako-osc-attack-letter-version-20261108"
+            # Reject missing pipeline metadata before media/resource work.
+            case "${CIRCLE_PIPELINE_NUMBER:-}" in
+              ""|*[!0-9]*) echo "FAIL: CircleCI pipeline.number was not supplied" >&2; exit 1 ;;
+            esac
+            echo "PASS: CircleCI pipeline #$CIRCLE_PIPELINE_NUMBER"
             # Parse-check EVERY CircleCI run script before any build work.
             python3 fm1/native/tools/check_ci_run_shell.py
             python3 -m compileall -q fm1/native
