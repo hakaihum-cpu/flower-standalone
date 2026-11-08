@@ -243,8 +243,8 @@ void app_init(void)
 }
 void app_panic(void){mi_audio_panic(&audio);}
 /* fm1-base backup hooks are REQUIRED by the stock resources installer.
- * Settings are already saved synchronously through plat_store_save().
- * No new save format, project store or asynchronous worker is introduced. */
+ * MI17 stores four presets and global settings synchronously in the
+ * EXISTING OBJ_SETTINGS flash object; no additional sectors or worker. */
 int app_backup_playing(void)
 {
     unsigned i;
