@@ -497,19 +497,28 @@ static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
 static uint16_t mi_photo_palette[16];
 static int16_t mi_photo_cached=-1;
+/* Same size as the old amber res.bin: distinguish by its palette bytes.
+ * FWSC-only updates must never silently display the obsolete image colours. */
+static const uint8_t *mi_photo_source(uint32_t *length)
+{
+    const uint8_t *res=plat_res(length);
+    if(!res||*length<MI_TILE_DATA_BYTES||
+       res[2u]!=0xC4u||res[3u]!=0x18u||
+       res[16u]!=0x35u||res[17u]!=0x4Cu||
+       res[30u]!=0x9Du||res[31u]!=0xF7u)
+        return 0;
+    return res;
+}
 static void mi_photo_decode(unsigned frame)
 {
     uint32_t length=0u;
     const uint8_t *res;
     unsigned clip,ty,tx,row,col,i;
     if(frame>=MI_TILE_COUNT||mi_photo_cached==(int16_t)frame)return;
-    /* FM-1_938 requires its 279936-byte photo resource. All older
-     * 119520-byte resources are INCOMPATIBLE and show DOT fallback. */
-    res=plat_res(&length);
-    if(!res||length<MI_TILE_DATA_BYTES){
-        mi_photo_cached=-1;
-        return;
-    }
+    /* FM-1_938 requires its revised 279936-byte photo resource.
+     * Old sepia resources (even if 279936 bytes) use EFFECTS fallback. */
+    res=mi_photo_source(&length);
+    if(!res){mi_photo_cached=-1;return;}
     clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
     if(clip>=MI_TILE_VQ_CLIPS){mi_photo_cached=-1;return;}
     for(i=0u;i<16u;i++){
@@ -575,8 +584,7 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
     px+=((int32_t)audio.video_effective[2]-64)/4;
     py+=((int32_t)audio.video_effective[3]-64)/4;
     if(visual_tile>=MI_TILE_COUNT||
-       !plat_res(&resource_length)||
-       resource_length<MI_TILE_DATA_BYTES){
+       !mi_photo_source(&resource_length)){
         mi_photo_cached=-1;
         mi_media_draw_scaled_half(half,px,py,size,size,clip_left,0);
         return;
@@ -978,7 +986,7 @@ int app_expect(const char *what,int *got)
   else if(mi_streq(what,"rec_overdub")) *got=(int)audio.recorder.overdubbing;
   else if(mi_streq(what,"media_ready")){
       uint32_t length=0u;
-      *got=plat_res(&length)!=0&&length>=MI_TILE_DATA_BYTES?1:0;
+      *got=mi_photo_source(&length)!=0?1:0;
   }
   else if(mi_streq(what,"rec_samples")) *got=(int)audio.recorder.count;
   else if(mi_streq(what,"rec_pitch")) *got=(int)state.seq[2];
