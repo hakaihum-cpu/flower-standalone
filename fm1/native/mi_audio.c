@@ -156,7 +156,9 @@ static void mi_step_tick(mi_audio_t *a,const mi_state_t *s)
     unsigned t,dir=s->step_dir,len=s->step_len,pos,bpm;
     uint32_t period;
     if(!s->step_play){
-        a->step_active=0u;
+        /* Preserve next position for MIDI Continue after Stop. Internal
+         * K2 STOP still restarts the pattern from its beginning. */
+        if(!a->step_midi_mode)a->step_active=0u;
         a->step_wait=0u;
         return;
     }
@@ -169,7 +171,12 @@ static void mi_step_tick(mi_audio_t *a,const mi_state_t *s)
         a->step_last_dir=(uint8_t)dir;
         a->step_last_len=(uint8_t)len;
     }
-    if(a->step_wait){--a->step_wait;return;}
+    if(a->step_midi_mode){
+        /* A 1/16 note is 6 MIDI Clock pulses, never a calculated BPM.
+         * Clock messages are collected by the audio-thread MIDI poll. */
+        if(!a->step_clock_pending)return;
+        a->step_clock_pending=0u;
+    }else if(a->step_wait){--a->step_wait;return;}
     pos=a->step_next;
     if(pos>=len)pos=0u;
     a->step_current=(uint8_t)pos;
@@ -183,11 +190,13 @@ static void mi_step_tick(mi_audio_t *a,const mi_state_t *s)
         a->step_random^=a->step_random<<5;
         a->step_next=(uint8_t)(a->step_random%len);
     }else a->step_next=(uint8_t)((pos+1u)%len);
-    bpm=s->global[0]<40?40u:(s->global[0]>240?240u:(unsigned)s->global[0]);
-    /* One step = 1/16 note, equivalent to 15/BPM seconds. */
-    period=(uint32_t)(a->sample_rate*15.f/(float)bpm+0.5f);
-    if(period<1u)period=1u;
-    a->step_wait=period-1u;
+    if(!a->step_midi_mode){
+        bpm=s->global[0]<40?40u:(s->global[0]>240?240u:(unsigned)s->global[0]);
+        /* Internal fallback: one 1/16 note = 15/BPM seconds. */
+        period=(uint32_t)(a->sample_rate*15.f/(float)bpm+0.5f);
+        if(period<1u)period=1u;
+        a->step_wait=period-1u;
+    }
 }
 static float drum_sample(mi_audio_t *a,const mi_state_t *s,mi_voice_t *v)
 {
@@ -513,13 +522,36 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
     dry=fx_stage(a,s,first,s->wet,dry,&a->wet_current);
     return fx_stage(a,s,second,s->wet2,dry,&a->wet_current2);
 }
-void mi_audio_midi_clock(mi_audio_t *a,unsigned status)
+void mi_audio_midi_clock(mi_audio_t *a,mi_state_t *s,unsigned status)
 {
-    if(!a)return;
-    if(status==0xFAu){a->recorder.clock_ticks=0u;a->recorder.clock_period=0.f;}
-    else if(status==0xF8u)
+    if(!a||!s)return;
+    if(status==0xFAu){ /* MIDI Start: return to first step, then wait for F8 */
+        a->recorder.clock_ticks=0u;
+        a->recorder.clock_period=0.f;
+        a->step_midi_mode=1u;
+        a->step_clock_phase=0u;
+        a->step_clock_pending=0u;
+        a->step_active=0u;
+        a->step_wait=0u;
+        s->step_play=1u;
+    }else if(status==0xFBu){ /* Continue: keep next step and pulse phase */
+        a->step_midi_mode=1u;
+        s->step_play=1u;
+    }else if(status==0xFCu){ /* Stop: preserve next step for Continue */
+        s->step_play=0u;
+        a->step_clock_pending=0u;
+        a->step_midi_mode=1u;
+        mi_rec_clock_stop(&a->recorder);
+    }else if(status==0xF8u){
+        /* The RECORDER continues receiving the identical raw MIDI clock. */
         mi_rec_external_tick(&a->recorder,a->rendered_samples);
-    else if(status==0xFCu)mi_rec_clock_stop(&a->recorder);
+        a->step_midi_mode=1u;
+        if(s->step_play){
+            if(a->step_clock_phase==0u)a->step_clock_pending=1u;
+            a->step_clock_phase=(uint8_t)((a->step_clock_phase+1u)%6u);
+        }
+    }else return;
+    a->step_last_clock_sample=a->rendered_samples;
 }
 void mi_audio_rec_request(mi_audio_t *a,unsigned command)
 {
@@ -539,6 +571,17 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         apply_lfo_destination(&snapshot,s->lfo[3],
             lfo_value(s->lfo[1],a->lfo_phase)*(float)s->lfo[2]/127.f);
     rs=&snapshot;
+    /* Clock loss (>1 s) reverts to the existing internal BPM without
+     * freezing playback. MIDI Stop keeps step_play=0 and stays stopped. */
+    if(a->step_midi_mode &&
+       (uint32_t)(a->rendered_samples-a->step_last_clock_sample)>
+       (uint32_t)a->sample_rate){
+        a->step_midi_mode=0u;
+        a->step_clock_phase=0u;
+        a->step_clock_pending=0u;
+        a->step_active=0u;
+        a->step_wait=0u;
+    }
     for(k=0u;k<4u;k++)a->video_effective[k]=snapshot.video_params[k];
     float scale=clampf(master_q12/4096.f,0.f,1.f)*clampf(rs->level/127.f,0.f,1.f)*5000000.f;
     uint8_t wave=rs->wave==MI_WAVE_MULTI?rs->osc1_wave:
