@@ -259,7 +259,7 @@ def main():
     palettes, books, maps, worst = [], [], [], []
     decoded_crc32 = 0
     reconstructed = 0
-    montage = Image.new("RGB", (256, 78 * CLIPS)) if a.preview else None
+    montage = Image.new("RGB", (256, HEIGHT * CLIPS * 3)) if a.preview else None
     for clip in range(CLIPS):
         print(f"EFFECTS source clip {clip+1}/{CLIPS}: quantising all 36 frames", flush=True)
         images = jpeg_frames(source, clip)
@@ -321,14 +321,20 @@ def main():
               f"dictionary={selected}", flush=True)
         if montage is not None:
             pal = rgb_palette(palette)
-            montage.paste(Image.fromarray(pal[idx[0, :HEIGHT]]), (0, clip * HEIGHT))
-            montage.paste(Image.fromarray(pal[recon[0, :HEIGHT]]), (128, clip * HEIGHT))
+            # Show FIRST / MIDDLE / LAST source and reconstructed frames.
+            # A single clip-first preview hides motion-dependent VQ damage.
+            for row, frame in enumerate((0, FRAMES//2, FRAMES-1)):
+                top = (clip * 3 + row) * HEIGHT
+                montage.paste(Image.fromarray(pal[idx[frame, :HEIGHT]]),
+                              (0, top))
+                montage.paste(Image.fromarray(pal[recon[frame, :HEIGHT]]),
+                              (WIDTH, top))
     if reconstructed != CLIPS * FRAMES or len(palettes) != CLIPS:
         raise RuntimeError(f"FAIL: VQ reconstructed {reconstructed}/{CLIPS*FRAMES} original slots")
     write_candidate(a.output_header, palettes, books, maps, decoded_crc32)
     if a.preview:
         a.preview.parent.mkdir(parents=True, exist_ok=True)
-        montage.resize((768, 78 * CLIPS * 3), Image.Resampling.NEAREST).save(a.preview)
+        montage.resize((768, HEIGHT * CLIPS * 3 * 3), Image.Resampling.NEAREST).save(a.preview)
     print(f"CANDIDATE: RGB565 16 colours, {reconstructed} original-frame slots; "
           f"media {MEDIA_BYTES}/{APP_SLOT} bytes; worst additional PSNR "
           f"{min(worst):.2f} dB; decoded CRC32={decoded_crc32:08X}; "
