@@ -147,6 +147,14 @@ assert ci.index("test_video_palette_natural.py") < ci.index("Reconstruct all 144
 assert ci.index("test_black_frame_guard.py") < ci.index("Reconstruct all 144 original")
 assert "visible<32u" in (root / "fm1/native/test_media_crc.c").read_text()
 assert (root / "fm1/native/tools/black_frame_guard.py").is_file()
+# Index zero is an opaque RGB565 palette colour. Treating it as alpha
+# discarded real frames from BOTH FX and EUREKA.
+frame_guard = (root / "fm1/native/tools/black_frame_guard.py").read_text()
+assert "visible[0] = False" not in frame_guard
+assert "Palette entry zero is an OPAQUE colour" in frame_guard
+frame_guard_test = (root / "fm1/native/tools/test_black_frame_guard.py").read_text()
+assert "bright_zero[0]=0xFFFF" in frame_guard_test
+assert "visible_pixel_counts(all_zero,bright_zero)" in frame_guard_test
 assert ci.index("Reconstruct all 144 original MIYAKO EFFECTS") < ci.index(
     "Reconstruct all 576 original MIYAKO EUREKA")
 assert ci.index("Reconstruct all 576 original MIYAKO EUREKA") < ci.index(
@@ -389,6 +397,16 @@ assert "test -s /tmp/fm1-base/miyako/mi_ui_media.h" in ci
 assert "MI_UI_MOTION_COUNT 100u" in ci
 assert (root / "fm1/native/tools/build_ui_anim_header.py").is_file()
 assert (root / "fm1/native/tools/mi_ui_env_lfo_logo_start_16color.b64").is_file()
+# 190 original-source alpha masks are keyed to their *own* frames,
+# not to 16-colour palette indices shared with dark hair and clothing.
+matte_asset = root / "fm1/native/tools/mi_ui_env_lfo_matte_3x3.b64"
+assert matte_asset.is_file() and matte_asset.stat().st_size > 1000
+assert 'MATTE_SHA256 = "cdaaf835271f85976ef2d3595e9df49f605468fbd374979c204bf3145cc457e0"' in (root / "fm1/native/tools/build_ui_anim_header.py").read_text()
+assert "mi_ui_env_matte" in ui and "mi_ui_lfo_matte" in ui
+assert "prior<16u?colors[prior]:C_BLACK" in ui
+assert "if(!(matte[alpha_byte]" in ui
+assert "mi_ui_draw_motion(0u,mi_ui_param_frame(0u));" in ui
+assert "mi_ui_draw_motion(1u,mi_ui_param_frame(1u));" in ui
 # The supplied ENV atlas has 9 columns x 10 rows, NOT 10x10. Never use
 # the old 100 ENV slices as the visible animation again.
 env90_pack = root / "fm1/native/tools/mi_ui_env_9x10_16color.b64"
