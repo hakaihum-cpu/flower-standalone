@@ -609,18 +609,14 @@ assert "MIYAKO_FX_DREAMY_LARGE.png" in ci
 assert "MIYAKO_FX_EUREKA_LARGE.png" in ci
 assert "shot MIYAKO_FX_DREAMY_LARGE.png" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "shot MIYAKO_FX_EUREKA_LARGE.png" in (root / "fm1/native/host_smoke.txt").read_text()
-# Preserve actual source aspect, not the old forced square stretch:
-# 14 landscape (640x360) videos display at 240x135, while the two real
-# square 720x720 EUREKA clips (global 12/13) occupy the 240x240 display.
-# Do not crop frames or change their 128x78/16-colour VQ storage.
+# User accepts source-aspect stretch to fill the entire 240x240 LCD.
+# Keep both FX and EUREKA full-bleed and preserve their existing codec,
+# frame count, clip selection, audio and UI overlay.
 assert "mi_tile_draw_half(half,0,0,240,0,audio_activity)" in ui
 assert "mi_dreamy_dot_draw_half" not in ui
-assert "static void mi_media_draw_fitted_half(unsigned half,int eureka)" in ui
-assert "clip==12u||clip==13u" in ui
-assert "mi_media_draw_scaled_half(half,0,52,240,135,0,eureka);" in ui
-assert "mi_media_draw_scaled_half(half,0,0,240,240,0,1);" in ui
-assert ui.count("mi_media_draw_fitted_half(half,mode==7u);") == 2
-assert "mi_media_draw_scaled_half(half,0,0,240,240,0,mode==7u)" not in ui
+assert ui.count("mi_media_draw_scaled_half(half,0,0,240,240,0,mode==7u);") == 2
+assert "mi_media_draw_fitted_half" not in ui
+assert "mi_media_draw_scaled_half(half,0,52,240,135,0,eureka);" not in ui
 assert "mi_fx_dial(half,181,183,3u)" in ui
 assert "mi_fx_dial(half,121,183,2u)" in ui
 assert "mi_video_vfx_half" not in ui
