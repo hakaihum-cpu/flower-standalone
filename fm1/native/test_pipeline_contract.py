@@ -200,8 +200,14 @@ assert "FM-1_938" not in ci and "FM-1_938" not in app_header
 assert 'PRODUCT = prefix + "38"' not in ci
 assert ci.index('set_miyako_product_id.py') < ci.index(
     'tools/build.py /tmp/fm1-base/miyako --host')
-# Firmware UI renders the exact generated identity rather than static 0.3.x.
-assert 'cv_text(75,11,&FONT_XS,APP_VERSION,GREY);' in ui
+# FWSC/product identity still follows pipeline.number internally. The user
+# explicitly did NOT request a visible version: the artwork replaces it.
+assert 'cv_text(75,11,&FONT_XS,APP_VERSION,GREY);' not in ui
+assert 'mi_ui_draw_logo();' in ui
+assert 'mi_ui_draw_start();' in ui
+assert 'mi_ui_draw_motion(0u,mi_ui_param_frame(0u));' in ui
+assert 'mi_ui_draw_motion(1u,mi_ui_param_frame(1u));' in ui
+assert 'mi_ui_motion_decode(unsigned kind,unsigned frame)' in ui
 
 # Root issue from the current build log: fm1-base's own mmio_check()
 # correctly rejects a volatile pointer cast outside the BSP, even though
