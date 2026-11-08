@@ -20,14 +20,29 @@
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
 #define GREY RGB(218,213,202)
-#define SAVED_MAGIC 0x4D493136u /* MI16: drum step sequencer */
+#define SAVED_MAGIC 0x4D493137u /* MI17: four persistent preset slots */
+#define SAVED_MAGIC_M16 0x4D493136u /* MI16: old single-slot settings */
 #define SAVED_MAGIC_M15 0x4D493135u /* MI15 settings */
 #define SAVED_MAGIC_M14 0x4D493134u /* MI14 settings */
 #define SAVED_MAGIC_PREV 0x4D493133u /* MI13 settings */
+/* Store four independent patch snapshots in the existing OBJ_SETTINGS key.
+ * It has a documented 3840-byte payload limit and needs no new flash map. */
 typedef struct {
- uint32_t magic;
- mi_state_t state;
- } saved_t;
+    uint32_t magic;
+    uint8_t valid_mask,active_slot,midi_channel,clock_mode;
+    mi_state_t slots[4];
+} saved_bank_t;
+/* MI16 had exactly one state, aligned to the platform's 4-byte ABI.
+ * Never interpret a smaller historic object as the four-slot MI17 blob. */
+#define MI16_STATE_BYTES ((offsetof(mi_state_t,midi_channel)+3u)&~3u)
+typedef struct {
+    uint32_t magic;
+    uint8_t state_prefix[MI16_STATE_BYTES];
+} saved_mi16_t;
+typedef char mi_save_bank_limit[(sizeof(saved_bank_t)<=3840u)?1:-1];
+static saved_bank_t saved_bank;
+static uint8_t config_dirty;
+static uint32_t config_changed_ms;
 /* Exact persisted MI13/MI14 layout: FX_COUNT was seven. */
 typedef struct {
     mi_view_t view;
