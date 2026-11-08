@@ -254,7 +254,7 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
             if(k==0u)s->step_track=(uint8_t)limited(s->step_track,d,0,3);
             if(k==1u)s->step_play=(uint8_t)(d>0?1u:0u);
             if(k==2u)s->step_dir=(uint8_t)limited(s->step_dir,d,0,2);
-            if(k==3u)s->step_len=(uint8_t)limited(s->step_len,d,1,16);
+            if(k==3u)s->step_len=(uint8_t)limited(s->step_len,d,8,16);
             return;
         }
         p=&s->seq[k];
@@ -398,7 +398,7 @@ int mi_state_valid(const mi_state_t *s)
         s->drum_color>127u||s->drum_level>127u||
         (s->rec_bars!=2u&&s->rec_bars!=4u)||
         s->step_track>=4u||s->step_play>1u||s->step_dir>2u||
-        s->step_len<1u||s->step_len>16u||s->step_editor>1u)
+        s->step_len<8u||s->step_len>16u||s->step_editor>1u)
         return 0;
     for (i = 0; i < 4u; ++i) {
         if (s->env[i] > 127u || s->lfo[i] > 127u || s->video_params[i]>127u)
