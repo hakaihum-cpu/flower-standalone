@@ -12,37 +12,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mi_palette import clip_pixels as effects_palette
 from pack_eureka_frames import clip_pixels as eureka_palette
 from mi_reference_palette import REFERENCE_565
-from pack_miyako_resource import PHOTO_RGB565
+from pack_miyako_resource import read_payload, CHUNK_DIR, SHA256
+import hashlib
 import re
 
-# The archive keeps the original VQ selectors and codebooks. Original
-# photographs are monochrome, so the native LCD maps indices back into
-# eight original-source greyscale palette tables. Both the earlier blue
-# recolour and the historical warm res.bin retain compatible frame maps.
-from test_miyako_resource96 import REFERENCE as RESOURCE_REFERENCE
+# The exact 628-frame archive now contains 24 independent RGB565 palettes
+# reconstructed from the eight SHA-verified original user image sheets.
+# The last contact sheet includes real yellow and sunset hues.
+resource = read_payload(CHUNK_DIR)
+assert SHA256 == "df517e2d8c7902bed076610a07876dee660890799ba5dec6bc12bf366783bcf4"
+assert hashlib.sha256(resource).hexdigest() == SHA256
 app_source = (Path(__file__).resolve().parents[1] / "app.c").read_text()
-assert RESOURCE_REFERENCE == PHOTO_RGB565, (
-    "installed res.bin must use the revised non-sepia photo palette"
-)
-assert PHOTO_RGB565 != REFERENCE_565
-assert len(set(PHOTO_RGB565)) == 16
+header = (Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
 assert re.search(r"static\s+uint16_t\s+mi_photo_palette\[16\];", app_source)
 assert "res=plat_res(length);" in app_source
 assert "res=mi_photo_source(&length);" in app_source
-# The historical blue/purple re-palette modified only 24 color tables,
-# not frame selectors. The native renderer now restores authentic RGB565
-# palette entries from the user-source manifest for BOTH resource revisions.
-assert "original||legacy" in app_source
-assert "mi_photo_palette[i]=mi_photo_grayscale_palette[bank][i]" in app_source
-assert "for(i=1u;i<MI_TILE_BANKS;i++)" in app_source
-assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in (Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
-header=(Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
-assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in header
-calibrated = header.split("mi_photo_grayscale_palette[MI_TILE_BANKS][16] = {", 1)[1].split("};", 1)[0]
-rows = [line for line in calibrated.splitlines() if line.strip().startswith("{")]
-assert len(rows) == 8
-assert all(len(re.findall(r"0x[0-9a-f]{4}u", row)) == 16 for row in rows)
-assert "SHA256 bb5345df9b9e4118052bfeac603e38f16db0fccd5af49223e52b08115a1cc40" in header
+assert "mi_photo_palette[i]=(uint16_t)" in app_source
+assert "((uint16_t)res[offset+1u]<<8u)" in app_source
+assert "MI_TILE_RESOURCE_RGB_SOURCE 1u" in header
+assert "mi_photo_grayscale_palette" not in app_source
 assert "mi_photo_palette[idx]" in app_source
 
 W, H = 128, 78
