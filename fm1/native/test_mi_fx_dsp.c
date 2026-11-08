@@ -19,6 +19,14 @@ int main(void)
         if(out>peak)peak=out;
     }
     assert(peak>0.6f);
+    /* Maximum DELAY must now make a substantially stronger second repeat:
+     * after the first 40ms echo, the next repeat returns ~96% amplitude. */
+    mi_fx_dsp_init(&p);
+    for(i=0u;i<=3528u;i++){
+        float out=mi_fx_dsp_process(&p,MI_FX_DELAY,
+                                    i==0u?1.f:0.f,44100.f,0u,127u);
+        if(i==3528u)assert(out>0.94f && out<0.98f);
+    }
     mi_fx_dsp_init(&p);
     peak=0.f;
     for(i=0;i<2000u;i++){
