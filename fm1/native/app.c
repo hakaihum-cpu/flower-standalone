@@ -13,6 +13,7 @@
 #include "mi_audio.h"
 #include "mi_video.h"
 #include "mi_resource_media.h"
+#include "mi_shared_tile_codec_poc.h" /* optional MTL1 read path */
 #include "mi_effects_vq_frames.h" /* 144 source frames */
 #include "mi_eureka_vq_frames.h" /* 576 source frames */
 #include "mi_letter_anim.h" /* exact 72 user-source paper-airplane frames */
@@ -853,6 +854,10 @@ static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
  * method made every real picture look like coloured grayscale). */
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
 static uint16_t mi_photo_palette[16];
+/* MTL1 uses one 4 KiB 8x4 tile dictionary and one 288-byte index map.
+ * Reused between frames and both LCD 120-row passes; no malloc/audio IRQ. */
+static uint8_t mi_photo_tilebook[MI_TP_BOOK_BYTES];
+static uint8_t mi_photo_tilemap[MI_TP_MAP_BYTES];
 static int16_t mi_photo_cached=-1;
 /* The original user images have been re-encoded in the existing VQ
  * format. Old res.bin codebooks/selectors are NOT interchangeable. Reject
@@ -861,7 +866,14 @@ static int16_t mi_photo_cached=-1;
 static const uint8_t *mi_photo_source(uint32_t *length)
 {
     const uint8_t *res=plat_res(length);
-    if(!res||*length<MI_TILE_DATA_BYTES||
+    if(!res||!length)return 0;
+    /* Accept only CRC-checked resources from fm1-base. An MTL1 payload
+     * decodes to exactly the existing 16-colour VQ pixels; it is NOT a
+     * full-colour source image or a visual-quality change by itself. */
+    if(*length>=6012u&&*length<=MI_TP_MAX_PAYLOAD&&
+       res[0u]=='M'&&res[1u]=='T'&&res[2u]=='L'&&res[3u]=='1')
+        return res;
+    if(*length<MI_TILE_DATA_BYTES||
        res[0u]!=0xFFu||res[1u]!=0xFFu||
        res[2u]!=0x00u||res[3u]!=0x00u||
        res[4u]!=0xEFu||res[5u]!=0x83u||
@@ -879,6 +891,16 @@ static void mi_photo_decode(unsigned frame)
      * real original-source, clip-specific RGB565 palette and VQ maps. */
     res=mi_photo_source(&length);
     if(!res){mi_photo_cached=-1;return;}
+    if(res[0u]=='M'&&res[1u]=='T'&&res[2u]=='L'&&res[3u]=='1'){
+        if(mi_tp_decode_frame(res,length,(uint16_t)frame,mi_photo_palette,
+                              mi_photo_pixels,mi_photo_tilebook,
+                              mi_photo_tilemap)!=0){
+            mi_photo_cached=-1;
+            return;
+        }
+        mi_photo_cached=(int16_t)frame;
+        return;
+    }
     clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
     if(clip>=MI_TILE_VQ_CLIPS){mi_photo_cached=-1;return;}
     /* Clip palette is stored alongside its codebook in the existing
