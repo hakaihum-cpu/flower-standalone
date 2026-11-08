@@ -309,7 +309,7 @@ assert "mi_rec_external_tick" in audio and "MI_REC_CAPACITY" in recorder
 assert "MI_FX_BITCRUSH" in fxcode and "MI_FX_PITCHSHIFT" in fxcode
 assert "mi_lfo_dest_name" in controls and "apply_lfo_destination" in audio
 assert "mi_visual_map(&sx,&sy" in ui and "mi_visual_photo_bank" in ui
-assert "next=visual_rng%10u<3u?" in ui
+assert "visual_rng%10u<3u)?visual_rng%MI_TILE_COUNT:" in ui
 assert "filter_cutoff" in controls and "a->filter_a+=" in audio
 # Old MI13/MI14 structs had seven FX slots; new state has nine.
 # Never memcpy the old save into the new layout (misaligned FX matrices).
