@@ -215,6 +215,29 @@ int main(void)
  s.fx=MI_FX_PITCHSHIFT;
  mi_audio_render(&a,&s,lr,256u,4096u);
  assert(a.last_mode==MI_FX_PITCHSHIFT);
- puts("PASS: eight voices, FMDrum, filter, LFO routing, FX, adaptive REC");
+ /* Confirm the actual recorder input contains FMDrum PCM, not silence.
+  * Recording picks up the same post-FX internal bus as regular OSC voices. */
+ mi_init(&s);mi_audio_init(&a,44100.f);
+ s.wave=MI_WAVE_FMDRUM;s.fx=MI_FX_OFF;s.fx2=MI_FX_OFF;
+ mi_audio_rec_request(&a,1u);
+ mi_audio_input_on(&a,&s,53u,127u); /* kick */
+ mi_audio_input_on(&a,&s,54u,127u); /* snare */
+ for(i=0u;i<16u;i++)mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.recorder.recording && a.recorder.count>200u);
+ {
+     unsigned audible=0u;
+     for(i=0u;i<a.recorder.count;i++){
+         int16_t pcm=mi_rec_sample(i);
+         if(pcm>64 || pcm< -64)++audible;
+     }
+     assert(audible>20u);
+ }
+ mi_audio_input_off(&a,&s,53u);
+ mi_audio_input_off(&a,&s,54u);
+ mi_audio_rec_request(&a,1u);
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(!a.recorder.recording && a.recorder.playing &&
+        a.recorder.count>200u);
+ puts("PASS: eight voices, FMDrum-to-REC PCM, filter, LFO routing, FX, adaptive REC");
  return 0;
 }
