@@ -75,6 +75,8 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t encoder, int32_t steps);
 const char *mi_wave_name(unsigned wave);
 #define MI_WAVE_MULTI 4u
 #define MI_WAVE_FMDRUM 5u
+/* MIDI CC#21 on any channel controls REC PITCH's existing seven values. */
+#define MI_REC_PITCH_CC 21u
 #define MI_LFO_DEST_COUNT 58u
 const char *mi_arp_mode_name(unsigned mode);
 const char *mi_lfo_wave_name(unsigned wave);
