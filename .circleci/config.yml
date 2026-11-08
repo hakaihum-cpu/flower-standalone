@@ -135,11 +135,8 @@ jobs:
             # image placeholders do not affect the native sound processing.
             test -s /tmp/miyako-host-preflight/MIYAKO_FX_PREVIEW.wav
             test -s /tmp/miyako-host-preflight/MIYAKO_EUREKA_AUDIO.wav
-            /tmp/mi-video-venv/bin/python fm1/native/tools/check_noresource_display.py \
-              /tmp/miyako-host-preflight/MIYAKO_NO_RESOURCE_SEL.png \
-              /tmp/miyako-host-preflight/MIYAKO_NO_RESOURCE_FX.png \
-              /tmp/miyako-host-preflight/MIYAKO_PHOTO_RESOURCE_RESTORED.png \
-              /tmp/miyako-host-preflight/MIYAKO_PHOTO_RESOURCE.png
+            # Compiler-only media headers contain ZERO pixels by design.
+            # Validate image visibility only in the later REAL-VQ host run.
             python3 fm1/native/tools/check_host_wav.py \
               /tmp/miyako-host-preflight/MIYAKO_FX_PREVIEW.wav
             python3 fm1/native/tools/check_eureka_wav.py \
