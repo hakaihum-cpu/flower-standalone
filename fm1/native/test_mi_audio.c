@@ -296,6 +296,12 @@ int main(void)
  mi_audio_midi_clock(&a,&s,0xF8u); /* Clock while stopped: no step */
  mi_audio_render(&a,&s,lr,256u,4096u);
  assert(!s.step_play && a.step_next==2u && a.step_current==1u);
+ /* STOP must preserve next step and fractional clock phase even after a
+  * long pause; Continue is not equivalent to Start. */
+ a.rendered_samples+=(uint32_t)(a.sample_rate*2.f);
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.step_midi_mode && !s.step_play &&
+        a.step_next==2u && a.step_clock_phase==1u);
  mi_audio_midi_clock(&a,&s,0xFBu);
  assert(s.step_play && a.step_next==2u);
  for(i=0u;i<6u;i++){
