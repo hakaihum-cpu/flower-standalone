@@ -1147,8 +1147,9 @@ static void mi_draw_attack_scene(void)
     unsigned y,x;
     if(frame>=MI_LETTER_FRAMES)frame=MI_LETTER_FRAMES-1u;
     for(y=0u;y<MI_LETTER_H;y++){
-        int32_t top=41+(int32_t)(y*66u/MI_LETTER_H);
-        int32_t bottom=41+(int32_t)((y+1u)*66u/MI_LETTER_H);
+        /* Leave the SINE/MULTI and OSC selector labels unobscured. */
+        int32_t top=48+(int32_t)(y*61u/MI_LETTER_H);
+        int32_t bottom=48+(int32_t)((y+1u)*61u/MI_LETTER_H);
         unsigned from=0u,previous=mi_letter_scene_pixel(frame,0u,y);
         for(x=1u;x<=MI_LETTER_W;x++){
             unsigned color=x==MI_LETTER_W?16u:mi_letter_scene_pixel(frame,x,y);
