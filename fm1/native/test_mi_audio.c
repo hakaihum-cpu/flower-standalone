@@ -269,6 +269,52 @@ int main(void)
  s.step_dir=2u;s.step_len=16u;
  mi_audio_render(&a,&s,lr,256u,4096u);
  assert(a.step_current<16u);
- puts("PASS: eight voices, FMDrum-to-REC PCM, 4x16 step sequencer, filter, LFO, FX");
+ /* MIDI Start must arm but NOT free-run before external Clock.
+  * 24 PPQN: 6 F8 pulses per 1/16 note; Stop/Continue preserve position. */
+ mi_init(&s);mi_audio_init(&a,44100.f);
+ s.step_pattern[0]=0xFFFFu;
+ s.global[0]=120;
+ mi_audio_midi_clock(&a,&s,0xFAu);
+ assert(s.step_play && a.step_midi_mode && a.step_clock_phase==0u);
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.step_active && a.step_next==0u && !a.v[0].active);
+ mi_audio_midi_clock(&a,&s,0xF8u);
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.step_current==0u && a.step_next==1u &&
+        a.step_clock_phase==1u && a.v[0].drum_type==1u);
+ for(i=0u;i<5u;i++){
+     mi_audio_midi_clock(&a,&s,0xF8u);
+     mi_audio_render(&a,&s,lr,256u,4096u);
+ }
+ assert(a.step_current==0u && a.step_clock_phase==0u);
+ mi_audio_midi_clock(&a,&s,0xF8u);
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.step_current==1u && a.step_next==2u);
+ mi_audio_midi_clock(&a,&s,0xFCu);
+ assert(!s.step_play && a.step_next==2u);
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ mi_audio_midi_clock(&a,&s,0xF8u); /* Clock while stopped: no step */
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(!s.step_play && a.step_next==2u && a.step_current==1u);
+ mi_audio_midi_clock(&a,&s,0xFBu);
+ assert(s.step_play && a.step_next==2u);
+ for(i=0u;i<6u;i++){
+     mi_audio_midi_clock(&a,&s,0xF8u);
+     mi_audio_render(&a,&s,lr,256u,4096u);
+ }
+ assert(a.step_current==2u && a.step_next==3u);
+ /* MIDI Start resets even a previously continued pattern. Reverse
+  * transport begins on the last enabled step, not step zero. */
+ s.step_dir=1u;s.step_len=16u;
+ mi_audio_midi_clock(&a,&s,0xFAu);
+ mi_audio_midi_clock(&a,&s,0xF8u);
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.step_current==15u && a.step_next==14u);
+ /* Losing MIDI Clock returns to the existing internal tempo engine. */
+ a.step_last_clock_sample=0u;
+ a.rendered_samples=(uint32_t)a.sample_rate+2000u;
+ mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(!a.step_midi_mode && s.step_play && a.step_current==15u);
+ puts("PASS: eight voices, FMDrum-to-REC PCM, 4x16 SEQ MIDI Clock/transport, filter, LFO, FX");
  return 0;
 }
