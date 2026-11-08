@@ -420,6 +420,11 @@ static float fx_stage(mi_audio_t *a,const mi_state_t *s,
                                 s->fx_options[mode][0],s->fx_options[mode][1],
                                 s->fx_extra[mode]);
     }else target=0.f;
+    /* Delay/reverb maximum was too subtle on the FM-1. Increase audible
+     * wet return progressively toward high WET settings, but preserve
+     * existing low-WET balance and master output soft limiting. */
+    if(mode==MI_FX_REVERB)wet*=1.f+0.75f*target*target;
+    else if(mode==MI_FX_DELAY)wet*=1.f+0.35f*target*target;
     /* EUREKA is genuinely wet-only and its history starts empty. Previously
      * the wet mixer muted a newly played note before the TIME+HAZE history
      * was available (observed in #266's first-second host WAV).
