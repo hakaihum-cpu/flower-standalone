@@ -27,7 +27,9 @@ assert RESOURCE_REFERENCE == PHOTO_RGB565, (
 assert PHOTO_RGB565 != REFERENCE_565
 assert len(set(PHOTO_RGB565)) == 16
 assert re.search(r"static\s+uint16_t\s+mi_photo_palette\[16\];", app_source)
-assert "res=plat_res(&length);" in app_source
+assert "res=plat_res(length);" in app_source
+assert "res=mi_photo_source(&length);" in app_source
+assert "res[2u]!=0xC4u" in app_source
 assert "unsigned off=MI_TILE_VQ_PALETTE_OFFSET+clip*32u+i*2u;" in app_source
 assert re.search(
     r"mi_photo_palette\[i\]\s*=\s*\(uint16_t\)\(\(uint16_t\)res\[off\]\s*\|\s*"
