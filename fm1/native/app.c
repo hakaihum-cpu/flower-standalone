@@ -1158,6 +1158,7 @@ static void draw(void)
 
     cv_begin(240,120,C_BLACK);
     cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
+    cv_text(75,11,&FONT_XS,APP_VERSION,GREY);
     cv_text(140,10,&FONT_XS,
             state.view==MI_SEQ?(audio.recorder.clock_active?"MIDI 2BAR":
                 state.rec_bars==4u?"REC 4BAR":"REC 2BAR"):
