@@ -1131,34 +1131,52 @@ static void mi_draw_save(void)
     cv_text(12,103,&FONT_XS,"SAVE KEY: CONFIRM",GREY);
     cv_blit(0,120);
 }
-/* Reuse 72 ordered scene frames from the user's 8x9 montage.
- * Attack 0 -> tile 0; Attack 127 -> tile 71. The four-bit 16-colour
- * dictionary was generated and SHA-verified from the provided PNG.
- * Scene renders below the MIYAKO title and above the four K parameters. */
+/* Reuse all 72 ordered scene frames from the user's 8x9 montage.
+ * SUB 0 -> tile 0; SUB 127 -> tile 71. The original 16-colour
+ * source is retained verbatim; on FM-1 the displayed scene uses
+ * consistent high-contrast yellow/black, not corrupt cyan/amber.
+ * Scene renders below the MIYAKO title and above K1-K4 parameters. */
 static unsigned mi_letter_scene_pixel(unsigned frame,unsigned x,unsigned y)
 {
     unsigned block=mi_letter_maps[frame*200u+(y>>2u)*20u+(x>>2u)];
     unsigned pair=mi_letter_book[block*8u+((y&3u)<<1u)+((x&3u)>>1u)];
     return (x&1u)?pair&15u:pair>>4u;
 }
-static void mi_draw_attack_scene(void)
+static unsigned mi_letter_brightness(uint16_t rgb)
 {
-    unsigned frame=((unsigned)state.env[0]*(MI_LETTER_FRAMES-1u)+63u)/127u;
-    unsigned y,x;
+    /* Source palette is RGB565, not an indexed firmware display colour.
+     * Use relative brightness across its sixteen entries to preserve
+     * silhouettes instead of displaying wildly incorrect blue/yellow. */
+    return 3u*((rgb>>11u)&31u)+4u*((rgb>>5u)&63u)+(rgb&31u);
+}
+static void mi_draw_sub_scene(void)
+{
+    unsigned frame=((unsigned)state.sub*(MI_LETTER_FRAMES-1u)+63u)/127u;
+    unsigned y,x,p,lo=UINT32_MAX,hi=0u,cut;
+    uint8_t ink[16];
     if(frame>=MI_LETTER_FRAMES)frame=MI_LETTER_FRAMES-1u;
+    for(p=0u;p<16u;p++){
+        unsigned lum=mi_letter_brightness(mi_letter_palette[p]);
+        if(lum<lo)lo=lum;
+        if(lum>hi)hi=lum;
+    }
+    cut=lo+(hi-lo)/2u;
+    for(p=0u;p<16u;p++)
+        ink[p]=(uint8_t)(mi_letter_brightness(mi_letter_palette[p])<=cut);
     for(y=0u;y<MI_LETTER_H;y++){
-        /* Leave the SINE/MULTI and OSC selector labels unobscured. */
+        /* Preserve the oscillator labels above the scene. */
         int32_t top=48+(int32_t)(y*61u/MI_LETTER_H);
         int32_t bottom=48+(int32_t)((y+1u)*61u/MI_LETTER_H);
-        unsigned from=0u,previous=mi_letter_scene_pixel(frame,0u,y);
+        unsigned from=0u,previous=ink[mi_letter_scene_pixel(frame,0u,y)];
         for(x=1u;x<=MI_LETTER_W;x++){
-            unsigned color=x==MI_LETTER_W?16u:mi_letter_scene_pixel(frame,x,y);
+            unsigned color=x==MI_LETTER_W?2u:
+                           ink[mi_letter_scene_pixel(frame,x,y)];
             if(color!=previous){
                 int32_t x0=8+(int32_t)(from*224u/MI_LETTER_W);
                 int32_t x1=8+(int32_t)(x*224u/MI_LETTER_W);
                 if(x1>x0&&bottom>top)
                     cv_rect(x0,top,x1-x0,bottom-top,
-                            mi_letter_palette[previous]);
+                            previous?YELLOW:C_BLACK);
                 from=x;
                 previous=color;
             }
@@ -1237,9 +1255,9 @@ static void draw(void)
             cv_text(133,33,&FONT_B,state.osc_page==1u?"2":"1",YELLOW);
             cv_text(171,35,&FONT_XS,"PRESET",GREY);
         }
-        /* Paper-airplane source animation driven by ENV ATTACK; the
-         * same live waveform remains overlaid between postbox/letter. */
-        mi_draw_attack_scene();
+        /* Paper-airplane source animation driven by SUB; the same
+         * live oscillator waveform stays between postbox and letter. */
+        mi_draw_sub_scene();
         mi_draw_letter_waveform();
     }else if(state.view==MI_FX){
         unsigned mode=state.fx_slot?state.fx2:state.fx;
@@ -1393,8 +1411,9 @@ int app_expect(const char *what,int *got)
   }
   else if(mi_streq(what,"rec_samples")) *got=(int)audio.recorder.count;
   else if(mi_streq(what,"rec_pitch")) *got=(int)state.seq[2];
- else if(mi_streq(what,"attack_frame"))
-     *got=(int)(((unsigned)state.env[0]*(MI_LETTER_FRAMES-1u)+63u)/127u);
+ else if(mi_streq(what,"sub_frame"))
+     *got=(int)(((unsigned)state.sub*(MI_LETTER_FRAMES-1u)+63u)/127u);
+ else if(mi_streq(what,"sub")) *got=(int)state.sub;
   else if(mi_streq(what,"preset")) *got=(int)state.preset;
  else if(mi_streq(what,"slot")) *got=(int)state.project_slot;
  else if(mi_streq(what,"midi_channel")) *got=(int)state.midi_channel;
