@@ -137,8 +137,10 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
         s->octave = (int8_t)limited(s->octave, -1, -3, 3); break;
     case MI_B_OCT_UP:
         s->octave = (int8_t)limited(s->octave, +1, -3, 3); break;
-    case MI_B_PLAY: view(s,MI_SEQ);return result(MI_ACTION_PLAY, 0);
-    case MI_B_REC: view(s,MI_SEQ);return result(MI_ACTION_RECORD, 0);
+    case MI_B_PLAY: view(s,MI_SEQ);s->step_editor=0u;
+        return result(MI_ACTION_PLAY, 0);
+    case MI_B_REC: view(s,MI_SEQ);s->step_editor=0u;
+        return result(MI_ACTION_RECORD, 0);
     case MI_B_SAVE:
         if (s->view != MI_SAVE) {
             view(s, MI_SAVE);
