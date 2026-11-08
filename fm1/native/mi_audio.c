@@ -160,7 +160,7 @@ static void mi_step_tick(mi_audio_t *a,const mi_state_t *s)
         a->step_wait=0u;
         return;
     }
-    if(len<1u||len>16u)len=8u;
+    if(len<8u||len>16u)len=8u;
     if(dir>2u)dir=0u;
     if(!a->step_active||a->step_last_dir!=dir||a->step_last_len!=len){
         a->step_active=1u;
