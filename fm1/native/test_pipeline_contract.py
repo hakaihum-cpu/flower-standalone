@@ -528,7 +528,13 @@ assert "mi_media_draw_scaled_half(half,123,84,116,71" not in ui
 assert "if(x<clip_left)" in ui and "mi_image_rect(" in ui
 assert "mi_photo_reference_rgb(rgb)" not in ui
 assert "mi_user_reference_rgb565[16]" not in ui
-assert "mi_photo_palette[i]=mi_photo_grayscale_palette[bank][i]" in ui
+# Source-RGB photo resource holds a distinct real RGB565 palette for
+# every 27-frame clip. Guard the actual native decoder, not the removed
+# 8-bank grayscale recolouring that caused CircleCI #298's false failure.
+assert "mi_photo_grayscale_palette" not in ui
+assert "mi_photo_palette[i]=(uint16_t)((uint16_t)res[offset]|" in ui
+assert "((uint16_t)res[offset+1u]<<8u)" in ui
+assert "clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP" in ui
 assert "mi_tile_bank_first[8]" in resource_header
 for source in ("mi_palette.py", "pack_eureka_frames.py"):
     color_source = (root / "fm1/native/tools" / source).read_text()
