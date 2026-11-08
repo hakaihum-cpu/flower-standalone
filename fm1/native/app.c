@@ -885,14 +885,16 @@ static void draw(void)
     for(i=0;i<4u;i++){
         int32_t x=8+(int32_t)i*58;
         cv_text(x,24,&FONT_XS,mi_param_name(&state,i),GREY);
-        if(((state.view==MI_OSC&&state.osc_page<2u&&
-                 state.wave!=MI_WAVE_FMDRUM)||state.view==MI_HOME)&&i==0u)
-            textcpy(val,mi_wave_name(state.view==MI_HOME?state.wave:
-                   (state.osc_page==1u?state.osc2_wave:
-                    state.wave==MI_WAVE_MULTI?state.osc1_wave:state.wave)),
-                   sizeof val);
-        else if(state.view==MI_HOME&&state.wave==MI_WAVE_MULTI&&i==1u)
-            textcpy(val,state.osc_page?"OSC2":"OSC1",sizeof val);
+        if(state.view==MI_HOME&&state.wave==MI_WAVE_MULTI&&i<2u)
+            textcpy(val,mi_wave_name(i==0u?state.osc1_wave:state.osc2_wave),
+                    sizeof val);
+        else if(state.view==MI_HOME&&i==0u)
+            textcpy(val,mi_wave_name(state.wave),sizeof val);
+        else if(state.view==MI_OSC&&state.osc_page<2u&&
+                state.wave!=MI_WAVE_FMDRUM&&i==0u)
+            textcpy(val,mi_wave_name(state.osc_page==1u?state.osc2_wave:
+                    state.wave==MI_WAVE_MULTI?state.osc1_wave:state.wave),
+                    sizeof val);
         else if(state.view==MI_LFO&&i==1u)
             textcpy(val,mi_lfo_wave_name(state.lfo[1]),sizeof val);
         else if(state.view==MI_LFO&&i==3u)
