@@ -908,7 +908,7 @@ static void mi_graph_stepseq(void)
         if(half){
             cv_rect(8,80,224,1,DIM);
             cv_text(8,87,&FONT_XS,"K1 TRK   K2 RUN / STOP",GREY);
-            cv_text(8,101,&FONT_XS,"K3 DIR   K4 STEPS 1-16",GREY);
+            cv_text(8,101,&FONT_XS,"K3 DIR   K4 STEPS 8-16",GREY);
         }
         cv_blit(0,half?120:0);
     }
