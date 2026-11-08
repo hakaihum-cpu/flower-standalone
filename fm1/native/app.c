@@ -882,10 +882,17 @@ static void mi_photo_decode(unsigned frame)
     if(!res){mi_photo_cached=-1;return;}
     clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
     if(clip>=MI_TILE_VQ_CLIPS){mi_photo_cached=-1;return;}
-    /* The user-source VQ codebooks were indexed to this original
-     * RGB565 palette. Earlier resource packaging changed its colour table
-     * to blue/purple but never changed the underlying selector indices. */
-    for(i=0u;i<16u;i++)mi_photo_palette[i]=mi_photo_source_palette[i];
+    /* All eight supplied contact sheets are monochrome. The VQ source
+     * indices were luminance-derived, but the old palette added false
+     * warm/blue colours. Match each decoded frame to its own source bank
+     * before selecting the original-image greyscale tone. */
+    {
+        unsigned bank=0u;
+        for(i=1u;i<MI_TILE_BANKS;i++)
+            if(frame>=mi_tile_bank_first[i])bank=i;
+        for(i=0u;i<16u;i++)
+            mi_photo_palette[i]=mi_photo_grayscale_palette[bank][i];
+    }
     for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
         for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
             unsigned id=res[MI_TILE_VQ_MAP_OFFSET+
