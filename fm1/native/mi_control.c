@@ -105,7 +105,11 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
 {
     if (!s) return result(MI_ACTION_NONE, 0);
     switch (b) {
-    case MI_B_HOME: view(s, MI_HOME); break;
+    case MI_B_HOME:
+        view(s, MI_HOME);
+        /* FILTER is an EDIT-only page; HOME MULTI selects OSC1 or OSC2. */
+        if(s->wave==MI_WAVE_MULTI&&s->osc_page>1u)s->osc_page=0u;
+        break;
     case MI_B_EDIT:
         if(s->view==MI_OSC){
             if(s->osc_page==0u)s->osc_page=s->wave==MI_WAVE_MULTI?1u:2u;
@@ -165,11 +169,13 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     if (k >= 4) return;
     switch (s->view) {
     case MI_HOME:
-        /* HOME edits OSCILLATOR controls, never hidden audio FX.
-         * In MULTI, K1/K2 independently choose OSC1/OSC2 waveforms. */
+        /* HOME edits oscillator controls, never FX. MULTI's PRESET encoder
+         * selects OSC1/OSC2 without changing the active synthesis mode.
+         * K1 edits the selected waveform; K2 edits SUB or OSC2 DETUNE. */
         if(s->wave==MI_WAVE_MULTI){
-            if(k==0){p=&s->osc1_wave;hi=3;}
-            if(k==1){p=&s->osc2_wave;hi=3;}
+            unsigned second=s->osc_page==1u;
+            if(k==0){p=second?&s->osc2_wave:&s->osc1_wave;hi=3;}
+            if(k==1)p=second?&s->osc2_detune:&s->sub;
             if(k==2)p=&s->osc2_level;
         }else{
             if(k==0){p=&s->wave;hi=MI_WAVE_FMDRUM;}
@@ -278,7 +284,7 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         unsigned rate=s->view==MI_ENV?4u:2u;
         /* Choice knobs must never skip waveforms, FX, rhythm or octaves. */
         if((s->view==MI_HOME &&
-            ((s->wave==MI_WAVE_MULTI&&k<2u)||
+            ((s->wave==MI_WAVE_MULTI&&k==0u)||
              (s->wave!=MI_WAVE_MULTI&&k==0u)))||
            (s->view==MI_OSC&&
             ((s->osc_page==0u&&k==0u&&s->wave!=MI_WAVE_FMDRUM)||
@@ -326,6 +332,14 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
         }
         break;
     case MI_EN_PRESETS: {
+        /* MULTI: PRESET selects which oscillator HOME is editing.
+         * No preset is applied: that would overwrite MULTI/wave settings. */
+        if(s->view==MI_HOME&&s->wave==MI_WAVE_MULTI){
+            if(s->osc_page>1u)s->osc_page=0u;
+            s->osc_page=(uint8_t)limited(s->osc_page,
+                                        steps>0?1:-1,0,1);
+            break;
+        }
         if(s->view==MI_SEQ){
             if(steps!=0)s->rec_bars=s->rec_bars==2u?4u:2u;
             break;
@@ -454,7 +468,7 @@ const char *mi_fx_name(mi_fx_t effect)
 const char *mi_param_name(const mi_state_t *s, unsigned k)
 {
     static const char *const names[MI_VIEW_COUNT][4] = {
-        {"WAVE","MODE","WET","LEVEL"}, {"WAVE","WIDTH","SUB","CRUSH"},
+        {"WAVE","SUB","CRUSH","LEVEL"}, {"WAVE","WIDTH","SUB","CRUSH"},
         {"MODE","WET","P3","P4"}, {"MODE","WET","P3","P4"},
         {"ATK","DEC","SUS","REL"}, {"RATE","WAVE","DEPTH","DEST"},
         {"MODE","RATE","GATE","OCT"}, {"IN","OUT","PITCH","LEVEL"},
@@ -478,11 +492,13 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         return d[k];
     }
     if(s->view==MI_HOME){
-        static const char *const multi[4]={"OSC1","OSC2","MIX2","LEVEL"};
+        static const char *const multi1[4]={"WAVE","SUB","MIX2","LEVEL"};
+        static const char *const multi2[4]={"WAVE","DETUNE","MIX2","LEVEL"};
         static const char *const pulse[4]={"WAVE","WIDTH","SUB","LEVEL"};
         static const char *const single[4]={"WAVE","SUB","CRUSH","LEVEL"};
         static const char *const drums[4]={"FMDRUM","TONE","DECAY","LEVEL"};
-        if(s->wave==MI_WAVE_MULTI)return multi[k];
+        if(s->wave==MI_WAVE_MULTI)
+            return (s->osc_page==1u?multi2:multi1)[k];
         if(s->wave==MI_WAVE_FMDRUM)return drums[k];
         return s->wave==3u?pulse[k]:single[k];
     }
@@ -522,9 +538,12 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
     if (!s || k > 3) return 0;
     switch (s->view) {
     case MI_HOME:
-        if(s->wave==MI_WAVE_MULTI)
-            return k==0?s->osc1_wave:k==1?s->osc2_wave:
+        if(s->wave==MI_WAVE_MULTI){
+            int second=s->osc_page==1u;
+            return k==0?(second?s->osc2_wave:s->osc1_wave):
+                   k==1?(second?((int32_t)s->osc2_detune-64):(int32_t)s->sub):
                    k==2?s->osc2_level:s->level;
+        }
         if(s->wave==MI_WAVE_FMDRUM)
             return k==0?s->wave:k==1?s->drum_tone:
                    k==2?s->drum_decay:s->level;
