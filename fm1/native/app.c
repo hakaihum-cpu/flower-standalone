@@ -1058,10 +1058,79 @@ static void mi_graph_stepseq(void)
         cv_blit(0,half?120:0);
     }
 }
+/* Dedicated FM-1 pages: do not reuse the 4-column OSC/FX parameter
+ * strip for GlobalConfig or SAVE; show purpose and physical controls. */
+static void mi_draw_config(void)
+{
+    char n[16];
+    cv_begin(240,120,C_BLACK);
+    cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
+    cv_text(119,10,&FONT_XS,"GLOBAL CONFIG",GREY);
+    cv_rect(8,31,224,1,DIM);
+    cv_text(12,43,&FONT_XS,"MIDI CHANNEL",GREY);
+    number(state.midi_channel,n);
+    cv_text(177,39,&FONT_B,n,YELLOW);
+    cv_text(12,71,&FONT_XS,"CLOCK",GREY);
+    cv_text(141,67,&FONT_S,state.global[3]==1?"MIDI":"INTERNAL",YELLOW);
+    cv_text(12,98,&FONT_XS,"PRESET SLOT",GREY);
+    number(state.project_slot,n);
+    cv_text(177,94,&FONT_B,n,YELLOW);
+    cv_blit(0,0);
+
+    cv_begin(240,120,C_BLACK);
+    cv_rect(8,9,224,1,DIM);
+    if(plat_ms()<message_until){
+        cv_text(12,25,&FONT_S,line_a,YELLOW);
+        cv_text(12,54,&FONT_XS,line_b,GREY);
+    }else{
+        cv_text(12,25,&FONT_XS,"PRESET LOAD",YELLOW);
+        cv_text(12,51,&FONT_XS,
+                state.config_load_armed?"K4: CONFIRM LOAD":"K4: TURN TWICE TO LOAD",
+                state.config_load_armed?YELLOW:GREY);
+    }
+    cv_text(12,83,&FONT_XS,"K1 MIDI CH   K2 CLOCK",GREY);
+    cv_text(12,101,&FONT_XS,"K3 SLOT      K4 LOAD",GREY);
+    cv_blit(0,120);
+}
+static void mi_draw_save(void)
+{
+    char n[16];
+    unsigned idx=(unsigned)state.project_slot-1u;
+    int occupied=idx<4u&&(saved_bank.valid_mask&(1u<<idx));
+    cv_begin(240,120,C_BLACK);
+    cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
+    cv_text(139,10,&FONT_XS,"SAVE / LOAD",GREY);
+    cv_rect(8,31,224,1,DIM);
+    cv_text(12,45,&FONT_XS,"PRESET SLOT",GREY);
+    number(state.project_slot,n);
+    cv_text(162,39,&FONT_B,n,YELLOW);
+    cv_text(12,76,&FONT_XS,"SLOT STATUS",GREY);
+    cv_text(135,73,&FONT_S,occupied?"STORED":"EMPTY",
+            occupied?YELLOW:GREY);
+    cv_blit(0,0);
+
+    cv_begin(240,120,C_BLACK);
+    cv_text(12,15,&FONT_XS,"ACTION",GREY);
+    cv_text(92,13,&FONT_S,state.save_action?"LOAD":"SAVE",YELLOW);
+    cv_rect(8,41,224,1,DIM);
+    if(plat_ms()<message_until){
+        cv_text(12,51,&FONT_XS,line_a,YELLOW);
+        cv_text(12,69,&FONT_XS,line_b,GREY);
+    }else{
+        cv_text(12,51,&FONT_XS,
+                state.save_armed?"PRESS SAVE: CONFIRM":"PRESS SAVE TWICE",
+                state.save_armed?YELLOW:GREY);
+    }
+    cv_text(12,86,&FONT_XS,"K1 SLOT  K2 SAVE / LOAD",GREY);
+    cv_text(12,103,&FONT_XS,"SAVE KEY: CONFIRM",GREY);
+    cv_blit(0,120);
+}
 static void draw(void)
 {
     uint32_t i,now=plat_ms();
     char val[16];
+    if(state.view==MI_CONFIG){mi_draw_config();return;}
+    if(state.view==MI_SAVE){mi_draw_save();return;}
     if(state.view==MI_SEQ&&state.step_editor){
         mi_graph_stepseq();
         return;
