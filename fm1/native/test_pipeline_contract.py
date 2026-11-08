@@ -236,12 +236,13 @@ controls = (root / "fm1/native/mi_control.c").read_text(encoding="utf-8")
 assert "static void mi_media_draw_half(unsigned half)" in ui
 # TAPE DOT removed by user request; keep the unrelated REEL sound FX.
 assert "mi_tape_dot_draw_half" not in ui and "mi_tape_circle_x" not in ui
-assert "((int32_t)visual_choice+steps)%12" in ui
-assert "if(next<0)next+=12;" in ui
+assert "((int32_t)visual_choice+steps)%11" in ui
+assert "if(next<0)next+=11;" in ui
 assert "if(next<0)next+=13;" not in ui
 assert 'mi_streq(what,"visual_choice")' in ui
-assert "expect visual_choice 11" in (root / "fm1/native/host_smoke.txt").read_text()
-assert "(normal_visual_bank+1u)%11u" in ui
+assert "expect visual_choice 10" in (root / "fm1/native/host_smoke.txt").read_text()
+assert "normal_visual_bank==7u?9u:" in ui
+assert "normal_visual_bank==10u?0u:" in ui
 assert "if(mode==9u||mode==10u)return (int)(mode-3u);" in ui
 assert "case MI_FX_REEL:return 9u;" not in ui
 assert "if(state.view==MI_VIDEO)" in ui and "mi_media_draw_half(1)" in ui
@@ -259,12 +260,12 @@ assert "MIYAKO_OSC_LIVE_SINE.png" in ci
 assert "expect osc_scope_active 1" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "state.osc_page" in ui and "state.osc2_wave" in ui
 # HOME MULTI uses an actual selected OSC1/OSC2 waveform.
-assert "mi_wave_name(state.view==MI_HOME?" in ui
+assert "mi_wave_name(i==0u?state.osc1_wave:state.osc2_wave)" in ui
 assert "state.wave==MI_WAVE_MULTI" in ui
 assert "state.osc1_wave" in ui
-# HOME K1 shows program MULTI; OSC waveforms are edited within OSC pages.
+# HOME K1 and K2 independently change OSC1/OSC2 in MULTI.
 assert "s->wave==MI_WAVE_MULTI&&s->osc_page<2u" in controls
-assert 'static const char *const multi[4]={"WAVE","OSC","DETUNE","LEVEL"};' in controls
+assert 'static const char *const multi[4]={"OSC1","OSC2","MIX2","LEVEL"};' in controls
 assert 'mi_streq(what,"osc1_wave")' in ui
 assert 'mi_streq(what,"osc2_wave")' in ui
 assert "expect osc1_wave 3" in (root / "fm1/native/host_smoke.txt").read_text()
@@ -324,12 +325,10 @@ assert 'return "PWIDTH";' in controls
 # The old 488-frame compile-time atlas is NOT part of the active firmware.
 # All 628 photo frames now come from the CRC-checked separate resource.
 # Reject accidental reintroduction of the obsolete atlas into the renderer.
-dot = (root / "fm1/native/mi_dreamy_dot_portrait.h").read_text(encoding="utf-8")
-assert "mi_dreamy_dot_portrait.h" in ci
-assert '#include "mi_dreamy_dot_portrait.h"' in ui
-assert "MI_DREAMY_DOT_BYTES 690u" in dot
-assert "mi_dreamy_dot_draw_half(half,0,0,240,0)" in ui
-# TAPE DOT was deleted; the 11-bank SEL contract is verified above.
+assert '#include "mi_dreamy_dot_portrait.h"' not in ui
+assert "mi_dreamy_dot_draw_half" not in ui
+assert "case MI_FX_DREAMY:return normal_visual_bank;" in ui
+# TAPE DOT and the crying DREAMY portrait are not rendered.
 assert "if(state.fx==MI_FX_OFF&&state.fx2==MI_FX_OFF)" in ui
 assert '#include "mi_tile_atlas.h"' not in ui
 assert "mi_photo_vq_maps" not in ui and "mi_photo_vq_tilebook" not in ui
@@ -368,8 +367,8 @@ assert "mi_resource_media.h" in ci
 assert "pack_miyako_resource.py" in ci
 assert 'MIYAKO-FM1-NATIVE-DEV-res.bin' in ci
 # Photo bank requires the CRC-checked separate resource. Both SEL and FX
-# must display a visible existing original when a user flashes FWSC alone.
-assert "mi_dreamy_dot_draw_half(half,px,py,size,clip_left);" in ui
+# must display a visible existing EFFECTS frame when FWSC is installed alone.
+assert "mi_media_draw_scaled_half(half,px,py,size,size,clip_left,0);" in ui
 assert "resource_length<MI_TILE_DATA_BYTES" in ui
 assert "mi_photo_cached=-1;" in ui
 # Toggling res 0 must force a render; pixel tests must not accept the
@@ -411,11 +410,11 @@ assert "MIYAKO_FX_DREAMY_LARGE.png" in ci
 assert "MIYAKO_FX_EUREKA_LARGE.png" in ci
 assert "shot MIYAKO_FX_DREAMY_LARGE.png" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "shot MIYAKO_FX_EUREKA_LARGE.png" in (root / "fm1/native/host_smoke.txt").read_text()
-# All user photo/EUREKA/DREAMY FX media is enlarged above all four knobs.
-# Reject the old cropped right-hand 116px panel and artificial scanlines.
-assert "mi_tile_draw_half(half,40,18,160,0,audio_activity)" in ui
-assert "mi_dreamy_dot_draw_half(half,40,18,160,0)" in ui
-assert "mi_media_draw_scaled_half(half,0,25,240,146,0,mode==7u)" in ui
+# Fill the entire 240x240 LCD with media; FX dials remain visible on top.
+# Reject the old letterboxed SEL and cropped FX image area.
+assert "mi_tile_draw_half(half,0,0,240,0,audio_activity)" in ui
+assert "mi_dreamy_dot_draw_half" not in ui
+assert "mi_media_draw_scaled_half(half,0,0,240,240,0,mode==7u)" in ui
 assert "mi_fx_dial(half,181,183,3u)" in ui
 assert "mi_fx_dial(half,121,183,2u)" in ui
 assert "mi_video_vfx_half" not in ui
@@ -433,7 +432,7 @@ for source in ("mi_palette.py", "pack_eureka_frames.py"):
     assert "ImageFilter.UnsharpMask" in color_source
     assert "gain = min(1.10," in color_source
     assert "** 0.86" in color_source
-    assert "from mi_reference_palette import reference_pixels" in color_source
+    assert "from mi_reference_palette import natural_pixels" in color_source
 ref_palette = (root / "fm1/native/tools/mi_reference_palette.py").read_text()
 assert "REFERENCE_RGB = (" in ref_palette
 assert "REFERENCE_565" in ref_palette
