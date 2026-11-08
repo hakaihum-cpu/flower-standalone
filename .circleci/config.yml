@@ -42,6 +42,10 @@ jobs:
             python3 fm1/native/tools/test_miyako_dynamic_version.py
             python3 fm1/native/tools/build_letter_anim_header.py --out /tmp/mi_letter_preflight.h
             test -s /tmp/mi_letter_preflight.h
+            python3 fm1/native/tools/build_ui_anim_header.py --out /tmp/mi_ui_preflight.h
+            test -s /tmp/mi_ui_preflight.h
+            grep -Fq "#define MI_UI_MOTION_COUNT 100u" /tmp/mi_ui_preflight.h
+            grep -Fq "mi_ui_start_maps" /tmp/mi_ui_preflight.h
             python3 fm1/native/tools/test_miyako_resource96.py
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
@@ -105,6 +109,10 @@ jobs:
             python3 fm1/native/tools/build_letter_anim_header.py \
               --out /tmp/fm1-base/miyako/mi_letter_anim.h
             test -s /tmp/fm1-base/miyako/mi_letter_anim.h
+            python3 fm1/native/tools/build_ui_anim_header.py \
+              --out /tmp/fm1-base/miyako/mi_ui_media.h
+            test -s /tmp/fm1-base/miyako/mi_ui_media.h
+            grep -Fq "#define MI_UI_MOTION_COUNT 100u" /tmp/fm1-base/miyako/mi_ui_media.h
             # Standard CRC-protected res.bin, 96x96 original-source images.
             # 279936 + 32-byte header fits in 69 sectors; saved data untouched.
             python3 fm1/native/tools/pack_miyako_resource.py \
