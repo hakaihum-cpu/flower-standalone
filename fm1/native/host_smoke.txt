@@ -200,3 +200,34 @@ tap EDIT
 expect osc_page 0
 tap HOME
 expect view 0
+# Physical SEQ button long-hold enters step editor; short press stays REC.
+# All sixteen *white* keys are direct toggles for the current track.
+press SEQ
+wait 700
+expect view 7
+expect step_editor 1
+expect step_len 8
+release SEQ
+tapkey w0 100
+expect step_kick 1
+tapkey w15 100
+expect step_kick 32769
+tapkey w0 100
+expect step_kick 32768
+spin K4 8
+expect step_len 16
+spin K1 1
+expect step_track 1
+tapkey w3 100
+expect step_snare 8
+spin K3 1
+expect step_dir 1
+spin K2 1
+expect step_play 1
+expect step_current 15
+shot MIYAKO_STEP_SEQ.png
+spin K2 -1
+expect step_play 0
+tap SEQ
+expect step_editor 0
+expect view 7
