@@ -1049,6 +1049,7 @@ void app_ui_init(void)
 void app_frame(void)
 {
  static uint32_t video_time;
+ static uint8_t shown_seq_play=255u,shown_seq_clock=255u,shown_rec_pitch=255u;
  uint32_t now;
  input();
  now=plat_ms();
@@ -1080,6 +1081,16 @@ void app_frame(void)
  }
   state.recording=audio.recorder.recording;
   state.playing=audio.recorder.playing;
+  /* MIDI updates can arrive without a key/knob event. Show STOP,
+   * Clock lock and CC21 REC PITCH changes even when playback is idle. */
+  if(state.view==MI_SEQ &&
+     (state.step_editor?
+      (shown_seq_play!=state.step_play||
+       shown_seq_clock!=audio.step_midi_mode):
+      shown_rec_pitch!=state.seq[2]))redraw=1;
+  shown_seq_play=state.step_play;
+  shown_seq_clock=audio.step_midi_mode;
+  shown_rec_pitch=state.seq[2];
   if(message_until&&now>=message_until){message_until=0;redraw=1;}
  if(redraw){draw();redraw=0;}
 }
