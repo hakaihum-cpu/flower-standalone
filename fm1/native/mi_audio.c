@@ -571,9 +571,10 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         apply_lfo_destination(&snapshot,s->lfo[3],
             lfo_value(s->lfo[1],a->lfo_phase)*(float)s->lfo[2]/127.f);
     rs=&snapshot;
-    /* Clock loss (>1 s) reverts to the existing internal BPM without
-     * freezing playback. MIDI Stop keeps step_play=0 and stays stopped. */
-    if(a->step_midi_mode &&
+    /* Clock loss while RUNNING (>1 s) reverts to internal BPM.
+     * Transport STOP is not clock loss: keep the stopped playhead and
+     * fractional six-pulse phase, even when CONTINUE comes much later. */
+    if(a->step_midi_mode && s->step_play &&
        (uint32_t)(a->rendered_samples-a->step_last_clock_sample)>
        (uint32_t)a->sample_rate){
         a->step_midi_mode=0u;
