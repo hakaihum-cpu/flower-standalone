@@ -9,7 +9,7 @@ required = (
     "version: 2.1",
     "default: false",
     "when: << pipeline.parameters.run_build >>",
-    "only: feature/fm1-miyako-multi-home-osc-preset-20261108",
+    "only: feature/fm1-miyako-seq-midi-transport-rec-cc21-20261108",
     "fm1_native_build",
     "MIYAKO-FM1-NATIVE-DEV.fwsc",
     "MI_EFFECTS_ASSET_COUNT 144u",
@@ -68,7 +68,7 @@ assert ci.index("python3 fm1/native/tools/check_ci_run_shell.py") < ci.index(
     "python3 -m compileall -q fm1/native")
 assert "five-sheet set's" not in ci
 assert (root / "fm1/native/tools/check_ci_run_shell.py").is_file()
-assert re.search(r"^\s+only: feature/fm1-miyako-multi-home-osc-preset-20261108\s*$", ci, re.M)
+assert re.search(r"^\s+only: feature/fm1-miyako-seq-midi-transport-rec-cc21-20261108\s*$", ci, re.M)
 assert "/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako" in ci
 assert "test_media_crc.c" in ci
 assert "pack_effects_vq_candidate.py" in ci
