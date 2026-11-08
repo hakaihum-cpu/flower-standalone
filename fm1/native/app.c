@@ -979,8 +979,8 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
     }
 }
 /* Original 144 + 576 VQ frame banks remain available alongside photo tiles.
- * The 128x78 intermediate is stretched ONLY to the source-correct 16:9
- * or square viewport by mi_media_draw_fitted_half(), not blindly to 1:1. */
+ * The 128x78 intermediary is deliberately enlarged to the full square LCD
+ * for both FX and EUREKA, as explicitly requested. */
 static unsigned mi_media_visual_index(unsigned sy,unsigned sx)
 {
     unsigned at;
@@ -1025,31 +1025,15 @@ static void mi_media_draw_scaled_half(unsigned half,int32_t px,int32_t py,
         }
     }
 }
-/* Original media geometry: FX is 640x360 landscape. EUREKA uses
- * the 14 landscape video clips plus two 1080x1080 source clips (global
- * slots 12 and 13) that were delivered as 720x720 JPEGs. Prior code
- * stretched BOTH to 240x240, distorting FX faces and scenery. Keep the
- * existing 128x78/16-colour VQ assets and frame order: presentation only. */
-static void mi_media_draw_fitted_half(unsigned half,int eureka)
-{
-    unsigned clip=0u;
-    if(eureka&&video.eureka_frame>=0)
-        clip=(unsigned)video.eureka_frame/36u;
-    if(eureka&&(clip==12u||clip==13u)){
-        /* Two approved 720x720 source videos: full square LCD. */
-        mi_media_draw_scaled_half(half,0,0,240,240,0,1);
-    }else{
-        /* 640x360 original videos: width 240, correct 16:9 height 135,
-         * centered with black bars (same aspect as a 720-square UI). */
-        mi_media_draw_scaled_half(half,0,52,240,135,0,eureka);
-    }
-}
+/* Full-bleed 240x240 preview for both video groups. Aspect stretch is
+ * intentional: the user prefers to fill the FM-1's square LCD. Retain
+ * existing image frames, VQ decoding and FX parameter overlays unchanged. */
 static void mi_media_draw_half(unsigned half)
 {
     unsigned mode=mi_visual_mode();
     if(mi_visual_photo_bank(mode)>=0)
         mi_tile_draw_half(half,0,0,240,0,audio_activity);
-    else mi_media_draw_fitted_half(half,mode==7u);
+    else mi_media_draw_scaled_half(half,0,0,240,240,0,mode==7u);
 }
 /* Intentionally limited by the FM-1's physical 240x240 LCD: 2x2 compact
  * hardware knobs on the left; a live square source tile on the right. */
@@ -1096,7 +1080,7 @@ static void mi_fx_draw_half(unsigned half)
     if(mi_visual_photo_bank(mode)>=0){
         mi_tile_draw_half(half,0,0,240,0,audio_activity);
     }else{
-        mi_media_draw_fitted_half(half,mode==7u);
+        mi_media_draw_scaled_half(half,0,0,240,240,0,mode==7u);
     }
     if(half==0u){
         cv_rect(0,0,240,16,C_BLACK);
