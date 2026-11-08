@@ -523,6 +523,16 @@ assert "expect save_mask 3" in host_smoke
 assert "expect midi_channel 2" in host_smoke
 assert "expect clock_mode 1" in host_smoke
 assert "expect wave 5" in host_smoke
+# The 240x240 startup image must expire before host OSC SUB=0/127
+# screenshots are taken. Previously both captures were the same splash,
+# and its yellow logo happened to pass the mailbox/person ROI count.
+smoke = (root / "fm1/native/host_smoke.txt").read_text(encoding="utf-8")
+assert "mi_ui_splash_until=plat_ms()+1200u;" in ui
+assert "wait 1300\n# User-source scene is controlled by SUB" in smoke
+assert smoke.index("wait 1300\n# User-source scene is controlled by SUB") < smoke.index(
+    "shot MIYAKO_OSC_SUB_0.png")
+assert smoke.index("shot MIYAKO_OSC_SUB_0.png") < smoke.index(
+    "shot MIYAKO_OSC_SUB_127.png")
 # Source-derived 72-frame high-detail 160x72 paper-airplane display,
 # not the previous illegible 80x40 4x4 16-colour source. The original
 # screenshot is owned by the user; no AI-generated images replace it.
