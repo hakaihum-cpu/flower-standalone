@@ -20,6 +20,9 @@ PACK = Path(__file__).resolve().with_name("mi_ui_env_lfo_logo_start_16color.b64"
 # cut the person across adjacent cells and produced sliding/jumping frames.
 ENV90_PACK = Path(__file__).resolve().with_name("mi_ui_env_9x10_16color.b64")
 ENV90_RAW_SHA256 = "d0074a610d8eb39aad0bbfe34b2c2584043aea966c8fcf3dbc2efc1234422d7d"
+MATTE_PACK = Path(__file__).resolve().with_name("mi_ui_env_lfo_matte_3x3.b64")
+MATTE_SHA256 = "cdaaf835271f85976ef2d3595e9df49f605468fbd374979c204bf3145cc457e0"
+MATTE_BYTES = 4 + (90 + 100) * 32  # 16x16 tiles, 1 opaque bit/tile
 ENV90_RAW_BYTES = 16937
 ENV90_DELTA_BYTES = 13137
 EXPECTED_SHA256 = "e521e1bccaf19001298d1f699256fd2a37065f7185722758942d2b4aaca253de"
@@ -47,6 +50,23 @@ def read_pack():
     if (elen, llen) != (14426, 7627):
         raise SystemExit("FAIL: unexpected ENV/LFO motion delta sizes")
     return data, elen, llen
+
+
+def read_matte():
+    try:
+        data = zlib.decompress(base64.b64decode(
+            MATTE_PACK.read_text(encoding="ascii").strip(), validate=True))
+    except (OSError, ValueError, zlib.error) as exc:
+        raise SystemExit("FAIL: ENV/LFO original-source matte pack invalid") from exc
+    if (len(data) != MATTE_BYTES or data[:4] != b"MAT1"
+            or hashlib.sha256(data).hexdigest() != MATTE_SHA256):
+        raise SystemExit("FAIL: ENV/LFO background matte size or SHA256")
+    env = data[4:4 + 90 * 32]
+    lfo = data[4 + 90 * 32:]
+    if (len(env) != 90 * 32 or len(lfo) != 100 * 32
+            or not any(env) or not any(lfo)):
+        raise SystemExit("FAIL: ENV/LFO transparency geometry")
+    return env, lfo
 
 
 def u8_array(name, data):
@@ -92,6 +112,7 @@ def main():
     ap.add_argument("--out",type=Path,required=True)
     args=ap.parse_args()
     raw,elen,llen=read_pack()
+    matte_env,matte_lfo=read_matte()
     pos=12
     outputs = [
       "/* User-supplied ENV (90), LFO (100), logo, startup source; 16 RGB565. */\n",
@@ -142,7 +163,11 @@ def main():
                 u8_array("mi_ui_env_books",ebooks),
                 u8_array("mi_ui_env_bases",ebases),
                 u16_array("mi_ui_env_offsets",eoffsets),
-                u8_array("mi_ui_env_deltas",edeltas)]
+                u8_array("mi_ui_env_deltas",edeltas),
+                # Derived from 190 supplied source frames, not palette-index
+                # guesses. Dark hair/skirt and UFO remain opaque on black.
+                u8_array("mi_ui_env_matte",matte_env),
+                u8_array("mi_ui_lfo_matte",matte_lfo)]
     palette=raw[pos:pos+32];pos+=32
     pixels=raw[pos:pos+(LOGO_W*LOGO_H//2)];pos+=len(pixels)
     if len(pixels)!=(LOGO_W*LOGO_H//2):raise SystemExit("FAIL: logo pixels")
@@ -157,6 +182,8 @@ def main():
                 u8_array("mi_ui_start_maps",maps),"#endif\n"]
     args.out.parent.mkdir(parents=True,exist_ok=True)
     args.out.write_text("".join(outputs),encoding="ascii")
-    print(f"PASS: 90 ENV (9x10) + 100 LFO (10x10) frames, 16 RGB565; original logo and start unchanged; SHA256 {EXPECTED_SHA256}")
+    print(f"PASS: 90 ENV + 100 LFO, 16 RGB565; user-source matte: "
+          f"{len(matte_env)}+{len(matte_lfo)} bytes; black background, "
+          f"original subject and UFO preserved; SHA256 {MATTE_SHA256}")
 
 if __name__=="__main__":main()
