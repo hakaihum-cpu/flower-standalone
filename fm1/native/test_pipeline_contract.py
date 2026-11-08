@@ -372,6 +372,17 @@ assert '#include "mi_resource_media.h"' in ui and 'mi_photo_source(&length)' in 
 assert "mi_resource_media.h" in ci
 assert "pack_miyako_resource.py" in ci
 assert 'MIYAKO-FM1-NATIVE-DEV-res.bin' in ci
+# User-supplied ENV/LFO/logo/start is generated into the native app tree
+# by the existing manual CI job; the source-only closure allows that header.
+# Prevent another 'missing native header mi_ui_media.h' at pipeline start.
+assert '#include "mi_ui_media.h"' in ui
+assert '"mi_ui_media.h"' in native_audit
+assert "build_ui_anim_header.py --out /tmp/mi_ui_preflight.h" in ci
+assert "--out /tmp/fm1-base/miyako/mi_ui_media.h" in ci
+assert "test -s /tmp/fm1-base/miyako/mi_ui_media.h" in ci
+assert "MI_UI_MOTION_COUNT 100u" in ci
+assert (root / "fm1/native/tools/build_ui_anim_header.py").is_file()
+assert (root / "fm1/native/tools/mi_ui_env_lfo_logo_start_16color.b64").is_file()
 # Photo bank requires the CRC-checked separate resource. Both SEL and FX
 # must display a visible existing EFFECTS frame when FWSC is installed alone.
 assert "mi_media_draw_scaled_half(half,px,py,size,size,clip_left,0);" in ui
