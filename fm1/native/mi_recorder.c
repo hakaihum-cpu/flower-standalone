@@ -94,7 +94,11 @@ void mi_rec_external_tick(mi_recorder_t *r,uint32_t sample_clock)
     r->clock_last_sample=sample_clock;
     r->clock_active=1u;
     ++r->clock_ticks;
-    if(r->armed && ((r->clock_ticks-1u)%96u)==0u){
+    /* Start at the NEXT 1/16-note MIDI boundary (6 clocks), not the
+     * next full bar (96 clocks). REC should respond within a subdivision
+     * while still recording exactly 192 external ticks (two bars).
+     * The first clock after MIDI Start is the initial downbeat. */
+    if(r->armed && ((r->clock_ticks-1u)%6u)==0u){
         uint8_t overdub=r->count>=4u;
         if(!overdub)mi_rec_clear(r);
         r->armed=0u;r->recording=1u;r->overdubbing=overdub;
