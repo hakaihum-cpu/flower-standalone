@@ -26,7 +26,8 @@ typedef enum {
     MI_EN_K1, MI_EN_K2, MI_EN_K3, MI_EN_K4
 } mi_encoder_t;
 typedef enum {
-    MI_ACTION_NONE, MI_ACTION_SAVE, MI_ACTION_PLAY, MI_ACTION_RECORD
+    MI_ACTION_NONE, MI_ACTION_SAVE, MI_ACTION_PLAY, MI_ACTION_RECORD,
+    MI_ACTION_LOAD
 } mi_action_t;
 typedef struct {
     mi_view_t view;
@@ -63,6 +64,11 @@ typedef struct {
     uint8_t step_dir;         /* K3: 0=FWD, 1=REV, 2=RND */
     uint8_t step_len;         /* K4: 8..16; default 8 */
     uint8_t step_editor;      /* SEQ long hold UI, transient */
+    /* MI17: appended configuration and explicit save/load controls.
+     * Historic MI16 flash data is migrated by its exact aligned prefix. */
+    uint8_t midi_channel;     /* 1..16: incoming note channel */
+    uint8_t save_action;      /* SAVE screen K2: 0=SAVE 1=LOAD */
+    uint8_t config_load_armed;/* GLO K4 double-detent confirmation */
 } mi_state_t;
 typedef struct {
     mi_action_t action;
