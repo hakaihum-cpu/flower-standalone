@@ -139,23 +139,52 @@ static void number(int32_t value,char *out)
 }
 void app_init(void)
 {
- saved_t saved;
- int restored=0;
+ int restored=0,bank_loaded=0;
+ unsigned i;
  int stored_bytes=plat_store_size(OBJ_SETTINGS);
  mi_init(&state);
+ mi_memzero(&saved_bank,sizeof saved_bank);
+ saved_bank.magic=SAVED_MAGIC;
+ saved_bank.active_slot=1u;
+ saved_bank.midi_channel=1u;
  mi_audio_init(&audio,44100.f);
  mi_video_init(&video,MI_EFFECTS_ASSET_COUNT);
  mi_video_set_eureka(&video,MI_EUREKA_ASSET_COUNT);
- /* Check actual stored bytes before loading to avoid truncated legacy data. */
- if(stored_bytes==(int)sizeof saved &&
-    plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved &&
-    saved.magic==SAVED_MAGIC&&mi_state_valid(&saved.state)){
-     state=saved.state;restored=1;
+ /* MI17: load a real four-slot bank. One corrupt slot cannot silently
+  * become the current sound; invalid slots are discarded individually. */
+ if(stored_bytes==(int)sizeof saved_bank &&
+    plat_store_load(OBJ_SETTINGS,&saved_bank,sizeof saved_bank)==
+        (int)sizeof saved_bank &&
+    saved_bank.magic==SAVED_MAGIC&&
+    !(saved_bank.valid_mask&0xF0u)&&
+    saved_bank.active_slot>=1u&&saved_bank.active_slot<=4u&&
+    saved_bank.midi_channel>=1u&&saved_bank.midi_channel<=16u&&
+    saved_bank.clock_mode<=1u){
+     bank_loaded=1;
+     for(i=0u;i<4u;i++)
+         if((saved_bank.valid_mask&(1u<<i))&&
+            !mi_state_valid(&saved_bank.slots[i]))
+             saved_bank.valid_mask=(uint8_t)(saved_bank.valid_mask&~(1u<<i));
+     if(saved_bank.valid_mask&(1u<<(saved_bank.active_slot-1u))){
+         state=saved_bank.slots[saved_bank.active_slot-1u];
+         restored=1;
+     }
+ }else if(stored_bytes==(int)sizeof(saved_mi16_t)){
+     saved_mi16_t old16;
+     if(plat_store_load(OBJ_SETTINGS,&old16,sizeof old16)==(int)sizeof old16&&
+        old16.magic==SAVED_MAGIC_M16){
+         /* Defaults for the appended MI17 fields were set by mi_init. */
+         mi_memcopy(&state,old16.state_prefix,
+                    offsetof(mi_state_t,midi_channel));
+         if(state.global[3]>1)state.global[3]=0;
+         restored=mi_state_valid(&state);
+     }
  }else if(stored_bytes==(int)sizeof(saved_mi15_t)){
      saved_mi15_t old15;
      if(plat_store_load(OBJ_SETTINGS,&old15,sizeof old15)==(int)sizeof old15&&
         old15.magic==SAVED_MAGIC_M15){
          mi_memcopy(&state,old15.state_prefix,sizeof old15.state_prefix);
+         if(state.global[3]>1)state.global[3]=0;
          restored=mi_state_valid(&state);
      }
  }else if(stored_bytes==(int)sizeof(saved_v14_t)){
@@ -181,18 +210,35 @@ void app_init(void)
      }
  }
  if(!restored)mi_init(&state);
- state.save_armed=0;
- state.playing=state.recording=0;
+ if(!bank_loaded){
+     mi_memzero(&saved_bank,sizeof saved_bank);
+     saved_bank.magic=SAVED_MAGIC;
+     saved_bank.active_slot=state.project_slot;
+     saved_bank.midi_channel=state.midi_channel;
+     saved_bank.clock_mode=(uint8_t)state.global[3];
+     /* A legacy single-slot sound is preserved in its selected slot,
+      * but do not write a new flash format until an explicit SAVE. */
+     if(restored){
+         saved_bank.valid_mask=(uint8_t)(1u<<(state.project_slot-1u));
+         saved_bank.slots[state.project_slot-1u]=state;
+     }
+ }else{
+     state.project_slot=saved_bank.active_slot;
+     state.midi_channel=saved_bank.midi_channel;
+     state.global[3]=(int16_t)saved_bank.clock_mode;
+ }
+ state.save_armed=0u;state.save_action=0u;state.config_load_armed=0u;
+ state.playing=state.recording=0u;
  state.step_play=0u;state.step_editor=0u;
- state.view=MI_HOME;
- state.osc_page=0u;
+ state.view=MI_HOME;state.osc_page=0u;
+ config_dirty=0u;config_changed_ms=0u;
  osc_scope_last_active=0u;
  last_keys=last_buttons=rec_pressed_at=seq_pressed_at=0u;
  rec_long_done=seq_long_done=0u;
  visual_choice=0u;visual_last_mode=255u;visual_bank_ticks=0u;visual_cooldown=0u;
  visual_rng=0x6d697961u;visual_generation=0u;
  visual_last_activity=0.f;visual_tile=0u;normal_visual_bank=6u;
-  mi_memzero(held_note,sizeof held_note);redraw=1;
+ mi_memzero(held_note,sizeof held_note);redraw=1;
  message_until=0;line_a[0]=line_b[0]=0;
 }
 void app_panic(void){mi_audio_panic(&audio);}
