@@ -868,10 +868,62 @@ static void mi_graph_recorder(void)
         cv_line(8+(int32_t)cursor,45,8+(int32_t)cursor,114,RGB(120,240,140));
     }
 }
+/* 240x240 FM-1 sequence page, matching MIYAKO's yellow/grey-on-black UI.
+ * All sixteen white-key steps remain visible even at an 8-step loop length. */
+static void mi_graph_stepseq(void)
+{
+    static const char *const names[4]={"KICK","SNARE","HH CL","TOM"};
+    static const char *const dirs[3]={"FWD","REV","RND"};
+    unsigned half,t,col;
+    char val[16];
+    for(half=0u;half<2u;half++){
+        cv_begin(240,120,C_BLACK);
+        if(half==0u){
+            cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
+            cv_text(124,10,&FONT_XS,"STEP SEQ",GREY);
+            cv_rect(8,31,224,1,DIM);
+            number(state.step_len,val);
+            cv_text(12,35,&FONT_XS,"STEPS",GREY);
+            cv_text(53,35,&FONT_XS,val,YELLOW);
+            cv_text(95,35,&FONT_XS,
+                    dirs[state.step_dir<=2u?state.step_dir:0u],GREY);
+            cv_text(164,35,&FONT_XS,
+                    state.step_play?"PLAY":"STOP",YELLOW);
+        }
+        for(t=half*2u;t<half*2u+2u;t++){
+            int32_t y=(int32_t)(half?16:58)+
+                      (int32_t)(t%2u)*29;
+            int selected=t==state.step_track;
+            if(selected)cv_rect(3,y,3,15,YELLOW);
+            cv_text(8,y+1,&FONT_XS,names[t],
+                    selected?YELLOW:GREY);
+            for(col=0u;col<16u;col++){
+                int32_t x=54+(int32_t)col*11;
+                int enabled=(state.step_pattern[t]&(1u<<col))!=0u;
+                int active=col<state.step_len;
+                cv_rect(x,y,10,13,active?DIM:RGB(55,48,37));
+                cv_rect(x+1,y+1,8,11,enabled?
+                        (active?YELLOW:DIM):C_BLACK);
+                if(state.step_play&&col==audio.step_current)
+                    cv_rect(x,y+15,10,2,C_WHITE);
+            }
+        }
+        if(half){
+            cv_rect(8,80,224,1,DIM);
+            cv_text(8,87,&FONT_XS,"K1 TRK   K2 RUN / STOP",GREY);
+            cv_text(8,101,&FONT_XS,"K3 DIR   K4 STEPS 1-16",GREY);
+        }
+        cv_blit(0,half?120:0);
+    }
+}
 static void draw(void)
 {
     uint32_t i,now=plat_ms();
     char val[16];
+    if(state.view==MI_SEQ&&state.step_editor){
+        mi_graph_stepseq();
+        return;
+    }
     if(state.view==MI_FX){
         mi_fx_draw_half(0u);
         mi_fx_draw_half(1u);
@@ -1003,8 +1055,10 @@ void app_frame(void)
      if((state.view==MI_VIDEO||state.view==MI_FX)&&
         state.lfo[2]&&state.lfo[3]>=24u&&state.lfo[3]<=27u)
          redraw=1;
-     if(state.view==MI_SEQ && (audio.recorder.recording||
-                                audio.recorder.playing||audio.recorder.armed))
+     if(state.view==MI_SEQ &&
+        ((state.step_editor&&state.step_play)||
+         (!state.step_editor&&(audio.recorder.recording||
+                              audio.recorder.playing||audio.recorder.armed))))
          redraw=1;
      if(state.view==MI_OSC||state.view==MI_HOME){
          uint8_t active=audio.osc_scope_active;
@@ -1039,6 +1093,16 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"recording")) *got=(int)audio.recorder.recording;
   else if(mi_streq(what,"rec_playing")) *got=(int)audio.recorder.playing;
   else if(mi_streq(what,"rec_overdub")) *got=(int)audio.recorder.overdubbing;
+  else if(mi_streq(what,"step_editor")) *got=(int)state.step_editor;
+  else if(mi_streq(what,"step_track")) *got=(int)state.step_track;
+  else if(mi_streq(what,"step_play")) *got=(int)state.step_play;
+  else if(mi_streq(what,"step_dir")) *got=(int)state.step_dir;
+  else if(mi_streq(what,"step_len")) *got=(int)state.step_len;
+  else if(mi_streq(what,"step_current")) *got=(int)audio.step_current;
+  else if(mi_streq(what,"step_kick")) *got=(int)state.step_pattern[0];
+  else if(mi_streq(what,"step_snare")) *got=(int)state.step_pattern[1];
+  else if(mi_streq(what,"step_hat")) *got=(int)state.step_pattern[2];
+  else if(mi_streq(what,"step_tom")) *got=(int)state.step_pattern[3];
   else if(mi_streq(what,"media_ready")){
       uint32_t length=0u;
       *got=mi_photo_source(&length)!=0?1:0;
