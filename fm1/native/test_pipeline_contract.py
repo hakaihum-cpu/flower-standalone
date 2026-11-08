@@ -469,6 +469,17 @@ assert "mi_soft_limit(sample)" in audio
 assert "p->dreamy_filter+=" in fxcode
 assert "r->overdubbing=1u" in recorder
 assert "r->overdubbing&&r->count>=4u" in recorder
+# Mid-loop REC must not rewind playback. Cover manual REC, bar-quantised MIDI
+# start, clock loss, and manual/MIDI stop with executable native C tests.
+assert "static void begin_overdub(mi_recorder_t *r)" in recorder
+assert recorder.count("begin_overdub(r);") == 3
+assert "r->write_pos=(uint32_t)r->playback_pos;" in recorder
+assert "if(!was_overdubbing)r->playback_pos=0.f;" in recorder
+recorder_test = (root / "fm1/native/test_mi_recorder.c").read_text()
+for position in ("1234.25f", "2345.75f", "3765.5f"):
+    assert position in recorder_test
+assert "assert(mi_rec_sample(10)==old10);" in recorder_test
+assert "assert(r.playback_pos==pos);" in recorder_test
 # Upstream fm1-base's existing CRC-checked separate resource installer,
 # explicitly approved for integrated animation; user data sectors stay intact.
 resource_header = (root / "fm1/native/mi_resource_media.h").read_text()
