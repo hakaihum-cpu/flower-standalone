@@ -59,18 +59,17 @@ turn SELECT 1
 shot MIYAKO_PHOTO_RESOURCE_RESTORED.png
 turn SELECT -1
 expect visual_choice 0
-# Selection AUTO + 11 banks: negative wrap must return last bank.
+# AUTO + ten approved bank choices; removed DREAMY portrait is inaccessible.
 turn SELECT -1
-expect visual_choice 11
+expect visual_choice 10
 turn SELECT 1
 expect visual_choice 0
-# The user's five supplied sheets are all integrated: three were already
-# among the original six banks; two new 10x7 sheets add 70 frames each.
-turn SELECT 10
+# Eight user-supplied sheets still available, in addition to EFFECTS/EUREKA.
+turn SELECT 9
 shot MIYAKO_ADDED_SHEET1.png
 turn SELECT 1
 shot MIYAKO_ADDED_SHEET2.png
-turn SELECT -11
+turn SELECT -10
 shot MIYAKO_EFFECTS_VIDEO.png
 expect fx 1
 tap ENV
@@ -170,30 +169,31 @@ turn SELECT 1
 expect view 3
 tap HOME
 expect view 0
-# HOME K1 selects MULTI as a program. OSC1/OSC2 edit under EDIT,
-# and the new FILTER is the third EDIT page.
+# HOME is an actual OSC editor: after selecting MULTI K1 edits OSC1,
+# K2 edits OSC2, K3 controls OSC2 mix and K4 controls master level.
 turn K1 2
 expect wave 4
 expect osc_page 0
-tap EDIT
-expect view 1
-turn K1 3
 expect osc1_wave 3
-expect wave 4
-tap EDIT
-expect osc_page 1
-turn K1 2
+turn K1 -1
+expect osc1_wave 2
+turn K2 2
 expect osc2_wave 2
 expect wave 4
 shot MIYAKO_MULTI_HOME_WAVES.png
+tap EDIT
+expect view 1
+turn K1 1
+expect osc1_wave 3
+tap EDIT
+expect osc_page 1
+turn K1 1
+expect osc2_wave 3
+expect wave 4
 tap EDIT
 expect osc_page 2
 turn K1 -20
 tap EDIT
 expect osc_page 0
-tap EDIT
-expect osc_page 1
-turn K1 1
-expect osc2_wave 3
 tap HOME
 expect view 0
