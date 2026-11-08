@@ -974,6 +974,7 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
     if(visual_tile>=MI_TILE_COUNT||
        !mi_photo_source(&resource_length)){
         mi_photo_cached=-1;
+        mi_photo_book_clip=-1; /* resource absent: cannot reuse its tilebook */
         mi_media_draw_scaled_half(half,px,py,size,size,clip_left,0);
         return;
     }
