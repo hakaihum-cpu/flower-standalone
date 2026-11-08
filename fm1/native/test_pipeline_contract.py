@@ -499,7 +499,12 @@ assert 'MI_TILE_COUNT 628u' in resource_header
 assert 'MI_TILE_BANKS 8u' in resource_header
 assert 'MI_TILE_DATA_BYTES 279936u' in resource_header
 assert 'test_miyako_resource96.py' in ci
-assert '272553' in ci and '272521' in ci\nassert 'test_shared_photo_tiles_poc.py' in ci\nassert '--shared-tile-poc' in ci\nassert 'mi_shared_tile_codec_poc.c' in ci and 'mi_shared_tile_codec_poc.h' in ci\nassert '#include \"mi_shared_tile_codec_poc.h\"' in ui\nassert 'mi_tp_decode_frame(res,length' in ui
+assert '272553' in ci and '272521' in ci
+assert 'test_shared_photo_tiles_poc.py' in ci
+assert '--shared-tile-poc' in ci
+assert 'mi_shared_tile_codec_poc.c' in ci and 'mi_shared_tile_codec_poc.h' in ci
+assert '#include \"mi_shared_tile_codec_poc.h\"' in ui
+assert 'mi_tp_decode_frame(res,length' in ui
 assert '#include "mi_resource_media.h"' in ui and 'mi_photo_source(&length)' in ui
 assert "mi_resource_media.h" in ci
 assert "pack_miyako_resource.py" in ci
