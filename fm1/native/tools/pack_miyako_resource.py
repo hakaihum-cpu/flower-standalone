@@ -56,12 +56,30 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('resource_payload', type=Path)
     parser.add_argument('--chunk-dir', type=Path, default=CHUNK_DIR)
+    parser.add_argument('--shared-tile-poc', action='store_true',
+                        help='Use staged MTL1 candidate after all 628 source/pixel tests')
     args = parser.parse_args()
-    data = read_payload(args.chunk_dir)
+    if args.shared_tile_poc:
+        # A separate experimental encoding, never silently replaces the
+        # existing SHA-verified VQ resource. The independent test compares
+        # every decoded palette and every 96x96 pixel twice.
+        from test_shared_photo_tiles_poc import PACKED_RESOURCE, decoded_frame, original_frame
+        archive = read_payload(args.chunk_dir)
+        data = base64.b64decode(''.join(PACKED_RESOURCE.read_text().split()),
+                                validate=True)
+        if len(data) != 272521 or len(data) > RESOURCE_CAPACITY:
+            raise ValueError('MTL1 candidate resource size mismatch')
+        for frame in range(628):
+            if decoded_frame(data, frame) != original_frame(archive, frame):
+                raise ValueError(f'MTL1 source RGB palette/pixel mismatch at {frame}')
+        description = 'MTL1 exact VQ pixels, 628 frames'
+    else:
+        data = read_payload(args.chunk_dir)
+        description = 'approved 96x96 VQ, 628 frames'
     args.resource_payload.parent.mkdir(parents=True, exist_ok=True)
     args.resource_payload.write_bytes(data)
-    print(f'PASS: 628 original-source 96x96 photos, 24 clip-specific 16-colour RGB565 palettes, {len(data)}B, '
-          f'archive SHA256 {SHA256}, output SHA256 {hashlib.sha256(data).hexdigest()}')
+    print(f'PASS: {description}; payload {len(data)}B; '
+          f'archive SHA256 {SHA256}; output SHA256 {hashlib.sha256(data).hexdigest()}')
 
 
 if __name__ == '__main__':
