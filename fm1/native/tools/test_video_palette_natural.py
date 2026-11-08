@@ -38,8 +38,11 @@ assert "for(i=1u;i<MI_TILE_BANKS;i++)" in app_source
 assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in (Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
 header=(Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
 assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in header
-for entry in ("0x0000u", "0x10a2u", "0x2945u", "0xc618u", "0xf7beu"):
-    assert entry in header
+calibrated = header.split("mi_photo_grayscale_palette[MI_TILE_BANKS][16] = {", 1)[1].split("};", 1)[0]
+rows = [line for line in calibrated.splitlines() if line.strip().startswith("{")]
+assert len(rows) == 8
+assert all(len(re.findall(r"0x[0-9a-f]{4}u", row)) == 16 for row in rows)
+assert "SHA256 bb5345df9b9e4118052bfeac603e38f16db0fccd5af49223e52b08115a1cc40" in header
 assert "mi_photo_palette[idx]" in app_source
 
 W, H = 128, 78
