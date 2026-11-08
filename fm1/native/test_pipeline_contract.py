@@ -386,7 +386,13 @@ assert "stale rendering" in (root / "fm1/native/tools/check_noresource_display.p
 for name in ("MIYAKO_NO_RESOURCE_SEL.png", "MIYAKO_NO_RESOURCE_FX.png",
              "MIYAKO_PHOTO_RESOURCE_RESTORED.png"):
     assert name in (root / "fm1/native/host_smoke.txt").read_text()
-assert ci.count("check_noresource_display.py") == 2
+# The media preflight uses zero-initialised compiler stubs, not pictures.
+# Image-visibility checks MUST run once after both real VQ packs are built.
+assert ci.count("check_noresource_display.py") == 1
+assert ci.index("Reconstruct all 576 original MIYAKO EUREKA frames") < ci.index(
+    "check_noresource_display.py")
+assert ci.index("Compile FM-1 native platform host simulator and exercise UI") < ci.index(
+    "check_noresource_display.py")
 assert 'expect media_ready 1' in (root / "fm1/native/host_smoke.txt").read_text()
 assert 'MIYAKO_ADDED_SHEET1.png' in (root / "fm1/native/host_smoke.txt").read_text()
 assert 'MIYAKO_ADDED_SHEET2.png' in (root / "fm1/native/host_smoke.txt").read_text()
