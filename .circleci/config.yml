@@ -27,7 +27,7 @@ jobs:
           name: Verify exact MIYAKO branch and zero KARMA source closure
           command: |
             set -eu
-            test "$CIRCLE_BRANCH" = "feature/fm1-miyako-video-opaque-letter-sub-20261108"
+            test "$CIRCLE_BRANCH" = "feature/fm1-letter-highdetail-20261108"
             # Reject missing pipeline metadata before media/resource work.
             case "${CIRCLE_PIPELINE_NUMBER:-}" in
               ""|*[!0-9]*) echo "FAIL: CircleCI pipeline.number was not supplied" >&2; exit 1 ;;
@@ -274,6 +274,11 @@ jobs:
             test -s fm1-dist/MIYAKO_OSC_LIVE_SINE.png
             test -s fm1-dist/MIYAKO_OSC_SUB_0.png
             test -s fm1-dist/MIYAKO_OSC_SUB_127.png
+            # Source legibility gate checks subject silhouettes, frame change,
+            # and proper 2-colour pixels in the actual host LCD screenshots.
+            /tmp/mi-video-venv/bin/python fm1/native/tools/check_letter_quality.py \
+              fm1-dist/MIYAKO_OSC_SUB_0.png \
+              fm1-dist/MIYAKO_OSC_SUB_127.png
             test -s fm1-dist/MIYAKO_NORMAL_SEL_ACTIVE.png
             test -s fm1-dist/MIYAKO_NORMAL_SEL_RETURN.png
             test -s fm1-dist/MIYAKO_NORMAL_SEL_FROM_FX.png
@@ -337,4 +342,4 @@ workflows:
       - fm1_native_build:
           filters:
             branches:
-              only: feature/fm1-miyako-video-opaque-letter-sub-20261108
+              only: feature/fm1-letter-highdetail-20261108
