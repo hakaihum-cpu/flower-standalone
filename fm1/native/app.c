@@ -1473,7 +1473,7 @@ void app_ui_init(void)
 {
  touch_on(1);
  lcd_fill(0,0,240,240,C_BLACK);
- mi_ui_splash_until=plat_ms()+1200u;
+ mi_ui_splash_until=plat_ms()+3000u;
  redraw=1;
 }
 void app_frame(void)
