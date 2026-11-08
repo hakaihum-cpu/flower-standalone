@@ -60,4 +60,21 @@ frameset[0,0,:MIN_VISIBLE_PIXELS]=1
 assert visible_pixel_counts(frameset,pal)[0]==0
 frameset[0,0,:MIN_VISIBLE_PIXELS]=2
 assert visible_pixel_counts(frameset,pal)[0]==MIN_VISIBLE_PIXELS
-print("PASS: seven black-frame substitution tests")
+# Palette index zero is not transparency. A bright source image whose
+# ONLY visible colour is palette[0] must never be replaced by its neighbour.
+bright_zero=np.zeros(16,np.uint16)
+bright_zero[0]=0xFFFF
+all_zero=np.zeros((FRAME_COUNT,PADDED_HEIGHT,WIDTH),np.uint8)
+assert np.all(visible_pixel_counts(all_zero,bright_zero)==WIDTH*(PADDED_HEIGHT-2))
+selectors=np.arange(FRAME_COUNT*TILES,dtype=np.int32).reshape(FRAME_COUNT,TILES)
+original=selectors.copy()
+assert replace_black_frames(all_zero,all_zero.copy(),selectors,bright_zero,"EUREKA",0)==[]
+assert np.array_equal(selectors,original)
+# A genuinely BLACK palette entry zero remains invisible, without special
+# index handling. Test mixed bright and black index-zero pixels as well.
+dark_zero=np.zeros(16,np.uint16)
+dark_zero[1]=0xFFFF
+mixed=np.zeros((1,PADDED_HEIGHT,WIDTH),np.uint8)
+mixed[0,0,:MIN_VISIBLE_PIXELS]=1
+assert visible_pixel_counts(mixed,dark_zero)[0]==MIN_VISIBLE_PIXELS
+print("PASS: nine black-frame substitution and palette-zero opacity tests")
