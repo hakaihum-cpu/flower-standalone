@@ -115,6 +115,7 @@ static uint8_t backup_hold;
  * 0=AUTO, 1..6=original photo sheets, 7=EFFECTS, 8=EUREKA,
  * 9..10=two extra photo sheets. The old DREAMY portrait is excluded. */
 static uint8_t visual_choice,visual_last_mode=255u,visual_cooldown,visual_bank_ticks;
+static mi_view_t visual_previous_view=MI_HOME;
 static uint16_t visual_tile;
 static uint8_t normal_visual_bank; /* SEL independent integrated playlist */
 static float visual_last_activity;
@@ -239,6 +240,7 @@ void app_init(void)
  visual_choice=0u;visual_last_mode=255u;visual_bank_ticks=0u;visual_cooldown=0u;
  visual_rng=0x6d697961u;visual_generation=0u;
  visual_last_activity=0.f;visual_tile=0u;normal_visual_bank=6u;
+ visual_previous_view=MI_HOME;
  mi_memzero(held_note,sizeof held_note);redraw=1;
  message_until=0;line_a[0]=line_b[0]=0;
 }
@@ -525,6 +527,22 @@ static void input(void)
          redraw=1;
      }
  }
+ /* Re-entering SEL or FX MUST reactivate the image sequence. Do not
+  * preserve hidden-page cooldown/audio-onset state across navigation:
+  * that can leave the first frame stuck when coming back to SEL. */
+ if(state.view!=visual_previous_view){
+     if(state.view==MI_VIDEO||state.view==MI_FX){
+         visual_last_mode=255u;
+         visual_cooldown=0u;
+         visual_bank_ticks=0u;
+         visual_last_activity=0.f;
+         video.effects_cooldown=0u;
+         video.effects_previous=0.f;
+         video.eureka_previous=0.f;
+     }
+     visual_previous_view=state.view;
+     redraw=1;
+ }
  plat_glow(1);
  plat_play_red(audio.recorder.recording!=0u);
  plat_leds((1u<<(state.view==MI_OSC?B_EDIT:
@@ -804,7 +822,9 @@ static void mi_tile_draw_half(unsigned half,int32_t px,int32_t py,
             unsigned first=sx,idx=mi_photo_visual_index(sy,sx);
             ++sx;
             while(sx<MI_TILE_SIDE&&mi_photo_visual_index(sy,sx)==idx)++sx;
-            if(idx){
+            /* Palette 0 is a REAL source pixel, never transparency.
+             * Skipping it leaves black holes across the 96x96 photo. */
+            {
                 int32_t x0=px+(int32_t)(first*(unsigned)size/MI_TILE_SIDE);
                 int32_t x1=px+(int32_t)(sx*(unsigned)size/MI_TILE_SIDE);
                 if(x1>x0)mi_image_rect(x0,top,x1-x0,bottom-top,
@@ -842,7 +862,8 @@ static void mi_media_draw_scaled_half(unsigned half,int32_t px,int32_t py,
         while(x<MI_EFFECTS_ASSET_W){
             unsigned idx=mi_media_visual_index(sy,x);
             unsigned first=x++,last;
-            if(idx==0u)continue;
+            /* Palette index zero is opaque in the source 16-colour
+             * EFFECTS/EUREKA frames. Never create an implicit hole. */
             while(x<MI_EFFECTS_ASSET_W){
                 if(mi_media_visual_index(sy,x)!=idx)break;
                 ++x;
@@ -1325,16 +1346,22 @@ void app_frame(void)
  now=plat_ms();
  if(now-video_time>=33u){
      video_time=now;
-     int16_t old_effects=video.effects_frame,old_eureka=video.eureka_frame;
-     unsigned visual_changed=mi_visual_step(audio_activity);
-     unsigned mode=mi_visual_mode();
-     /* Never process off-screen video banks when a photo-tile sheet is chosen. */
-     if(mode==6u||mode==7u)mi_video_tick(&video,audio_activity,mode==7u);
-     else video.eureka_previous=0.f; /* original source disabled gate */
-     if((state.view==MI_VIDEO||state.view==MI_FX) &&
-        (visual_changed||(mode==6u&&old_effects!=video.effects_frame)||
-         (mode==7u&&old_eureka!=video.eureka_frame)))
-         redraw=1;
+     /* Never consume visual RNG, frame clocks or cooldown off-screen.
+      * Otherwise repeated page transitions make normal SEL animation look
+      * as though it stopped switching. Restore clocks on re-entry. */
+     if(state.view==MI_VIDEO||state.view==MI_FX){
+         int16_t old_effects=video.effects_frame;
+         int16_t old_eureka=video.eureka_frame;
+         unsigned visual_changed=mi_visual_step(audio_activity);
+         unsigned mode=mi_visual_mode();
+         if(mode==6u||mode==7u)
+             mi_video_tick(&video,audio_activity,mode==7u);
+         else video.eureka_previous=0.f;
+         if(visual_changed||
+            (mode==6u&&old_effects!=video.effects_frame)||
+            (mode==7u&&old_eureka!=video.eureka_frame))
+             redraw=1;
+     }
      if((state.view==MI_VIDEO||state.view==MI_FX)&&
         state.lfo[2]&&state.lfo[3]>=24u&&state.lfo[3]<=27u)
          redraw=1;
