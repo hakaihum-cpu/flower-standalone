@@ -270,21 +270,27 @@ static void midi_audio_poll(void)
      uint8_t note=(uint8_t)((pkt>>16)&127u);
      uint8_t velocity=(uint8_t)((pkt>>24)&127u);
      uint8_t kind=status&0xF0u;
+     uint8_t note_channel=(uint8_t)((status&0x0Fu)+1u);
      (void)port;
      if(status==0xF8u||status==0xFAu||
         status==0xFBu||status==0xFCu){
          mi_audio_midi_clock(&audio,&state,status);
          continue;
      }
-     if(kind==0x90u&&velocity)mi_audio_input_on(&audio,&state,note,velocity);
-     else if(kind==0x80u||(kind==0x90u&&!velocity))
+     /* GLO MIDI CH filters note input. MIDI realtime has no channel.
+      * Recorder CC21 keeps its established all-channel behavior. */
+     if(note_channel==state.midi_channel&&kind==0x90u&&velocity)
+         mi_audio_input_on(&audio,&state,note,velocity);
+     else if(note_channel==state.midi_channel&&
+             (kind==0x80u||(kind==0x90u&&!velocity)))
          mi_audio_input_off(&audio,&state,note);
      else if(kind==0xB0u&&note==MI_REC_PITCH_CC)
          /* CC21 on any MIDI channel: existing 7 pitches, index 0..6.
           * 0=-12, 1=-7, 2=-5, 3=0, 4=+5, 5=+7, 6=+12 semitones.
           * Exactly the same state as RECORDER K3, no new pitch DSP. */
          state.seq[2]=(uint8_t)(((unsigned)velocity*7u)>>7u);
-     else if(kind==0xB0u&&note==123u)
+     else if(kind==0xB0u&&note==123u&&
+             note_channel==state.midi_channel)
          mi_audio_panic(&audio);
  }
 }
@@ -481,13 +487,9 @@ static void input(void)
      action=mi_button(&state,map_button(i),now);
      redraw=1;
      if(action.action==MI_ACTION_SAVE){
-         saved_t save;
-         save.magic=SAVED_MAGIC;
-         save.state=state;
-         save.state.save_armed=0;
-         save.state.step_play=0u;save.state.step_editor=0u;
-         app_say((!backup_hold&&plat_store_save(OBJ_SETTINGS,&save,sizeof save)==0)?
-                  "SAVED":"SAVE FAILED","");
+         mi_store_slot();
+     }else if(action.action==MI_ACTION_LOAD){
+         mi_load_slot();
      }else if(action.action==MI_ACTION_RECORD){
          mi_audio_rec_request(&audio,1u);
     }else if(action.action==MI_ACTION_PLAY){
@@ -504,7 +506,16 @@ static void input(void)
              if(next<0)next+=11;
              visual_choice=(uint8_t)next;
              visual_last_mode=255u; /* force new bank selection */
-         }else mi_rotate(&state,map_encoder(i),steps);
+         }else{
+             mi_view_t before=state.view;
+             mi_result_t action=mi_rotate(&state,map_encoder(i),steps);
+             if(before==MI_CONFIG&&state.view==MI_CONFIG&&
+                (i==EN_K1||i==EN_K2)){
+                 config_dirty=1u;
+                 config_changed_ms=now;
+             }
+             if(action.action==MI_ACTION_LOAD)mi_load_slot();
+         }
          redraw=1;
      }
  }
@@ -1218,6 +1229,13 @@ void app_frame(void)
   shown_seq_play=state.step_play;
   shown_seq_clock=audio.step_midi_mode;
   shown_rec_pitch=state.seq[2];
+  /* Persist global MIDI channel and clock once after the knobs settle.
+   * A burst of detents must not write flash on every increment. */
+  if(config_dirty&&(uint32_t)(now-config_changed_ms)>=1000u&&
+     !backup_hold){
+      if(mi_store_bank())config_dirty=0u;
+      else{config_dirty=0u;app_say("CONFIG FAILED","");}
+  }
   if(message_until&&now>=message_until){message_until=0;redraw=1;}
  if(redraw){draw();redraw=0;}
 }
