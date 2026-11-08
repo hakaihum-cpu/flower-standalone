@@ -20,7 +20,8 @@
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
 #define GREY RGB(218,213,202)
-#define SAVED_MAGIC 0x4D493135u /* MI15: expanded controls */
+#define SAVED_MAGIC 0x4D493136u /* MI16: drum step sequencer */
+#define SAVED_MAGIC_M15 0x4D493135u /* MI15 settings */
 #define SAVED_MAGIC_M14 0x4D493134u /* MI14 settings */
 #define SAVED_MAGIC_PREV 0x4D493133u /* MI13 settings */
 typedef struct {
@@ -42,6 +43,12 @@ typedef struct {
     uint8_t fx_extra[7][4],fx_page,osc1_wave;
 } mi_state_v14_t;
 typedef struct {uint32_t magic;mi_state_v14_t state;} saved_v14_t;
+/* Read the exact saved MI15 prefix while preserving default MI16 fields.
+ * The enclosing struct is 4-byte aligned just like the old saved_t. */
+typedef struct {
+    uint32_t magic;
+    uint8_t state_prefix[offsetof(mi_state_t,step_pattern)];
+} saved_mi15_t;
 typedef struct {uint32_t magic;
     uint8_t state_prefix[offsetof(mi_state_v14_t,osc2_wave)];
 } saved_legacy_t;
@@ -83,8 +90,13 @@ static mi_audio_t audio;
 static mi_video_t video;
 static volatile float audio_activity;
 static uint8_t osc_scope_last_active;
-static uint32_t last_keys,last_buttons,rec_pressed_at;
-static uint8_t rec_long_done;
+static uint32_t last_keys,last_buttons,rec_pressed_at,seq_pressed_at;
+static uint8_t rec_long_done,seq_long_done;
+/* Left-to-right 16 FM-1 white keys within its 27 semitone keyboard. */
+static const uint8_t seq_white_keys[16]={
+    0u,2u,4u,6u,7u,9u,11u,12u,
+    14u,16u,18u,19u,21u,23u,24u,26u
+};
 static uint8_t backup_hold;
 /* Visual selection is independent of audio FX.
  * 0=AUTO, 1..6=original photo sheets, 7=EFFECTS, 8=EUREKA,
@@ -127,6 +139,13 @@ void app_init(void)
     plat_store_load(OBJ_SETTINGS,&saved,sizeof saved)==(int)sizeof saved &&
     saved.magic==SAVED_MAGIC&&mi_state_valid(&saved.state)){
      state=saved.state;restored=1;
+ }else if(stored_bytes==(int)sizeof(saved_mi15_t)){
+     saved_mi15_t old15;
+     if(plat_store_load(OBJ_SETTINGS,&old15,sizeof old15)==(int)sizeof old15&&
+        old15.magic==SAVED_MAGIC_M15){
+         mi_memcopy(&state,old15.state_prefix,sizeof old15.state_prefix);
+         restored=mi_state_valid(&state);
+     }
  }else if(stored_bytes==(int)sizeof(saved_v14_t)){
      saved_v14_t old14;
      if(plat_store_load(OBJ_SETTINGS,&old14,sizeof old14)==(int)sizeof old14){
@@ -152,10 +171,12 @@ void app_init(void)
  if(!restored)mi_init(&state);
  state.save_armed=0;
  state.playing=state.recording=0;
+ state.step_play=0u;state.step_editor=0u;
  state.view=MI_HOME;
  state.osc_page=0u;
  osc_scope_last_active=0u;
- last_keys=last_buttons=rec_pressed_at=0u;rec_long_done=0u;
+ last_keys=last_buttons=rec_pressed_at=seq_pressed_at=0u;
+ rec_long_done=seq_long_done=0u;
  visual_choice=0u;visual_last_mode=255u;visual_bank_ticks=0u;visual_cooldown=0u;
  visual_rng=0x6d697961u;visual_generation=0u;
  visual_last_activity=0.f;visual_tile=0u;normal_visual_bank=6u;
@@ -169,7 +190,8 @@ void app_panic(void){mi_audio_panic(&audio);}
 int app_backup_playing(void)
 {
     unsigned i;
-    if(audio.recorder.recording||audio.recorder.playing||audio.held_total||
+    if(state.step_play||audio.recorder.recording||
+    audio.recorder.playing||audio.held_total||
        audio.arp_sounding)return 1;
     for(i=0u;i<MI_NATIVE_POLY;i++)if(audio.v[i].active)return 1;
     return 0;
@@ -261,10 +283,19 @@ static void input(void)
      bit=1u<<i;
      uint8_t note=(uint8_t)(53+(int)i+12*(int)state.octave);
      if((keys&bit)&&!(last_keys&bit)){
-         held_note[i]=note;
-         mi_audio_input_on(&audio,&state,note,(uint8_t)touch_vel(i));
+         if(state.view==MI_SEQ&&state.step_editor){
+             unsigned k;
+             held_note[i]=255u; /* edit keys must not sound or send note-offs */
+             for(k=0u;k<16u;k++)if(seq_white_keys[k]==i){
+                 state.step_pattern[state.step_track]^=(uint16_t)(1u<<k);
+                 break;
+             }
+         }else{
+             held_note[i]=note;
+             mi_audio_input_on(&audio,&state,note,(uint8_t)touch_vel(i));
+         }
      }
-     if(!(keys&bit)&&(last_keys&bit))
+     if(!(keys&bit)&&(last_keys&bit)&&held_note[i]<128u)
          mi_audio_input_off(&audio,&state,held_note[i]);
  }
  if(keys!=last_keys)redraw=1;
@@ -290,10 +321,30 @@ static void input(void)
          redraw=1;
      }
  }
+ /* Short SEQ still opens RECORDER. Long SEQ (>=650ms) opens the
+  * independent four-track step sequencer without touching REC data. */
+ {
+     uint32_t bit_seq=1u<<B_SEQ;
+     if((buttons&bit_seq)&&!(last_buttons&bit_seq)){
+         seq_pressed_at=now;seq_long_done=0u;
+     }
+     if((buttons&bit_seq)&&!seq_long_done&&
+        (uint32_t)(now-seq_pressed_at)>=650u){
+         seq_long_done=1u;
+         state.view=MI_SEQ;
+         state.step_editor=1u;
+         state.save_armed=0u;
+         redraw=1;
+     }
+     if(!(buttons&bit_seq)&&(last_buttons&bit_seq)&&!seq_long_done){
+         mi_button(&state,MI_B_SEQ,now);
+         redraw=1;
+     }
+ }
  for(i=0;i<NB;i++){
      mi_result_t action;
      bit=1u<<i;
-     if(i==B_REC||!(buttons&bit)||(last_buttons&bit))continue;
+     if(i==B_REC||i==B_SEQ||!(buttons&bit)||(last_buttons&bit))continue;
      /* SEL always returns to normal animation, never locks to FX imagery. */
      if(i==B_SEL){
          visual_choice=0u;visual_last_mode=255u;visual_bank_ticks=0u;
@@ -305,6 +356,7 @@ static void input(void)
          save.magic=SAVED_MAGIC;
          save.state=state;
          save.state.save_armed=0;
+         save.state.step_play=0u;save.state.step_editor=0u;
          app_say((!backup_hold&&plat_store_save(OBJ_SETTINGS,&save,sizeof save)==0)?
                   "SAVED":"SAVE FAILED","");
      }else if(action.action==MI_ACTION_RECORD){
