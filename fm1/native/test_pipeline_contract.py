@@ -483,25 +483,28 @@ assert "turn K1 6\nexpect fx 6" not in host_eureka
 host_fx = (root / "fm1/native/host_fx_preview.txt").read_text()
 assert "spin K1 -3\nexpect fx 2" in host_fx
 assert "spin PRESET 1" not in host_fx
-assert "bb5345df9b9e4118052b2feac603e38f16db0fccd5af49223e52b08115a1cc40" in resource_packer
+# The archived 628 user frames now use the same stock flash VQ layout
+# with 24 SOURCE-RGB palettes, not the previous grayscale recolour.
+assert "df517e2d8c7902bed076610a07876dee660890799ba5dec6bc12bf366783bcf4" in resource_packer
 assert "RESOURCE_CAPACITY = 69 * 4096 - 32" in resource_packer
-assert "photo96_rebuild.py" in (root / "fm1/native/tools/PHOTO96_REBUILD.md").read_text()
-assert "original||legacy" in ui
-assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in resource_header
-# Match all 8 x 16 source-calibrated shades, not three arbitrary
-# colour triplets. Index order is essential to the archival VQ maps.
-photo_palette = resource_header.split(
-    "mi_photo_grayscale_palette[MI_TILE_BANKS][16] = {", 1)[1].split("};", 1)[0]
-palette_rows = [line for line in photo_palette.splitlines()
-                if line.strip().startswith("{")]
-assert len(palette_rows) == 8
-assert all(len(re.findall(r"0x[0-9a-f]{4}u", row)) == 16
-           for row in palette_rows)
-assert "SHA256 bb5345df9b9e4118052b2feac603e38f16db0fccd5af49223e52b08115a1cc40" in resource_header
-assert "PHOTO_RGB565 = (" in resource_packer
+assert "PALETTE_CLIPS = 24" in resource_packer
 assert "return result" in resource_packer
 assert "transformed = bytearray(result)" not in resource_packer
-assert "mi_photo_palette[i]=mi_photo_grayscale_palette[bank][i]" in ui
+manifest_photo = __import__("json").loads(
+    (root / "Resources/fm1_photo_96_chunks/manifest.json").read_text())
+assert manifest_photo["payload_sha256"] == (
+    "df517e2d8c7902bed076610a07876dee660890799ba5dec6bc12bf366783bcf4")
+assert manifest_photo["frames"] == 628 and manifest_photo["clips"] == 24
+assert manifest_photo["palette_clip_count"] == 24
+assert len(manifest_photo["files"]) == 8
+assert "photo96_rebuild.py" in (
+    root / "fm1/native/tools/PHOTO96_REBUILD.md").read_text()
+assert "MI_TILE_RESOURCE_RGB_SOURCE 1u" in resource_header
+assert "MI_TILE_VQ_PALETTE_OFFSET 0u" in resource_header
+assert "mi_photo_grayscale_palette" not in ui
+assert "mi_photo_palette[i]=(uint16_t)" in ui
+assert "((uint16_t)res[offset+1u]<<8u)" in ui
+assert "res[4u]!=0xEFu" in ui and "res[30u]!=0x8Au" in ui
 assert "clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP" in ui
 assert "mi_visual_photo_bank(mode)" in ui
 assert "MIYAKO_FX_DREAMY_LARGE.png" in ci
