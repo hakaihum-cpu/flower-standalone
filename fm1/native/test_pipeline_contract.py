@@ -527,9 +527,10 @@ assert "expect wave 5" in host_smoke
 # screenshots are taken. Previously both captures were the same splash,
 # and its yellow logo happened to pass the mailbox/person ROI count.
 smoke = (root / "fm1/native/host_smoke.txt").read_text(encoding="utf-8")
-assert "mi_ui_splash_until=plat_ms()+1200u;" in ui
-assert "wait 1300\n# User-source scene is controlled by SUB" in smoke
-assert smoke.index("wait 1300\n# User-source scene is controlled by SUB") < smoke.index(
+assert "mi_ui_splash_until=plat_ms()+3000u;" in ui
+assert "master 4096\n# Show the original startup artwork for three seconds before normal UI.\nwait 3200" in smoke
+assert smoke.count("reboot\nwait 3200") == 2
+assert smoke.rindex("reboot\nwait 3200") < smoke.index(
     "shot MIYAKO_OSC_SUB_0.png")
 assert smoke.index("shot MIYAKO_OSC_SUB_0.png") < smoke.index(
     "shot MIYAKO_OSC_SUB_127.png")
