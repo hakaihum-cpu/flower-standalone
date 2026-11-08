@@ -385,6 +385,10 @@ expect wave 4
 expect midi_channel 2
 expect clock_mode 1
 expect save_mask 3
+# The user-supplied 240x240 startup image is displayed for 1200 ms after
+# app_ui_init(). Host screenshots MUST wait for it to finish; otherwise
+# SUB=0 and SUB=127 capture the identical splash image, not the OSC scene.
+wait 1300
 # User-source scene is controlled by SUB, NOT by ENV ATTACK.
 # Home MULTI OSC1 K2 is SUB. All 72 frames remain reachable.
 tap HOME
