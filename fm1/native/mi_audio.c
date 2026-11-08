@@ -66,6 +66,7 @@ void mi_audio_init(mi_audio_t *a,float rate)
     a->sample_rate=rate>=8000.f&&rate<=192000.f?rate:44100.f;
     a->rand_state=0x4d495941u;
     a->arp_random=0x50414e5au;
+    a->step_random=0x53455131u;
     mi_fx_dsp_init(&native_fx);
     mi_rec_init(&a->recorder);
     a->video_effective[2]=64u;a->video_effective[3]=64u;
@@ -145,6 +146,48 @@ static void drum_on(mi_audio_t *a,const mi_state_t *s,
         v->drum_decay_rate=clampf(1.f-7.f/(duration*a->sample_rate),
                                  0.85f,0.99998f);
     }
+}
+/* Independent 4-track FMDrum sequencer; its notes are never routed through
+ * live held-key state or the selected oscillator, and its PCM reaches REC.
+ * Sequence scheduling runs at the audio sample clock, not LCD frame rate. */
+static void mi_step_tick(mi_audio_t *a,const mi_state_t *s)
+{
+    static const uint8_t notes[4]={53u,54u,55u,58u};
+    unsigned t,dir=s->step_dir,len=s->step_len,pos,bpm;
+    uint32_t period;
+    if(!s->step_play){
+        a->step_active=0u;
+        a->step_wait=0u;
+        return;
+    }
+    if(len<1u||len>16u)len=8u;
+    if(dir>2u)dir=0u;
+    if(!a->step_active||a->step_last_dir!=dir||a->step_last_len!=len){
+        a->step_active=1u;
+        a->step_wait=0u;
+        a->step_next=(uint8_t)(dir==1u?len-1u:0u);
+        a->step_last_dir=(uint8_t)dir;
+        a->step_last_len=(uint8_t)len;
+    }
+    if(a->step_wait){--a->step_wait;return;}
+    pos=a->step_next;
+    if(pos>=len)pos=0u;
+    a->step_current=(uint8_t)pos;
+    for(t=0u;t<4u;t++)
+        if(s->step_pattern[t]&(uint16_t)(1u<<pos))
+            drum_on(a,s,notes[t],112u);
+    if(dir==1u)a->step_next=(uint8_t)(pos==0u?len-1u:pos-1u);
+    else if(dir==2u){
+        a->step_random^=a->step_random<<13;
+        a->step_random^=a->step_random>>17;
+        a->step_random^=a->step_random<<5;
+        a->step_next=(uint8_t)(a->step_random%len);
+    }else a->step_next=(uint8_t)((pos+1u)%len);
+    bpm=s->global[0]<40?40u:(s->global[0]>240?240u:(unsigned)s->global[0]);
+    /* One step = 1/16 note, equivalent to 15/BPM seconds. */
+    period=(uint32_t)(a->sample_rate*15.f/(float)bpm+0.5f);
+    if(period<1u)period=1u;
+    a->step_wait=period-1u;
 }
 static float drum_sample(mi_audio_t *a,const mi_state_t *s,mi_voice_t *v)
 {
@@ -557,6 +600,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     }
     for(i=0;i<n;i++){
         float sample=0.f,osc_capture=0.f,lfo,mod,voice_duty=duty;
+        mi_step_tick(a,rs);
         arp_tick(a,rs);
         a->lfo_phase=wrap01(a->lfo_phase+lfo_speed);
         lfo=lfo_value(rs->lfo[1],a->lfo_phase);
