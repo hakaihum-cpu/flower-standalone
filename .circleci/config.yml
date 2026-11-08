@@ -31,6 +31,7 @@ jobs:
             python3 -m py_compile fm1/native/verify_standalone.py fm1/native/test_pipeline_contract.py
             python3 fm1/native/verify_standalone.py
             python3 fm1/native/test_pipeline_contract.py
+            python3 fm1/native/tools/test_miyako_dynamic_version.py
             python3 fm1/native/tools/build_letter_anim_header.py --out /tmp/mi_letter_preflight.h
             test -s /tmp/mi_letter_preflight.h
             python3 fm1/native/tools/test_miyako_resource96.py
