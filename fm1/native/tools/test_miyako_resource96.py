@@ -7,7 +7,8 @@ counts, stable clip palettes, no grayscale-only render, and full-range data.
 from __future__ import annotations
 import argparse
 from pathlib import Path
-from pack_miyako_resource import read_payload, CHUNK_DIR, SHA256
+from pack_miyako_resource import read_payload, CHUNK_DIR, SHA256, PHOTO_RGB565
+import hashlib
 
 COUNT = 628
 SIDE = 96
@@ -19,8 +20,7 @@ BOOK_BYTES = CLIPS * 256 * 16
 BOOK_OFFSET = PALETTE_BYTES
 MAP_OFFSET = PALETTE_BYTES + BOOK_BYTES
 BANK_SIZES = (81, 64, 100, 81, 81, 81, 70, 70)
-REFERENCE = (0x0000,0x1841,0x28a2,0x5101,0x4184,0x49c5,0x6206,0x7a05,
-             0x89e4,0x8b0a,0xa2c6,0xd2c6,0xabac,0xec49,0xdd50,0xfdd1)
+REFERENCE = PHOTO_RGB565
 
 
 def check(data: bytes) -> None:
@@ -47,7 +47,7 @@ def check(data: bytes) -> None:
         distinct = sum(x > 0 for x in counts)
         assert distinct >= 15, f'frame {f} still monochrome/low-colour: {distinct}'
         min_colors = min(min_colors, distinct)
-    print(f'PASS: {COUNT} original 96x96 frames, 8 user banks, >= {min_colors}/16 real colours each, sha {SHA256}')
+    print(f'PASS: {COUNT} original 96x96 frames, 8 user banks, >= {min_colors}/16 real colours each, archive sha {SHA256}, installed sha {hashlib.sha256(data).hexdigest()}')
 
 
 if __name__ == '__main__':
