@@ -103,7 +103,10 @@ def natural_pixels(frames: list[Image.Image]) -> tuple[list[int], list[bytes]]:
     for method in (Image.Quantize.MAXCOVERAGE,
                    Image.Quantize.FASTOCTREE):
         candidate = palette_candidate(method)
-        if candidate[0] < best[0]:
+        # Preserve colour diversity as well as numeric RGB fidelity.
+        # A clipped, tiny palette must not win merely by smoothing faces.
+        if (candidate[0] < best[0] and
+                len(set(candidate[1])) >= len(set(best[1]))):
             best = candidate
     _, rgb565, out = best
     if (len(rgb565) != 16 or len(out) != CLIP_LENGTH or
