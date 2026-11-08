@@ -292,6 +292,8 @@ jobs:
               'IMPORTANT: this update REQUIRES a new 279968-byte res.bin even if the previously installed file has the same size. The old amber palette is rejected.' \
               'The matching 279968-byte resource is REQUIRED for original-source 96x96 true 16-colour photo frames. Older 119552-byte resources are incompatible.' \
               'REC internal 2s, EUREKA short-buffer 2s, two serial FX with conflict guards.' \
+              'SEQ short press: RECORDER. SEQ hold (650ms): 4-track FMDrum step sequencer.' \
+              '16 white keys toggle steps 1-16. K1 track, K2 play/stop, K3 direction, K4 length 8-16.' \
               'This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.' \
               > fm1-dist/README_BEFORE_INSTALL.txt
             (cd fm1-dist && sha256sum *.fwsc *-res.bin > SHA256SUMS)
