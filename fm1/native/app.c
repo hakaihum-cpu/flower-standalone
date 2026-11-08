@@ -325,7 +325,8 @@ void app_say(const char *a,const char *b)
 static int mi_store_bank(void)
 {
     saved_bank.magic=SAVED_MAGIC;
-    saved_bank.active_slot=state.project_slot;
+    /* Do not change the boot preset merely because GLO K3 browsed an
+     * EMPTY slot before the global settings debounce finishes. */
     saved_bank.midi_channel=state.midi_channel;
     saved_bank.clock_mode=(uint8_t)state.global[3];
     return !backup_hold &&
@@ -336,6 +337,7 @@ static void mi_store_slot(void)
     unsigned index=(unsigned)state.project_slot-1u;
     mi_state_t before;
     uint8_t oldmask=saved_bank.valid_mask;
+    uint8_t old_active=saved_bank.active_slot;
     if(index>=4u){app_say("BAD SLOT","");return;}
     before=saved_bank.slots[index];
     saved_bank.slots[index]=state;
@@ -350,12 +352,14 @@ static void mi_store_slot(void)
     saved_bank.slots[index].playing=0u;
     saved_bank.slots[index].recording=0u;
     saved_bank.valid_mask=(uint8_t)(oldmask|(1u<<index));
+    saved_bank.active_slot=state.project_slot;
     if(mi_store_bank()){
         config_dirty=0u;
         app_say("PRESET SAVED","");
     }else{
         saved_bank.slots[index]=before;
         saved_bank.valid_mask=oldmask;
+        saved_bank.active_slot=old_active;
         app_say("SAVE FAILED","");
     }
 }
@@ -381,6 +385,7 @@ static void mi_load_slot(void)
     state.step_play=0u;state.step_editor=0u;
     state.playing=0u;state.recording=0u;
     state.view=current;        /* stay on CONFIG or SAVE for clear feedback */
+    saved_bank.active_slot=state.project_slot;
     if(mi_store_bank()){
         config_dirty=0u;
         app_say("PRESET LOADED","");
