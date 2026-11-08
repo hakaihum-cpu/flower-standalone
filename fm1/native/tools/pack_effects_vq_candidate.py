@@ -280,6 +280,15 @@ def main():
         images = jpeg_frames(source, clip)
         palette, fourbit = clip_pixels(images)
         idx = source_indices(fourbit)
+        original_rgb = np.stack([np.asarray(im, dtype=np.float32)
+                                 for im in images])
+        palette_rgb = rgb_palette(palette)
+        def source_quality(reconstruction):
+            """Compare actual original JPEG to the final 16-colour VQ RGB."""
+            display = palette_rgb[reconstruction[:, :HEIGHT]].astype(np.float32)
+            mse = np.mean((original_rgb - display) ** 2, axis=(1, 2, 3))
+            psnr = 10 * np.log10(255 * 255 / np.maximum(mse, 1e-9))
+            return float(psnr.min()), float(psnr.mean())
         # Improve the CURRENT 8x4 / 256-tile VQ dictionary only. Preserve the
         # original candidate as a guaranteed fallback if tuning is worse.
         base = train_clip(idx, palette)
@@ -288,7 +297,8 @@ def main():
         for balance in (1.0, 2.0, 3.0, 4.0, 6.0):
             trial = train_clip(idx, palette, loops=18,
                                frame_balance=balance)
-            if improves_both(trial[3], chosen[3]):
+            if (improves_both(trial[3], chosen[3]) and
+                    improves_both(source_quality(trial[2]), source_quality(chosen[2]))):
                 chosen, selected = trial, f"frame-balanced {balance:g}"
         # Deterministic multi-start search: local 140-frame source checks
         # showed measurable worst-frame gains without changing the codec.
@@ -297,7 +307,8 @@ def main():
         for seed in (2, 3, 5, 7):
             trial = train_clip(idx, palette, loops=18,
                                frame_balance=6.0, seed=clip * 100 + seed)
-            if improves_both(trial[3], chosen[3]):
+            if (improves_both(trial[3], chosen[3]) and
+                    improves_both(source_quality(trial[2]), source_quality(chosen[2]))):
                 chosen, selected = trial, f"multi-start {seed}"
         # Use the same codec with RGB-distance-spread starting tiles.
         # Local source checks improved the worst frame in two of three
@@ -307,7 +318,8 @@ def main():
                                frame_balance=6.0,
                                seed=-(clip * 100 + seed),
                                free_zero=True)
-            if improves_both(trial[3], chosen[3]):
+            if (improves_both(trial[3], chosen[3]) and
+                    improves_both(source_quality(trial[2]), source_quality(chosen[2]))):
                 chosen, selected = trial, f"full-dictionary spread-start {seed}"
         book, ids, recon, quality = chosen
         # Keep source clip/codec intact. Blank source or decoded frames reuse
