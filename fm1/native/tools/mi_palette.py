@@ -5,7 +5,7 @@ Exactly 36 user-supplied frames per clip; fixed 16-colour RGB565 palette.
 No EUREKA audio, animation or code dependency.
 """
 from PIL import Image, ImageStat, ImageFilter
-from mi_reference_palette import reference_pixels
+from mi_reference_palette import natural_pixels
 
 WIDTH, HEIGHT = 128, 78
 CLIP_LENGTH = 36
@@ -69,4 +69,4 @@ def clip_pixels(frames: list[Image.Image]) -> tuple[list[int], list[bytes]]:
 
     # The reference user's 16 warm colors replace grayscale-per-clip medcut.
     # Face outline and frame sequence remain the real source pixels only.
-    return reference_pixels(fixed)
+    return natural_pixels(fixed)
