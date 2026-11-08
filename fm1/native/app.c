@@ -134,6 +134,113 @@ static int redraw;
 static char line_a[24],line_b[24];
 static uint32_t message_until;
 
+
+/* All four new panels use the same bounded 16-colour RGB565 canvas already
+ * used by the native FM-1 app. No DSP, audio callback or flash map changes. */
+static unsigned mi_ui_start_index(unsigned x,unsigned y)
+{
+    unsigned id=mi_ui_start_maps[(y>>1u)*120u+(x>>1u)];
+    unsigned packed=mi_ui_start_books[id*2u+(y&1u)];
+    return (x&1u)?packed&15u:packed>>4u;
+}
+static void mi_ui_draw_start(void)
+{
+    unsigned half,y,x;
+    for(half=0u;half<2u;half++){
+        cv_begin(240,120,C_BLACK);
+        for(y=0u;y<120u;y++){
+            unsigned sy=half*120u+y,start=0u;
+            unsigned previous=mi_ui_start_index(0u,sy);
+            for(x=1u;x<=240u;x++){
+                unsigned current=x==240u?16u:mi_ui_start_index(x,sy);
+                if(current!=previous){
+                    cv_rect((int32_t)start,(int32_t)y,
+                            (int32_t)(x-start),1,mi_ui_start_palette[previous]);
+                    start=x;previous=current;
+                }
+            }
+        }
+        cv_blit(0,half*120u);
+    }
+}
+static void mi_ui_draw_logo(void)
+{
+    unsigned x,y;
+    for(y=0u;y<MI_UI_LOGO_H;y++){
+        unsigned prior=16u,begin=0u;
+        for(x=0u;x<=MI_UI_LOGO_W;x++){
+            unsigned idx=16u;
+            if(x<MI_UI_LOGO_W){
+                unsigned byte=mi_ui_logo_pixels[y*(MI_UI_LOGO_W/2u)+(x>>1u)];
+                idx=(x&1u)?byte&15u:byte>>4u;
+            }
+            if(idx!=prior){
+                if(prior<16u)
+                    cv_rect(8+(int32_t)begin,(int32_t)y,
+                            (int32_t)(x-begin),1,mi_ui_logo_palette[prior]);
+                begin=x;prior=idx;
+            }
+        }
+    }
+}
+static void mi_ui_motion_decode(unsigned kind,unsigned frame)
+{
+    const uint8_t *bases=kind?mi_ui_lfo_bases:mi_ui_env_bases;
+    const uint8_t *delta=kind?mi_ui_lfo_deltas:mi_ui_env_deltas;
+    const uint16_t *offsets=kind?mi_ui_lfo_offsets:mi_ui_env_offsets;
+    unsigned clip=frame/MI_UI_MOTION_CLIP;
+    unsigned f,i;
+    if(kind==mi_ui_motion_kind&&frame==mi_ui_motion_frame)return;
+    mi_memcopy(mi_ui_motion_map,bases+clip*MI_UI_MOTION_MAP_BYTES,
+               MI_UI_MOTION_MAP_BYTES);
+    for(f=clip*MI_UI_MOTION_CLIP+1u;f<=frame;f++){
+        const uint8_t *flags=delta+offsets[f];
+        const uint8_t *next=flags+32u;
+        for(i=0u;i<MI_UI_MOTION_MAP_BYTES;i++)
+            if(flags[i>>3u]&(0x80u>>(i&7u)))
+                mi_ui_motion_map[i]=*next++;
+    }
+    mi_ui_motion_kind=(uint8_t)kind;
+    mi_ui_motion_frame=(uint8_t)frame;
+}
+static unsigned mi_ui_motion_index(unsigned kind,unsigned x,unsigned y)
+{
+    const uint8_t *books=kind?mi_ui_lfo_books:mi_ui_env_books;
+    unsigned tile=mi_ui_motion_map[(y/3u)*16u+(x/3u)];
+    unsigned pixel=(y%3u)*3u+(x%3u);
+    unsigned packed=books[tile*5u+(pixel>>1u)];
+    return (pixel&1u)?packed&15u:packed>>4u;
+}
+static void mi_ui_draw_motion(unsigned kind,unsigned frame)
+{
+    const uint16_t *colors=kind?mi_ui_lfo_palette:mi_ui_env_palette;
+    unsigned y,x;
+    if(frame>=MI_UI_MOTION_COUNT)frame=MI_UI_MOTION_COUNT-1u;
+    mi_ui_motion_decode(kind,frame);
+    /* Bottom-right of upper half, never in the lower knob/value strip. */
+    for(y=0u;y<MI_UI_MOTION_H;y++){
+        unsigned start=0u,prior=mi_ui_motion_index(kind,0u,y);
+        for(x=1u;x<=MI_UI_MOTION_W;x++){
+            unsigned idx=x==MI_UI_MOTION_W?16u:mi_ui_motion_index(kind,x,y);
+            if(idx!=prior){
+                cv_rect(180+(int32_t)start,70+(int32_t)y,
+                        (int32_t)(x-start),1,colors[prior]);
+                start=x;prior=idx;
+            }
+        }
+    }
+}
+static unsigned mi_ui_param_frame(unsigned kind)
+{
+    unsigned k=kind?mi_lfo_visual_param:mi_env_visual_param;
+    unsigned v=kind?state.lfo[k]:state.env[k];
+    unsigned max=127u;
+    if(kind&&k==1u)max=3u;
+    if(kind&&k==3u)max=MI_LFO_DEST_COUNT-1u;
+    if(v>max)v=max;
+    return (v*(MI_UI_MOTION_COUNT-1u)+max/2u)/max;
+}
+
 static void textcpy(char *dest,const char *src,unsigned limit)
 {
  unsigned i=0;if(!src)src="";
@@ -530,6 +637,15 @@ static void input(void)
          }else{
              mi_view_t before=state.view;
              mi_result_t action=mi_rotate(&state,map_encoder(i),steps);
+             if(i>=EN_K1&&i<=EN_K4){
+                 if(before==MI_ENV&&state.view==MI_ENV){
+                     mi_env_visual_param=(uint8_t)(i-EN_K1);
+                     mi_ui_motion_kind=255u;
+                 }else if(before==MI_LFO&&state.view==MI_LFO){
+                     mi_lfo_visual_param=(uint8_t)(i-EN_K1);
+                     mi_ui_motion_kind=255u;
+                 }
+             }
              if(before==MI_CONFIG&&state.view==MI_CONFIG&&
                 (i==EN_K1||i==EN_K2)){
                  config_dirty=1u;
@@ -979,6 +1095,7 @@ static void mi_graph_env(void)
     cv_text(x1,104,&FONT_XS,"D",GREY);
     cv_text(x2,104,&FONT_XS,"S",GREY);
     cv_text(x3,104,&FONT_XS,"R",GREY);
+    mi_ui_draw_motion(0u,mi_ui_param_frame(0u));
 }
 static float mi_lfo_graph_value(unsigned wave,float p)
 {
@@ -1008,6 +1125,7 @@ static void mi_graph_lfo(void)
         if(x>12)cv_line((int32_t)x-1,prior,(int32_t)x,y,YELLOW);
         prior=y;
     }
+    mi_ui_draw_motion(1u,mi_ui_param_frame(1u));
 }
 static void mi_graph_arp(void)
 {
@@ -1059,7 +1177,7 @@ static void mi_graph_stepseq(void)
     for(half=0u;half<2u;half++){
         cv_begin(240,120,C_BLACK);
         if(half==0u){
-            cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
+            mi_ui_draw_logo();
             cv_text(124,10,&FONT_XS,"STEP SEQ",GREY);
             cv_rect(8,31,224,1,DIM);
             number(state.step_len,val);
@@ -1104,7 +1222,7 @@ static void mi_draw_config(void)
 {
     char n[16];
     cv_begin(240,120,C_BLACK);
-    cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
+    mi_ui_draw_logo();
     cv_text(119,10,&FONT_XS,"GLOBAL CONFIG",GREY);
     cv_rect(8,31,224,1,DIM);
     cv_text(12,43,&FONT_XS,"MIDI CHANNEL",GREY);
@@ -1138,7 +1256,7 @@ static void mi_draw_save(void)
     unsigned idx=(unsigned)state.project_slot-1u;
     int occupied=idx<4u&&(saved_bank.valid_mask&(1u<<idx));
     cv_begin(240,120,C_BLACK);
-    cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
+    mi_ui_draw_logo();
     cv_text(139,10,&FONT_XS,"SAVE / LOAD",GREY);
     cv_rect(8,31,224,1,DIM);
     cv_text(12,45,&FONT_XS,"PRESET SLOT",GREY);
@@ -1241,6 +1359,10 @@ static void draw(void)
 {
     uint32_t i,now=plat_ms();
     char val[16];
+    if(mi_ui_splash_until&&now<mi_ui_splash_until){
+        mi_ui_draw_start();
+        return;
+    }
     if(state.view==MI_CONFIG){mi_draw_config();return;}
     if(state.view==MI_SAVE){mi_draw_save();return;}
     if(state.view==MI_SEQ&&state.step_editor){
@@ -1264,8 +1386,7 @@ static void draw(void)
     }
 
     cv_begin(240,120,C_BLACK);
-    cv_text(8,6,&FONT_B,APP_NAME,YELLOW);
-    cv_text(75,11,&FONT_XS,APP_VERSION,GREY);
+    mi_ui_draw_logo();
     cv_text(140,10,&FONT_XS,
             state.view==MI_SEQ?(audio.recorder.clock_active?"MIDI 2BAR":
                 state.rec_bars==4u?"REC 4BAR":"REC 2BAR"):
@@ -1352,6 +1473,7 @@ void app_ui_init(void)
 {
  touch_on(1);
  lcd_fill(0,0,240,240,C_BLACK);
+ mi_ui_splash_until=plat_ms()+1200u;
  redraw=1;
 }
 void app_frame(void)
@@ -1413,6 +1535,9 @@ void app_frame(void)
       else{config_dirty=0u;app_say("CONFIG FAILED","");}
   }
   if(message_until&&now>=message_until){message_until=0;redraw=1;}
+  if(mi_ui_splash_until&&now>=mi_ui_splash_until){
+      mi_ui_splash_until=0u;redraw=1;
+  }
  if(redraw){draw();redraw=0;}
 }
 #ifdef PLAT_HOST
