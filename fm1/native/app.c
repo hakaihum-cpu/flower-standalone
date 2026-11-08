@@ -850,7 +850,6 @@ static void mi_graph_recorder(void)
     uint32_t outx=(uint32_t)state.seq[1]*223u/127u;
     cv_text(12,36,&FONT_XS,
         audio.recorder.recording?"RECORDING":
-        audio.recorder.armed?"REC ARMED":
         audio.recorder.playing?"LOOP PLAY":"STOPPED",YELLOW);
     cv_line(8,78,232,78,DIM);
     for(x=0;x<224u;x++){
@@ -1115,7 +1114,6 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"arp_sounding")) *got=(int)audio.arp_sounding;
  else if(mi_streq(what,"lfo_wave")) *got=(int)state.lfo[1];
  else if(mi_streq(what,"recording")) *got=(int)audio.recorder.recording;
- else if(mi_streq(what,"rec_armed")) *got=(int)audio.recorder.armed;
   else if(mi_streq(what,"rec_playing")) *got=(int)audio.recorder.playing;
   else if(mi_streq(what,"rec_overdub")) *got=(int)audio.recorder.overdubbing;
   else if(mi_streq(what,"step_editor")) *got=(int)state.step_editor;
