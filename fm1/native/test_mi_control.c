@@ -41,7 +41,7 @@ int main(void)
     assert(s.view == MI_VIDEO && s.wet == 0 && s.fx == MI_FX_CHORUS);
     assert(!strcmp(mi_param_name(&s,0),"GLITCH"));
     mi_rotate(&s, MI_EN_K1, 60); /* SEL cannot silently change current FX */
-    assert(s.fx == MI_FX_CHORUS);
+    assert(s.video_params[0]==120u && s.fx == MI_FX_CHORUS);
     mi_button(&s, MI_B_FX, 13);
     mi_rotate(&s, MI_EN_K1, -1);
     assert(s.fx == MI_FX_REVERB);
@@ -74,9 +74,9 @@ int main(void)
     mi_rotate(&s,MI_EN_K1,24);
     mi_rotate(&s,MI_EN_K2,-20);
     mi_rotate(&s,MI_EN_K3,3);
-    assert(s.seq[0]==24&&s.seq[1]==107&&s.seq[2]==6);
+    assert(s.seq[0]==48&&s.seq[1]==87&&s.seq[2]==6);
     mi_rotate(&s,MI_EN_K2,-500);
-    assert(s.seq[1]==25);
+    assert(s.seq[1]==49);
     for(i=0;i<5;i++) mi_button(&s, MI_B_OCT_DOWN, 7001);
     assert(s.octave == -3);
     assert(MI_FX_COUNT == 9 && MI_VIEW_COUNT == 10);
@@ -100,6 +100,14 @@ int main(void)
     mi_button(&s,MI_B_ENV,8002);
     assert(!strcmp(mi_param_name(&s,0),"ATK"));
     assert(!strcmp(mi_param_name(&s,3),"REL"));
+    /* ADSR: four points/detent, 32 detents cover the full 0..127 range.
+     * Other continuous parameters use two; enum selectors stay one. */
+    mi_rotate(&s,MI_EN_K1,3);
+    mi_rotate(&s,MI_EN_K2,-2);
+    mi_rotate(&s,MI_EN_K3,3);
+    mi_rotate(&s,MI_EN_K4,2);
+    assert(s.env[0]==16u&&s.env[1]==57u&&
+           s.env[2]==127u&&s.env[3]==53u);
     mi_button(&s,MI_B_FX,9000);
     assert(s.fx_slot==0u);
     mi_rotate(&s,MI_EN_K1,-50);
@@ -123,7 +131,7 @@ int main(void)
     assert(s.osc_page==2u&&!strcmp(mi_param_name(&s,0),"CUTOFF"));
     mi_rotate(&s,MI_EN_K1,-20);
     mi_rotate(&s,MI_EN_K2,10);
-    assert(s.filter_cutoff==107u&&s.filter_resonance==10u);
+    assert(s.filter_cutoff==87u&&s.filter_resonance==20u);
     mi_button(&s,MI_B_EDIT,9012);
     assert(s.osc_page==0u&&!strcmp(mi_param_name(&s,1),"WIDTH"));
     mi_button(&s,MI_B_HOME,9013);
@@ -136,7 +144,7 @@ int main(void)
     mi_rotate(&s,MI_EN_K2,10);
     mi_rotate(&s,MI_EN_K3,70);
     mi_rotate(&s,MI_EN_K4,1);
-    assert(s.osc2_wave==1u&&s.osc2_detune==74u&&
+    assert(s.osc2_wave==1u&&s.osc2_detune==84u&&
            s.osc2_level==127u&&s.osc2_octave==3u);
     mi_button(&s,MI_B_EDIT,9016);
     assert(s.osc_page==2u);
@@ -168,9 +176,9 @@ int main(void)
     mi_rotate(&s,MI_EN_K2,127);
     mi_rotate(&s,MI_EN_K3,20);
     mi_rotate(&s,MI_EN_K4,10);
-    assert(mi_param_value(&s,0)==2 && mi_param_value(&s,1)==1);
-    assert(s.fx_extra[MI_FX_DREAMY][2]==84u);
-    assert(s.fx_extra[MI_FX_DREAMY][3]==74u);
+    assert(mi_param_value(&s,0)==4 && mi_param_value(&s,1)==1);
+    assert(s.fx_extra[MI_FX_DREAMY][2]==104u);
+    assert(s.fx_extra[MI_FX_DREAMY][3]==84u);
     assert(s.fx_options[MI_FX_DREAMY][0]==64u);
     assert(s.fx_options[MI_FX_DREAMY][1]==80u);
     mi_rotate(&s,MI_EN_PRESETS,-1);
@@ -225,7 +233,7 @@ int main(void)
     assert(!strcmp(mi_param_name(&s,2),"CRUSH"));
     mi_rotate(&s,MI_EN_K2,12);
     mi_rotate(&s,MI_EN_K3,6);
-    assert(s.sub==12u&&s.crush==6u&&s.fx==MI_FX_OFF);
+    assert(s.sub==24u&&s.crush==12u&&s.fx==MI_FX_OFF);
     mi_rotate(&s,MI_EN_K1,4);
     assert(s.wave==MI_WAVE_MULTI&&s.osc2_level==64u);
     assert(!strcmp(mi_param_name(&s,0),"OSC1"));
@@ -236,7 +244,7 @@ int main(void)
     assert(s.wave==MI_WAVE_MULTI&&s.osc1_wave==2u&&s.osc2_wave==2u);
     assert(mi_param_value(&s,0)==2&&mi_param_value(&s,1)==2);
     mi_rotate(&s,MI_EN_K3,10);
-    assert(s.osc2_level==74u&&mi_param_value(&s,2)==74);
+    assert(s.osc2_level==84u&&mi_param_value(&s,2)==84);
     mi_button(&s,MI_B_EDIT,9300);
     assert(s.view==MI_OSC&&s.osc_page==0u);
     mi_rotate(&s,MI_EN_K1,1);
@@ -260,7 +268,7 @@ int main(void)
     mi_button(&s,MI_B_EDIT,9304);
     assert(!strcmp(mi_param_name(&s,0),"TONE"));
     mi_rotate(&s,MI_EN_K1,10);
-    assert(s.drum_tone==74u);
+    assert(s.drum_tone==84u);
     mi_button(&s,MI_B_EDIT,9305);
     assert(!strcmp(mi_param_name(&s,0),"CUTOFF"));
     mi_init(&s);
@@ -309,9 +317,9 @@ int main(void)
     assert(!strcmp(mi_lfo_dest_name(57u),"REC BARS"));
     mi_button(&s,MI_B_SEL,9502);
     mi_rotate(&s,MI_EN_K1,50);
-    assert(s.video_params[0]==50u);
+    assert(s.video_params[0]==100u);
     mi_rotate(&s,MI_EN_K2,20);
-    assert(s.video_params[1]==20u);
+    assert(s.video_params[1]==40u);
     mi_button(&s,MI_B_SEQ,9503);
     assert(s.rec_bars==2u);
     mi_rotate(&s,MI_EN_PRESETS,1);
