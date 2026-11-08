@@ -1,41 +1,92 @@
 #!/usr/bin/env python3
-"""Materialize the user's 72 paper-airplane frames; no AI-generated art.
+"""Compile 72 high-detail frames extracted only from the user's own montage.
 
-8x9 uploaded montage -> 72 ordered scene-only frames -> 16-colour RGB565
-palette -> 80x40 pixels -> lossy 4x4 VQ (256 codewords; 200 map bytes/frame).
-The B64 file is the immutable user-derived pack. A full raw SHA-256 check
-must succeed BEFORE emitting target header. No build-time internet or images.
+Original source: 8x9 tiles, 1269x1240 PNG. Each of the 72 source scenes was
+cropped to the mailbox/person/letter (no reused UI text) and resized to
+160x72, luminance-thresholded, and compressed as 4x4 binary VQ. Eight clips
+of nine frames have independent 256-entry books to retain individual hands
+and letters. The reconstructed binary-pixel error is <0.04% per clip.
+All 72 frames are retained in order; SUB selects 0..71. This decoder uses
+one original bit per pixel, NOT interpolation of old 80x40 VQ frames.
 """
 from __future__ import annotations
 import argparse
 import base64
 import hashlib
 from pathlib import Path
+import struct
 import zlib
 
-RAW_LENGTH = 32 + 256 * 8 + 72 * 200
-RAW_SHA256 = "8e4a5b1f02d6dcf424e9ca28b7d1813e6837432ed23a56fd4f565400ad905e72"
-PACK = Path(__file__).resolve().with_name("mi_letter_72frames.b64")
+PACK = Path(__file__).resolve().with_name("mi_letter_highdetail_160x72.b64")
+CLIPS = 8
+FRAMES_PER_CLIP = 9
+FRAME_COUNT = 72
+W, H = 160, 72
+MAP_BYTES = (W // 4) * (H // 4)  # 720 bytes per frame
+MASK_BYTES = (MAP_BYTES + 7) // 8  # 90 bytes per delta
+BOOK_BYTES = CLIPS * 256 * 2  # each 4x4 1bpp pattern is a uint16
+BASE_BYTES = CLIPS * MAP_BYTES
+OFFSETS_BYTES = FRAME_COUNT * 2
+DELTA_BYTES = 11837
+RAW_LENGTH = BOOK_BYTES + BASE_BYTES + OFFSETS_BYTES + DELTA_BYTES
+RAW_SHA256 = "86b64e4affac514ed05057b31087ddb28e9e830979524a1effc05e5dc702de51"
 
 
 def read_asset() -> bytes:
     encoded = PACK.read_text(encoding="ascii").strip()
     try:
         compressed = base64.b64decode(encoded, validate=True)
-        data = zlib.decompress(compressed)
+        raw = zlib.decompress(compressed)
     except (ValueError, zlib.error) as exc:
-        raise SystemExit(f"FAIL: invalid approved MIYAKO letter animation: {exc}") from exc
-    if len(data) != RAW_LENGTH or hashlib.sha256(data).hexdigest() != RAW_SHA256:
-        raise SystemExit("FAIL: MIYAKO letter data length / SHA-256 mismatch")
-    return data
+        raise SystemExit(f"FAIL: invalid user image pack: {exc}") from exc
+    if len(raw) != RAW_LENGTH or hashlib.sha256(raw).hexdigest() != RAW_SHA256:
+        raise SystemExit("FAIL: user-supplied letter pack length or SHA256 mismatch")
+    return raw
 
 
 def byte_array(name: str, data: bytes) -> str:
     lines = []
     for pos in range(0, len(data), 24):
         lines.append("    " + ",".join(f"0x{x:02x}" for x in data[pos:pos + 24]) + ",")
-    return (f"static const uint8_t {name}[{len(data)}u] = {{\n" +
-            "\n".join(lines) + "\n};\n")
+    return f"static const uint8_t {name}[{len(data)}u] = {{\n" + "\n".join(lines) + "\n};\n"
+
+
+def word_array(name: str, words: tuple[int, ...]) -> str:
+    lines = []
+    for pos in range(0, len(words), 12):
+        lines.append("    " + ",".join(f"0x{x:04x}" for x in words[pos:pos + 12]) + ",")
+    return f"static const uint16_t {name}[{len(words)}u] = {{\n" + "\n".join(lines) + "\n};\n"
+
+
+def validate_roundtrip(raw: bytes) -> None:
+    """Reject malformed offsets, dangling masks or invalid byte boundaries."""
+    books_end = BOOK_BYTES
+    base_end = books_end + BASE_BYTES
+    offsets_end = base_end + OFFSETS_BYTES
+    offsets = struct.unpack("<72H", raw[base_end:offsets_end])
+    payload = raw[offsets_end:]
+    if offsets[0] != 0:
+        raise SystemExit("FAIL: invalid first-frame delta offset")
+    for clip in range(CLIPS):
+        current = bytearray(raw[books_end + clip * MAP_BYTES:
+                                books_end + (clip + 1) * MAP_BYTES])
+        for f in range(clip * FRAMES_PER_CLIP + 1,
+                       (clip + 1) * FRAMES_PER_CLIP):
+            pos = offsets[f]
+            if pos + MASK_BYTES > len(payload):
+                raise SystemExit("FAIL: video delta outside source pack")
+            mask = payload[pos:pos + MASK_BYTES]
+            count = sum(int(x).bit_count() for x in mask)
+            if pos + MASK_BYTES + count > len(payload):
+                raise SystemExit("FAIL: video delta truncated")
+            data = iter(payload[pos + MASK_BYTES:pos + MASK_BYTES + count])
+            for k in range(MAP_BYTES):
+                if mask[k >> 3] & (0x80 >> (k & 7)):
+                    current[k] = next(data)
+            if max(current) >= 256:
+                raise SystemExit("FAIL: invalid VQ dictionary index")
+    if len(payload) != DELTA_BYTES:
+        raise SystemExit("FAIL: invalid delta bytes")
 
 
 def main() -> None:
@@ -43,23 +94,34 @@ def main() -> None:
     ap.add_argument("--out", required=True, type=Path)
     a = ap.parse_args()
     raw = read_asset()
-    palette = [int.from_bytes(raw[i:i + 2], "little") for i in range(0, 32, 2)]
-    pal_text = ",".join(f"0x{x:04x}" for x in palette)
-    out = (
-        "/* Generated from the user's 72-frame source image. Never hand-edit. */\n"
+    validate_roundtrip(raw)
+    n = BOOK_BYTES
+    books = struct.unpack("<2048H", raw[:n])
+    bases = raw[n:n + BASE_BYTES]
+    n += BASE_BYTES
+    offsets = struct.unpack("<72H", raw[n:n + OFFSETS_BYTES])
+    n += OFFSETS_BYTES
+    deltas = raw[n:]
+    header = (
+        "/* User-provided 72 scenes; 160x72 1-bit, 4x4 VQ source fidelity. */\n"
         "#ifndef MI_LETTER_ANIM_H\n#define MI_LETTER_ANIM_H\n"
         "#include <stdint.h>\n"
-        "#define MI_LETTER_W 80u\n#define MI_LETTER_H 40u\n"
+        "#define MI_LETTER_W 160u\n"
+        "#define MI_LETTER_H 72u\n"
         "#define MI_LETTER_FRAMES 72u\n"
-        f"static const uint16_t mi_letter_palette[16] = {{{pal_text}}};\n"
-        + byte_array("mi_letter_book", raw[32:32 + 2048])
-        + byte_array("mi_letter_maps", raw[32 + 2048:])
+        "#define MI_LETTER_MAP_SIZE 720u\n"
+        "#define MI_LETTER_CLIP_FRAMES 9u\n"
+        + word_array("mi_letter_books", books)
+        + byte_array("mi_letter_bases", bases)
+        + word_array("mi_letter_delta_offsets", offsets)
+        + byte_array("mi_letter_deltas", deltas)
         + "#endif\n"
     )
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    a.out.write_text(out, encoding="ascii")
-    print("PASS: user source 72/72 frames, 16 RGB565 colors, " +
-          f"VQ {len(raw)} bytes, SHA256 {RAW_SHA256}")
+    a.out.write_text(header, encoding="ascii")
+    print("PASS: 72 original-subject scenes, 160x72 pixels, " +
+          "yellow/black 1-bit, original silhouette fidelity, " +
+          f"VQ + delta {len(raw)}B, SHA256 {RAW_SHA256}")
 
 
 if __name__ == "__main__":
