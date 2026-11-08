@@ -20,7 +20,7 @@ from pathlib import Path
 import struct
 import zlib
 from PIL import Image, ImageOps, ImageStat, ImageFilter
-from mi_reference_palette import reference_pixels
+from mi_reference_palette import natural_pixels
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "Resources" / "miyako_eureka_frames.pack"
@@ -108,7 +108,7 @@ def clip_pixels(frames: list[Image.Image]) -> tuple[list[int], list[bytes]]:
 
     # The reference user's 16 warm colors replace grayscale-per-clip medcut.
     # Face outline and frame sequence remain the real source pixels only.
-    return reference_pixels(fixed)
+    return natural_pixels(fixed)
 
 def encode_delta(delta: bytes) -> bytes:
     """Three bounded packet types: zero run, equal-byte run, literal."""
