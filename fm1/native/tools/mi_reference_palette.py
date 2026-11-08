@@ -32,22 +32,42 @@ REFERENCE_565 = tuple(
     for r, g, b in REFERENCE_RGB
 )
 
-def reference_pixels(frames: list[Image.Image]) -> tuple[list[int], list[bytes]]:
-    """Apply the reference 16 colors to original pixels, preserving shape."""
+def natural_pixels(frames: list[Image.Image]) -> tuple[list[int], list[bytes]]:
+    """Derive a 16-colour RGB565 palette from all 36 actual source frames.
+
+    Never apply the former single amber/sepia reference palette to every
+    EFFECTS/EUREKA clip. Preserve source chroma without generated artwork.
+    """
     if len(frames) != CLIP_LENGTH:
         raise ValueError(f"expected {CLIP_LENGTH} original source frames")
-    if len(set(REFERENCE_565)) != 16:
-        raise ValueError("reference palette has fewer than 16 colors")
-    pal = Image.new("P", (1, 1))
-    pal.putpalette([c for rgb in REFERENCE_RGB for c in rgb])
-    pixels = []
+    w, h = frames[0].size
+    if any(im.size != (w, h) for im in frames):
+        raise ValueError("mixed source frame dimensions")
+    collage = Image.new("RGB", (w * 6, h * 6))
+    for i, frame in enumerate(frames):
+        collage.paste(frame.convert("RGB"), ((i % 6) * w, (i // 6) * h))
+    paletted = collage.quantize(
+        colors=16, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE
+    )
+    raw = paletted.getpalette()
+    entries = paletted.getcolors() or []
+    count = max(1, min(16, max((index for _, index in entries), default=0) + 1))
+    colors = [tuple(raw[i * 3:i * 3 + 3]) for i in range(count)]
+    # Fill unused slots only. Every actual pixel is quantized to the original
+    # source-derived entries, not to warm reference colors.
+    while len(colors) < 16:
+        colors.append(colors[-1])
+    rgb565 = [((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+              for r, g, b in colors]
+    palette_image = Image.new("P", (1, 1))
+    palette_image.putpalette([c for rgb in colors for c in rgb])
+    out = []
     for frame in frames:
-        if frame.size != (WIDTH, HEIGHT):
-            raise ValueError(f"incorrect original frame size: {frame.size}")
         indices = frame.convert("RGB").quantize(
-            palette=pal, dither=Image.Dither.NONE).tobytes()
-        if len(indices) != WIDTH * HEIGHT or max(indices) >= 16:
-            raise ValueError("palette index outside 0..15")
-        pixels.append(bytes((indices[i] << 4) | indices[i + 1]
-                            for i in range(0, len(indices), 2)))
-    return list(REFERENCE_565), pixels
+            palette=palette_image, dither=Image.Dither.NONE
+        ).tobytes()
+        if len(indices) != w * h or any(x >= 16 for x in indices):
+            raise ValueError("out-of-range image palette index")
+        out.append(bytes((indices[i] << 4) | indices[i + 1]
+                         for i in range(0, len(indices), 2)))
+    return rgb565, out
