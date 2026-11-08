@@ -212,12 +212,17 @@ static void midi_audio_poll(void)
      (void)port;
      if(status==0xF8u||status==0xFAu||
         status==0xFBu||status==0xFCu){
-         mi_audio_midi_clock(&audio,status);
+         mi_audio_midi_clock(&audio,&state,status);
          continue;
      }
      if(kind==0x90u&&velocity)mi_audio_input_on(&audio,&state,note,velocity);
      else if(kind==0x80u||(kind==0x90u&&!velocity))
          mi_audio_input_off(&audio,&state,note);
+     else if(kind==0xB0u&&note==MI_REC_PITCH_CC)
+         /* CC21 on any MIDI channel: existing 7 pitches, index 0..6.
+          * 0=-12, 1=-7, 2=-5, 3=0, 4=+5, 5=+7, 6=+12 semitones.
+          * Exactly the same state as RECORDER K3, no new pitch DSP. */
+         state.seq[2]=(uint8_t)(((unsigned)velocity*7u)>>7u);
      else if(kind==0xB0u&&note==123u)
          mi_audio_panic(&audio);
  }
@@ -884,8 +889,10 @@ static void mi_graph_stepseq(void)
             cv_text(53,35,&FONT_XS,val,YELLOW);
             cv_text(95,35,&FONT_XS,
                     dirs[state.step_dir<=2u?state.step_dir:0u],GREY);
-            cv_text(164,35,&FONT_XS,
-                    state.step_play?"PLAY":"STOP",YELLOW);
+            cv_text(146,35,&FONT_XS,
+                    audio.step_midi_mode?"MCLK":"INT",GREY);
+            cv_text(192,35,&FONT_XS,
+                    state.step_play?"RUN":"STOP",YELLOW);
         }
         for(t=half*2u;t<half*2u+2u;t++){
             int32_t y=(int32_t)(half?16:58)+
@@ -1104,6 +1111,8 @@ int app_expect(const char *what,int *got)
   else if(mi_streq(what,"step_dir")) *got=(int)state.step_dir;
   else if(mi_streq(what,"step_len")) *got=(int)state.step_len;
   else if(mi_streq(what,"step_current")) *got=(int)audio.step_current;
+  else if(mi_streq(what,"step_midi_mode")) *got=(int)audio.step_midi_mode;
+  else if(mi_streq(what,"step_clock_phase")) *got=(int)audio.step_clock_phase;
   else if(mi_streq(what,"step_kick")) *got=(int)state.step_pattern[0];
   else if(mi_streq(what,"step_snare")) *got=(int)state.step_pattern[1];
   else if(mi_streq(what,"step_hat")) *got=(int)state.step_pattern[2];
