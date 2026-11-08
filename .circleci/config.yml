@@ -329,7 +329,7 @@ jobs:
               'REEL, DREAMY, DELAY, REVERB and CHORUS are native FM-1 DSP implementations.' \
               'Original 144 EFFECTS and 576 EUREKA source frames are 16-colour VQ.' \
               'To see all 628 photo tiles, install the matching MIYAKO-FM1-NATIVE-DEV-res.bin with the existing fm1-base resource installer; FWSC-only updates do not include photos.' \
-              'IMPORTANT: this update REQUIRES a new 279968-byte res.bin even if the previously installed file has the same size. The old amber palette is rejected.' \
+              'The 279968-byte resource uses the original user-source RGB565 colours; the previous 279968-byte palette-only variant is also readable. The old 119552-byte format is not compatible.' \
               'The matching 279968-byte resource is REQUIRED for original-source 96x96 true 16-colour photo frames. Older 119552-byte resources are incompatible.' \
               'REC internal 2s, EUREKA short-buffer 2s, two serial FX with conflict guards.' \
               'SEQ short press: RECORDER. SEQ hold (650ms): 4-track FMDrum step sequencer.' \
