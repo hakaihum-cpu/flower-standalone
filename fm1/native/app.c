@@ -1350,6 +1350,12 @@ int app_expect(const char *what,int *got)
   else if(mi_streq(what,"rec_pitch")) *got=(int)state.seq[2];
   else if(mi_streq(what,"preset")) *got=(int)state.preset;
  else if(mi_streq(what,"slot")) *got=(int)state.project_slot;
+ else if(mi_streq(what,"midi_channel")) *got=(int)state.midi_channel;
+ else if(mi_streq(what,"clock_mode")) *got=(int)state.global[3];
+ else if(mi_streq(what,"save_action")) *got=(int)state.save_action;
+ else if(mi_streq(what,"save_armed")) *got=(int)state.save_armed;
+ else if(mi_streq(what,"config_load_armed")) *got=(int)state.config_load_armed;
+ else if(mi_streq(what,"save_mask")) *got=(int)saved_bank.valid_mask;
  else if(mi_streq(what,"active")) {
     unsigned i;int n=0;
     for(i=0;i<MI_NATIVE_POLY;i++)if(audio.v[i].active)n++;
