@@ -362,14 +362,14 @@ assert 'MI_TILE_BANKS 8u' in resource_header
 assert 'MI_TILE_DATA_BYTES 279936u' in resource_header
 assert 'test_miyako_resource96.py' in ci
 assert '279968' in ci and '279936' in ci
-assert '#include "mi_resource_media.h"' in ui and 'plat_res(&length)' in ui
+assert '#include "mi_resource_media.h"' in ui and 'mi_photo_source(&length)' in ui
 assert "mi_resource_media.h" in ci
 assert "pack_miyako_resource.py" in ci
 assert 'MIYAKO-FM1-NATIVE-DEV-res.bin' in ci
 # Photo bank requires the CRC-checked separate resource. Both SEL and FX
 # must display a visible existing EFFECTS frame when FWSC is installed alone.
 assert "mi_media_draw_scaled_half(half,px,py,size,size,clip_left,0);" in ui
-assert "resource_length<MI_TILE_DATA_BYTES" in ui
+assert "*length<MI_TILE_DATA_BYTES" in ui
 assert "mi_photo_cached=-1;" in ui
 # Toggling res 0 must force a render; pixel tests must not accept the
 # previous cached photo screenshot without rendering the fallback.
