@@ -525,9 +525,10 @@ static float effect(mi_audio_t *a,const mi_state_t *s,float dry)
 void mi_audio_midi_clock(mi_audio_t *a,mi_state_t *s,unsigned status)
 {
     if(!a||!s)return;
-    if(status==0xFAu){ /* MIDI Start: return to first step, then wait for F8 */
+    if(status==0xFAu){ /* MIDI Start: Recorder clock path unchanged. */
         a->recorder.clock_ticks=0u;
         a->recorder.clock_period=0.f;
+        if(s->global[3]!=1)return; /* SEQ CLOCK INTERNAL ignores MIDI transport */
         a->step_midi_mode=1u;
         a->step_clock_phase=0u;
         a->step_clock_pending=0u;
@@ -535,9 +536,14 @@ void mi_audio_midi_clock(mi_audio_t *a,mi_state_t *s,unsigned status)
         a->step_wait=0u;
         s->step_play=1u;
     }else if(status==0xFBu){ /* Continue: keep next step and pulse phase */
+        if(s->global[3]!=1)return;
         a->step_midi_mode=1u;
         s->step_play=1u;
     }else if(status==0xFCu){ /* Stop: preserve next step for Continue */
+        if(s->global[3]!=1){
+            mi_rec_clock_stop(&a->recorder);
+            return;
+        }
         s->step_play=0u;
         a->step_clock_pending=0u;
         a->step_midi_mode=1u;
@@ -545,6 +551,7 @@ void mi_audio_midi_clock(mi_audio_t *a,mi_state_t *s,unsigned status)
     }else if(status==0xF8u){
         /* The RECORDER continues receiving the identical raw MIDI clock. */
         mi_rec_external_tick(&a->recorder,a->rendered_samples);
+        if(s->global[3]!=1)return; /* REC MIDI clock remains unchanged */
         a->step_midi_mode=1u;
         if(s->step_play){
             if(a->step_clock_phase==0u)a->step_clock_pending=1u;
@@ -571,17 +578,19 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         apply_lfo_destination(&snapshot,s->lfo[3],
             lfo_value(s->lfo[1],a->lfo_phase)*(float)s->lfo[2]/127.f);
     rs=&snapshot;
-    /* Clock loss while RUNNING (>1 s) reverts to internal BPM.
-     * Transport STOP is not clock loss: keep the stopped playhead and
-     * fractional six-pulse phase, even when CONTINUE comes much later. */
-    if(a->step_midi_mode && s->step_play &&
-       (uint32_t)(a->rendered_samples-a->step_last_clock_sample)>
-       (uint32_t)a->sample_rate){
+    /* GLO CLOCK is an explicit SEQ source, never a hidden MIDI override.
+     * MIDI mode waits for 24-PPQN F8 pulses; INTERNAL uses configured BPM.
+     * The RECORDER keeps its existing independent MIDI auto-clock path. */
+    if(s->global[3]==1){
+        if(!a->step_midi_mode){
+            a->step_midi_mode=1u;
+            a->step_clock_phase=0u;a->step_clock_pending=0u;
+            a->step_active=0u;a->step_wait=0u;
+        }
+    }else if(a->step_midi_mode){
         a->step_midi_mode=0u;
-        a->step_clock_phase=0u;
-        a->step_clock_pending=0u;
-        a->step_active=0u;
-        a->step_wait=0u;
+        a->step_clock_phase=0u;a->step_clock_pending=0u;
+        a->step_active=0u;a->step_wait=0u;
     }
     for(k=0u;k<4u;k++)a->video_effective[k]=snapshot.video_params[k];
     float scale=clampf(master_q12/4096.f,0.f,1.f)*clampf(rs->level/127.f,0.f,1.f)*5000000.f;
@@ -643,7 +652,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         if(cmd==3u)mi_rec_clear(&a->recorder);
     }
     for(i=0;i<n;i++){
-        float sample=0.f,osc_capture=0.f,lfo,mod,voice_duty=duty;
+        float sample=0.f,drum_mix=0.f,osc_capture=0.f,lfo,mod,voice_duty=duty;
         mi_step_tick(a,rs);
         arp_tick(a,rs);
         a->lfo_phase=wrap01(a->lfo_phase+lfo_speed);
@@ -655,7 +664,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
             if(!v->active)continue;
             if(v->drum_type){
                 float drum=drum_sample(a,rs,v);
-                sample+=drum;osc_capture+=drum*0.6f;
+                drum_mix+=drum;osc_capture+=drum*0.6f;
                 continue;
             }
             if(!v->held&&v->env_stage!=3u){
@@ -723,7 +732,8 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
             sample=a->filter_b;
         }else{a->filter_a=sample;a->filter_b=sample;}
         sample=mi_soft_limit(sample);
-        sample=effect(a,rs,sample);
+        sample=effect(a,rs,sample); /* effects process OSC only, NEVER FMDrum */
+        sample=mi_soft_limit(sample+drum_mix); /* dry drums still enter REC */
         /* Existing FX wet-smoothing principle: crossfade the recorder monitor
          * in/out over milliseconds. Simply adding two full-scale signals
          * clipped during layered playback and caused sharp transitions. */
