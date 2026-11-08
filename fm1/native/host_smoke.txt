@@ -250,3 +250,47 @@ expect step_play 0
 tap SEQ
 expect step_editor 0
 expect view 7
+# CC21 (hex 15), any MIDI channel, changes only REC PITCH's 7 choices.
+midi USB B0 15 7F
+expect rec_pitch 6
+midi USB B5 15 40
+expect rec_pitch 3
+midi USB B9 15 00
+expect rec_pitch 0
+# Clock runs the same four-track pattern with transport from external master.
+# The selected reverse/16-step pattern was retained after leaving SEQ.
+midi USB FA 00 00
+expect step_play 1
+expect step_midi_mode 1
+midi USB F8 00 00
+wait 20
+expect step_current 15
+expect step_clock_phase 1
+midi USB F8 00 00
+midi USB F8 00 00
+midi USB F8 00 00
+midi USB F8 00 00
+midi USB F8 00 00
+expect step_current 15
+expect step_clock_phase 0
+midi USB F8 00 00
+wait 20
+expect step_current 14
+midi USB FC 00 00
+expect step_play 0
+midi USB F8 00 00
+expect step_current 14
+midi USB FB 00 00
+expect step_play 1
+midi USB F8 00 00
+midi USB F8 00 00
+midi USB F8 00 00
+midi USB F8 00 00
+midi USB F8 00 00
+midi USB F8 00 00
+wait 20
+expect step_current 13
+midi USB FC 00 00
+expect step_play 0
+wait 1100
+expect step_midi_mode 0
