@@ -118,6 +118,8 @@ static uint8_t visual_choice,visual_last_mode=255u,visual_cooldown,visual_bank_t
 static mi_view_t visual_previous_view=MI_HOME;
 static uint16_t visual_tile;
 static uint8_t normal_visual_bank; /* SEL independent integrated playlist */
+static uint8_t mi_letter_decoded_frame=255u;
+static uint8_t mi_letter_tile_map[MI_LETTER_MAP_SIZE];
 static float visual_last_activity;
 static uint32_t visual_rng=0x6d697961u,visual_generation;
 static uint8_t held_note[NKEYS];
@@ -241,6 +243,7 @@ void app_init(void)
  visual_rng=0x6d697961u;visual_generation=0u;
  visual_last_activity=0.f;visual_tile=0u;normal_visual_bank=6u;
  visual_previous_view=MI_HOME;
+ mi_letter_decoded_frame=255u;
  mi_memzero(held_note,sizeof held_note);redraw=1;
  message_until=0;line_a[0]=line_b[0]=0;
 }
@@ -1152,54 +1155,57 @@ static void mi_draw_save(void)
     cv_text(12,103,&FONT_XS,"SAVE KEY: CONFIRM",GREY);
     cv_blit(0,120);
 }
-/* Reuse all 72 ordered scene frames from the user's 8x9 montage.
- * SUB 0 -> tile 0; SUB 127 -> tile 71. The original 16-colour
- * source is retained verbatim; on FM-1 the displayed scene uses
- * consistent high-contrast yellow/black, not corrupt cyan/amber.
- * Scene renders below the MIYAKO title and above K1-K4 parameters. */
+/* Render the 72 original user-source silhouettes at 160x72, not the
+ * previous 80x40 resample. Each of eight 9-frame clips uses its own 256
+ * exact 4x4 binary masks, and the map changes are loss-bounded deltas.
+ * SUB still chooses frames 0..71, without touching OSC DSP or envelopes.
+ * The palette is strictly YELLOW/C_BLACK as approved for 2-colour mode. */
+static void mi_letter_map_decode(unsigned frame)
+{
+    unsigned clip=frame/MI_LETTER_CLIP_FRAMES;
+    unsigned begin=clip*MI_LETTER_CLIP_FRAMES;
+    unsigned f,i;
+    if(mi_letter_decoded_frame==frame)return;
+    mi_memcopy(mi_letter_tile_map,
+               mi_letter_bases+clip*MI_LETTER_MAP_SIZE,
+               MI_LETTER_MAP_SIZE);
+    for(f=begin+1u;f<=frame;f++){
+        const uint8_t *mask=mi_letter_deltas+mi_letter_delta_offsets[f];
+        const uint8_t *next=mask+90u; /* 720 packed 1-bit change flags */
+        for(i=0u;i<MI_LETTER_MAP_SIZE;i++)
+            if(mask[i>>3u]&(0x80u>>(i&7u)))
+                mi_letter_tile_map[i]=*next++;
+    }
+    mi_letter_decoded_frame=(uint8_t)frame;
+}
 static unsigned mi_letter_scene_pixel(unsigned frame,unsigned x,unsigned y)
 {
-    unsigned block=mi_letter_maps[frame*200u+(y>>2u)*20u+(x>>2u)];
-    unsigned pair=mi_letter_book[block*8u+((y&3u)<<1u)+((x&3u)>>1u)];
-    return (x&1u)?pair&15u:pair>>4u;
-}
-static unsigned mi_letter_brightness(uint16_t rgb)
-{
-    /* Source palette is RGB565, not an indexed firmware display colour.
-     * Use relative brightness across its sixteen entries to preserve
-     * silhouettes instead of displaying wildly incorrect blue/yellow. */
-    return 3u*((rgb>>11u)&31u)+4u*((rgb>>5u)&63u)+(rgb&31u);
+    unsigned clip=frame/MI_LETTER_CLIP_FRAMES;
+    unsigned idx=(y>>2u)*(MI_LETTER_W/4u)+(x>>2u);
+    uint16_t mask=mi_letter_books[clip*256u+mi_letter_tile_map[idx]];
+    return (unsigned)((mask>>(4u*(y&3u)+(x&3u)))&1u);
 }
 static void mi_draw_sub_scene(void)
 {
     unsigned frame=((unsigned)state.sub*(MI_LETTER_FRAMES-1u)+63u)/127u;
-    unsigned y,x,p,lo=UINT32_MAX,hi=0u,cut;
-    uint8_t ink[16];
+    unsigned y,x;
     if(frame>=MI_LETTER_FRAMES)frame=MI_LETTER_FRAMES-1u;
-    for(p=0u;p<16u;p++){
-        unsigned lum=mi_letter_brightness(mi_letter_palette[p]);
-        if(lum<lo)lo=lum;
-        if(lum>hi)hi=lum;
-    }
-    cut=lo+(hi-lo)/2u;
-    for(p=0u;p<16u;p++)
-        ink[p]=(uint8_t)(mi_letter_brightness(mi_letter_palette[p])<=cut);
+    mi_letter_map_decode(frame);
     for(y=0u;y<MI_LETTER_H;y++){
-        /* Preserve the oscillator labels above the scene. */
-        int32_t top=48+(int32_t)(y*61u/MI_LETTER_H);
-        int32_t bottom=48+(int32_t)((y+1u)*61u/MI_LETTER_H);
-        unsigned from=0u,previous=ink[mi_letter_scene_pixel(frame,0u,y)];
+        /* 192x75 screen scene: no 4x4 blocky upscaling, and no
+         * SINE/OSC/parameter text is covered. */
+        int32_t top=40+(int32_t)(y*75u/MI_LETTER_H);
+        int32_t bottom=40+(int32_t)((y+1u)*75u/MI_LETTER_H);
+        unsigned first=0u,old=mi_letter_scene_pixel(frame,0u,y);
         for(x=1u;x<=MI_LETTER_W;x++){
-            unsigned color=x==MI_LETTER_W?2u:
-                           ink[mi_letter_scene_pixel(frame,x,y)];
-            if(color!=previous){
-                int32_t x0=8+(int32_t)(from*224u/MI_LETTER_W);
-                int32_t x1=8+(int32_t)(x*224u/MI_LETTER_W);
+            unsigned now=x==MI_LETTER_W?2u:mi_letter_scene_pixel(frame,x,y);
+            if(now!=old){
+                int32_t x0=24+(int32_t)(first*192u/MI_LETTER_W);
+                int32_t x1=24+(int32_t)(x*192u/MI_LETTER_W);
                 if(x1>x0&&bottom>top)
-                    cv_rect(x0,top,x1-x0,bottom-top,
-                            previous?YELLOW:C_BLACK);
-                from=x;
-                previous=color;
+                    cv_rect(x0,top,x1-x0,bottom-top,old?YELLOW:C_BLACK);
+                first=x;
+                old=now;
             }
         }
     }
