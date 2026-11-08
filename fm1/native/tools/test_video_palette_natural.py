@@ -33,7 +33,9 @@ assert "res=mi_photo_source(&length);" in app_source
 # not frame selectors. The native renderer now restores authentic RGB565
 # palette entries from the user-source manifest for BOTH resource revisions.
 assert "original||legacy" in app_source
-assert "mi_photo_palette[i]=mi_photo_source_palette[i]" in app_source
+assert "mi_photo_palette[i]=mi_photo_grayscale_palette[bank][i]" in app_source
+assert "for(i=1u;i<MI_TILE_BANKS;i++)" in app_source
+assert "mi_photo_grayscale_palette[MI_TILE_BANKS][16]" in (Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
 header=(Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
 assert "mi_photo_source_palette[16]" in header
 for entry in ("0x1841u", "0x5101u", "0x89e4u", "0xfdd1u"):
