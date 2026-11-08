@@ -499,4 +499,31 @@ assert "expect save_mask 3" in host_smoke
 assert "expect midi_channel 2" in host_smoke
 assert "expect clock_mode 1" in host_smoke
 assert "expect wave 5" in host_smoke
+# Exact user-supplied 8x9 animation: 72 real frames, RGB565/16 colour,
+# 80x40 scene-only. The existing OSC scope MUST remain visibly overlaid
+# between the original postbox and letter; no invented artwork.
+letter_script = (root / "fm1/native/tools/build_letter_anim_header.py").read_text()
+letter_data = root / "fm1/native/tools/mi_letter_72frames.b64"
+assert letter_data.is_file() and letter_data.stat().st_size > 4000
+assert 'RAW_LENGTH = 32 + 256 * 8 + 72 * 200' in letter_script
+assert 'RAW_SHA256 = "8e4a5b1f02d6dcf424e9ca28b7d1813e6837432ed23a56fd4f565400ad905e72"' in letter_script
+assert '#include "mi_letter_anim.h"' in ui
+assert 'mi_letter_maps[frame*200u+' in ui
+assert 'mi_letter_book[block*8u+' in ui
+assert 'mi_letter_palette[previous]' in ui
+assert 'state.env[0]*(MI_LETTER_FRAMES-1u)+63u' in ui
+assert 'mi_draw_attack_scene();' in ui
+assert 'mi_draw_letter_waveform();' in ui
+assert 'audio.osc_scope[idx]*18/127' in ui
+assert '"attack_frame"' in ui
+assert 'mi_letter_anim.h' in (root / "fm1/native/verify_standalone.py").read_text()
+assert "build_letter_anim_header.py --out /tmp/mi_letter_preflight.h" in ci
+assert '--out /tmp/fm1-base/miyako/mi_letter_anim.h' in ci
+assert "test_miyako_dynamic_version.py" in ci
+assert "MIYAKO_OSC_ATTACK_0.png" in ci and "MIYAKO_OSC_ATTACK_127.png" in ci
+assert "expect attack_frame 0" in host_smoke
+assert "expect attack_frame 71" in host_smoke
+# Repeat the manual gating and branch controls after introducing the assets.
+assert "when: << pipeline.parameters.run_build >>" in ci
+assert "only: feature/fm1-miyako-osc-attack-letter-version-20261108" in ci
 print("PASS: manual Phase 3 REC + EUREKA 2sec/576 frames + guarded dual-FX")
