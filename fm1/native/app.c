@@ -215,7 +215,8 @@ static void mi_ui_draw_motion(unsigned kind,unsigned frame)
 {
     const uint16_t *colors=kind?mi_ui_lfo_palette:mi_ui_env_palette;
     unsigned y,x;
-    if(frame>=MI_UI_MOTION_COUNT)frame=MI_UI_MOTION_COUNT-1u;
+    const unsigned count=kind?MI_UI_MOTION_COUNT:MI_UI_ENV_COUNT;
+    if(frame>=count)frame=count-1u;
     mi_ui_motion_decode(kind,frame);
     /* Render inside the second (bottom) 240x120 LCD pass only. */
     for(y=0u;y<MI_UI_MOTION_H;y++){
@@ -238,7 +239,7 @@ static unsigned mi_ui_param_frame(unsigned kind)
     if(kind&&k==1u)max=3u;
     if(kind&&k==3u)max=MI_LFO_DEST_COUNT-1u;
     if(v>max)v=max;
-    return (v*(MI_UI_MOTION_COUNT-1u)+max/2u)/max;
+    return (v*((kind?MI_UI_MOTION_COUNT:MI_UI_ENV_COUNT)-1u)+max/2u)/max;
 }
 
 static void textcpy(char *dest,const char *src,unsigned limit)
