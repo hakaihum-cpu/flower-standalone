@@ -93,10 +93,12 @@ void mi_init(mi_state_t *s)
     s->fx_options[MI_FX_PITCHSHIFT][1]=64u;
     /* REC editor: IN=0, OUT=127, pitch=0 semitones, level=100. */
     s->seq[0]=0;s->seq[1]=127;s->seq[2]=3;s->seq[3]=100;
+    s->step_len=8u; /* 4 silent FMDrum tracks, ready for white-key toggles */
 }
 static void view(mi_state_t *s, mi_view_t v)
 {
     s->view = v;
+    if(v!=MI_SEQ)s->step_editor=0u;
     s->save_armed = 0;
 }
 mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
@@ -129,7 +131,7 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
     case MI_B_ENV: view(s, MI_ENV); break;
     case MI_B_LFO: view(s, MI_LFO); break;
     case MI_B_ARP: view(s, MI_ARP); break;
-    case MI_B_SEQ: view(s, MI_SEQ); break;
+    case MI_B_SEQ: view(s, MI_SEQ); s->step_editor=0u; break;
     case MI_B_GLO: view(s, MI_CONFIG); break;
     case MI_B_OCT_DOWN:
         s->octave = (int8_t)limited(s->octave, -1, -3, 3); break;
@@ -246,6 +248,13 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         if(k==3){lo=1;hi=4;}
         break;
     case MI_SEQ:
+        if(s->step_editor){
+            if(k==0u)s->step_track=(uint8_t)limited(s->step_track,d,0,3);
+            if(k==1u)s->step_play=(uint8_t)(d>0?1u:0u);
+            if(k==2u)s->step_dir=(uint8_t)limited(s->step_dir,d,0,2);
+            if(k==3u)s->step_len=(uint8_t)limited(s->step_len,d,1,16);
+            return;
+        }
         p=&s->seq[k];
         if(k==0)hi=s->seq[1]>0u?(int32_t)s->seq[1]-1:0;
         if(k==1)lo=(int32_t)s->seq[0]+1;
@@ -385,7 +394,9 @@ int mi_state_valid(const mi_state_t *s)
         s->filter_cutoff>127u||s->filter_resonance>127u||
         s->drum_tone>127u||s->drum_decay>127u||
         s->drum_color>127u||s->drum_level>127u||
-        (s->rec_bars!=2u&&s->rec_bars!=4u))
+        (s->rec_bars!=2u&&s->rec_bars!=4u)||
+        s->step_track>=4u||s->step_play>1u||s->step_dir>2u||
+        s->step_len<1u||s->step_len>16u||s->step_editor>1u)
         return 0;
     for (i = 0; i < 4u; ++i) {
         if (s->env[i] > 127u || s->lfo[i] > 127u || s->video_params[i]>127u)
@@ -448,6 +459,10 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         {"BPM","SWING","TUNE","CLOCK"}, {"SLOT","","",""}
     };
     if (!s || k > 3 || (unsigned)s->view >= MI_VIEW_COUNT) return "?";
+    if(s->view==MI_SEQ&&s->step_editor){
+        static const char *const names[4]={"TRACK","PLAY","DIR","STEPS"};
+        return names[k];
+    }
     if(s->view==MI_VIDEO){
         static const char *const v[4]={"GLITCH","TILE","XSHIFT","YSHIFT"};
         return v[k];
@@ -539,7 +554,11 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
     case MI_ENV: return s->env[k];
     case MI_LFO: return s->lfo[k];
     case MI_ARP: return s->arp[k];
-    case MI_SEQ: return s->seq[k];
+    case MI_SEQ:
+        if(s->step_editor)
+            return k==0?s->step_track+1u:k==1?s->step_play:
+                   k==2?s->step_dir:s->step_len;
+        return s->seq[k];
     case MI_CONFIG: return s->global[k];
     case MI_SAVE: return k == 0 ? s->project_slot : 0;
     default: return 0;
