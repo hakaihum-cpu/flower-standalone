@@ -11,7 +11,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mi_palette import clip_pixels as effects_palette
 from pack_eureka_frames import clip_pixels as eureka_palette
-from mi_reference_palette import REFERENCE_565
+from mi_reference_palette import REFERENCE_565, natural_pixels
 from pack_miyako_resource import read_payload, CHUNK_DIR, SHA256
 import hashlib
 import re
@@ -52,6 +52,9 @@ for t in range(36):
 before = [im.tobytes() for im in frames]
 for name, run in (("EFFECTS", effects_palette), ("EUREKA", eureka_palette)):
     palette, coded = run(frames)
+    source_palette, source_coded = natural_pixels(frames)
+    assert (palette, coded) == (source_palette, source_coded), (
+        name, "encoder altered original RGB before 16-color quantization")
     assert len(palette) == 16
     assert tuple(palette) != REFERENCE_565, (name, "old sepia palette still applied")
     assert len(coded) == 36 and all(len(b) == W * H // 2 for b in coded)
