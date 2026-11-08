@@ -99,7 +99,7 @@ jobs:
             python3 fm1/native/tools/set_miyako_product_id.py --base /tmp/fm1-base
             test -s /tmp/fm1_product_id.txt
             product="$(cat /tmp/fm1_product_id.txt)"
-            grep -Fq "PRODUCT = prefix + \"\${product#FM-1_9}\"" /tmp/fm1-base/tools/build.py
+            grep -Fq "PRODUCT = prefix + \"${product#FM-1_9}\"" /tmp/fm1-base/tools/build.py
             grep -Fq "#define APP_VERSION \"$product\"" /tmp/fm1-base/miyako/app.h
             # Fail early on fonts: never reach the C build with untested
             # Pillow Raqm or a missing upstream bitmap asset.
