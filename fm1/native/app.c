@@ -217,13 +217,13 @@ static void mi_ui_draw_motion(unsigned kind,unsigned frame)
     unsigned y,x;
     if(frame>=MI_UI_MOTION_COUNT)frame=MI_UI_MOTION_COUNT-1u;
     mi_ui_motion_decode(kind,frame);
-    /* Bottom-right of upper half, never in the lower knob/value strip. */
+    /* Render inside the second (bottom) 240x120 LCD pass only. */
     for(y=0u;y<MI_UI_MOTION_H;y++){
         unsigned start=0u,prior=mi_ui_motion_index(kind,0u,y);
         for(x=1u;x<=MI_UI_MOTION_W;x++){
             unsigned idx=x==MI_UI_MOTION_W?16u:mi_ui_motion_index(kind,x,y);
             if(idx!=prior){
-                cv_rect(180+(int32_t)start,70+(int32_t)y,
+                cv_rect(96+(int32_t)start,72+(int32_t)y,
                         (int32_t)(x-start),1,colors[prior]);
                 start=x;prior=idx;
             }
@@ -1095,7 +1095,6 @@ static void mi_graph_env(void)
     cv_text(x1,104,&FONT_XS,"D",GREY);
     cv_text(x2,104,&FONT_XS,"S",GREY);
     cv_text(x3,104,&FONT_XS,"R",GREY);
-    mi_ui_draw_motion(0u,mi_ui_param_frame(0u));
 }
 static float mi_lfo_graph_value(unsigned wave,float p)
 {
@@ -1125,7 +1124,6 @@ static void mi_graph_lfo(void)
         if(x>12)cv_line((int32_t)x-1,prior,(int32_t)x,y,YELLOW);
         prior=y;
     }
-    mi_ui_draw_motion(1u,mi_ui_param_frame(1u));
 }
 static void mi_graph_arp(void)
 {
@@ -1467,6 +1465,14 @@ static void draw(void)
         cv_text(x,49,(state.view==MI_LFO&&i==3u)?&FONT_XS:&FONT_S,
                  val,YELLOW);
     }
+    /* Fixed bottom-center sprite. Each frame is decoded as a complete
+     * 48x48 tile, never drawn over the ENV/LFO waveform or knob values.
+     * The second LCD pass begins at physical y=120. The sprite occupies
+     * x=96..143 and physical y=192..239 only. */
+    if(state.view==MI_ENV)
+        mi_ui_draw_motion(0u,mi_ui_param_frame(0u));
+    else if(state.view==MI_LFO)
+        mi_ui_draw_motion(1u,mi_ui_param_frame(1u));
     cv_blit(0,120);
 }
 void app_ui_init(void)
