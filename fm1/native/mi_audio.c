@@ -242,8 +242,14 @@ static void arp_sync(mi_audio_t *a,const mi_state_t *s)
     if(!mode){
         unsigned note;
         for(note=0;note<128u;note++)
-            if(a->held_keys[note>>5]&(1u<<(note&31u)))
-                mi_audio_note_on(a,(uint8_t)note,a->held_velocity[note]);
+            if(a->held_keys[note>>5]&(1u<<(note&31u))){
+                /* Turning ARP off must restore the selected FMDrum voice,
+                 * not an ordinary oscillator. */
+                if(s->wave==MI_WAVE_FMDRUM)
+                    drum_on(a,s,(uint8_t)note,a->held_velocity[note]);
+                else
+                    mi_audio_note_on(a,(uint8_t)note,a->held_velocity[note]);
+            }
     }
 }
 static void arp_tick(mi_audio_t *a,const mi_state_t *s)
