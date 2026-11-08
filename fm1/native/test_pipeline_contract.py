@@ -189,7 +189,7 @@ assert 'grep -Fq "#define APP_VERSION' in ci
 assert '--product "$(cat /tmp/fm1_product_id.txt)"' in ci
 assert 'ap.add_argument("--product", required=True)' in verify_fwsc
 assert "FM-1_938" not in ci and "FM-1_938" not in app_header
-assert "PRODUCT = prefix + \\"38\\"" not in ci
+assert 'PRODUCT = prefix + "38"' not in ci
 assert ci.index('set_miyako_product_id.py') < ci.index(
     'tools/build.py /tmp/fm1-base/miyako --host')
 # Firmware UI renders the exact generated identity rather than static 0.3.x.
