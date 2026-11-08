@@ -385,17 +385,39 @@ expect wave 4
 expect midi_channel 2
 expect clock_mode 1
 expect save_mask 3
-# User-source paper-airplane scene: ATTACK sweeps all 72 frames in order.
-# Waveform overlay is live and retains the original synth OSC input.
-tap ENV
-spin K1 -100
-expect attack_frame 0
-tap EDIT
-wait 30
-shot MIYAKO_OSC_ATTACK_0.png
+# User-source scene is controlled by SUB, NOT by ENV ATTACK.
+# Home MULTI OSC1 K2 is SUB. All 72 frames remain reachable.
+tap HOME
+spin K2 -100
+expect sub 0
+expect sub_frame 0
 tap ENV
 spin K1 100
-expect attack_frame 71
+expect sub_frame 0
 tap EDIT
 wait 30
-shot MIYAKO_OSC_ATTACK_127.png
+shot MIYAKO_OSC_SUB_0.png
+tap HOME
+spin K2 100
+expect sub 127
+expect sub_frame 71
+tap EDIT
+wait 30
+shot MIYAKO_OSC_SUB_127.png
+# Normal image page must resume upon returning from unrelated views.
+tap SEL
+expect view 3
+wait 70
+shot MIYAKO_NORMAL_SEL_ACTIVE.png
+tap HOME
+expect view 0
+tap SEL
+expect view 3
+wait 70
+shot MIYAKO_NORMAL_SEL_RETURN.png
+tap FX
+expect view 2
+tap SEL
+expect view 3
+wait 70
+shot MIYAKO_NORMAL_SEL_FROM_FX.png
