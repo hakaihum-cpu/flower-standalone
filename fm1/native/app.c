@@ -854,21 +854,20 @@ static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
 static uint16_t mi_photo_palette[16];
 static int16_t mi_photo_cached=-1;
-/* Accept both authentic user-source and prior palette-overridden
- * res.bin. Both have the SAME 628 VQ codebooks and selector maps, and
- * their palette indexes are restored to the source colours below. */
+/* The original user images have been re-encoded in the existing VQ
+ * format. Old res.bin codebooks/selectors are NOT interchangeable. Reject
+ * them even if the size matches: display the established FX fallback
+ * until the matching standard CRC-checked resource is installed. */
 static const uint8_t *mi_photo_source(uint32_t *length)
 {
     const uint8_t *res=plat_res(length);
-    int original,legacy;
-    if(!res||*length<MI_TILE_DATA_BYTES)return 0;
-    original=(res[2u]==0x41u&&res[3u]==0x18u&&
-              res[16u]==0xE4u&&res[17u]==0x89u&&
-              res[30u]==0xD1u&&res[31u]==0xFDu);
-    legacy=(res[2u]==0xC4u&&res[3u]==0x18u&&
-            res[16u]==0x35u&&res[17u]==0x4Cu&&
-            res[30u]==0x9Du&&res[31u]==0xF7u);
-    return (original||legacy)?res:0;
+    if(!res||*length<MI_TILE_DATA_BYTES||
+       res[0u]!=0xFFu||res[1u]!=0xFFu||
+       res[2u]!=0x00u||res[3u]!=0x00u||
+       res[4u]!=0xEFu||res[5u]!=0x83u||
+       res[30u]!=0x8Au||res[31u]!=0x4Au)
+        return 0;
+    return res;
 }
 static void mi_photo_decode(unsigned frame)
 {
@@ -876,22 +875,19 @@ static void mi_photo_decode(unsigned frame)
     const uint8_t *res;
     unsigned clip,ty,tx,row,col,i;
     if(frame>=MI_TILE_COUNT||mi_photo_cached==(int16_t)frame)return;
-    /* Keep authentic 628-frame photo colours across new and previous
-     * resource installations. Never require an unrelated flash format. */
+    /* All 628 frames require the matching CRC-validated res.bin with its
+     * real original-source, clip-specific RGB565 palette and VQ maps. */
     res=mi_photo_source(&length);
     if(!res){mi_photo_cached=-1;return;}
     clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
     if(clip>=MI_TILE_VQ_CLIPS){mi_photo_cached=-1;return;}
-    /* All eight supplied contact sheets are monochrome. The VQ source
-     * indices were luminance-derived, but the old palette added false
-     * warm/blue colours. Match each decoded frame to its own source bank
-     * before selecting the original-image greyscale tone. */
-    {
-        unsigned bank=0u;
-        for(i=1u;i<MI_TILE_BANKS;i++)
-            if(frame>=mi_tile_bank_first[i])bank=i;
-        for(i=0u;i<16u;i++)
-            mi_photo_palette[i]=mi_photo_grayscale_palette[bank][i];
+    /* Clip palette is stored alongside its codebook in the existing
+     * 279936-byte res.bin. Never substitute unrelated colours: this
+     * preserves the sepia/yellow sunset as well as grayscale frames. */
+    for(i=0u;i<16u;i++){
+        unsigned offset=MI_TILE_VQ_PALETTE_OFFSET+clip*32u+i*2u;
+        mi_photo_palette[i]=(uint16_t)((uint16_t)res[offset]|
+                                      ((uint16_t)res[offset+1u]<<8u));
     }
     for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
         for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
