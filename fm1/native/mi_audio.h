@@ -40,6 +40,9 @@ typedef struct {
     /* Audio-sample-accurate FMDrum step sequencer (independent of OSC page). */
     uint32_t step_wait, step_random;
     uint8_t step_active, step_next, step_last_dir, step_last_len;
+    /* MIDI clock 24 PPQN / 6 = one 1/16-note step. AUDIO thread only. */
+    uint32_t step_last_clock_sample;
+    uint8_t step_midi_mode,step_clock_phase,step_clock_pending;
     volatile uint8_t step_current; /* UI playhead; 0..15 */
     float sample_rate, wow, flutter, wet_current,wet_current2;
     float rec_monitor_mix; /* existing wet-smoothing approach for REC monitor */
@@ -60,7 +63,7 @@ void mi_audio_panic(mi_audio_t *a);
 /* Command is consumed at the next audio block, no audio memory writes on UI. */
 void mi_audio_rec_request(mi_audio_t *a, unsigned command);
 /* USB/TRS real-time MIDI 0xF8/0xFA/0xFB/0xFC on the audio thread. */
-void mi_audio_midi_clock(mi_audio_t *a,unsigned status);
+void mi_audio_midi_clock(mi_audio_t *a,mi_state_t *s,unsigned status);
 void mi_audio_render(mi_audio_t *a, const mi_state_t *s,
                      int32_t *interleaved_lr, uint32_t frames, uint32_t master_q12);
 #endif
