@@ -29,13 +29,15 @@ assert len(set(PHOTO_RGB565)) == 16
 assert re.search(r"static\s+uint16_t\s+mi_photo_palette\[16\];", app_source)
 assert "res=plat_res(length);" in app_source
 assert "res=mi_photo_source(&length);" in app_source
-assert "res[2u]!=0xC4u" in app_source
-assert "unsigned off=MI_TILE_VQ_PALETTE_OFFSET+clip*32u+i*2u;" in app_source
-assert re.search(
-    r"mi_photo_palette\[i\]\s*=\s*\(uint16_t\)\(\(uint16_t\)res\[off\]\s*\|\s*"
-    r"\(\(uint16_t\)res\[off\+1u\]<<8u\)\);",
-    app_source,
-), "C photo palette must decode little-endian RGB565 from the resource"
+# The historical blue/purple re-palette modified only 24 color tables,
+# not frame selectors. The native renderer now restores authentic RGB565
+# palette entries from the user-source manifest for BOTH resource revisions.
+assert "original||legacy" in app_source
+assert "mi_photo_palette[i]=mi_photo_source_palette[i]" in app_source
+header=(Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
+assert "mi_photo_source_palette[16]" in header
+for entry in ("0x1841u", "0x5101u", "0x89e4u", "0xfdd1u"):
+    assert entry in header
 assert "mi_photo_palette[idx]" in app_source
 
 W, H = 128, 78
