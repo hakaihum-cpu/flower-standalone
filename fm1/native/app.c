@@ -1192,10 +1192,11 @@ static void mi_draw_sub_scene(void)
     if(frame>=MI_LETTER_FRAMES)frame=MI_LETTER_FRAMES-1u;
     mi_letter_map_decode(frame);
     for(y=0u;y<MI_LETTER_H;y++){
-        /* 192x75 screen scene: no 4x4 blocky upscaling, and no
-         * SINE/OSC/parameter text is covered. */
-        int32_t top=40+(int32_t)(y*75u/MI_LETTER_H);
-        int32_t bottom=40+(int32_t)((y+1u)*75u/MI_LETTER_H);
+        /* Render exactly one LCD scanline per source row (y=48..119).
+         * SINE/OSC labels above and four parameter controls below remain
+         * unobscured; the previous 80x40 upscale destroyed face detail. */
+        int32_t top=48+(int32_t)y;
+        int32_t bottom=top+1;
         unsigned first=0u,old=mi_letter_scene_pixel(frame,0u,y);
         for(x=1u;x<=MI_LETTER_W;x++){
             unsigned now=x==MI_LETTER_W?2u:mi_letter_scene_pixel(frame,x,y);
