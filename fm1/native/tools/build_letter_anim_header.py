@@ -30,6 +30,7 @@ OFFSETS_BYTES = FRAME_COUNT * 2
 DELTA_BYTES = 11837
 RAW_LENGTH = BOOK_BYTES + BASE_BYTES + OFFSETS_BYTES + DELTA_BYTES
 RAW_SHA256 = "86b64e4affac514ed05057b31087ddb28e9e830979524a1effc05e5dc702de51"
+DECODED_CRC32 = 0x3141B600  # independent 72-frame silhouette checksum
 
 
 def read_asset() -> bytes:
@@ -67,26 +68,38 @@ def validate_roundtrip(raw: bytes) -> None:
     payload = raw[offsets_end:]
     if offsets[0] != 0:
         raise SystemExit("FAIL: invalid first-frame delta offset")
+    checksum = 0
     for clip in range(CLIPS):
         current = bytearray(raw[books_end + clip * MAP_BYTES:
                                 books_end + (clip + 1) * MAP_BYTES])
-        for f in range(clip * FRAMES_PER_CLIP + 1,
+        book = struct.unpack_from("<256H", raw, clip * 256 * 2)
+        for f in range(clip * FRAMES_PER_CLIP,
                        (clip + 1) * FRAMES_PER_CLIP):
-            pos = offsets[f]
-            if pos + MASK_BYTES > len(payload):
-                raise SystemExit("FAIL: video delta outside source pack")
-            mask = payload[pos:pos + MASK_BYTES]
-            count = sum(int(x).bit_count() for x in mask)
-            if pos + MASK_BYTES + count > len(payload):
-                raise SystemExit("FAIL: video delta truncated")
-            data = iter(payload[pos + MASK_BYTES:pos + MASK_BYTES + count])
-            for k in range(MAP_BYTES):
-                if mask[k >> 3] & (0x80 >> (k & 7)):
-                    current[k] = next(data)
-            if max(current) >= 256:
-                raise SystemExit("FAIL: invalid VQ dictionary index")
+            if f % FRAMES_PER_CLIP:
+                pos = offsets[f]
+                if pos + MASK_BYTES > len(payload):
+                    raise SystemExit("FAIL: video delta outside source pack")
+                mask = payload[pos:pos + MASK_BYTES]
+                count = sum(int(x).bit_count() for x in mask)
+                if pos + MASK_BYTES + count > len(payload):
+                    raise SystemExit("FAIL: video delta truncated")
+                data = iter(payload[pos + MASK_BYTES:pos + MASK_BYTES + count])
+                for k in range(MAP_BYTES):
+                    if mask[k >> 3] & (0x80 >> (k & 7)):
+                        current[k] = next(data)
+            # Decode the whole source bitmap independently of the C viewer.
+            bits = bytearray(W * H // 8)
+            for y in range(H):
+                for x in range(W):
+                    tile = book[current[(y >> 2) * (W // 4) + (x >> 2)]]
+                    pix = (tile >> (4 * (y & 3) + (x & 3))) & 1
+                    bits[(y * W + x) >> 3] |= pix << (7 - (x & 7))
+            checksum = zlib.crc32(bits, checksum)
     if len(payload) != DELTA_BYTES:
         raise SystemExit("FAIL: invalid delta bytes")
+    if checksum != DECODED_CRC32:
+        raise SystemExit(f"FAIL: 72 decoded image checksum {checksum:08x} "
+                         f"vs {DECODED_CRC32:08x}")
 
 
 def main() -> None:
