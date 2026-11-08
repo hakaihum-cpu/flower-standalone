@@ -2,7 +2,7 @@
  * Independent MIYAKO FM-1 app using only fm1-base's hardware platform API.
  * This is an INCOMPLETE port. Original EFFECTS and EUREKA frames are
  * encoded at build time (16-colour lossy VQ); additionally, the six
- * user-supplied portrait/eye/city tile sheets are a 488-frame 16-colour source VQ atlas.
+ * user-supplied image sheets are 628 frames in eight 16-colour resource banks.
  * Full original MIYAKO DSP and independent video banks are not yet present.
  * Do not release this development image as the approved MIYAKO firmware.
  *
@@ -385,8 +385,8 @@ static void mi_media_decode(unsigned frame,unsigned eureka)
  * or hidden FX parameter values. No source pixels are cropped or stretched.
  */
 /* Eight photo banks, 628 frames, rebuilt from approved original sheets at 96x96. */
-/* Photo frames use the same static RGB565 palette + 8x4 VQ arrays
- * as mi_media_decode() uses for EFFECTS/EUREKA. No base64 runtime work. */
+/* Photo frames use the separately installed 96x96 RGB565 resource;
+ * EFFECTS/EUREKA still use their independent compiled 128x78 VQ tables. */
 /* Display effect follows the actual active FX, independently of which
  * picture bank was selected by the performer. */
 static unsigned mi_visual_fx(void)
