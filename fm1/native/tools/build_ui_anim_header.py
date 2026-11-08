@@ -94,7 +94,7 @@ def main():
     raw,elen,llen=read_pack()
     pos=12
     outputs = [
-      "/* User-supplied ENV (100), LFO (100), logo, startup source; 16 RGB565. */\n",
+      "/* User-supplied ENV (90), LFO (100), logo, startup source; 16 RGB565. */\n",
       "#ifndef MI_UI_MEDIA_H\n#define MI_UI_MEDIA_H\n#include <stdint.h>\n",
       "#define MI_UI_MOTION_W 48u\n#define MI_UI_MOTION_H 48u\n",
       "#define MI_UI_MOTION_COUNT 100u\n#define MI_UI_ENV_COUNT 90u\n#define MI_UI_MOTION_CLIP 10u\n",
