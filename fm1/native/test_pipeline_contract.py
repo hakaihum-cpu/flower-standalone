@@ -688,11 +688,19 @@ assert "if(s->global[3]!=1)return" in audio
 assert "mi_rec_external_tick(&a->recorder,a->rendered_samples)" in audio
 assert "note_channel==state.midi_channel" in ui
 assert "note==MI_REC_PITCH_CC" in ui
-# DRUM is summed after synth FILTER and FX but before REC capture.
-assert "drum_mix+=drum" in audio
+# Manual FMDrum enters REC, but the FMDrum sequencer goes ONLY to final
+# output. The order must be unambiguous and preserved across future changes.
+assert "drum_on(a,s,notes[t],112u,1u)" in audio
+assert "drum_on(a,s,note,velocity,0u)" in audio
+assert "if(v->drum_from_step)drum_seq+=drum" in audio
+assert "else drum_manual+=drum" in audio
 assert "sample=effect(a,rs,sample);" in audio
-assert "sample=mi_soft_limit(sample+drum_mix);" in audio
+assert "sample=mi_soft_limit(sample+drum_manual);" in audio
 assert "mi_rec_tick(&a->recorder,sample,rs->seq)" in audio
+assert "sample=mi_soft_limit(sample+drum_seq);" in audio
+assert audio.index("sample=mi_soft_limit(sample+drum_manual);") < \
+       audio.index("mi_rec_tick(&a->recorder,sample,rs->seq)") < \
+       audio.index("sample=mi_soft_limit(sample+drum_seq);")
 assert "if(r->armed && ((r->clock_ticks-1u)%96u)==0u)" in recorder
 # Real host screenshots plus flash-reboot/load assertions.
 for name in ("MIYAKO_GLOBAL.png","MIYAKO_GLOBAL_MIDI.png",
