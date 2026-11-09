@@ -29,7 +29,8 @@ int main(void)
  assert(v.eureka_frame>=0&&v.eureka_frame<576);
  int eureka_at=v.eureka_frame;
  for(int k=0;k<40;k++)mi_video_tick(&v,0.8f,1);
- assert(v.eureka_frame==eureka_at); /* held level does NOT animate */
+ assert(v.eureka_frame!=eureka_at); /* held notes must keep animating */
+  eureka_at=v.eureka_frame;
  for(int k=0;k<50;k++)mi_video_tick(&v,0.f,1);
  assert(v.eureka_frame==eureka_at); /* silence freezes the current image */
  mi_video_tick(&v,0.35f,1); /* real activity change moves the playhead */
