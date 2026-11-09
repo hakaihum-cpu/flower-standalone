@@ -32,9 +32,9 @@ void mi_video_set_eureka(mi_video_t *v,uint16_t count)
     v->eureka_playhead=0.f;
     v->eureka_previous=0.f;
 }
-/* This is the original MIYAKO clip policy, extracted from
- * VisualizerComponent::setAudioActivity. All 36 frames of each source clip
- * stay in the original order; dynamics, not a free-running timer, move it. */
+/* Retain original 36-frame clip ordering and attack-driven clip jumps.
+ * Advance within the clip on each audible video tick to avoid a permanent
+ * freeze with steady held notes; silence still freezes the last frame. */
 static void choose_eureka_clip(mi_video_t *v)
 {
     unsigned clips=(unsigned)v->eureka_count/36u;
@@ -62,9 +62,9 @@ void mi_video_tick(mi_video_t *v,float activity,int eureka_mode)
         change=activity>previous?activity-previous:previous-activity;
         v->eureka_previous=activity;
         if(v->eureka_clip<0)choose_eureka_clip(v);
-        if(audio_present&&(onset||change>0.0025f)){
-            /* Preserve the original selective random clip jump.
-             * Constant tone / silence must not automatically advance. */
+        if(audio_present){
+            /* Preserve selective random clip jumps on note attacks.
+             * A held tone must still advance frames within its clip. */
             if(onset && (v->eureka_rng%5u)==0u)
                 choose_eureka_clip(v);
             else{
