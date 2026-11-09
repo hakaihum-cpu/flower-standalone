@@ -256,9 +256,20 @@ def build(source_dir: Path, output: Path, report_file: Path | None, preview_path
         base_raw, base_edge = frame_errors(source, old_baseline, weights_image)
         initial_raw, initial_edge = frame_errors(source, initial_recon, weights_image)
         trial_raw, trial_edge = frame_errors(source, refined_recon, weights_image)
-        # Within the source-derived 4x4 candidates, keep whichever does not
-        # worsen the WORST edge frame or mean edge error.
-        if trial_edge.max() <= initial_edge.max() and trial_edge.mean() <= initial_edge.mean():
+        # M4H9's proven 96-word candidate was 275443 B. Permit at most
+        # 96 more selector bytes per clip (2304 bytes total) so a favourable
+        # quality choice cannot silently exceed the 282592 B resource limit.
+        initial_lengths = huffman_lengths(np.bincount(
+            initial_selectors.reshape(-1), minlength=CODES))
+        baseline_bytes = len(stream_codes(initial_selectors, initial_lengths)[0])
+        refined_lengths = huffman_lengths(np.bincount(
+            refined_sel.reshape(n, TILES).reshape(-1), minlength=CODES))
+        refined_bytes = len(stream_codes(refined_sel.reshape(n, TILES), refined_lengths)[0])
+        # Within the source-derived 4x4 candidates, retain refinements only
+        # when visible edges improve and flash cost remains bounded.
+        if (trial_edge.max() <= initial_edge.max() and
+            trial_edge.mean() < initial_edge.mean() and
+            refined_bytes <= baseline_bytes + 96):
             codebook, selectors, image_index = refined_book, refined_sel.reshape(n, TILES), refined_idx
             reconstructed = refined_recon.astype(np.float32)
             use_refined = True
@@ -275,6 +286,8 @@ def build(source_dir: Path, output: Path, report_file: Path | None, preview_path
         records_detail.append({
             "clip": clip, "frames": n, "qualified_vs_current_vq": improved,
             "edge_refinement_selected": use_refined,
+            "baseline_selector_bytes": baseline_bytes,
+            "edge_selector_bytes": refined_bytes,
             "current_vq_psnr": round(float(10*np.log10(65025/max(base_raw.mean(),1e-8))), 3),
             "trial_psnr": round(float(10*np.log10(65025/max(final_raw.mean(),1e-8))), 3),
             "current_vq_worst_edge_mse": round(float(base_edge.max()), 4),
