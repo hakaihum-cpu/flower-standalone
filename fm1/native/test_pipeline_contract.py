@@ -93,7 +93,7 @@ required = (
     "version: 2.1",
     "default: false",
     "when: << pipeline.parameters.run_build >>",
-    "only: feature/fm1-photo-shared-tile-poc-20261109",
+    "only: feature/fm1-lossless-huffman-resource-poc-20261109",
     "fm1_native_build",
     "MIYAKO-FM1-NATIVE-DEV.fwsc",
     "MI_EFFECTS_ASSET_COUNT 144u",
@@ -158,7 +158,7 @@ assert ci.index("python3 fm1/native/tools/check_ci_run_shell.py") < ci.index(
     "python3 -m compileall -q fm1/native")
 assert "five-sheet set's" not in ci
 assert (root / "fm1/native/tools/check_ci_run_shell.py").is_file()
-assert re.search(r"^\s+only: feature/fm1-photo-shared-tile-poc-20261109\s*$", ci, re.M)
+assert re.search(r"^\s+only: feature/fm1-lossless-huffman-resource-poc-20261109\s*$", ci, re.M)
 assert "/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako" in ci
 assert "test_media_crc.c" in ci
 assert "pack_effects_vq_candidate.py" in ci
@@ -271,7 +271,7 @@ assert ci.index("Install pinned JieLi compiler") < ci.index(
     "Verify freestanding MIYAKO C with the actual JieLi target compiler")
 assert ci.index("Verify freestanding MIYAKO C with the actual JieLi target compiler") < ci.index(
     "Reconstruct all 144 original MIYAKO EFFECTS source frames")
-assert "for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_control.c mi_video.c mi_shared_tile_codec_poc.c" in ci
+assert "for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_control.c mi_video.c mi_shared_tile_codec_poc.c mi_hu_codec_poc.c" in ci
 assert "fsyntax-only" in ci and "fno-builtin" in ci
 assert "fm1/native/mi_memory.h" in ci
 # JieLi's pi32v2 toolchain doesn't have hosted libc string.h; scanning
@@ -499,10 +499,18 @@ assert 'MI_TILE_COUNT 628u' in resource_header
 assert 'MI_TILE_BANKS 8u' in resource_header
 assert 'MI_TILE_DATA_BYTES 279936u' in resource_header
 assert 'test_miyako_resource96.py' in ci
-assert '272553' in ci and '272521' in ci
+assert '260201' in ci and '260169' in ci
 assert 'test_shared_photo_tiles_poc.py' in ci
-assert '--shared-tile-poc' in ci
+assert '--lossless-huffman-poc' in ci
 assert 'mi_shared_tile_codec_poc.c' in ci and 'mi_shared_tile_codec_poc.h' in ci
+assert 'mi_hu_codec_poc.c' in ci and 'mi_hu_codec_poc.h' in ci
+assert 'test_photo_huffman_host.py --sanitize' in ci
+assert '#include "mi_hu_codec_poc.h"' in ui
+assert 'mi_hu_decode(&mi_photo_hu_reader' in ui
+assert 'mi_hu_codec_poc.c' in manifest
+assert "codec.add_argument('--lossless-huffman-poc'" in resource_packer
+assert (root / "fm1/native/mi_hu_codec_poc.c").is_file()
+assert (root / "fm1/native/tools/pack_photo_huffman_lossless_poc.py").is_file()
 assert '#include \"mi_shared_tile_codec_poc.h\"' in ui
 assert 'mi_tp_decode_frame_cached(res,length' in ui
 assert 'static uint8_t mi_photo_tilebook[MI_TP_BOOK_BYTES] PLAT_POOL;' in ui
@@ -778,5 +786,5 @@ assert "video.effects_cooldown=0u;" in ui
 assert "video.eureka_previous=0.f;" in ui
 # Repeat the manual gating and branch controls after introducing the assets.
 assert "when: << pipeline.parameters.run_build >>" in ci
-assert "only: feature/fm1-photo-shared-tile-poc-20261109" in ci
+assert "only: feature/fm1-lossless-huffman-resource-poc-20261109" in ci
 print("PASS: manual Phase 3 REC + EUREKA 2sec/576 frames + guarded dual-FX")
