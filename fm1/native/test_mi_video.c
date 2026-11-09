@@ -33,6 +33,8 @@ int main(void)
   eureka_at=v.eureka_frame;
  for(int k=0;k<50;k++)mi_video_tick(&v,0.f,1);
  assert(v.eureka_frame==eureka_at); /* silence freezes the current image */
+ mi_video_tick(&v,0.004f,1);
+ assert(v.eureka_frame!=eureka_at); /* quiet sustained notes still animate */
  mi_video_tick(&v,0.35f,1); /* real activity change moves the playhead */
  assert(v.eureka_frame>=0 && v.eureka_frame<576);
  assert(v.eureka_previous==0.35f);
