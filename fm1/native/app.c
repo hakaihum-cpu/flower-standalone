@@ -14,6 +14,7 @@
 #include "mi_video.h"
 #include "mi_resource_media.h"
 #include "mi_shared_tile_codec_poc.h" /* optional MTL1 read path */
+#include "mi_hu_codec_poc.h" /* lossless MHU1 resource reader */
 #include "mi_effects_vq_frames.h" /* 144 source frames */
 #include "mi_eureka_vq_frames.h" /* 576 source frames */
 #include "mi_letter_anim.h" /* exact 72 user-source paper-airplane frames */
@@ -860,6 +861,8 @@ static uint8_t mi_photo_tilebook[MI_TP_BOOK_BYTES] PLAT_POOL;
 static uint8_t mi_photo_tilemap[MI_TP_MAP_BYTES];
 static int16_t mi_photo_book_clip=-1; /* avoid inflating same 4 KiB book per frame */
 static int16_t mi_photo_cached=-1;
+/* Uses the existing MTL1 4 KiB codebook and 288-byte selector buffers. */
+static mi_hu_reader_t mi_photo_hu_reader;
 /* The original user images have been re-encoded in the existing VQ
  * format. Old res.bin codebooks/selectors are NOT interchangeable. Reject
  * them even if the size matches: display the established FX fallback
@@ -871,6 +874,9 @@ static const uint8_t *mi_photo_source(uint32_t *length)
     /* Accept only CRC-checked resources from fm1-base. An MTL1 payload
      * decodes to exactly the existing 16-colour VQ pixels; it is NOT a
      * full-colour source image or a visual-quality change by itself. */
+    if(*length>=6696u&&*length<=MI_HU_RESOURCE_MAX&&
+       res[0u]=='M'&&res[1u]=='H'&&res[2u]=='U'&&res[3u]=='1')
+        return res;
     if(*length>=6012u&&*length<=MI_TP_MAX_PAYLOAD&&
        res[0u]=='M'&&res[1u]=='T'&&res[2u]=='L'&&res[3u]=='1')
         return res;
@@ -891,7 +897,41 @@ static void mi_photo_decode(unsigned frame)
     /* All 628 frames require the matching CRC-validated res.bin with its
      * real original-source, clip-specific RGB565 palette and VQ maps. */
     res=mi_photo_source(&length);
-    if(!res){mi_photo_cached=-1;mi_photo_book_clip=-1;return;}
+    if(!res){
+        mi_photo_cached=-1;
+        mi_photo_book_clip=-1;
+        mi_photo_hu_reader.data=0;
+        mi_photo_hu_reader.cached_clip=-1;
+        mi_photo_hu_reader.cached_book=0;
+        return;
+    }
+    if(res[0u]=='M'&&res[1u]=='H'&&res[2u]=='U'&&res[3u]=='1'){
+        /* Validate full MHU1 payload once after the standard res.bin CRC. */
+        if(mi_photo_hu_reader.data!=res||mi_photo_hu_reader.size!=length){
+            mi_photo_hu_reader.data=0;
+            mi_photo_hu_reader.cached_clip=-1;
+            mi_photo_hu_reader.cached_book=0;
+            if(mi_hu_open(&mi_photo_hu_reader,res,length)!=0){
+                mi_photo_cached=-1;
+                mi_photo_book_clip=-1;
+                return;
+            }
+        }
+        if(mi_hu_decode(&mi_photo_hu_reader,frame,mi_photo_palette,
+                        mi_photo_tilebook,mi_photo_tilemap,mi_photo_pixels)!=0){
+            mi_photo_hu_reader.cached_clip=-1;
+            mi_photo_hu_reader.cached_book=0;
+            mi_photo_cached=-1;
+            mi_photo_book_clip=-1;
+            return;
+        }
+        mi_photo_book_clip=-1; /* MHU1 book must not become the MTL1 book. */
+        mi_photo_cached=(int16_t)frame;
+        return;
+    }
+    /* MTL1/raw can overwrite the same 4 KiB book; invalidate MHU1 cache. */
+    mi_photo_hu_reader.cached_clip=-1;
+    mi_photo_hu_reader.cached_book=0;
     if(res[0u]=='M'&&res[1u]=='T'&&res[2u]=='L'&&res[3u]=='1'){
         if(mi_tp_decode_frame_cached(res,length,(uint16_t)frame,mi_photo_palette,
                                      mi_photo_pixels,mi_photo_tilebook,
