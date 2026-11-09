@@ -40,7 +40,7 @@ This uses the exact SHA256-checked existing repository archive. It includes a Py
 
 ## Host decoder implementation and tests
 
-The following are committed on this experimental branch, but **not added to fm1.toml's production source list**:
+The following are committed in the **experimental** branch and the runtime reader has now been wired into `app.c` and registered in this branch's `fm1.toml`. The approved master and main are unchanged:
 
 - `fm1/native/mi_hu_codec_poc.h` — reader API and exact size contracts
 - `fm1/native/mi_hu_codec_poc.c` — bounded, freestanding canonical-Huffman decoder and CRC32/resource validator
@@ -49,12 +49,19 @@ The following are committed on this experimental branch, but **not added to fm1.
 
 An independent local C implementation was compiled on Linux x86_64 using `cc -std=c99 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined`; a deterministic **synthetic** 279,936-byte 628-frame test archive encoded by a Python MHU1 prototype to 230,955 bytes, and all C assertions passed (628 forward/shuffled/reverse, byte-perfect VQ pixels and corrupted-input rejection). This validates the algorithm and cross-language binary format **on synthetic data**, not all current MIYAKO artwork.
 
-The real-data JS pack/decode proof above is separate. The committed Python and C code need their own real-archive validation run and target compiler/link/audio load checks. No CircleCI build was launched and no firmware, res.bin, branch merge, or device files were modified.
+The real-data JS pack/decode proof above is separate. The committed Python and C code need their own real-archive validation run and target compiler/link/audio load checks. No CircleCI firmware build was launched and no main, approved firmware, installed res.bin, branch merge, or device files were modified. The experimental branch now has optional MHU1 runtime support, separate C reader compilation, and a manual CI job configured to test, pack, and produce the matching standard res.bin after explicit build authorization.
 
-## Gates before integration
-1. Run the checked-in Python packer on the actual SHA-checked source archive and record resulting binary size and digest.
-2. Implement a small bounded freestanding C decoder for the new frame format; prove 628 forward/shuffled/reverse frames match the VQ reference, plus corrupt-input tests.
-3. Check target RAM, XIP size, audio deadlines, live LCD performance and CPU cost with the existing platform/toolchain.
-4. Only if all checks pass, integrate an optional reader, preserving existing VQ/MTL1 fallback and the current flash/store/resource map. CI remains manual and needs explicit permission. No `main` changes.
+## Integration progress and remaining gates (2026-11-09)
+
+- DONE: The experimental branch's `app.c` accepts MHU1 payloads alongside the existing CRC-protected MTL1 and raw VQ paths. It reuses the existing 4 KiB `mi_photo_tilebook`, 288-byte map and 4,608-byte pixel buffer. Switching from the other formats invalidates the dictionary cache.
+- DONE: This branch's `fm1.toml` includes the separate `mi_hu_codec_poc.c` compile unit. No change to audio, recorder or UI mapping logic.
+- DONE: `pack_miyako_resource.py --lossless-huffman-poc` creates the MHU1 payload after SHA256 verification and 628-frame exact source/pixel round-trip. Standard fm1-base resource tooling wraps that payload with its own 32-byte CRC header. An `.mhu1` file by itself must never be flashed as a `res.bin`.
+- DONE: Existing CircleCI manual pipeline config is adjusted for this experimental branch only. It runs Python/C host unit tests with sanitizers **before** expensive media/build work and checks exact size **260,169 B payload / 260,201 B installed resource**. Its branch filter and `run_build=true` requirement are preserved.
+- DONE: Static read-back audit of the updated GitHub files checks the code path, existing format fallback, compile list, packing gate, branch guard, resource size checks and allowed CircleCI template variables.
+- PENDING: The committed Python/C host test must run together on the **current** 12 SHA256-verified GitHub source chunks. A local reference archive from an older branch (SHA256 `bb5345df...`) was verified with an independently compiled GCC host decoder, but it is different from the current GitHub source (SHA256 `df517e2d...`). Do not substitute the former proof for the latter.
+- PENDING: Target pi32v2 compiler/link policy and LCD/audio timing checks. The current branch has not executed CircleCI. Physical FM-1 testing is also pending.
+- PENDING: No changes may be merged to main or adopted as approved until target compilation and audio/LCD regression tests pass.
+
+The next approved manual CI run, if authorized, needs to expose the pipeline number, branch name, exact `.fwsc` and `-res.bin` artifacts and test logs. No run has been requested or started here.
 
 A lossy direct16 source-frame experiment previously needed ~1.80MB for 628 frames; this lossless repacking is about saving space **within existing VQ quality**, not a claim that the direct16 source fits.
