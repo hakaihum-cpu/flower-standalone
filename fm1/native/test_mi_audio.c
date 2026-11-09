@@ -238,8 +238,7 @@ int main(void)
  mi_audio_render(&a,&s,lr,256u,4096u);
  assert(!a.recorder.recording && a.recorder.playing &&
         a.recorder.count>200u);
- /* The four FMDrum sequencer tracks fire simultaneously, independent
-  * of the selected OSC waveform, and are captured by the existing REC bus. */
+ /* The FMDrum sequencer plays on the output only. Live FMDrum is recorded. */
  mi_init(&s);mi_audio_init(&a,44100.f);
  s.wave=0u; /* live OSC stays SINE; sequencer still uses FMDrum */
  s.step_pattern[0]=s.step_pattern[1]=
@@ -256,7 +255,12 @@ int main(void)
          int16_t pcm=mi_rec_sample(i);
          if(pcm>64 || pcm< -64)++audible;
      }
-     assert(audible>5u);
+     assert(audible==0u); /* no sequencer audio in Recorder */
+ }
+ {
+     unsigned audible_output=0u,j;
+     for(j=0u;j<512u;j++)if(lr[j]!=0)++audible_output;
+     assert(audible_output>5u); /* sequencer still sounds normally */
  }
  for(i=0u;i<22u;i++)mi_audio_render(&a,&s,lr,256u,4096u);
  assert(a.step_current==1u);
@@ -344,6 +348,6 @@ int main(void)
     mi_audio_render(&a,&s,lr,256u,4096u);
     for(j=0u;j<512u;j++)assert(lr[j]==dry[j]);
  }
- puts("PASS: eight voices, FMDrum dry FX bypass and REC, 4x16 SEQ explicit MIDI Clock/transport");
+ puts("PASS: FMDrum live REC and SEQ output-only isolation; MIDI clock transport");
  return 0;
 }
