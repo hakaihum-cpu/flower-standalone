@@ -56,8 +56,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('resource_payload', type=Path)
     parser.add_argument('--chunk-dir', type=Path, default=CHUNK_DIR)
-    parser.add_argument('--shared-tile-poc', action='store_true',
-                        help='Use staged MTL1 candidate after all 628 source/pixel tests')
+    codec = parser.add_mutually_exclusive_group()
+    codec.add_argument('--shared-tile-poc', action='store_true',
+                       help='Use staged MTL1 candidate after all 628 source/pixel tests')
+    codec.add_argument('--lossless-huffman-poc', action='store_true',
+                       help='Pack the 628 approved VQ images into MHU1, verify exact palettes/pixels')
     args = parser.parse_args()
     if args.shared_tile_poc:
         # A separate experimental encoding, never silently replaces the
@@ -73,6 +76,16 @@ def main() -> None:
             if decoded_frame(data, frame) != original_frame(archive, frame):
                 raise ValueError(f'MTL1 source RGB palette/pixel mismatch at {frame}')
         description = 'MTL1 exact VQ pixels, 628 frames'
+    elif args.lossless_huffman_poc:
+        # The standard fm1-base resource builder adds its own 32-byte CRC
+        # installer header. MHU1 here is ONLY its payload, not res.bin.
+        from pack_photo_huffman_lossless_poc import pack, verify
+        archive = read_payload(args.chunk_dir)
+        data = pack(archive)
+        verify(archive, data)
+        if len(data) != 260169 or len(data) > RESOURCE_CAPACITY:
+            raise ValueError('MHU1 candidate size/sector capacity mismatch')
+        description = 'MHU1 byte-exact approved VQ pixels, 628 frames'
     else:
         data = read_payload(args.chunk_dir)
         description = 'approved 96x96 VQ, 628 frames'
