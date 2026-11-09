@@ -46,6 +46,10 @@ def verify_sheets(folder, files, manifest):
 
 
 def build(folder: Path, output: Path, report: Path, preview: Path | None):
+    # Prevent the 1.8 MB research payload from ever masquerading as a firmware
+    # or standard 69-sector image. It is only a visual reference.
+    if output.suffix.lower() != ".m16p":
+        raise ValueError("direct16 reference output must be .m16p, never res.bin")
     sys.path.insert(0, str(ROOT / "fm1/native/tools"))
     import photo96_sources as src
     src.base = folder
