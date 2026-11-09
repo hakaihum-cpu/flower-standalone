@@ -56,8 +56,8 @@ void mi_video_tick(mi_video_t *v,float activity,int eureka_mode)
         unsigned index;
         if(!v->eureka_count)return;
         previous=v->eureka_previous;
-        audio_present=activity>0.006f;
-        onset=audio_present && activity>0.008f &&
+        audio_present=activity>0.003f;
+        onset=audio_present && activity>0.004f &&
               activity>previous*1.45f+0.003f;
         change=activity>previous?activity-previous:previous-activity;
         v->eureka_previous=activity;
