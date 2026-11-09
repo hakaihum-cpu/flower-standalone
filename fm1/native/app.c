@@ -810,6 +810,10 @@ static unsigned mi_visual_step(float activity)
         if(photo_bank>=0)visual_tile=mi_tile_bank_first[photo_bank];
         visual_cooldown=0u;
         visual_last_activity=0.f;
+        /* Restart all media schedulers after switching between banks. */
+        video.effects_cooldown=0u;
+        video.effects_previous=0.f;
+        video.eureka_previous=0.f;
         ++visual_generation;
         changed=1;
     }
