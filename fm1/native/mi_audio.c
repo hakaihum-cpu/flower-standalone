@@ -89,7 +89,7 @@ void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
     v->phase=0.f;v->phase2=0.f;v->subphase=0.f;
     v->increment=note_freq(note)/a->sample_rate;
     v->env=0.f;v->env_stage=0;v->release_step=0.f;v->age=++a->age_counter;
-    v->drum_type=0u;v->drum_variant=0u;
+    v->drum_type=0u;v->drum_variant=0u;v->drum_from_step=0u;
 }
 void mi_audio_note_off(mi_audio_t *a,uint8_t note)
 {
@@ -119,7 +119,7 @@ void mi_audio_panic(mi_audio_t *a)
  * Six consecutive local keys: kick, snare, closed hat, open hat, crash,
  * low tom. Higher six-key groups vary tuning, envelope and FM index. */
 static void drum_on(mi_audio_t *a,const mi_state_t *s,
-                    uint8_t note,uint8_t velocity)
+                    uint8_t note,uint8_t velocity,uint8_t from_step)
 {
     unsigned i,idx,variant;
     static const float hz[6]={55.f,182.f,2460.f,1760.f,1120.f,84.f};
@@ -136,6 +136,7 @@ static void drum_on(mi_audio_t *a,const mi_state_t *s,
     if(!v)return;
     v->drum_type=(uint8_t)(idx+1u);
     v->drum_variant=(uint8_t)variant;
+    v->drum_from_step=from_step;
     v->env=1.f;v->env_stage=2u;v->held=0u;
     v->drum_pitch_env=1.f;
     v->increment=hz[idx]*(0.7f+(float)s->drum_tone/256.f+
@@ -182,7 +183,7 @@ static void mi_step_tick(mi_audio_t *a,const mi_state_t *s)
     a->step_current=(uint8_t)pos;
     for(t=0u;t<4u;t++)
         if(s->step_pattern[t]&(uint16_t)(1u<<pos))
-            drum_on(a,s,notes[t],112u);
+            drum_on(a,s,notes[t],112u,1u);
     if(dir==1u)a->step_next=(uint8_t)(pos==0u?len-1u:pos-1u);
     else if(dir==2u){
         a->step_random^=a->step_random<<13;
@@ -256,7 +257,7 @@ void mi_audio_input_on(mi_audio_t *a,const mi_state_t *s,
     if(a->held_refs[note]<255u)++a->held_refs[note];
     a->held_velocity[note]=velocity?velocity:1u;
     if(s->arp[0]==0u && a->held_refs[note]==1u){
-        if(s->wave==MI_WAVE_FMDRUM)drum_on(a,s,note,velocity);
+        if(s->wave==MI_WAVE_FMDRUM)drum_on(a,s,note,velocity,0u);
         else mi_audio_note_on(a,note,velocity);
     }
 }
@@ -652,7 +653,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         if(cmd==3u)mi_rec_clear(&a->recorder);
     }
     for(i=0;i<n;i++){
-        float sample=0.f,drum_mix=0.f,osc_capture=0.f,lfo,mod,voice_duty=duty;
+        float sample=0.f,drum_manual=0.f,drum_seq=0.f,osc_capture=0.f,lfo,mod,voice_duty=duty;
         mi_step_tick(a,rs);
         arp_tick(a,rs);
         a->lfo_phase=wrap01(a->lfo_phase+lfo_speed);
@@ -664,7 +665,9 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
             if(!v->active)continue;
             if(v->drum_type){
                 float drum=drum_sample(a,rs,v);
-                drum_mix+=drum;osc_capture+=drum*0.6f;
+                if(v->drum_from_step)drum_seq+=drum;
+                else drum_manual+=drum;
+                osc_capture+=drum*0.6f;
                 continue;
             }
             if(!v->held&&v->env_stage!=3u){
@@ -733,7 +736,7 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
         }else{a->filter_a=sample;a->filter_b=sample;}
         sample=mi_soft_limit(sample);
         sample=effect(a,rs,sample); /* effects process OSC only, NEVER FMDrum */
-        sample=mi_soft_limit(sample+drum_mix); /* dry drums still enter REC */
+        sample=mi_soft_limit(sample+drum_manual); /* live FMDrum enters REC; sequencer never does */
         /* Existing FX wet-smoothing principle: crossfade the recorder monitor
          * in/out over milliseconds. Simply adding two full-scale signals
          * clipped during layered playback and caused sharp transitions. */
@@ -741,9 +744,11 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
             float monitored=mi_rec_tick(&a->recorder,sample,rs->seq);
             float target=a->recorder.playing?1.f:0.f;
             a->rec_monitor_mix+=(target-a->rec_monitor_mix)*0.0015f;
-            sample=mi_soft_limit(sample*(1.f-0.5f*a->rec_monitor_mix)+
-                                 monitored*(0.5f*a->rec_monitor_mix));
+            sample=mi_soft_limit(sample*(1.f-0.45f*a->rec_monitor_mix)+
+                                 monitored*(0.75f*a->rec_monitor_mix));
         }
+        /* Sequence FMDrum is output-only, even during recording or overdub. */
+        sample=mi_soft_limit(sample+drum_seq);
         {
             int32_t out=(int32_t)(clampf(sample,-1.f,1.f)*scale);
             lr[2u*i]=out;lr[2u*i+1u]=out;
