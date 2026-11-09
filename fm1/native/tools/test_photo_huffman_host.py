@@ -33,7 +33,10 @@ def main() -> None:
         cmd = [args.cc, '-std=c99', '-O1', '-Wall', '-Wextra',
                '-Werror', '-pedantic', '-g', '-I', str(ROOT)]
         if args.sanitize:
-            cmd += ['-fsanitize=address,undefined', '-fno-omit-frame-pointer']
+            # Match the existing host ASan policy: non-PIE avoids intermittent
+            # ASan shadow-map conflicts on CircleCI's default GCC runner.
+            cmd += ['-fsanitize=address,undefined', '-fno-sanitize-recover=all',
+                    '-fno-omit-frame-pointer', '-fno-pie', '-no-pie']
         cmd += [str(ROOT/'mi_hu_codec_poc.c'),
                 str(ROOT/'test_mi_hu_codec_poc.c'), '-o', str(executable)]
         subprocess.run(cmd, check=True)
