@@ -14,7 +14,7 @@ typedef struct {
     uint8_t note, active, held, vel, env_stage;
     float phase, phase2, subphase, increment, env, release_step;
     uint32_t age;
-    uint8_t drum_type,drum_variant;
+    uint8_t drum_type,drum_variant,drum_from_step;
     float drum_decay_rate,drum_pitch_env;
 } mi_voice_t;
 typedef struct {
