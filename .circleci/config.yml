@@ -55,7 +55,7 @@ jobs:
             /tmp/mi_control_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
-              fm1/native/mi_control.c fm1/native/mi_audio.c fm1/native/mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/mi_slicer.c fm1/native/test_mi_audio.c \
+              fm1/native/mi_control.c fm1/native/mi_audio.c fm1/native/mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/mi_rec_pcm7.c fm1/native/mi_slicer.c fm1/native/test_mi_audio.c \
               -o /tmp/mi_audio_test
             /tmp/mi_audio_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
@@ -65,20 +65,20 @@ jobs:
             /tmp/mi_fx_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
-              fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/test_mi_recorder.c \
+              fm1/native/mi_recorder.c fm1/native/mi_rec_pcm7.c fm1/native/test_mi_recorder.c \
               -o /tmp/mi_recorder_test
             /tmp/mi_recorder_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
-              fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/test_mi_multirec.c \
+              fm1/native/mi_recorder.c fm1/native/mi_rec_pcm7.c fm1/native/test_mi_multirec.c \
               -o /tmp/mi_multirec_test
             /tmp/mi_multirec_test
-            # ADPCM host regression precedes all expensive video processing.
+            # 7-bit log-PCM host regression precedes all expensive video processing.
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
-              fm1/native/mi_rec_adpcm.c fm1/native/test_mi_rec_adpcm.c \
-              -o /tmp/mi_rec_adpcm_test
-            /tmp/mi_rec_adpcm_test
+              fm1/native/mi_rec_pcm7.c fm1/native/test_mi_rec_pcm7.c \
+              -o /tmp/mi_rec_pcm7_test
+            /tmp/mi_rec_pcm7_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
               fm1/native/mi_slicer.c fm1/native/test_mi_slicer.c \
@@ -86,7 +86,7 @@ jobs:
             /tmp/mi_slicer_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
-              fm1/native/mi_rec_adpcm.c fm1/native/mi_slicer.c \
+              fm1/native/mi_rec_pcm7.c fm1/native/mi_slicer.c \
               fm1/native/test_mi_dsp_stress.c -o /tmp/mi_dsp_stress_test
             /tmp/mi_dsp_stress_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
@@ -122,7 +122,7 @@ jobs:
                fm1/native/mi_video.c fm1/native/mi_video.h \
                fm1/native/mi_fx_dsp.c fm1/native/mi_fx_dsp.h \
                fm1/native/mi_recorder.c fm1/native/mi_recorder.h \
-               fm1/native/mi_rec_adpcm.c fm1/native/mi_rec_adpcm.h \
+               fm1/native/mi_rec_pcm7.c fm1/native/mi_rec_pcm7.h \
                fm1/native/mi_slicer.c fm1/native/mi_slicer.h \
                fm1/native/mi_memory.h fm1/native/mi_resource_media.h \
                /tmp/fm1-base/miyako/
@@ -215,7 +215,7 @@ jobs:
             test -x "$CLC"
             # All four independent MIYAKO native DSP / video objects.
             # Same CPU, FPU, standard, builtin and optimization policy as fm1-base.
-            for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_adpcm.c mi_slicer.c mi_control.c mi_video.c; do
+            for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_pcm7.c mi_slicer.c mi_control.c mi_video.c; do
               "$CLC" -fsyntax-only -std=c99 -Os -mcpu=r3 -mfprev1 -ffp-contract=off \
                 -fno-builtin -Wall -Werror=implicit-function-declaration \
                 -I /tmp/fm1-base/miyako -I /tmp/fm1-base/include \
@@ -354,7 +354,7 @@ jobs:
               'To see all 628 photo tiles, install the matching MIYAKO-FM1-NATIVE-DEV-res.bin with the existing fm1-base resource installer; FWSC-only updates do not include photos.' \
               'The 628 user photo frames retain their real RGB colours (including sepia sunsets) with 24 per-clip 16-colour palettes in the unchanged stock VQ format.' \
               'The exact matching 279968-byte MIYAKO-FM1-NATIVE-DEV-res.bin MUST be installed together with this FWSC; old image resources, even when the same size, have different VQ codebooks and are rejected. Use the original resource installer.' \
-              'RECORDER: three independent 2/4-bar 40-byte ADPCM loop tracks, with per-track overdub, mute, pan, pitch, in/out and level. 2 bars when external MIDI Clock is active.' \
+              'RECORDER: three independent 2/4-bar 56-byte log-PCM loop tracks, with per-track overdub, mute, pan, pitch, in/out and level. 2 bars when external MIDI Clock is active.' \
               'SEQ short press: RECORDER (repeat to switch LOOP parameters/MIX page); PRESET selects LOOP 1/2/3. SEQ hold (650ms): independent 4-track FMDrum step sequencer.' \
               '16 white keys toggle steps 1-16. K1 track, K2 play/stop, K3 direction, K4 length 8-16.' \
               'SEQ MIDI input: F8 24-PPQN Clock, six clocks per step, FA Start, FB Continue, FC Stop. Internal BPM if clock is lost.' \
