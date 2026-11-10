@@ -7,6 +7,7 @@
 #include "mi_audio.h"
 #include "mi_fx_dsp.h"
 #include "mi_memory.h"
+#include "mi_piano_set1.h"
 static mi_fx_dsp_t native_fx;
 static float clampf(float x,float lo,float hi){return x<lo?lo:x>hi?hi:x;}
 /* Peak compression keeps the slope continuous at +/-0.75, unlike a hard
@@ -73,6 +74,8 @@ void mi_audio_init(mi_audio_t *a,float rate)
     a->video_effective[2]=64u;a->video_effective[3]=64u;
     a->last_mode=MI_FX_OFF;
 }
+/* Nearest original keys: MIDI 51, 58, 65. */
+static unsigned piano_zone(uint8_t note){return note<=54u?0u:note<=61u?1u:2u;}
 void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
 {
     unsigned i,pick=0;float quiet=2.f;uint32_t oldest=0xffffffffu;
@@ -91,6 +94,11 @@ void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
     v->increment=note_freq(note)/a->sample_rate;
     v->env=0.f;v->env_stage=0;v->release_step=0.f;v->age=++a->age_counter;
     v->drum_type=0u;v->drum_variant=0u;v->drum_from_step=0u;
+    v->piano_zone=(uint8_t)piano_zone(note);
+    v->piano_pos=0.f;v->piano_gain=1.f;
+    v->piano_step=(float)MI_PIANO_SET1_RATE/a->sample_rate*
+                  note_freq((int)note)/
+                  note_freq((int)mi_piano_set1_roots[v->piano_zone]);
 }
 void mi_audio_note_off(mi_audio_t *a,uint8_t note)
 {
@@ -300,7 +308,7 @@ static void arp_sync(mi_audio_t *a,const mi_state_t *s)
                 /* Turning ARP off must restore the selected FMDrum voice,
                  * not an ordinary oscillator. */
                 if(s->wave==MI_WAVE_FMDRUM)
-                    drum_on(a,s,(uint8_t)note,a->held_velocity[note]);
+                    drum_on(a,s,(uint8_t)note,a->held_velocity[note],0u);
                 else
                     mi_audio_note_on(a,(uint8_t)note,a->held_velocity[note]);
             }
@@ -366,7 +374,7 @@ static void arp_tick(mi_audio_t *a,const mi_state_t *s)
         uint8_t vel=a->held_velocity[held_nth(a,base)];
         if(note>127u)note=127u;
         a->arp_note=(uint8_t)note;
-        if(s->wave==MI_WAVE_FMDRUM)drum_on(a,s,a->arp_note,vel?vel:100u);
+        if(s->wave==MI_WAVE_FMDRUM)drum_on(a,s,a->arp_note,vel?vel:100u,0u);
         else mi_audio_note_on(a,a->arp_note,vel?vel:100u);
     }
     a->arp_sounding=1u;
@@ -451,7 +459,7 @@ static void apply_lfo_destination(mi_state_t *m,unsigned dest,float depth)
     case 44:mod_fx_extra(m,second,2u,depth);break;
     case 45:mod_fx_extra(m,second,3u,depth);break;
     MOD(46,osc2_octave,4u);MOD(47,osc1_wave,3u);
-    MOD(48,osc2_wave,3u);MOD(49,wave,MI_WAVE_FMDRUM);
+    MOD(48,osc2_wave,3u);MOD(49,wave,MI_WAVE_PIANO);
     MOD(50,fx,MI_FX_COUNT-1u);MOD(51,fx2,MI_FX_COUNT-1u);
     MOD(52,arp[0],4u);MOD(53,lfo[0],127u);
     MOD(54,lfo[1],3u);MOD(55,lfo[2],127u);
