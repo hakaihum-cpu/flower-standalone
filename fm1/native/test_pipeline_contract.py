@@ -720,6 +720,9 @@ assert "fm1/native/mi_rec_pcm7.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").
 assert "fm1/native/mi_slicer.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
 assert "fm1/native/mi_slicer.c fm1/native/test_mi_slicer.c" in ci
 assert "fm1/native/test_mi_piano_set1.c -o /tmp/mi_piano_set1_test" in ci
+assert "fm1/native/test_mi_piano_set1_stress.c -o /tmp/mi_piano_set1_stress" in ci
+assert "150000 SET1 flash sample/pitch/random-position stress cases" in (root / "fm1/native/test_mi_piano_set1_stress.c").read_text()
+assert ci.index("/tmp/mi_piano_set1_stress") < ci.index("Reconstruct all 144 original")
 assert "/tmp/mi_piano_set1_test" in ci
 assert "PIANO: Wingie2 SET1 only" in ci
 assert "MI_WAVE_PIANO" in (root / "fm1/native/mi_control.h").read_text()
