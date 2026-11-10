@@ -1200,32 +1200,42 @@ static void mi_graph_arp(void)
         cv_rect(18+(int32_t)x*27,98-h,18,h,mode?YELLOW:DIM);
     }
 }
+/* The REC screen follows the existing four-row drum sequencer style.
+ * Three compact waveforms, independent playheads, MUTE and selection.
+ * The standard bottom knob strip exposes REC or MIX pages. */
 static void mi_graph_recorder(void)
 {
-    unsigned x;
-    uint32_t count=audio.recorder.count;
-    uint32_t inx=(uint32_t)state.seq[0]*223u/127u;
-    uint32_t outx=(uint32_t)state.seq[1]*223u/127u;
-    cv_text(12,36,&FONT_XS,
-        audio.recorder.recording?"RECORDING":
-        audio.recorder.playing?"LOOP PLAY":"STOPPED",YELLOW);
-    cv_line(8,78,232,78,DIM);
-    for(x=0;x<224u;x++){
-        int8_t mn,mx;
-        int32_t y0,y1;
-        if(x*MI_REC_CAPACITY/224u>=count)break;
-        mi_rec_peak(x,&mn,&mx);
-        y0=78-(int32_t)mx/3;
-        y1=78-(int32_t)mn/3;
-        if(y1<y0)y1=y0;
-        cv_line(8+(int32_t)x,y0,8+(int32_t)x,y1,YELLOW);
-    }
-    cv_line(8+(int32_t)inx,45,8+(int32_t)inx,114,GREY);
-    cv_line(8+(int32_t)outx,45,8+(int32_t)outx,114,GREY);
-    if(audio.recorder.playing){
-        uint32_t cursor=(uint32_t)(audio.recorder.playback_pos*223.f/(float)MI_REC_CAPACITY);
-        if(cursor>223u)cursor=223u;
-        cv_line(8+(int32_t)cursor,45,8+(int32_t)cursor,114,RGB(120,240,140));
+    unsigned tr,col;
+    static const char *const names[3]={"LOOP 1","LOOP 2","LOOP 3"};
+    for(tr=0u;tr<MI_REC_TRACKS;tr++){
+        const mi_rec_track_t *t=&audio.recorder.tracks[tr];
+        unsigned y=37u+tr*26u;
+        int sel=(tr==state.rec_track);
+        if(sel)cv_rect(3,(int32_t)y,3,20,YELLOW);
+        cv_text(9,(int32_t)y+1,&FONT_XS,names[tr],sel?YELLOW:GREY);
+        cv_text(58,(int32_t)y+1,&FONT_XS,
+            t->recording?"REC":t->armed?"ARM":
+            state.rec_mute[tr]?"MUTE":t->playing?"PLAY":"STOP",
+            t->recording?YELLOW:GREY);
+        cv_line(111,(int32_t)y+12,230,(int32_t)y+12,DIM);
+        for(col=0u;col<120u;col+=2u){
+            unsigned bucket=col*224u/120u;
+            int8_t lo=0,hi=0;
+            int32_t y0,y1;
+            if(bucket*MI_REC_CAPACITY/224u>=t->count)break;
+            mi_rec_peak_track(tr,bucket,&lo,&hi);
+            y0=(int32_t)y+12-(int32_t)hi/15;
+            y1=(int32_t)y+12-(int32_t)lo/15;
+            if(y1<y0)y1=y0;
+            cv_line(111+(int32_t)col,y0,111+(int32_t)col,y1,
+                    sel?YELLOW:GREY);
+        }
+        if(t->playing&&t->count>0u){
+            unsigned x=(unsigned)(t->playback_pos*119.f/(float)MI_REC_CAPACITY);
+            if(x>119u)x=119u;
+            cv_rect(111+(int32_t)x,(int32_t)y+4,2,17,C_WHITE);
+        }
+        if(tr<2u)cv_line(8,(int32_t)y+24,232,(int32_t)y+24,DIM);
     }
 }
 /* 240x240 FM-1 sequence page, matching MIYAKO's yellow/grey-on-black UI.
@@ -1522,9 +1532,11 @@ static void draw(void)
         else if(state.view==MI_ARP&&i==1u){
             static const char *const rates[]={"1/4","1/8","1/16","1/32"};
             textcpy(val,rates[state.arp[1]<=3u?state.arp[1]:3u],sizeof val);
-        }else if(state.view==MI_SEQ&&i==2u){
+        }else if(state.view==MI_SEQ&&!state.rec_page&&i==2u){
             static const int semitone[7]={-12,-7,-5,0,5,7,12};
-            number(semitone[state.seq[2]<=6u?state.seq[2]:3u],val);
+            unsigned pitch=state.rec_track?
+                state.rec_extra[state.rec_track-1u][2]:state.seq[2];
+            number(semitone[pitch<=6u?pitch:3u],val);
         }else number(mi_param_value(&state,i),val);
         cv_text(x,49,(state.view==MI_LFO&&i==3u)?&FONT_XS:&FONT_S,
                  val,YELLOW);
@@ -1576,8 +1588,7 @@ void app_frame(void)
          redraw=1;
      if(state.view==MI_SEQ &&
         ((state.step_editor&&state.step_play)||
-         (!state.step_editor&&(audio.recorder.recording||
-                              audio.recorder.playing||audio.recorder.armed))))
+         (!state.step_editor&&mi_rec_any_busy(&audio.recorder))))
          redraw=1;
      if(state.view==MI_OSC||state.view==MI_HOME){
          uint8_t active=audio.osc_scope_active;
@@ -1585,18 +1596,20 @@ void app_frame(void)
          osc_scope_last_active=active;
      }else osc_scope_last_active=0u;
  }
-  state.recording=audio.recorder.recording;
-  state.playing=audio.recorder.playing;
+  state.recording=audio.recorder.tracks[state.rec_track].recording;
+  state.playing=audio.recorder.tracks[state.rec_track].playing;
   /* MIDI updates can arrive without a key/knob event. Show STOP,
    * Clock lock and CC21 REC PITCH changes even when playback is idle. */
   if(state.view==MI_SEQ &&
      (state.step_editor?
       (shown_seq_play!=state.step_play||
        shown_seq_clock!=audio.step_midi_mode):
-      shown_rec_pitch!=state.seq[2]))redraw=1;
+      shown_rec_pitch!=(state.rec_track?
+          state.rec_extra[state.rec_track-1u][2]:state.seq[2])))redraw=1;
   shown_seq_play=state.step_play;
   shown_seq_clock=audio.step_midi_mode;
-  shown_rec_pitch=state.seq[2];
+  shown_rec_pitch=state.rec_track?
+      state.rec_extra[state.rec_track-1u][2]:state.seq[2];
   /* Persist global MIDI channel and clock once after the knobs settle.
    * A burst of detents must not write flash on every increment. */
   if(config_dirty&&(uint32_t)(now-config_changed_ms)>=1000u&&
