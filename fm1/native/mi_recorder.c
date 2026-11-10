@@ -1,13 +1,13 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Three-track FM-1 REC, 44,100 sample points per track, block IMA ADPCM.
+ * Three-track FM-1 REC, 44,100 sample points per track, 7-bit log-PCM.
  * No allocation, PCM clearing, block re-encoding or flash writes on each
  * audio sample. The three loop heads and overdub heads are independent.
  */
 #include "mi_recorder.h"
 #include "mi_memory.h"
-#define MI_REC_BLOCK_MASK (MI_REC_ADPCM_SAMPLES-1u)
-static uint8_t clip[MI_REC_TRACKS][MI_REC_ADPCM_BLOCKS]
-                   [MI_REC_ADPCM_BLOCK_BYTES] __attribute__((section(".pool")));
+#define MI_REC_BLOCK_MASK (MI_REC_PCM7_SAMPLES-1u)
+static uint8_t clip[MI_REC_TRACKS][MI_REC_PCM7_BLOCKS]
+                   [MI_REC_PCM7_BLOCK_BYTES] __attribute__((section(".pool")));
 static int8_t wave_min[MI_REC_TRACKS][224],wave_max[MI_REC_TRACKS][224];
 static mi_recorder_t *latest;
 static const float speed[7]={0.5f,0.667419927f,0.749153538f,
@@ -20,7 +20,7 @@ static unsigned track_id(const mi_recorder_t *r)
 static void commit(mi_rec_track_t *t,unsigned tr)
 {
     if(t->write_valid&&t->write_dirty){
-        mi_adpcm_encode_64(clip[tr][t->write_block],t->write_pcm);
+        mi_pcm7_encode_64(clip[tr][t->write_block],t->write_pcm);
         t->read_valid=0u;
         t->write_dirty=0u;
     }
@@ -29,23 +29,23 @@ static int16_t get_pcm(mi_rec_track_t *t,unsigned tr,uint32_t pos)
 {
     unsigned block;
     if(pos>=t->count||pos>=MI_REC_CAPACITY)return 0;
-    block=(unsigned)pos/MI_REC_ADPCM_SAMPLES;
+    block=(unsigned)pos/MI_REC_PCM7_SAMPLES;
     if(t->write_valid&&t->write_dirty&&t->write_block==block)
         return t->write_pcm[pos&MI_REC_BLOCK_MASK];
     if(!t->read_valid||t->read_block!=block){
-        mi_adpcm_decode_64(t->read_pcm,clip[tr][block]);
+        mi_pcm7_decode_64(t->read_pcm,clip[tr][block]);
         t->read_block=(uint16_t)block;t->read_valid=1u;
     }
     return t->read_pcm[pos&MI_REC_BLOCK_MASK];
 }
 static void put_pcm(mi_rec_track_t *t,unsigned tr,uint32_t pos,int16_t value)
 {
-    unsigned block=(unsigned)pos/MI_REC_ADPCM_SAMPLES;
+    unsigned block=(unsigned)pos/MI_REC_PCM7_SAMPLES;
     if(pos>=MI_REC_CAPACITY)return;
     if(!t->write_valid||t->write_block!=block){
         commit(t,tr);
         if(t->overdubbing&&t->count>=4u)
-            mi_adpcm_decode_64(t->write_pcm,clip[tr][block]);
+            mi_pcm7_decode_64(t->write_pcm,clip[tr][block]);
         else mi_memzero(t->write_pcm,sizeof t->write_pcm);
         t->write_block=(uint16_t)block;
         t->write_valid=1u;t->write_dirty=0u;
