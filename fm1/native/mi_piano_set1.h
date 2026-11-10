@@ -14,7 +14,7 @@ extern const uint8_t mi_piano_set1_51[MI_PIANO_SET1_SAMPLES];
 extern const uint8_t mi_piano_set1_58[MI_PIANO_SET1_SAMPLES];
 extern const uint8_t mi_piano_set1_65[MI_PIANO_SET1_SAMPLES];
 float mi_piano_set1_tick(unsigned zone,float *position,float step);
-static const uint8_t *mi_piano_set1_data(unsigned index)
+static inline const uint8_t *mi_piano_set1_data(unsigned index)
 {
     return index==0u?mi_piano_set1_51:
            index==1u?mi_piano_set1_58:mi_piano_set1_65;
