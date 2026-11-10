@@ -122,6 +122,14 @@ int mi_rec_any_playing(const mi_recorder_t *r)
     for(i=0u;i<MI_REC_TRACKS;i++)if(r->tracks[i].playing)return 1;
     return 0;
 }
+int mi_rec_any_audible(const mi_recorder_t *r)
+{
+    unsigned i;
+    if(!r)return 0;
+    for(i=0u;i<MI_REC_TRACKS;i++)
+        if(r->tracks[i].playing&&r->tracks[i].count>=4u&&!r->mute[i])return 1;
+    return 0;
+}
 int mi_rec_any_busy(const mi_recorder_t *r)
 {
     unsigned i;
