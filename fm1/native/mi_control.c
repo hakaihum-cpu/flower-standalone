@@ -93,6 +93,11 @@ void mi_init(mi_state_t *s)
     s->fx_options[MI_FX_PITCHSHIFT][1]=64u;
     /* REC editor: IN=0, OUT=127, pitch=0 semitones, level=100. */
     s->seq[0]=0;s->seq[1]=127;s->seq[2]=3;s->seq[3]=100;
+    for(unsigned t=0u;t<2u;t++){
+        s->rec_extra[t][0]=0u;s->rec_extra[t][1]=127u;
+        s->rec_extra[t][2]=3u;s->rec_extra[t][3]=100u;
+    }
+    for(unsigned t=0u;t<3u;t++)s->rec_pan[t]=64u;
     s->step_len=8u; /* 4 silent FMDrum tracks, ready for white-key toggles */
     s->midi_channel=1u; /* default MIDI note input channel 1 */
     s->global[3]=0;     /* clock source: 0=INTERNAL, 1=MIDI */
@@ -141,7 +146,11 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
     case MI_B_ENV: view(s, MI_ENV); break;
     case MI_B_LFO: view(s, MI_LFO); break;
     case MI_B_ARP: view(s, MI_ARP); break;
-    case MI_B_SEQ: view(s, MI_SEQ); s->step_editor=0u; break;
+    case MI_B_SEQ:
+        if(s->view==MI_SEQ&&!s->step_editor)s->rec_page^=1u;
+        else{view(s, MI_SEQ);s->rec_page=0u;}
+        s->step_editor=0u;
+        break;
     case MI_B_GLO: view(s, MI_CONFIG); break;
     case MI_B_OCT_DOWN:
         s->octave = (int8_t)limited(s->octave, -1, -3, 3); break;
@@ -271,9 +280,19 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
             if(k==3u)s->step_len=(uint8_t)limited(s->step_len,d,8,16);
             return;
         }
-        p=&s->seq[k];
-        if(k==0)hi=s->seq[1]>0u?(int32_t)s->seq[1]-1:0;
-        if(k==1)lo=(int32_t)s->seq[0]+1;
+        if(s->rec_page){
+            if(k==0u)s->rec_mute[s->rec_track]^=1u;
+            if(k==1u)s->rec_pan[s->rec_track]=(uint8_t)
+                limited(s->rec_pan[s->rec_track],fast_step(d,2u),0,127);
+            if(k==2u)s->rec_track=(uint8_t)limited(s->rec_track,d,0,2);
+            if(k==3u)s->rec_bars=(uint8_t)(s->rec_bars==2u?4u:2u);
+            return;
+        }
+        p=s->rec_track?&s->rec_extra[s->rec_track-1u][k]:&s->seq[k];
+        if(k==0){uint8_t out=s->rec_track?s->rec_extra[s->rec_track-1u][1]:s->seq[1];
+                 hi=out>0u?(int32_t)out-1:0;}
+        if(k==1){uint8_t in=s->rec_track?s->rec_extra[s->rec_track-1u][0]:s->seq[0];
+                 lo=(int32_t)in+1;}
         if(k==2)hi=6;
         break;
     case MI_CONFIG:
@@ -359,7 +378,9 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
             break;
         }
         if(s->view==MI_SEQ){
-            if(steps!=0)s->rec_bars=s->rec_bars==2u?4u:2u;
+            /* PRESET selects one of the three independent REC tracks.
+             * BAR length remains K4 on the REC MIX page. */
+            s->rec_track=(uint8_t)limited(s->rec_track,steps>0?1:-1,0,2);
             break;
         }
         if(s->view==MI_FX){
@@ -442,11 +463,18 @@ int mi_state_valid(const mi_state_t *s)
         s->step_track>=4u||s->step_play>1u||s->step_dir>2u||
         s->step_len<8u||s->step_len>16u||s->step_editor>1u||
         s->midi_channel<1u||s->midi_channel>16u||
-        s->save_action>1u||s->config_load_armed>1u)
+        s->save_action>1u||s->config_load_armed>1u||
+        s->rec_track>=3u||s->rec_page>1u)
         return 0;
     for (i = 0; i < 4u; ++i) {
         if (s->env[i] > 127u || s->lfo[i] > 127u || s->video_params[i]>127u)
             return 0;
+    }
+    for(i=0u;i<3u;i++)if(s->rec_mute[i]>1u||s->rec_pan[i]>127u)return 0;
+    for(i=0u;i<2u;i++){
+        if(s->rec_extra[i][0]>=s->rec_extra[i][1] ||
+           s->rec_extra[i][1]>127u || s->rec_extra[i][2]>6u ||
+           s->rec_extra[i][3]>127u)return 0;
     }
     for (i = 0; i < MI_FX_COUNT; ++i) {
         for (j = 0; j < 2u; ++j)
@@ -509,6 +537,10 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
     if(s->view==MI_SEQ&&s->step_editor){
         static const char *const names[4]={"TRACK","PLAY","DIR","STEPS"};
         return names[k];
+    }
+    if(s->view==MI_SEQ&&s->rec_page){
+        static const char *const mix[4]={"MUTE","PAN","TRACK","BARS"};
+        return mix[k];
     }
     if(s->view==MI_VIDEO){
         static const char *const v[4]={"GLITCH","TILE","XSHIFT","YSHIFT"};
@@ -610,7 +642,10 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
         if(s->step_editor)
             return k==0?s->step_track+1u:k==1?s->step_play:
                    k==2?s->step_dir:s->step_len;
-        return s->seq[k];
+        if(s->rec_page)return k==0?s->rec_mute[s->rec_track]:
+            k==1?s->rec_pan[s->rec_track]:
+            k==2?s->rec_track+1u:s->rec_bars;
+        return s->rec_track?s->rec_extra[s->rec_track-1u][k]:s->seq[k];
     case MI_CONFIG: return k==0?s->midi_channel:k==1?s->global[3]:
                           k==2?s->project_slot:s->config_load_armed;
     case MI_SAVE: return k==0?s->project_slot:k==1?s->save_action:
