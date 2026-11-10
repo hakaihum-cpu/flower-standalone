@@ -21,7 +21,7 @@
     uint16_t capture_samples;
 typedef struct {
     MI_REC_FIELDS
-    /* Two 64-sample caches avoid any ADPCM re-encode on each audio sample. */
+    /* Two 64-sample caches avoid per-sample block companding. */
     int16_t read_pcm[MI_REC_PCM7_SAMPLES],write_pcm[MI_REC_PCM7_SAMPLES];
     uint16_t read_block,write_block;
     uint8_t read_valid,write_valid,write_dirty;
