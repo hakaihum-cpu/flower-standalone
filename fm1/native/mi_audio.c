@@ -744,6 +744,35 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                 v->env-=v->release_step;
                 if(v->env<=0.f){v->env=0.f;v->active=0u;continue;}
             }
+            if(rs->wave==MI_WAVE_PIANO){
+                /* Flash-backed Wingie2 SET1 goes through the normal OSC
+                 * FILTER, FX and REC capture buses, never through DRUM SEQ.
+                 * A short crossfade holds only the note sustain in XIP. */
+                float pitch_mod=rs->lfo[3]==0u?
+                    clampf(1.f+mod*0.059f,0.8f,1.2f):1.f;
+                float value=mi_piano_set1_tick(v->piano_zone,&v->piano_pos,
+                                               v->piano_step*pitch_mod);
+                float submix=(float)rs->sub/127.f;
+                if(submix>0.f)
+                    value=value*(1.f-submix)+
+                          sin01(v->subphase)*submix;
+                if(rs->crush){
+                    int bits=16-(int)(rs->crush*13u/127u);
+                    float levels=(float)(1u<<bits);
+                    value=(float)(int)(value*levels)/levels;
+                }
+                if(rs->lfo[3]==2u)
+                    value*=clampf(1.f-0.5f*(float)rs->lfo[2]/127.f*
+                                   (1.f-lfo),0.f,1.f);
+                value*=v->piano_gain*v->env*(v->vel/127.f)*0.18f;
+                sample+=value;
+                osc_capture+=value;
+                v->subphase=wrap01(v->subphase+
+                                  v->increment*0.5f*pitch_mod);
+                if(v->piano_pos>=(float)mi_piano_set1_loop_start[v->piano_zone])
+                    v->piano_gain*=0.999985f;
+                continue;
+            }
             {
                 float main=osc(wave,v->phase,voice_duty),sub=sin01(v->subphase);
                 float submix=rs->sub/127.f;
