@@ -792,10 +792,14 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                     rec_r*(0.75f*a->rec_monitor_mix)+drum_seq);
             {
                 float st_l=out_l,st_r=out_r;
-                mi_slicer_tick(&a->slicer,out_l,out_r,tempo_step,
-                               rs->fx_slicer[0],rs->fx_slicer[1],
-                               slicer_slot<2u||a->slicer_mix>0.001f,
-                               &st_l,&st_r);
+                /* The approved FX-OFF path must not spend an extra DSP
+                 * call per output sample. Drain only an in-flight crossfade. */
+                unsigned slicer_active=(slicer_target>0.0001f||
+                                        a->slicer_mix>0.0001f);
+                if(slicer_active||a->slicer.active)
+                    mi_slicer_tick(&a->slicer,out_l,out_r,tempo_step,
+                                   rs->fx_slicer[0],rs->fx_slicer[1],
+                                   slicer_active,&st_l,&st_r);
                 a->slicer_mix+=(slicer_target-a->slicer_mix)*0.0015f;
                 /* OFF is bit-for-bit the old mixer path: do not apply a
                  * second soft limiter when the user has disabled SLICER. */
