@@ -42,6 +42,7 @@ void mi_rec_select(mi_recorder_t *r,unsigned track);
 void mi_rec_set_track(mi_recorder_t *r,unsigned track,const uint8_t controls[4],
                       unsigned mute,unsigned pan);
 int mi_rec_any_playing(const mi_recorder_t *r);
+int mi_rec_any_audible(const mi_recorder_t *r);
 int mi_rec_any_busy(const mi_recorder_t *r);
 void mi_rec_toggle_record(mi_recorder_t *r);
 void mi_rec_toggle_play(mi_recorder_t *r);
