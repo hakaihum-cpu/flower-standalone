@@ -68,7 +68,12 @@ jobs:
               fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/test_mi_recorder.c \
               -o /tmp/mi_recorder_test
             /tmp/mi_recorder_test
-            # ADPCM is host-tested first; it is not yet linked to the firmware.
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+              -fsanitize=address,undefined -fno-sanitize-recover=all \
+              fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/test_mi_multirec.c \
+              -o /tmp/mi_multirec_test
+            /tmp/mi_multirec_test
+            # ADPCM host regression precedes all expensive video processing.
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
               fm1/native/mi_rec_adpcm.c fm1/native/test_mi_rec_adpcm.c \
