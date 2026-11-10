@@ -91,6 +91,7 @@ void mi_init(mi_state_t *s)
     s->fx_options[MI_FX_BITCRUSH][1]=0u;
     s->fx_options[MI_FX_PITCHSHIFT][0]=64u;
     s->fx_options[MI_FX_PITCHSHIFT][1]=64u;
+    s->fx_slicer[0]=64u;s->fx_slicer[1]=88u;
     /* REC editor: IN=0, OUT=127, pitch=0 semitones, level=100. */
     s->seq[0]=0;s->seq[1]=127;s->seq[2]=3;s->seq[3]=100;
     for(unsigned t=0u;t<2u;t++){
@@ -259,7 +260,8 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
             return;
         }
         if(k==1)p=s->fx_slot?&s->wet2:&s->wet;
-        if(k>1&&mode<MI_FX_COUNT)p=&s->fx_options[mode][k-2];
+        if(k>1&&mode==MI_FX_SLICER)p=&s->fx_slicer[k-2];
+        else if(k>1&&mode<MI_FX_STORAGE_COUNT)p=&s->fx_options[mode][k-2];
         break;
     }
     case MI_VIDEO: p=&s->video_params[k];break;
@@ -476,12 +478,13 @@ int mi_state_valid(const mi_state_t *s)
            s->rec_extra[i][1]>127u || s->rec_extra[i][2]>6u ||
            s->rec_extra[i][3]>127u)return 0;
     }
-    for (i = 0; i < MI_FX_COUNT; ++i) {
+    for (i = 0; i < MI_FX_STORAGE_COUNT; ++i) {
         for (j = 0; j < 2u; ++j)
             if (s->fx_options[i][j] > 127u)return 0;
         for (j = 0; j < 4u; ++j)
             if (s->fx_extra[i][j] > 127u)return 0;
     }
+    for(i=0u;i<2u;i++)if(s->fx_slicer[i]>127u)return 0;
     return 1;
 }
 
@@ -519,7 +522,7 @@ const char *mi_fx_name(mi_fx_t effect)
 {
     static const char *const names[] = {
         "OFF","REEL","DREAMY","DELAY","REVERB","CHORUS",
-        "EUREKA","BITCRUSH","PITCHSHIFT"
+        "EUREKA","BITCRUSH","PITCHSHIFT","SLICER"
     };
     return (unsigned)effect < MI_FX_COUNT ? names[effect] : "?";
 }
@@ -591,6 +594,7 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         if (fx == MI_FX_EUREKA) return k == 2 ? "TIME" : "HAZE";
         if (fx == MI_FX_BITCRUSH) return k == 2 ? "BITS" : "HOLD";
         if (fx == MI_FX_PITCHSHIFT) return k == 2 ? "PITCH" : "GRAIN";
+        if (fx == MI_FX_SLICER) return k == 2 ? "RATE" : "RND";
         /* Other DSP controls are pending source-accurate port; not fabricated. */
         return "TBD";
     }
@@ -633,7 +637,8 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
                    k==1?(s->fx_extra[fx][1]>=64u?1:0):
                    (int32_t)s->fx_extra[fx][k];
         return k==0?(int32_t)fx:k==1?(int32_t)(s->fx_slot?s->wet2:s->wet):
-            (fx<MI_FX_COUNT?(int32_t)s->fx_options[fx][k-2]:0);
+            (fx==MI_FX_SLICER?(int32_t)s->fx_slicer[k-2]:
+             fx<MI_FX_STORAGE_COUNT?(int32_t)s->fx_options[fx][k-2]:0);
     }
     case MI_ENV: return s->env[k];
     case MI_LFO: return s->lfo[k];
