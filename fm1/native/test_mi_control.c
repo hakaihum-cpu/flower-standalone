@@ -103,7 +103,7 @@ int main(void)
     assert(s.seq[1]==49);
     for(i=0;i<5;i++) mi_button(&s, MI_B_OCT_DOWN, 7001);
     assert(s.octave == -3);
-    assert(MI_FX_COUNT == 9 && MI_VIEW_COUNT == 10);
+    assert(MI_FX_COUNT == 10 && MI_FX_STORAGE_COUNT == 9 && MI_VIEW_COUNT == 10);
     assert(!strcmp(mi_fx_name(MI_FX_EUREKA),"EUREKA"));
     assert(mi_fx_pair_supported(MI_FX_DREAMY,MI_FX_EUREKA));
     assert(!mi_fx_pair_supported(MI_FX_DELAY,MI_FX_EUREKA));
@@ -345,6 +345,7 @@ int main(void)
     mi_init(&s);
     assert(!strcmp(mi_fx_name(MI_FX_BITCRUSH),"BITCRUSH"));
     assert(!strcmp(mi_fx_name(MI_FX_PITCHSHIFT),"PITCHSHIFT"));
+    assert(!strcmp(mi_fx_name(MI_FX_SLICER),"SLICER"));
     assert(!mi_fx_pair_supported(MI_FX_DREAMY,MI_FX_PITCHSHIFT));
     mi_button(&s,MI_B_FX,9500);
     mi_rotate(&s,MI_EN_K1,7);
@@ -353,6 +354,10 @@ int main(void)
     mi_rotate(&s,MI_EN_K1,1);
     assert(s.fx==MI_FX_PITCHSHIFT);
     assert(!strcmp(mi_param_name(&s,2),"PITCH"));
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.fx==MI_FX_SLICER && !strcmp(mi_param_name(&s,2),"RATE"));
+    mi_rotate(&s,MI_EN_K3,1);
+    assert(s.fx_slicer[0]==66u);
     mi_button(&s,MI_B_LFO,9501);
     mi_rotate(&s,MI_EN_K4,57);
     assert(s.lfo[3]==57u);
