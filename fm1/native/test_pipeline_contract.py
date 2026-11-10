@@ -158,6 +158,16 @@ assert ci.index("python3 fm1/native/tools/check_ci_run_shell.py") < ci.index(
     "python3 -m compileall -q fm1/native")
 assert "five-sheet set's" not in ci
 assert (root / "fm1/native/tools/check_ci_run_shell.py").is_file()
+# #301: an unused local in the late SET1 host test failed -Werror.
+# Check ALL eleven real first-stage compiler invocations before running tests.
+shell_gate = (root / "fm1/native/tools/check_ci_run_shell.py").read_text()
+assert "def precompile_first_stage(" in shell_gate
+assert 'len(compiles) != 11' in shell_gate
+assert '"-fsyntax-only"' in shell_gate and '["bash", "-n"]' in shell_gate
+assert "precompile_first_stage(scripts[0][1], root)" in shell_gate
+piano_host = (root / "fm1/native/test_mi_piano_set1.c").read_text()
+assert "const uint8_t *samples=mi_piano_set1_data(zone);" not in piano_host
+assert "mi_piano_set1_tick(zone,&pos,1.f)" in piano_host
 assert re.search(r"^\s+only: feature/fm1-three-track-rec-drum-routing-video-slicer-20261110\s*$", ci, re.M)
 # A correct branch in the WRONG GitHub repository cannot build this app.
 # Reject the checkout before downloading 720 frames or starting the toolchain.
