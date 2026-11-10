@@ -1,5 +1,5 @@
 /* Host-only deterministic sanitizer stress: PCM7 + stereo SLICER.
- * Bounded input variation exercises block headers, transients, disabled FX,
+ * Bounded input variation exercises bit-packed blocks, transients, disabled FX,
  * tempo changes, muted histories, and both stereo signals.
  * No FM-1 firmware build is triggered by this test source.
  */
