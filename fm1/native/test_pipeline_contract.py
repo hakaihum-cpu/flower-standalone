@@ -662,10 +662,12 @@ assert "MI_FX_EUREKA" in audio and "mi_fx_dsp_reset_shared" in audio
 assert "mi_fx_pair_supported" in audio
 assert "s->fx2" in controls and "s->fx_slot" in controls
 assert "fx_stage(a,s,second" in audio
-assert "RECORDING" in ui and "LOOP PLAY" in ui
+assert '"LOOP 1","LOOP 2","LOOP 3"' in ui
+assert '"REC":t->armed?"ARM":' in ui
+assert "mi_rec_peak_track(tr,bucket,&lo,&hi);" in ui
 assert "mi_recorder.c" in (root / "fm1/native/fm1.toml").read_text()
-# MI17: real persistent 4-slot patch data, not four labels pointing to
-# the same one-slot OBJ_SETTINGS object. Old MI16/15/14/13 still migrate.
+# MI18: preserve four patch slots and migrate old MI17 bank exactly;
+# historic MI16/15/14/13 single-slot layouts still migrate.
 assert "mi_state_t slots[4];" in ui
 assert "#define SAVED_MAGIC_M16" in ui
 assert "sizeof(saved_mi16_t)" in ui
