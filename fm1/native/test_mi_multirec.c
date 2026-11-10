@@ -1,4 +1,4 @@
-/* Host regression for three-track ADPCM REC: isolation, mute, pan, pitch,
+/* Host regression for three-track 7-bit log-PCM REC: isolation, mute, pan, pitch,
  * independent overdub, clock, and the original 44,100 samples per track. */
 #include "mi_recorder.h"
 #include <assert.h>
