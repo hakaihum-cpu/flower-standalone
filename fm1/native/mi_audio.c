@@ -797,8 +797,12 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                                slicer_slot<2u||a->slicer_mix>0.001f,
                                &st_l,&st_r);
                 a->slicer_mix+=(slicer_target-a->slicer_mix)*0.0015f;
-                out_l=mi_soft_limit(out_l+(st_l-out_l)*a->slicer_mix);
-                out_r=mi_soft_limit(out_r+(st_r-out_r)*a->slicer_mix);
+                /* OFF is bit-for-bit the old mixer path: do not apply a
+                 * second soft limiter when the user has disabled SLICER. */
+                if(a->slicer_mix>0.0001f){
+                    out_l=mi_soft_limit(out_l+(st_l-out_l)*a->slicer_mix);
+                    out_r=mi_soft_limit(out_r+(st_r-out_r)*a->slicer_mix);
+                }
             }
             lr[2u*i]=(int32_t)(clampf(out_l,-1.f,1.f)*scale);
             lr[2u*i+1u]=(int32_t)(clampf(out_r,-1.f,1.f)*scale);
