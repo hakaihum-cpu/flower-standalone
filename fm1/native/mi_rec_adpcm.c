@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Block-isolated IMA ADPCM. No allocation, libc, or audio IRQ buffer clears.
- * 64 PCM16 samples -> 36 bytes: signed predictor, index, pad, 32 nibbles.
+ * 64 PCM16 samples -> 40 bytes: predictor, step index, 32 nibbles,
+ * and one exact 16-bit transient anchor (position + predictor).
  * Every block resets its predictor, enabling trim, pitch, and overdub edits.
  */
 #include "mi_rec_adpcm.h"
@@ -32,7 +33,7 @@ static int step_predict(int predictor,int *index,unsigned nibble)
 void mi_adpcm_encode_64(uint8_t out[MI_REC_ADPCM_BLOCK_BYTES],
                         const int16_t samples[MI_REC_ADPCM_SAMPLES])
 {
-    unsigned i;int predictor,index=0,first_gap;
+    unsigned i,reset_pos=255u;int predictor,index=0,first_gap;
     if(!out||!samples)return;
     predictor=samples[0];
     first_gap=(int)samples[1]-(int)samples[0];
@@ -42,9 +43,27 @@ void mi_adpcm_encode_64(uint8_t out[MI_REC_ADPCM_BLOCK_BYTES],
     while(index<88 && (int)steps[index] < first_gap/4)++index;
     out[0]=(uint8_t)predictor;out[1]=(uint8_t)(predictor>>8);
     out[2]=(uint8_t)index;out[3]=0u;
+    /* One exact anchor per 64-sample block prevents IMA ADPCM from
+     * smearing loud FMDrum transients or abrupt loop boundaries. */
+    {
+        unsigned j;int largest=1500;
+        for(j=1u;j<MI_REC_ADPCM_SAMPLES;j++){
+            int jump=(int)samples[j]-(int)samples[j-1u];
+            if(jump<0)jump=-jump;
+            if(jump>largest){largest=jump;reset_pos=j;}
+        }
+    }
+    out[36]=(uint8_t)reset_pos;
+    if(reset_pos<MI_REC_ADPCM_SAMPLES){
+        out[37]=(uint8_t)samples[reset_pos];
+        out[38]=(uint8_t)(samples[reset_pos]>>8);
+    }else {out[37]=0u;out[38]=0u;}
+    out[39]=0u;
     for(i=0;i<32u;i++)out[4u+i]=0u;
     for(i=0;i<MI_REC_ADPCM_SAMPLES;i++){
-        int diff=(int)samples[i]-predictor,mag,step,remaining,code=0;
+        int diff,mag,step,remaining,code=0;
+        if(i==reset_pos){predictor=samples[i];index=0;}
+        diff=(int)samples[i]-predictor;
         unsigned nibble;
         if(diff<0){code=8;mag=-diff;}else mag=diff;
         step=steps[index];remaining=step;
@@ -69,6 +88,10 @@ void mi_adpcm_decode_64(int16_t samples[MI_REC_ADPCM_SAMPLES],
     for(i=0;i<MI_REC_ADPCM_SAMPLES;i++){
         unsigned b=in[4u+(i>>1u)];
         unsigned nibble=(i&1u)?b>>4u:b&15u;
+        if(i==(unsigned)in[36]&&i>0u){
+            predictor=(int)(int16_t)((uint16_t)in[37]|((uint16_t)in[38]<<8u));
+            index=0;
+        }
         predictor=step_predict(predictor,&index,nibble);
         samples[i]=(int16_t)predictor;
     }
