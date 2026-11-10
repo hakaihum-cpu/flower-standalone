@@ -205,7 +205,8 @@ for wav_check in ("check_host_wav.py", "check_eureka_wav.py"):
     )
 assert ci.index("Reconstruct all 144 original") < ci.index("Compile FM-1 native platform host")
 assert "grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB'" in ci
-assert "mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/mi_rec_pcm7.c fm1/native/mi_slicer.c fm1/native/test_mi_audio.c" in ci
+assert "mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/mi_rec_pcm7.c fm1/native/mi_slicer.c fm1/native/mi_piano_set1_engine.c" in ci
+assert "mi_piano_set1_51.c fm1/native/mi_piano_set1_58.c fm1/native/mi_piano_set1_65.c fm1/native/test_mi_audio.c" in ci
 assert "MIYAKO_HOME.png" in ci and "MIYAKO_FX.png" in ci
 assert "MIYAKO_EFFECTS_VIDEO.png" in ci
 # Approved on 2026-11-06: no 26dB (or other arbitrary numeric) image
@@ -272,7 +273,8 @@ assert ci.index("Install pinned JieLi compiler") < ci.index(
     "Verify freestanding MIYAKO C with the actual JieLi target compiler")
 assert ci.index("Verify freestanding MIYAKO C with the actual JieLi target compiler") < ci.index(
     "Reconstruct all 144 original MIYAKO EFFECTS source frames")
-assert "for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_pcm7.c mi_slicer.c mi_control.c mi_video.c" in ci
+assert "for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_pcm7.c mi_slicer.c mi_piano_set1_engine.c mi_piano_set1_51.c" in ci
+assert "mi_piano_set1_58.c mi_piano_set1_65.c mi_control.c mi_video.c" in ci
 assert "fsyntax-only" in ci and "fno-builtin" in ci
 assert "fm1/native/mi_memory.h" in ci
 # JieLi's pi32v2 toolchain doesn't have hosted libc string.h; scanning
@@ -472,7 +474,13 @@ assert "p->dreamy_filter+=" in fxcode
 # Three independent 7-bit log-PCM buffers replace the original monolithic PCM.
 # Capturing is sample-accurate; block writes are committed only once per 64
 # sample span or at stop/finish, never re-encoded for each audio sample.
-assert "static uint8_t clip[MI_REC_TRACKS][MI_REC_PCM7_BLOCKS]" in recorder
+assert "static uint8_t clip_ram[MI_REC_PCM7_BLOCKS][MI_REC_PCM7_BLOCK_BYTES];" in recorder
+assert "static uint8_t clip_pool[MI_REC_TRACKS-1u][MI_REC_PCM7_BLOCKS]" in recorder
+assert "return tr==0u?clip_ram[block]:clip_pool[tr-1u][block];" in recorder
+# This explicitly reduces POOL usage without shortening existing DELAY,
+# REVERB, DREAMY, SLICER, or REC's three 44,100-point tracks.
+assert 329100-88200+2*690*56+16384 <= 344064
+assert 33804+690*56 <= 98304
 assert "mi_pcm7_encode_64" in recorder and "mi_pcm7_decode_64" in recorder
 pcm7 = (root / "fm1/native/mi_rec_pcm7.c").read_text(encoding="utf-8")
 pcm7_h = (root / "fm1/native/mi_rec_pcm7.h").read_text(encoding="utf-8")
@@ -711,6 +719,24 @@ assert "fm1/native/mi_recorder.c fm1/native/mi_rec_pcm7.c fm1/native/test_mi_mul
 assert "fm1/native/mi_rec_pcm7.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
 assert "fm1/native/mi_slicer.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
 assert "fm1/native/mi_slicer.c fm1/native/test_mi_slicer.c" in ci
+assert "fm1/native/test_mi_piano_set1.c -o /tmp/mi_piano_set1_test" in ci
+assert "/tmp/mi_piano_set1_test" in ci
+assert "PIANO: Wingie2 SET1 only" in ci
+assert "MI_WAVE_PIANO" in (root / "fm1/native/mi_control.h").read_text()
+assert 'return wave<=MI_WAVE_PIANO?names[wave]:"?";' in controls
+assert 'mi_piano_set1_tick(v->piano_zone,&v->piano_pos' in audio
+assert "drum_on(a,s,(uint8_t)note,a->held_velocity[note],0u)" in audio
+assert "drum_on(a,s,a->arp_note,vel?vel:100u,0u)" in audio
+piano_header=(root / "fm1/native/mi_piano_set1.h").read_text()
+assert "#define MI_PIANO_SET1_SAMPLES 9600u" in piano_header
+assert "51u,58u,65u" in piano_header
+assert 'mi_piano_set1_engine.c' in manifest
+for note in (51,58,65):
+    piano_path=root/f"fm1/native/mi_piano_set1_{note}.c"
+    txt=piano_path.read_text(encoding="utf-8")
+    assert len(__import__("re").findall(r"0x[0-9a-f]{2}",txt))==9600
+    assert f"mi_piano_set1_{note}[9600]" in txt
+    assert f"fm1/native/mi_piano_set1_{note}.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
 assert "fm1/native/test_mi_dsp_stress.c -o /tmp/mi_dsp_stress_test" in ci
 assert "/tmp/mi_dsp_stress_test" in ci
 assert "80000u" in (root / "fm1/native/test_mi_dsp_stress.c").read_text()
