@@ -473,6 +473,13 @@ assert "p->dreamy_filter+=" in fxcode
 # sample span or at stop/finish, never re-encoded for each audio sample.
 assert "static uint8_t clip[MI_REC_TRACKS][MI_REC_ADPCM_BLOCKS]" in recorder
 assert "mi_adpcm_encode_64" in recorder and "mi_adpcm_decode_64" in recorder
+adpcm = (root / "fm1/native/mi_rec_adpcm.c").read_text(encoding="utf-8")
+adpcm_h = (root / "fm1/native/mi_rec_adpcm.h").read_text(encoding="utf-8")
+assert "#define MI_REC_ADPCM_BLOCK_BYTES 40u" in adpcm_h
+assert "out[36]=(uint8_t)reset_pos;" in adpcm
+assert "if(i==(unsigned)in[36]&&i>0u)" in adpcm
+assert "MI_REC_ADPCM_STORE_BYTES==82800u" in (root / "fm1/native/test_mi_rec_adpcm.c").read_text()
+assert "MI_REC_ADPCM_STORE_BYTES==82800u" in (root / "fm1/native/test_mi_multirec.c").read_text()
 assert "for(tr=0u;tr<MI_REC_TRACKS;tr++)" in recorder
 assert "t->overdubbing=1u;t->recording=1u;t->playing=1u" in recorder
 assert "if(t->overdubbing&&t->count>=4u)" in recorder
