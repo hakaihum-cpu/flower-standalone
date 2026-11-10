@@ -14,7 +14,7 @@ typedef enum {
 typedef enum {
     MI_FX_OFF, MI_FX_REEL, MI_FX_DREAMY, MI_FX_DELAY,
     MI_FX_REVERB, MI_FX_CHORUS, MI_FX_EUREKA,
-    MI_FX_BITCRUSH, MI_FX_PITCHSHIFT, MI_FX_COUNT
+    MI_FX_BITCRUSH, MI_FX_PITCHSHIFT, MI_FX_SLICER, MI_FX_COUNT
 } mi_fx_t;
 typedef enum {
     MI_B_HOME, MI_B_EDIT, MI_B_FX, MI_B_SEL, MI_B_ENV,
@@ -29,12 +29,15 @@ typedef enum {
     MI_ACTION_NONE, MI_ACTION_SAVE, MI_ACTION_PLAY, MI_ACTION_RECORD,
     MI_ACTION_LOAD
 } mi_action_t;
+/* Preserve all approved MI17/MI18 FX parameter offsets when appending SLICER.
+ * SLICER's two controls live at the tail of mi_state_t. */
+#define MI_FX_STORAGE_COUNT 9u
 typedef struct {
     mi_view_t view;
     uint8_t wave, width, sub, crush, fx, wet, level, preset;
     /* wave 0..3 = single, 4 = MULTI. Oscillator1's actual waveform is
      * retained separately while the HOME WAVE selector stays on MULTI. */
-    uint8_t fx_options[MI_FX_COUNT][2];
+    uint8_t fx_options[MI_FX_STORAGE_COUNT][2];
     uint8_t env[4], lfo[4], arp[4], seq[4];
     int16_t global[4]; /* BPM 40..240, SWING 0..100, TUNE -50..50, CLOCK 0..2 */
     uint8_t fx2, wet2, fx_slot; /* independent FX B, toggle slot via FX button */
@@ -48,7 +51,7 @@ typedef struct {
     uint8_t osc2_wave, osc2_level, osc2_detune, osc2_octave, osc_page;
     /* Four additional genuinely routed DSP controls for DREAMY/EUREKA:
      * pitch, reverse, density, feedback. Original 2 controls remain. */
-    uint8_t fx_extra[MI_FX_COUNT][4];
+    uint8_t fx_extra[MI_FX_STORAGE_COUNT][4];
     uint8_t fx_page;
     uint8_t osc1_wave; /* appended, previous saved-state prefix unchanged */
     /* MI15 additions are migrated field-wise from historic layouts. */
@@ -74,6 +77,8 @@ typedef struct {
     uint8_t rec_page;    /* 0=IN/OUT/PITCH/LEVEL, 1=MUTE/PAN/TRACK/BARS */
     uint8_t rec_extra[2][4]; /* REC 2/3 independent controls */
     uint8_t rec_mute[3],rec_pan[3];
+    /* MI19: independent SLICER rate and randomness, added at the tail. */
+    uint8_t fx_slicer[2];
 } mi_state_t;
 typedef struct {
     mi_action_t action;
