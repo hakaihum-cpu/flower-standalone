@@ -204,7 +204,7 @@ for wav_check in ("check_host_wav.py", "check_eureka_wav.py"):
     )
 assert ci.index("Reconstruct all 144 original") < ci.index("Compile FM-1 native platform host")
 assert "grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB'" in ci
-assert "mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/mi_slicer.c fm1/native/test_mi_audio.c" in ci
+assert "mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/mi_rec_pcm7.c fm1/native/mi_slicer.c fm1/native/test_mi_audio.c" in ci
 assert "MIYAKO_HOME.png" in ci and "MIYAKO_FX.png" in ci
 assert "MIYAKO_EFFECTS_VIDEO.png" in ci
 # Approved on 2026-11-06: no 26dB (or other arbitrary numeric) image
@@ -271,7 +271,7 @@ assert ci.index("Install pinned JieLi compiler") < ci.index(
     "Verify freestanding MIYAKO C with the actual JieLi target compiler")
 assert ci.index("Verify freestanding MIYAKO C with the actual JieLi target compiler") < ci.index(
     "Reconstruct all 144 original MIYAKO EFFECTS source frames")
-assert "for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_adpcm.c mi_slicer.c mi_control.c mi_video.c" in ci
+assert "for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_pcm7.c mi_slicer.c mi_control.c mi_video.c" in ci
 assert "fsyntax-only" in ci and "fno-builtin" in ci
 assert "fm1/native/mi_memory.h" in ci
 # JieLi's pi32v2 toolchain doesn't have hosted libc string.h; scanning
@@ -468,18 +468,18 @@ assert "s->fx_page^=1u;" in controls
 assert "REC manual stop, adaptive 2/4 bars, 192 MIDI ticks" in (root / "fm1/native/test_mi_recorder.c").read_text()
 assert "mi_soft_limit(sample)" in audio
 assert "p->dreamy_filter+=" in fxcode
-# Three independent ADPCM buffers replace the original monolithic PCM.
+# Three independent 7-bit log-PCM buffers replace the original monolithic PCM.
 # Capturing is sample-accurate; block writes are committed only once per 64
 # sample span or at stop/finish, never re-encoded for each audio sample.
-assert "static uint8_t clip[MI_REC_TRACKS][MI_REC_ADPCM_BLOCKS]" in recorder
-assert "mi_adpcm_encode_64" in recorder and "mi_adpcm_decode_64" in recorder
-adpcm = (root / "fm1/native/mi_rec_adpcm.c").read_text(encoding="utf-8")
-adpcm_h = (root / "fm1/native/mi_rec_adpcm.h").read_text(encoding="utf-8")
-assert "#define MI_REC_ADPCM_BLOCK_BYTES 40u" in adpcm_h
-assert "out[36]=(uint8_t)reset_pos;" in adpcm
-assert "if(i==(unsigned)in[36]&&i>0u)" in adpcm
-assert "MI_REC_ADPCM_STORE_BYTES==82800u" in (root / "fm1/native/test_mi_rec_adpcm.c").read_text()
-assert "MI_REC_ADPCM_STORE_BYTES==82800u" in (root / "fm1/native/test_mi_multirec.c").read_text()
+assert "static uint8_t clip[MI_REC_TRACKS][MI_REC_PCM7_BLOCKS]" in recorder
+assert "mi_pcm7_encode_64" in recorder and "mi_pcm7_decode_64" in recorder
+pcm7 = (root / "fm1/native/mi_rec_pcm7.c").read_text(encoding="utf-8")
+pcm7_h = (root / "fm1/native/mi_rec_pcm7.h").read_text(encoding="utf-8")
+assert "#define MI_REC_PCM7_BLOCK_BYTES 56u" in pcm7_h
+assert "static const int16_t magnitude[64]" in pcm7
+assert "bit=7u*i" in pcm7
+assert "MI_REC_PCM7_STORE_BYTES==115920u" in (root / "fm1/native/test_mi_rec_pcm7.c").read_text()
+assert "MI_REC_PCM7_STORE_BYTES==115920u" in (root / "fm1/native/test_mi_multirec.c").read_text()
 assert "for(tr=0u;tr<MI_REC_TRACKS;tr++)" in recorder
 assert "t->overdubbing=1u;t->recording=1u;t->playing=1u" in recorder
 assert "if(t->overdubbing&&t->count>=4u)" in recorder
@@ -705,9 +705,9 @@ assert "note_channel==state.midi_channel" in ui
 assert "note==MI_REC_PITCH_CC" in ui
 # Manual FMDrum enters REC, but the FMDrum sequencer goes ONLY to final
 # output. The order must be unambiguous and preserved across future changes.
-assert "fm1/native/mi_rec_adpcm.c fm1/native/test_mi_rec_adpcm.c" in ci
-assert "fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/test_mi_multirec.c" in ci
-assert "fm1/native/mi_rec_adpcm.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
+assert "fm1/native/mi_rec_pcm7.c fm1/native/test_mi_rec_pcm7.c" in ci
+assert "fm1/native/mi_recorder.c fm1/native/mi_rec_pcm7.c fm1/native/test_mi_multirec.c" in ci
+assert "fm1/native/mi_rec_pcm7.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
 assert "fm1/native/mi_slicer.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
 assert "fm1/native/mi_slicer.c fm1/native/test_mi_slicer.c" in ci
 assert "fm1/native/test_mi_dsp_stress.c -o /tmp/mi_dsp_stress_test" in ci
@@ -722,7 +722,7 @@ assert "sizeof(saved_mi18_t)" in ui and "sizeof(saved_mi17_t)" in ui
 assert 'fx_options[MI_FX_STORAGE_COUNT][2]' in (root / "fm1/native/mi_control.h").read_text()
 assert 'fx_extra[MI_FX_STORAGE_COUNT][4]' in (root / "fm1/native/mi_control.h").read_text()
 assert "mi_fx_slicer" not in audio  # only one SLICER instance
-assert ci.index("/tmp/mi_rec_adpcm_test") < ci.index("Reconstruct all 144 original")
+assert ci.index("/tmp/mi_rec_pcm7_test") < ci.index("Reconstruct all 144 original")
 assert "drum_on(a,s,notes[t],112u,1u)" in audio
 assert "drum_on(a,s,note,velocity,0u)" in audio
 assert "if(v->drum_from_step)drum_seq+=drum" in audio
