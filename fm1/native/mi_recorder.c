@@ -60,11 +60,13 @@ static void clear_track(mi_rec_track_t *t,unsigned tr)
     uint32_t clock_ticks=t->clock_ticks;
     uint32_t clock_last_sample=t->clock_last_sample;
     float clock_period=t->clock_period;
+    float capture_step=t->capture_step,play_step=t->play_step;
     mi_memzero(t,sizeof *t);
     t->clock_active=clock;t->clock_ticks=clock_ticks;
     t->clock_last_sample=clock_last_sample;t->clock_period=clock_period;
     t->bars=bars?bars:2u;
-    t->capture_step=0.5f;t->play_step=0.5f;
+    t->capture_step=capture_step>0.f?capture_step:0.5f;
+    t->play_step=play_step>0.f?play_step:0.5f;
     mi_memzero(wave_min[tr],sizeof wave_min[tr]);
     mi_memzero(wave_max[tr],sizeof wave_max[tr]);
 }
@@ -346,7 +348,8 @@ void mi_rec_tick_stereo(mi_recorder_t *r,float input,
                         const uint8_t selected_controls[4],float *left,float *right)
 {
     float l=0.f,rr=0.f;unsigned tr;
-    if(left)*left=0.f;if(right)*right=0.f;
+    if(left)*left=0.f;
+    if(right)*right=0.f;
     if(!r||!selected_controls)return;
     for(tr=0u;tr<MI_REC_TRACKS;tr++){
         const uint8_t *controls=tr==0u?selected_controls:r->params[tr-1u];
