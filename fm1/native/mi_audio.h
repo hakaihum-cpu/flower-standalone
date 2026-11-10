@@ -17,6 +17,8 @@ typedef struct {
     uint32_t age;
     uint8_t drum_type,drum_variant,drum_from_step;
     float drum_decay_rate,drum_pitch_env;
+    float piano_pos,piano_step,piano_gain;
+    uint8_t piano_zone;
 } mi_voice_t;
 typedef struct {
     mi_voice_t v[MI_NATIVE_POLY];
