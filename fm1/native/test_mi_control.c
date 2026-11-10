@@ -363,11 +363,26 @@ int main(void)
     mi_rotate(&s,MI_EN_K2,20);
     assert(s.video_params[1]==40u);
     mi_button(&s,MI_B_SEQ,9503);
-    assert(s.rec_bars==2u);
-    mi_rotate(&s,MI_EN_PRESETS,1);
+    assert(s.rec_bars==2u && s.rec_track==0u && s.rec_page==0u);
+    mi_rotate(&s,MI_EN_PRESETS,1); /* select LOOP 2, do not alter bars */
+    assert(s.rec_track==1u && s.rec_bars==2u);
+    mi_rotate(&s,MI_EN_K1,5);
+    mi_rotate(&s,MI_EN_K3,1);
+    assert(s.rec_extra[0][0]==10u && s.rec_extra[0][2]==4u);
+    assert(s.seq[0]==0u && s.seq[2]==3u); /* LOOP 1 untouched */
+    mi_button(&s,MI_B_SEQ,9504); /* REC MIX page */
+    assert(s.rec_page==1u && !strcmp(mi_param_name(&s,0),"MUTE"));
+    mi_rotate(&s,MI_EN_K1,1);
+    mi_rotate(&s,MI_EN_K2,-10);
+    assert(s.rec_mute[1]==1u && s.rec_pan[1]==44u);
+    mi_rotate(&s,MI_EN_K3,1); /* TRACK 3 */
+    assert(s.rec_track==2u);
+    mi_rotate(&s,MI_EN_K4,1); /* BAR 2->4 moved to REC MIX K4 */
     assert(s.rec_bars==4u);
-    mi_rotate(&s,MI_EN_PRESETS,-1);
+    mi_rotate(&s,MI_EN_K4,-1);
     assert(s.rec_bars==2u);
+    mi_button(&s,MI_B_SEQ,9505);
+    assert(s.rec_page==0u);
     assert(mi_state_valid(&s));
     /* Short SEQ remains the RECORDER; the long-hold editor has independent
      * discrete controls and all 16 step positions without touching REC. */
