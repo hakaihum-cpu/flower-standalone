@@ -307,6 +307,11 @@ int main(void)
     mi_rotate(&s,MI_EN_K1,2); /* PULSE -> MULTI -> FMDRUM */
     assert(s.wave==MI_WAVE_FMDRUM);
     assert(!strcmp(mi_wave_name(s.wave),"FMDRUM"));
+    mi_rotate(&s,MI_EN_K1,1); /* SET1 piano follows FMDrum */
+    assert(s.wave==MI_WAVE_PIANO&&mi_state_valid(&s));
+    assert(!strcmp(mi_wave_name(s.wave),"PIANO"));
+    mi_rotate(&s,MI_EN_K1,-1);
+    assert(s.wave==MI_WAVE_FMDRUM);
     mi_button(&s,MI_B_EDIT,9304);
     assert(!strcmp(mi_param_name(&s,0),"TONE"));
     mi_rotate(&s,MI_EN_K1,10);
