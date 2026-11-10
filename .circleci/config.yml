@@ -55,7 +55,7 @@ jobs:
             /tmp/mi_control_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
-              fm1/native/mi_control.c fm1/native/mi_audio.c fm1/native/mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/mi_rec_pcm7.c fm1/native/mi_slicer.c fm1/native/test_mi_audio.c \
+              fm1/native/mi_control.c fm1/native/mi_audio.c fm1/native/mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/mi_rec_pcm7.c fm1/native/mi_slicer.c fm1/native/mi_piano_set1_engine.c fm1/native/mi_piano_set1_51.c fm1/native/mi_piano_set1_58.c fm1/native/mi_piano_set1_65.c fm1/native/test_mi_audio.c \
               -o /tmp/mi_audio_test
             /tmp/mi_audio_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
@@ -84,6 +84,12 @@ jobs:
               fm1/native/mi_slicer.c fm1/native/test_mi_slicer.c \
               -o /tmp/mi_slicer_test
             /tmp/mi_slicer_test
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+              -fsanitize=address,undefined -fno-sanitize-recover=all \
+              fm1/native/mi_piano_set1_engine.c fm1/native/mi_piano_set1_51.c \
+              fm1/native/mi_piano_set1_58.c fm1/native/mi_piano_set1_65.c \
+              fm1/native/test_mi_piano_set1.c -o /tmp/mi_piano_set1_test
+            /tmp/mi_piano_set1_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
               fm1/native/mi_rec_pcm7.c fm1/native/mi_slicer.c \
@@ -124,6 +130,9 @@ jobs:
                fm1/native/mi_recorder.c fm1/native/mi_recorder.h \
                fm1/native/mi_rec_pcm7.c fm1/native/mi_rec_pcm7.h \
                fm1/native/mi_slicer.c fm1/native/mi_slicer.h \
+               fm1/native/mi_piano_set1.h fm1/native/mi_piano_set1_engine.c \
+               fm1/native/mi_piano_set1_51.c fm1/native/mi_piano_set1_58.c \
+               fm1/native/mi_piano_set1_65.c \
                fm1/native/mi_memory.h fm1/native/mi_resource_media.h \
                /tmp/fm1-base/miyako/
             test -s /tmp/fm1-base/miyako/words.tsv
@@ -215,7 +224,7 @@ jobs:
             test -x "$CLC"
             # All four independent MIYAKO native DSP / video objects.
             # Same CPU, FPU, standard, builtin and optimization policy as fm1-base.
-            for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_pcm7.c mi_slicer.c mi_control.c mi_video.c; do
+            for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_pcm7.c mi_slicer.c mi_piano_set1_engine.c mi_piano_set1_51.c mi_piano_set1_58.c mi_piano_set1_65.c mi_control.c mi_video.c; do
               "$CLC" -fsyntax-only -std=c99 -Os -mcpu=r3 -mfprev1 -ffp-contract=off \
                 -fno-builtin -Wall -Werror=implicit-function-declaration \
                 -I /tmp/fm1-base/miyako -I /tmp/fm1-base/include \
@@ -363,6 +372,7 @@ jobs:
               'SAVE: K1 slot, K2 SAVE/LOAD, physical SAVE key twice confirms the action. Four independently stored flash presets.' \
               'FMDrum live keyboard is recorded by RECORDER. Automatic step-sequencer FMDrum bypasses the recorder capture bus and remains audible on the final output.' \
               'SLICER FX (RATE/RND/WET) processes the final stereo mix including all LOOP tracks and FMDrum. RECORDER MIDI Clock capture behavior is preserved.' \
+              'PIANO: Wingie2 SET1 only, flash-backed MIDI roots 51/58/65, three 0.8-second 12kHz mono samples. PIANO keyboard/MIDI enters the normal FX and REC capture bus.' \
               'This is NOT the complete approved MIYAKO port. Physical FM-1 verification is pending.' \
               > fm1-dist/README_BEFORE_INSTALL.txt
             (cd fm1-dist && sha256sum *.fwsc *-res.bin > SHA256SUMS)
