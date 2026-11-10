@@ -420,7 +420,8 @@ assert "case MI_VIDEO:" in controls
 assert "mi_fx_dsp_process_ex(&native_fx,mode,dry,a->sample_rate" in audio
 assert "s->fx_extra[mode]" in audio
 assert "mi_fx_dsp_process_ex(" in fxcode
-assert "mode!=MI_FX_OFF&&mode<MI_FX_COUNT" in audio
+assert "mode!=MI_FX_OFF&&mode<MI_FX_STORAGE_COUNT" in audio
+assert "if(a->slicer_mix>0.0001f)" in audio
 # The DSP and its host test must both exercise DREAMY, not just name a menu.
 assert "mode==MI_FX_DREAMY" in fxcode
 fx_test = (root / "fm1/native/test_mi_fx_dsp.c").read_text(encoding="utf-8")
