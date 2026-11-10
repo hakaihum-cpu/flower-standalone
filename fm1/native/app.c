@@ -22,7 +22,8 @@
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
 #define GREY RGB(218,213,202)
-#define SAVED_MAGIC 0x4D493137u /* MI17: four persistent preset slots */
+#define SAVED_MAGIC 0x4D493138u /* MI18: three-track REC control persistence */
+#define SAVED_MAGIC_M17 0x4D493137u /* MI17: old four-slot saved bank */
 #define SAVED_MAGIC_M16 0x4D493136u /* MI16: old single-slot settings */
 #define SAVED_MAGIC_M15 0x4D493135u /* MI15 settings */
 #define SAVED_MAGIC_M14 0x4D493134u /* MI14 settings */
@@ -33,7 +34,15 @@ typedef struct {
     uint32_t magic;
     uint8_t valid_mask,active_slot,midi_channel,clock_mode;
     mi_state_t slots[4];
-} saved_bank_t;
+ } saved_bank_t;
+/* Exact old MI17 bank slots, each padded to the old state alignment.
+ * Read only the historic prefix: padding must NOT overwrite MI18 defaults. */
+#define MI17_STATE_BYTES ((offsetof(mi_state_t,rec_track)+3u)&~3u)
+typedef struct {
+    uint32_t magic;
+    uint8_t valid_mask,active_slot,midi_channel,clock_mode;
+    uint8_t slots[4][MI17_STATE_BYTES];
+} saved_mi17_t;
 /* MI16 had exactly one state, aligned to the platform's 4-byte ABI.
  * Never interpret a smaller historic object as the four-slot MI17 blob. */
 #define MI16_STATE_BYTES ((offsetof(mi_state_t,midi_channel)+3u)&~3u)
@@ -297,6 +306,35 @@ void app_init(void)
          state=saved_bank.slots[saved_bank.active_slot-1u];
          restored=1;
      }
+ }else if(stored_bytes==(int)sizeof(saved_mi17_t)){
+     saved_mi17_t old17;
+     if(plat_store_load(OBJ_SETTINGS,&old17,sizeof old17)==
+        (int)sizeof old17 && old17.magic==SAVED_MAGIC_M17 &&
+        !(old17.valid_mask&0xF0u) &&
+        old17.active_slot>=1u&&old17.active_slot<=4u &&
+        old17.midi_channel>=1u&&old17.midi_channel<=16u &&
+        old17.clock_mode<=1u){
+         unsigned slot;
+         bank_loaded=1;
+         saved_bank.valid_mask=0u;
+         saved_bank.active_slot=old17.active_slot;
+         saved_bank.midi_channel=old17.midi_channel;
+         saved_bank.clock_mode=old17.clock_mode;
+         for(slot=0u;slot<4u;slot++)if(old17.valid_mask&(1u<<slot)){
+             mi_state_t migrated;
+             mi_init(&migrated); /* defaults for all new REC tracks */
+             mi_memcopy(&migrated,old17.slots[slot],
+                        offsetof(mi_state_t,rec_track));
+             if(mi_state_valid(&migrated)){
+                 saved_bank.slots[slot]=migrated;
+                 saved_bank.valid_mask|=(uint8_t)(1u<<slot);
+             }
+         }
+         if(saved_bank.valid_mask&(1u<<(old17.active_slot-1u))){
+             state=saved_bank.slots[old17.active_slot-1u];
+             restored=1;
+         }
+     }
  }else if(stored_bytes==(int)sizeof(saved_mi16_t)){
      saved_mi16_t old16;
      if(plat_store_load(OBJ_SETTINGS,&old16,sizeof old16)==(int)sizeof old16&&
@@ -381,8 +419,7 @@ void app_panic(void){mi_audio_panic(&audio);}
 int app_backup_playing(void)
 {
     unsigned i;
-    if(state.step_play||audio.recorder.recording||
-    audio.recorder.playing||audio.held_total||
+    if(state.step_play||mi_rec_any_busy(&audio.recorder)||audio.held_total||
        audio.arp_sounding)return 1;
     for(i=0u;i<MI_NATIVE_POLY;i++)if(audio.v[i].active)return 1;
     return 0;
@@ -421,7 +458,11 @@ static void midi_audio_poll(void)
          /* CC21 on any MIDI channel: existing 7 pitches, index 0..6.
           * 0=-12, 1=-7, 2=-5, 3=0, 4=+5, 5=+7, 6=+12 semitones.
           * Exactly the same state as RECORDER K3, no new pitch DSP. */
-         state.seq[2]=(uint8_t)(((unsigned)velocity*7u)>>7u);
+         {
+             uint8_t pitch=(uint8_t)(((unsigned)velocity*7u)>>7u);
+             if(state.rec_track==0u)state.seq[2]=pitch;
+             else state.rec_extra[state.rec_track-1u][2]=pitch;
+         }
      else if(kind==0xB0u&&note==123u&&
              note_channel==state.midi_channel)
          mi_audio_panic(&audio);
@@ -435,6 +476,9 @@ void app_render(int32_t *lr,uint32_t n,uint32_t master_q12)
  mi_audio_render(&audio,&state,lr,n,master_q12);
  for(i=0;i<n;i++){
      int32_t sample=lr[2u*i];
+     if(sample<0)sample=-sample;
+     if(sample>peak)peak=sample;
+     sample=lr[2u*i+1u];
      if(sample<0)sample=-sample;
      if(sample>peak)peak=sample;
  }
