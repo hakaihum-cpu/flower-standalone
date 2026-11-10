@@ -93,7 +93,7 @@ required = (
     "version: 2.1",
     "default: false",
     "when: << pipeline.parameters.run_build >>",
-    "only: feature/fm1-letter-highdetail-20261108",
+    "only: feature/fm1-three-track-rec-drum-routing-video-slicer-20261110",
     "fm1_native_build",
     "MIYAKO-FM1-NATIVE-DEV.fwsc",
     "MI_EFFECTS_ASSET_COUNT 144u",
@@ -158,7 +158,7 @@ assert ci.index("python3 fm1/native/tools/check_ci_run_shell.py") < ci.index(
     "python3 -m compileall -q fm1/native")
 assert "five-sheet set's" not in ci
 assert (root / "fm1/native/tools/check_ci_run_shell.py").is_file()
-assert re.search(r"^\s+only: feature/fm1-letter-highdetail-20261108\s*$", ci, re.M)
+assert re.search(r"^\s+only: feature/fm1-three-track-rec-drum-routing-video-slicer-20261110\s*$", ci, re.M)
 assert "/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako" in ci
 assert "test_media_crc.c" in ci
 assert "pack_effects_vq_candidate.py" in ci
@@ -780,5 +780,5 @@ assert "video.effects_cooldown=0u;" in ui
 assert "video.eureka_previous=0.f;" in ui
 # Repeat the manual gating and branch controls after introducing the assets.
 assert "when: << pipeline.parameters.run_build >>" in ci
-assert "only: feature/fm1-letter-highdetail-20261108" in ci
+assert "only: feature/fm1-three-track-rec-drum-routing-video-slicer-20261110" in ci
 print("PASS: manual Phase 3 REC + EUREKA 2sec/576 frames + guarded dual-FX")
