@@ -8,3 +8,7 @@ fm1/native/mi_fx_dsp.c
 fm1/native/mi_recorder.c
 fm1/native/mi_rec_pcm7.c
 fm1/native/mi_slicer.c
+fm1/native/mi_piano_set1_engine.c
+fm1/native/mi_piano_set1_51.c
+fm1/native/mi_piano_set1_58.c
+fm1/native/mi_piano_set1_65.c
