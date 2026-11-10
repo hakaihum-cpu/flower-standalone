@@ -86,6 +86,11 @@ jobs:
             /tmp/mi_slicer_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
+              fm1/native/mi_rec_adpcm.c fm1/native/mi_slicer.c \
+              fm1/native/test_mi_dsp_stress.c -o /tmp/mi_dsp_stress_test
+            /tmp/mi_dsp_stress_test
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+              -fsanitize=address,undefined -fno-sanitize-recover=all \
               fm1/native/mi_video.c fm1/native/test_mi_video.c \
               -o /tmp/mi_video_test
             /tmp/mi_video_test
