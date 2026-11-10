@@ -6,8 +6,8 @@
 #define MI_REC_ADPCM_H
 #include <stdint.h>
 #define MI_REC_ADPCM_SAMPLES 64u
-#define MI_REC_ADPCM_BLOCK_BYTES 36u
-#define MI_REC_ADPCM_BLOCKS 690u /* ceil(44100 / 64) */
+#define MI_REC_ADPCM_BLOCK_BYTES 40u
+#define MI_REC_ADPCM_BLOCKS 690u /* ceil(44100 / 64): 36-byte ADPCM + 4-byte transient anchor */
 #define MI_REC_ADPCM_TRACKS 3u
 #define MI_REC_ADPCM_STORE_BYTES (MI_REC_ADPCM_TRACKS*MI_REC_ADPCM_BLOCKS*MI_REC_ADPCM_BLOCK_BYTES)
 void mi_adpcm_encode_64(uint8_t out[MI_REC_ADPCM_BLOCK_BYTES],
