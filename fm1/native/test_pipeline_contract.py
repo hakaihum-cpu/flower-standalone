@@ -204,7 +204,7 @@ for wav_check in ("check_host_wav.py", "check_eureka_wav.py"):
     )
 assert ci.index("Reconstruct all 144 original") < ci.index("Compile FM-1 native platform host")
 assert "grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB'" in ci
-assert "mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/test_mi_audio.c" in ci
+assert "mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/mi_slicer.c fm1/native/test_mi_audio.c" in ci
 assert "MIYAKO_HOME.png" in ci and "MIYAKO_FX.png" in ci
 assert "MIYAKO_EFFECTS_VIDEO.png" in ci
 # Approved on 2026-11-06: no 26dB (or other arbitrary numeric) image
@@ -271,7 +271,7 @@ assert ci.index("Install pinned JieLi compiler") < ci.index(
     "Verify freestanding MIYAKO C with the actual JieLi target compiler")
 assert ci.index("Verify freestanding MIYAKO C with the actual JieLi target compiler") < ci.index(
     "Reconstruct all 144 original MIYAKO EFFECTS source frames")
-assert "for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_adpcm.c mi_control.c mi_video.c" in ci
+assert "for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_adpcm.c mi_slicer.c mi_control.c mi_video.c" in ci
 assert "fsyntax-only" in ci and "fno-builtin" in ci
 assert "fm1/native/mi_memory.h" in ci
 # JieLi's pi32v2 toolchain doesn't have hosted libc string.h; scanning
@@ -666,7 +666,7 @@ assert '"LOOP 1","LOOP 2","LOOP 3"' in ui
 assert '"REC":t->armed?"ARM":' in ui
 assert "mi_rec_peak_track(tr,bucket,&lo,&hi);" in ui
 assert "mi_recorder.c" in (root / "fm1/native/fm1.toml").read_text()
-# MI18: preserve four patch slots and migrate old MI17 bank exactly;
+# MI19: preserve four patch slots and migrate old MI17 and MI18 banks;
 # historic MI16/15/14/13 single-slot layouts still migrate.
 assert "mi_state_t slots[4];" in ui
 assert "#define SAVED_MAGIC_M16" in ui
@@ -700,6 +700,10 @@ assert "note==MI_REC_PITCH_CC" in ui
 assert "fm1/native/mi_rec_adpcm.c fm1/native/test_mi_rec_adpcm.c" in ci
 assert "fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/test_mi_multirec.c" in ci
 assert "fm1/native/mi_rec_adpcm.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
+assert "fm1/native/mi_slicer.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
+assert "fm1/native/mi_slicer.c fm1/native/test_mi_slicer.c" in ci
+assert "mi_slicer_tick(&a->slicer,out_l,out_r,tempo_step" in audio
+assert "mi_fx_slicer" not in audio  # only one SLICER instance
 assert ci.index("/tmp/mi_rec_adpcm_test") < ci.index("Reconstruct all 144 original")
 assert "drum_on(a,s,notes[t],112u,1u)" in audio
 assert "drum_on(a,s,note,velocity,0u)" in audio
