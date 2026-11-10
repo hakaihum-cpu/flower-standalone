@@ -467,14 +467,19 @@ assert "s->fx_page^=1u;" in controls
 assert "REC manual stop, adaptive 2/4 bars, 192 MIDI ticks" in (root / "fm1/native/test_mi_recorder.c").read_text()
 assert "mi_soft_limit(sample)" in audio
 assert "p->dreamy_filter+=" in fxcode
-assert "r->overdubbing=1u" in recorder
-assert "r->overdubbing&&r->count>=4u" in recorder
-# Mid-loop REC must not rewind playback. Cover manual REC, bar-quantised MIDI
-# start, clock loss, and manual/MIDI stop with executable native C tests.
-assert "static void begin_overdub(mi_recorder_t *r)" in recorder
-assert recorder.count("begin_overdub(r);") == 3
-assert "r->write_pos=(uint32_t)r->playback_pos;" in recorder
-assert "if(!was_overdubbing)r->playback_pos=0.f;" in recorder
+# Three independent ADPCM buffers replace the original monolithic PCM.
+# Capturing is sample-accurate; block writes are committed only once per 64
+# sample span or at stop/finish, never re-encoded for each audio sample.
+assert "static uint8_t clip[MI_REC_TRACKS][MI_REC_ADPCM_BLOCKS]" in recorder
+assert "mi_adpcm_encode_64" in recorder and "mi_adpcm_decode_64" in recorder
+assert "for(tr=0u;tr<MI_REC_TRACKS;tr++)" in recorder
+assert "t->overdubbing=1u;t->recording=1u;t->playing=1u" in recorder
+assert "if(t->overdubbing&&t->count>=4u)" in recorder
+assert "static void begin_overdub(mi_rec_track_t *t)" in recorder
+assert recorder.count("begin_overdub(t);") == 3
+assert "t->write_pos=(uint32_t)t->playback_pos;" in recorder
+assert "if(!was_overdubbing)t->playback_pos=0.f;" in recorder
+assert "float capture_step=t->capture_step,play_step=t->play_step;" in recorder
 recorder_test = (root / "fm1/native/test_mi_recorder.c").read_text()
 for position in ("1234.25f", "2345.75f", "3765.5f"):
     assert position in recorder_test
