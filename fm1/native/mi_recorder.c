@@ -92,7 +92,7 @@ void mi_rec_init(mi_recorder_t *r)
         r->tracks[i].bars=2u;
         r->tracks[i].capture_step=0.5f;
         r->tracks[i].play_step=0.5f;
-        r->pan[i]=64u;
+        r->pan[i]=64u;r->level[i]=100u;
         mi_memzero(wave_min[i],sizeof wave_min[i]);
         mi_memzero(wave_max[i],sizeof wave_max[i]);
     }
@@ -113,6 +113,7 @@ void mi_rec_set_track(mi_recorder_t *r,unsigned track,const uint8_t controls[4],
     if(!r||track>=MI_REC_TRACKS||!controls)return;
     r->mute[track]=(uint8_t)(mute!=0u);
     r->pan[track]=(uint8_t)(pan>127u?127u:pan);
+    r->level[track]=controls[3];
     if(track>0u)for(i=0u;i<4u;i++)r->params[track-1u][i]=controls[i];
 }
 int mi_rec_any_playing(const mi_recorder_t *r)
@@ -127,7 +128,8 @@ int mi_rec_any_audible(const mi_recorder_t *r)
     unsigned i;
     if(!r)return 0;
     for(i=0u;i<MI_REC_TRACKS;i++)
-        if(r->tracks[i].playing&&r->tracks[i].count>=4u&&!r->mute[i])return 1;
+        if(r->tracks[i].playing&&r->tracks[i].count>=4u&&
+           !r->mute[i]&&r->level[i]>0u)return 1;
     return 0;
 }
 int mi_rec_any_busy(const mi_recorder_t *r)
@@ -368,8 +370,10 @@ void mi_rec_tick_stereo(mi_recorder_t *r,float input,
         l+=x*(pan<=64u?1.f:(float)(127u-pan)/63.f);
         rr+=x*(pan>=64u?1.f:(float)pan/64.f);
     }
-    if(left)*left=boundf(l,-1.f,1.f);
-    if(right)*right=boundf(rr,-1.f,1.f);
+    /* Do not hard-clip the sum of three loop tracks. The stereo output
+     * mixer applies its smooth limiter after combining OSC and FMDrum. */
+    if(left)*left=l;
+    if(right)*right=rr;
 }
 float mi_rec_tick(mi_recorder_t *r,float input,const uint8_t controls[4])
 {
