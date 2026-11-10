@@ -20,6 +20,15 @@ int main(void)
         if(x.holding)++changed;
     }
     assert(changed>100u);
+    /* Small MIDI period jitter must not reset the active slice; large
+     * tempo changes are intentionally applied on the next sample. */
+    {
+        uint32_t before=x.phase;
+        mi_slicer_tick(&x,0.3f,-0.4f,2054.f,127u,127u,1u,&left,&right);
+        assert(x.phase==(before+1u)%x.span);
+        mi_slicer_tick(&x,0.3f,-0.4f,3200.f,127u,127u,1u,&left,&right);
+        assert(x.phase==1u && x.span==800u);
+    }
     mi_slicer_tick(&x,0.f,0.f,2048.f,127u,127u,0u,&left,&right);
     assert(left==0.f&&right==0.f&&x.valid==0u);
     mi_slicer_init(&x);
