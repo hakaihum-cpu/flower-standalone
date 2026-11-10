@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Three independent tempo-adaptive 4-bit IMA ADPCM loop tracks.
+ * Three independent tempo-adaptive 7-bit log-PCM loop tracks.
  * Original REC API and first-track legacy fields are preserved.
  */
 #ifndef MI_NATIVE_RECORDER_H
 #define MI_NATIVE_RECORDER_H
 #include <stdint.h>
-#include "mi_rec_adpcm.h"
+#include "mi_rec_pcm7.h"
 #define MI_REC_RATE 22050u
 #define MI_REC_CAPACITY 44100u
 #define MI_REC_TRACKS 3u
@@ -22,7 +22,7 @@
 typedef struct {
     MI_REC_FIELDS
     /* Two 64-sample caches avoid any ADPCM re-encode on each audio sample. */
-    int16_t read_pcm[MI_REC_ADPCM_SAMPLES],write_pcm[MI_REC_ADPCM_SAMPLES];
+    int16_t read_pcm[MI_REC_PCM7_SAMPLES],write_pcm[MI_REC_PCM7_SAMPLES];
     uint16_t read_block,write_block;
     uint8_t read_valid,write_valid,write_dirty;
 } mi_rec_track_t;
