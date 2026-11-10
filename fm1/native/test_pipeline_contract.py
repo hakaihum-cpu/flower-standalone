@@ -204,7 +204,7 @@ for wav_check in ("check_host_wav.py", "check_eureka_wav.py"):
     )
 assert ci.index("Reconstruct all 144 original") < ci.index("Compile FM-1 native platform host")
 assert "grep -q 'MI_EFFECTS_MEDIA_PREFLIGHT_STUB'" in ci
-assert "mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/test_mi_audio.c" in ci
+assert "mi_fx_dsp.c fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/test_mi_audio.c" in ci
 assert "MIYAKO_HOME.png" in ci and "MIYAKO_FX.png" in ci
 assert "MIYAKO_EFFECTS_VIDEO.png" in ci
 # Approved on 2026-11-06: no 26dB (or other arbitrary numeric) image
@@ -271,7 +271,7 @@ assert ci.index("Install pinned JieLi compiler") < ci.index(
     "Verify freestanding MIYAKO C with the actual JieLi target compiler")
 assert ci.index("Verify freestanding MIYAKO C with the actual JieLi target compiler") < ci.index(
     "Reconstruct all 144 original MIYAKO EFFECTS source frames")
-assert "for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_control.c mi_video.c" in ci
+assert "for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_adpcm.c mi_control.c mi_video.c" in ci
 assert "fsyntax-only" in ci and "fno-builtin" in ci
 assert "fm1/native/mi_memory.h" in ci
 # JieLi's pi32v2 toolchain doesn't have hosted libc string.h; scanning
@@ -698,11 +698,11 @@ assert "if(v->drum_from_step)drum_seq+=drum" in audio
 assert "else drum_manual+=drum" in audio
 assert "sample=effect(a,rs,sample);" in audio
 assert "sample=mi_soft_limit(sample+drum_manual);" in audio
-assert "mi_rec_tick(&a->recorder,sample,rs->seq)" in audio
-assert "sample=mi_soft_limit(sample+drum_seq);" in audio
+assert "mi_rec_tick_stereo(&a->recorder,sample,rs->seq,&rec_l,&rec_r)" in audio
+assert "rec_l*(0.75f*a->rec_monitor_mix)+drum_seq" in audio
 assert audio.index("sample=mi_soft_limit(sample+drum_manual);") < \
-       audio.index("mi_rec_tick(&a->recorder,sample,rs->seq)") < \
-       audio.index("sample=mi_soft_limit(sample+drum_seq);")
+       audio.index("mi_rec_tick_stereo(&a->recorder,sample,rs->seq,&rec_l,&rec_r)") < \
+       audio.index("rec_l*(0.75f*a->rec_monitor_mix)+drum_seq")
 assert "if(r->armed && ((r->clock_ticks-1u)%96u)==0u)" in recorder
 # Real host screenshots plus flash-reboot/load assertions.
 for name in ("MIYAKO_GLOBAL.png","MIYAKO_GLOBAL_MIDI.png",
