@@ -56,4 +56,5 @@ void mi_rec_stop(mi_recorder_t *r);
 void mi_rec_clear(mi_recorder_t *r);
 int16_t mi_rec_sample(uint32_t sample);
 void mi_rec_peak(unsigned column,int8_t *lo,int8_t *hi);
+void mi_rec_peak_track(unsigned track,unsigned column,int8_t *lo,int8_t *hi);
 #endif
