@@ -13,6 +13,7 @@ static const uint16_t mi_piano_set1_loop_start[3]={5991u,5867u,6070u};
 extern const uint8_t mi_piano_set1_51[MI_PIANO_SET1_SAMPLES];
 extern const uint8_t mi_piano_set1_58[MI_PIANO_SET1_SAMPLES];
 extern const uint8_t mi_piano_set1_65[MI_PIANO_SET1_SAMPLES];
+float mi_piano_set1_tick(unsigned zone,float *position,float step);
 static const uint8_t *mi_piano_set1_data(unsigned index)
 {
     return index==0u?mi_piano_set1_51:
