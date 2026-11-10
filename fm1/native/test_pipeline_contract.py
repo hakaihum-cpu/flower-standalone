@@ -159,6 +159,12 @@ assert ci.index("python3 fm1/native/tools/check_ci_run_shell.py") < ci.index(
 assert "five-sheet set's" not in ci
 assert (root / "fm1/native/tools/check_ci_run_shell.py").is_file()
 assert re.search(r"^\s+only: feature/fm1-three-track-rec-drum-routing-video-slicer-20261110\s*$", ci, re.M)
+# A correct branch in the WRONG GitHub repository cannot build this app.
+# Reject the checkout before downloading 720 frames or starting the toolchain.
+assert 'git remote get-url origin' in ci
+assert 'PASS: FM-1 checkout source hakaihum-cpu/flower-standalone' in ci
+assert 'FAIL: CircleCI checkout source must be hakaihum-cpu/flower-standalone' in ci
+assert ci.index("source_url=") < ci.index("python3 fm1/native/tools/check_ci_run_shell.py")
 assert "/tmp/mi-video-venv/bin/python /tmp/fm1-base/tools/build.py /tmp/fm1-base/miyako" in ci
 assert "test_media_crc.c" in ci
 assert "pack_effects_vq_candidate.py" in ci
