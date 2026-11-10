@@ -28,6 +28,14 @@ jobs:
           command: |
             set -eu
             test "$CIRCLE_BRANCH" = "feature/fm1-three-track-rec-drum-routing-video-slicer-20261110"
+            # GitHub App and OAuth checkouts may use HTTPS or SSH. Check
+            # the actual checkout origin, not just the branch display name.
+            source_url="$(git remote get-url origin 2>/dev/null || true)"
+            case "$source_url" in
+              *github.com:hakaihum-cpu/flower-standalone|*github.com:hakaihum-cpu/flower-standalone.git|*github.com/hakaihum-cpu/flower-standalone|*github.com/hakaihum-cpu/flower-standalone.git)
+                echo "PASS: FM-1 checkout source hakaihum-cpu/flower-standalone" ;;
+              *) echo "FAIL: CircleCI checkout source must be hakaihum-cpu/flower-standalone" >&2; exit 1 ;;
+            esac
             # Reject missing pipeline metadata before media/resource work.
             case "${CIRCLE_PIPELINE_NUMBER:-}" in
               ""|*[!0-9]*) echo "FAIL: CircleCI pipeline.number was not supplied" >&2; exit 1 ;;
