@@ -710,7 +710,7 @@ assert "rec_l*(0.75f*a->rec_monitor_mix)+drum_seq" in audio
 assert audio.index("sample=mi_soft_limit(sample+drum_manual);") < \
        audio.index("mi_rec_tick_stereo(&a->recorder,sample,rs->seq,&rec_l,&rec_r)") < \
        audio.index("rec_l*(0.75f*a->rec_monitor_mix)+drum_seq")
-assert "if(r->armed && ((r->clock_ticks-1u)%96u)==0u)" in recorder
+assert "if(t->armed && ((t->clock_ticks-1u)%96u)==0u)" in recorder
 # Real host screenshots plus flash-reboot/load assertions.
 for name in ("MIYAKO_GLOBAL.png","MIYAKO_GLOBAL_MIDI.png",
              "MIYAKO_SAVE_LOAD.png"):
