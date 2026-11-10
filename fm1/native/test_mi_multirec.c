@@ -25,12 +25,14 @@ int main(void)
         assert(count[tr]>=899u&&count[tr]<=901u);
     }
     assert(mi_rec_any_playing(&r));
+    assert(mi_rec_any_audible(&r));
     /* Mute is a playback-only control: data must remain intact. */
     mi_rec_set_track(&r,0u,controls,1u,64u);
     mi_rec_set_track(&r,1u,controls,1u,64u);
     mi_rec_set_track(&r,2u,controls,0u,0u);
     for(i=0u;i<30u;i++)
         mi_rec_tick_stereo(&r,0.f,controls,&left,&right);
+    assert(mi_rec_any_audible(&r));
     assert(left>0.10f);
     assert(right==0.f); /* track 3 hard left; other two muted */
     /* Selected track 2 can overdub without touching the other two heads. */
