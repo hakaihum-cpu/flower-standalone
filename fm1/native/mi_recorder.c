@@ -72,11 +72,14 @@ int16_t mi_rec_sample(uint32_t sample)
 {
     return latest?get_pcm(&latest->tracks[0],0u,sample):0;
 }
+void mi_rec_peak_track(unsigned tr,unsigned column,int8_t *lo,int8_t *hi)
+{
+    if(lo)*lo=tr<MI_REC_TRACKS&&column<224u?wave_min[tr][column]:0;
+    if(hi)*hi=tr<MI_REC_TRACKS&&column<224u?wave_max[tr][column]:0;
+}
 void mi_rec_peak(unsigned column,int8_t *lo,int8_t *hi)
 {
-    unsigned tr=latest?track_id(latest):0u;
-    if(lo)*lo=column<224u?wave_min[tr][column]:0;
-    if(hi)*hi=column<224u?wave_max[tr][column]:0;
+    mi_rec_peak_track(latest?track_id(latest):0u,column,lo,hi);
 }
 void mi_rec_init(mi_recorder_t *r)
 {
