@@ -6,8 +6,16 @@
 #include "mi_recorder.h"
 #include "mi_memory.h"
 #define MI_REC_BLOCK_MASK (MI_REC_PCM7_SAMPLES-1u)
-static uint8_t clip[MI_REC_TRACKS][MI_REC_PCM7_BLOCKS]
-                   [MI_REC_PCM7_BLOCK_BYTES] __attribute__((section(".pool")));
+/* The FM-1 linker has separate 96 KiB RAM and 344 KiB POOL.
+ * Keep one loop in RAM, two in POOL: all 3 clips remain full 44,100 points,
+ * without reducing FX history, SLICER, or recorder bit depth. */
+static uint8_t clip_ram[MI_REC_PCM7_BLOCKS][MI_REC_PCM7_BLOCK_BYTES];
+static uint8_t clip_pool[MI_REC_TRACKS-1u][MI_REC_PCM7_BLOCKS]
+                        [MI_REC_PCM7_BLOCK_BYTES] __attribute__((section(".pool")));
+static uint8_t *clip_block(unsigned tr,unsigned block)
+{
+    return tr==0u?clip_ram[block]:clip_pool[tr-1u][block];
+}
 static int8_t wave_min[MI_REC_TRACKS][224],wave_max[MI_REC_TRACKS][224];
 static mi_recorder_t *latest;
 static const float speed[7]={0.5f,0.667419927f,0.749153538f,
@@ -20,7 +28,7 @@ static unsigned track_id(const mi_recorder_t *r)
 static void commit(mi_rec_track_t *t,unsigned tr)
 {
     if(t->write_valid&&t->write_dirty){
-        mi_pcm7_encode_64(clip[tr][t->write_block],t->write_pcm);
+        mi_pcm7_encode_64(clip_block(tr,t->write_block),t->write_pcm);
         t->read_valid=0u;
         t->write_dirty=0u;
     }
@@ -33,7 +41,7 @@ static int16_t get_pcm(mi_rec_track_t *t,unsigned tr,uint32_t pos)
     if(t->write_valid&&t->write_dirty&&t->write_block==block)
         return t->write_pcm[pos&MI_REC_BLOCK_MASK];
     if(!t->read_valid||t->read_block!=block){
-        mi_pcm7_decode_64(t->read_pcm,clip[tr][block]);
+        mi_pcm7_decode_64(t->read_pcm,clip_block(tr,block));
         t->read_block=(uint16_t)block;t->read_valid=1u;
     }
     return t->read_pcm[pos&MI_REC_BLOCK_MASK];
@@ -45,7 +53,7 @@ static void put_pcm(mi_rec_track_t *t,unsigned tr,uint32_t pos,int16_t value)
     if(!t->write_valid||t->write_block!=block){
         commit(t,tr);
         if(t->overdubbing&&t->count>=4u)
-            mi_pcm7_decode_64(t->write_pcm,clip[tr][block]);
+            mi_pcm7_decode_64(t->write_pcm,clip_block(tr,block));
         else mi_memzero(t->write_pcm,sizeof t->write_pcm);
         t->write_block=(uint16_t)block;
         t->write_valid=1u;t->write_dirty=0u;
