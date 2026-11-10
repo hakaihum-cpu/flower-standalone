@@ -727,7 +727,11 @@ static void input(void)
      redraw=1;
  }
  plat_glow(1);
- plat_play_red(audio.recorder.recording!=0u);
+ {unsigned rec=0u,tr;
+  for(tr=0u;tr<MI_REC_TRACKS;tr++)
+      if(audio.recorder.tracks[tr].recording){rec=1u;break;}
+  plat_play_red(rec);
+ }
  plat_leds((1u<<(state.view==MI_OSC?B_EDIT:
                    state.view==MI_VIDEO?B_SEL:
                    state.view==MI_FX?B_FX:
@@ -1642,9 +1646,9 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"arp_note")) *got=(int)audio.arp_note;
  else if(mi_streq(what,"arp_sounding")) *got=(int)audio.arp_sounding;
  else if(mi_streq(what,"lfo_wave")) *got=(int)state.lfo[1];
- else if(mi_streq(what,"recording")) *got=(int)audio.recorder.recording;
-  else if(mi_streq(what,"rec_playing")) *got=(int)audio.recorder.playing;
-  else if(mi_streq(what,"rec_overdub")) *got=(int)audio.recorder.overdubbing;
+ else if(mi_streq(what,"recording")) *got=(int)audio.recorder.tracks[state.rec_track].recording;
+  else if(mi_streq(what,"rec_playing")) *got=(int)audio.recorder.tracks[state.rec_track].playing;
+  else if(mi_streq(what,"rec_overdub")) *got=(int)audio.recorder.tracks[state.rec_track].overdubbing;
   else if(mi_streq(what,"step_editor")) *got=(int)state.step_editor;
   else if(mi_streq(what,"step_track")) *got=(int)state.step_track;
   else if(mi_streq(what,"step_play")) *got=(int)state.step_play;
@@ -1661,8 +1665,11 @@ int app_expect(const char *what,int *got)
       uint32_t length=0u;
       *got=mi_photo_source(&length)!=0?1:0;
   }
-  else if(mi_streq(what,"rec_samples")) *got=(int)audio.recorder.count;
-  else if(mi_streq(what,"rec_pitch")) *got=(int)state.seq[2];
+  else if(mi_streq(what,"rec_samples")) *got=(int)audio.recorder.tracks[state.rec_track].count;
+  else if(mi_streq(what,"rec_pitch")) *got=(int)(state.rec_track?
+      state.rec_extra[state.rec_track-1u][2]:state.seq[2]);
+  else if(mi_streq(what,"rec_track")) *got=(int)state.rec_track+1;
+  else if(mi_streq(what,"rec_page")) *got=(int)state.rec_page;
  else if(mi_streq(what,"sub_frame"))
      *got=(int)(((unsigned)state.sub*(MI_LETTER_FRAMES-1u)+63u)/127u);
  else if(mi_streq(what,"sub")) *got=(int)state.sub;
