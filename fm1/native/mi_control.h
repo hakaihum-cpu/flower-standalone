@@ -69,6 +69,11 @@ typedef struct {
     uint8_t midi_channel;     /* 1..16: incoming note channel */
     uint8_t save_action;      /* SAVE screen K2: 0=SAVE 1=LOAD */
     uint8_t config_load_armed;/* GLO K4 double-detent confirmation */
+    /* MI18 REC: track 1 retains seq[] for historic preset/CC21 migration. */
+    uint8_t rec_track;   /* 0..2, PRESET turns while on REC */
+    uint8_t rec_page;    /* 0=IN/OUT/PITCH/LEVEL, 1=MUTE/PAN/TRACK/BARS */
+    uint8_t rec_extra[2][4]; /* REC 2/3 independent controls */
+    uint8_t rec_mute[3],rec_pan[3];
 } mi_state_t;
 typedef struct {
     mi_action_t action;
