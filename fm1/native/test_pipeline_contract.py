@@ -704,6 +704,12 @@ assert "fm1/native/mi_rec_adpcm.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt")
 assert "fm1/native/mi_slicer.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
 assert "fm1/native/mi_slicer.c fm1/native/test_mi_slicer.c" in ci
 assert "mi_slicer_tick(&a->slicer,out_l,out_r,tempo_step" in audio
+assert "uint8_t *parameters=m->rec_track?" in audio
+assert "m->rec_extra[m->rec_track-1u]:m->seq" in audio
+assert "#define SAVED_MAGIC_M18" in ui and "#define SAVED_MAGIC_M17" in ui
+assert "sizeof(saved_mi18_t)" in ui and "sizeof(saved_mi17_t)" in ui
+assert 'fx_options[MI_FX_STORAGE_COUNT][2]' in (root / "fm1/native/mi_control.h").read_text()
+assert 'fx_extra[MI_FX_STORAGE_COUNT][4]' in (root / "fm1/native/mi_control.h").read_text()
 assert "mi_fx_slicer" not in audio  # only one SLICER instance
 assert ci.index("/tmp/mi_rec_adpcm_test") < ci.index("Reconstruct all 144 original")
 assert "drum_on(a,s,notes[t],112u,1u)" in audio
