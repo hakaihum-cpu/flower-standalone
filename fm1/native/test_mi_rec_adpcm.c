@@ -26,6 +26,18 @@ int main(void)
         abs_error+=(unsigned long)(err<0?-err:err);
     }
     assert(abs_error/64u<3500u); /* basic signal fidelity gate */
+    /* Regression: a fast FMDrum transient must not be delayed across the
+     * IMA step-index ramp. Old 36-byte blocks smeared a 48k-level jump. */
+    for(i=0u;i<64u;i++)source[i]=(int16_t)(i<36u?-24000:24000);
+    mi_adpcm_encode_64(block,source);
+    assert(block[36]==36u); /* per-block exact transient position */
+    mi_adpcm_decode_64(decoded,block);
+    assert(decoded[35]<-20000&&decoded[36]>20000);
+    for(i=0u;i<64u;i++)source[i]=(int16_t)(i<22u?24000:-24000);
+    mi_adpcm_encode_64(block,source);
+    assert(block[36]==22u);
+    mi_adpcm_decode_64(decoded,block);
+    assert(decoded[21]>20000&&decoded[22]<-20000);
     puts("PASS: 3-track 82,800-byte transient-anchored IMA ADPCM block codec");
     return 0;
 }
