@@ -427,8 +427,16 @@ static void apply_lfo_destination(mi_state_t *m,unsigned dest,float depth)
     MOD(22,drum_color,127u);MOD(23,drum_level,127u);
     MOD(24,video_params[0],127u);MOD(25,video_params[1],127u);
     MOD(26,video_params[2],127u);MOD(27,video_params[3],127u);
-    MOD(28,seq[0],126u);MOD(29,seq[1],127u);
-    MOD(30,seq[2],6u);MOD(31,seq[3],127u);
+    case 28:case 29:case 30:case 31: {
+        /* REC LFO destinations always address the selected loop track,
+         * as do the physical REC knobs and MIDI CC21 pitch control. */
+        unsigned which=dest-28u;
+        unsigned hi=which==0u?126u:which==2u?6u:127u;
+        uint8_t *parameters=m->rec_track?
+            m->rec_extra[m->rec_track-1u]:m->seq;
+        parameters[which]=mod_u8(parameters[which],depth,hi);
+        break;
+    }
     MOD(32,arp[1],3u);MOD(33,arp[2],100u);
     MOD(34,arp[3],4u);
     case 35:m->global[0]=(int16_t)clampf((float)m->global[0]+depth*60.f,40.f,240.f);break;
@@ -452,9 +460,15 @@ static void apply_lfo_destination(mi_state_t *m,unsigned dest,float depth)
     default:break;
     }
 #undef MOD
-    if(m->seq[0]>=m->seq[1]){
-        if(dest==28u)m->seq[0]=m->seq[1]>0u?m->seq[1]-1u:0u;
-        else m->seq[1]=m->seq[0]<127u?m->seq[0]+1u:127u;
+    if(dest==28u||dest==29u){
+        uint8_t *parameters=m->rec_track?
+            m->rec_extra[m->rec_track-1u]:m->seq;
+        if(parameters[0]>=parameters[1]){
+            if(dest==28u)parameters[0]=parameters[1]>0u?
+                         parameters[1]-1u:0u;
+            else parameters[1]=parameters[0]<127u?
+                         parameters[0]+1u:127u;
+        }
     }
     if(m->arp[2]<10u)m->arp[2]=10u;
     if(m->arp[3]<1u)m->arp[3]=1u;
