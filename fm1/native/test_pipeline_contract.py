@@ -710,6 +710,10 @@ assert "fm1/native/mi_recorder.c fm1/native/mi_rec_adpcm.c fm1/native/test_mi_mu
 assert "fm1/native/mi_rec_adpcm.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
 assert "fm1/native/mi_slicer.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
 assert "fm1/native/mi_slicer.c fm1/native/test_mi_slicer.c" in ci
+assert "fm1/native/test_mi_dsp_stress.c -o /tmp/mi_dsp_stress_test" in ci
+assert "/tmp/mi_dsp_stress_test" in ci
+assert "80000u" in (root / "fm1/native/test_mi_dsp_stress.c").read_text()
+assert ci.index("/tmp/mi_dsp_stress_test") < ci.index("Reconstruct all 144 original")
 assert "mi_slicer_tick(&a->slicer,out_l,out_r,tempo_step" in audio
 assert "uint8_t *parameters=m->rec_track?" in audio
 assert "m->rec_extra[m->rec_track-1u]:m->seq" in audio
