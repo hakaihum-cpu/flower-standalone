@@ -69,6 +69,7 @@ void mi_audio_init(mi_audio_t *a,float rate)
     a->step_random=0x53455131u;
     mi_fx_dsp_init(&native_fx);
     mi_rec_init(&a->recorder);
+    mi_slicer_init(&a->slicer);
     a->video_effective[2]=64u;a->video_effective[3]=64u;
     a->last_mode=MI_FX_OFF;
 }
@@ -390,6 +391,20 @@ static uint8_t mod_u8(uint8_t base,float depth,unsigned hi)
     if(v>(float)hi)v=(float)hi;
     return (uint8_t)(v+0.5f);
 }
+static void mod_fx_option(mi_state_t *m,unsigned mode,unsigned which,float depth)
+{
+    if(which>=2u)return;
+    if(mode==MI_FX_SLICER)
+        m->fx_slicer[which]=mod_u8(m->fx_slicer[which],depth,127u);
+    else if(mode<MI_FX_STORAGE_COUNT)
+        m->fx_options[mode][which]=mod_u8(m->fx_options[mode][which],depth,127u);
+}
+static void mod_fx_extra(mi_state_t *m,unsigned mode,unsigned which,float depth)
+{
+    /* SLICER uses two dedicated controls; all old FX extra offsets stay fixed. */
+    if(mode<MI_FX_STORAGE_COUNT&&which<4u)
+        m->fx_extra[mode][which]=mod_u8(m->fx_extra[mode][which],depth,127u);
+}
 static void apply_lfo_destination(mi_state_t *m,unsigned dest,float depth)
 {
     unsigned first=m->fx<MI_FX_COUNT?m->fx:MI_FX_OFF;
@@ -403,11 +418,11 @@ static void apply_lfo_destination(mi_state_t *m,unsigned dest,float depth)
     MOD(10,env[0],127u);MOD(11,env[1],127u);
     MOD(12,env[2],127u);MOD(13,env[3],127u);
     MOD(14,wet,127u);
-    case 15:m->fx_options[first][0]=mod_u8(m->fx_options[first][0],depth,127u);break;
-    case 16:m->fx_options[first][1]=mod_u8(m->fx_options[first][1],depth,127u);break;
+    case 15:mod_fx_option(m,first,0u,depth);break;
+    case 16:mod_fx_option(m,first,1u,depth);break;
     MOD(17,wet2,127u);
-    case 18:m->fx_options[second][0]=mod_u8(m->fx_options[second][0],depth,127u);break;
-    case 19:m->fx_options[second][1]=mod_u8(m->fx_options[second][1],depth,127u);break;
+    case 18:mod_fx_option(m,second,0u,depth);break;
+    case 19:mod_fx_option(m,second,1u,depth);break;
     MOD(20,drum_tone,127u);MOD(21,drum_decay,127u);
     MOD(22,drum_color,127u);MOD(23,drum_level,127u);
     MOD(24,video_params[0],127u);MOD(25,video_params[1],127u);
@@ -419,14 +434,14 @@ static void apply_lfo_destination(mi_state_t *m,unsigned dest,float depth)
     case 35:m->global[0]=(int16_t)clampf((float)m->global[0]+depth*60.f,40.f,240.f);break;
     case 36:m->global[1]=(int16_t)clampf((float)m->global[1]+depth*50.f,0.f,100.f);break;
     case 37:m->global[2]=(int16_t)clampf((float)m->global[2]+depth*50.f,-50.f,50.f);break;
-    case 38:m->fx_extra[first][0]=mod_u8(m->fx_extra[first][0],depth,127u);break;
-    case 39:m->fx_extra[first][1]=mod_u8(m->fx_extra[first][1],depth,127u);break;
-    case 40:m->fx_extra[first][2]=mod_u8(m->fx_extra[first][2],depth,127u);break;
-    case 41:m->fx_extra[first][3]=mod_u8(m->fx_extra[first][3],depth,127u);break;
-    case 42:m->fx_extra[second][0]=mod_u8(m->fx_extra[second][0],depth,127u);break;
-    case 43:m->fx_extra[second][1]=mod_u8(m->fx_extra[second][1],depth,127u);break;
-    case 44:m->fx_extra[second][2]=mod_u8(m->fx_extra[second][2],depth,127u);break;
-    case 45:m->fx_extra[second][3]=mod_u8(m->fx_extra[second][3],depth,127u);break;
+    case 38:mod_fx_extra(m,first,0u,depth);break;
+    case 39:mod_fx_extra(m,first,1u,depth);break;
+    case 40:mod_fx_extra(m,first,2u,depth);break;
+    case 41:mod_fx_extra(m,first,3u,depth);break;
+    case 42:mod_fx_extra(m,second,0u,depth);break;
+    case 43:mod_fx_extra(m,second,1u,depth);break;
+    case 44:mod_fx_extra(m,second,2u,depth);break;
+    case 45:mod_fx_extra(m,second,3u,depth);break;
     MOD(46,osc2_octave,4u);MOD(47,osc1_wave,3u);
     MOD(48,osc2_wave,3u);MOD(49,wave,MI_WAVE_FMDRUM);
     MOD(50,fx,MI_FX_COUNT-1u);MOD(51,fx2,MI_FX_COUNT-1u);
@@ -468,7 +483,10 @@ static float fx_stage(mi_audio_t *a,const mi_state_t *s,
         }
         a->ring[a->wr&(MI_NATIVE_RING-1u)]=(int16_t)(clampf(dry,-1.f,1.f)*32767.f);
         ++a->wr;if(a->valid<MI_NATIVE_RING)++a->valid;
-    }else if(mode!=MI_FX_OFF&&mode<MI_FX_COUNT){
+    }else if(mode==MI_FX_SLICER){
+        /* SLICER processes the final stereo mix, not the OSC-only FX bus. */
+        target=0.f;
+    }else if(mode!=MI_FX_OFF&&mode<MI_FX_STORAGE_COUNT){
         wet=mi_fx_dsp_process_ex(&native_fx,mode,dry,a->sample_rate,
                                 s->fx_options[mode][0],s->fx_options[mode][1],
                                 s->fx_extra[mode]);
@@ -651,6 +669,17 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     mi_rec_configure(&a->recorder,(unsigned)rs->global[0],rs->rec_bars,
                      a->sample_rate,a->rendered_samples);
     arp_sync(a,rs);
+    /* Postmix SLICER sees all three LOOP outputs and both FMDrum sources.
+     * Prefer measured external MIDI period; fall back to internal BPM.
+     * The small sample history bounds slices to micro-stutter lengths. */
+    unsigned slicer_slot=rs->fx==MI_FX_SLICER?0u:
+                         rs->fx2==MI_FX_SLICER?1u:2u;
+    float slicer_target=slicer_slot==0u?(float)rs->wet/127.f:
+                        slicer_slot==1u?(float)rs->wet2/127.f:0.f;
+    float tempo_step=a->sample_rate*15.f/(float)rs->global[0];
+    if(a->recorder.tracks[0].clock_active &&
+       a->recorder.tracks[0].clock_period>1.f)
+        tempo_step=6.f*a->recorder.tracks[0].clock_period;
     /* UI updates only an 8-bit command; the audio thread owns the samples. */
     if(a->rec_command){
         uint8_t cmd=a->rec_command;
@@ -761,6 +790,16 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                     rec_l*(0.75f*a->rec_monitor_mix)+drum_seq);
             out_r=mi_soft_limit(sample*(1.f-0.45f*a->rec_monitor_mix)+
                     rec_r*(0.75f*a->rec_monitor_mix)+drum_seq);
+            {
+                float st_l=out_l,st_r=out_r;
+                mi_slicer_tick(&a->slicer,out_l,out_r,tempo_step,
+                               rs->fx_slicer[0],rs->fx_slicer[1],
+                               slicer_slot<2u||a->slicer_mix>0.001f,
+                               &st_l,&st_r);
+                a->slicer_mix+=(slicer_target-a->slicer_mix)*0.0015f;
+                out_l=mi_soft_limit(out_l+(st_l-out_l)*a->slicer_mix);
+                out_r=mi_soft_limit(out_r+(st_r-out_r)*a->slicer_mix);
+            }
             lr[2u*i]=(int32_t)(clampf(out_l,-1.f,1.f)*scale);
             lr[2u*i+1u]=(int32_t)(clampf(out_r,-1.f,1.f)*scale);
         }
