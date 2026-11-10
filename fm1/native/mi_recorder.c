@@ -1,184 +1,288 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * MIYAKO FM-1 fixed 44,100-sample recorder; duration follows tempo.
- * No heap, flash writes or PCM buffer clear in the audio IRQ.
+ * Three-track FM-1 REC, 44,100 sample points per track, block IMA ADPCM.
+ * No allocation, PCM clearing, block re-encoding or flash writes on each
+ * audio sample. The three loop heads and overdub heads are independent.
  */
 #include "mi_recorder.h"
 #include "mi_memory.h"
-static int16_t clip[MI_REC_CAPACITY] __attribute__((section(".pool")));
-static int8_t wave_min[224],wave_max[224];
-static float clamp(float x,float lo,float hi){return x<lo?lo:x>hi?hi:x;}
-int16_t mi_rec_sample(uint32_t sample){return sample<MI_REC_CAPACITY?clip[sample]:0;}
+#define MI_REC_BLOCK_MASK (MI_REC_ADPCM_SAMPLES-1u)
+static uint8_t clip[MI_REC_TRACKS][MI_REC_ADPCM_BLOCKS]
+                   [MI_REC_ADPCM_BLOCK_BYTES] __attribute__((section(".pool")));
+static int8_t wave_min[MI_REC_TRACKS][224],wave_max[MI_REC_TRACKS][224];
+static mi_recorder_t *latest;
+static const float speed[7]={0.5f,0.667419927f,0.749153538f,
+                             1.f,1.334839854f,1.498307077f,2.f};
+static float boundf(float x,float lo,float hi){return x<lo?lo:x>hi?hi:x;}
+static unsigned track_id(const mi_recorder_t *r)
+{
+    return r->selected<MI_REC_TRACKS?r->selected:0u;
+}
+static void commit(mi_rec_track_t *t,unsigned tr)
+{
+    if(t->write_valid&&t->write_dirty){
+        mi_adpcm_encode_64(clip[tr][t->write_block],t->write_pcm);
+        t->read_valid=0u;
+        t->write_dirty=0u;
+    }
+}
+static int16_t get_pcm(mi_rec_track_t *t,unsigned tr,uint32_t pos)
+{
+    unsigned block;
+    if(pos>=t->count||pos>=MI_REC_CAPACITY)return 0;
+    block=(unsigned)pos/MI_REC_ADPCM_SAMPLES;
+    if(t->write_valid&&t->write_dirty&&t->write_block==block)
+        return t->write_pcm[pos&MI_REC_BLOCK_MASK];
+    if(!t->read_valid||t->read_block!=block){
+        mi_adpcm_decode_64(t->read_pcm,clip[tr][block]);
+        t->read_block=(uint16_t)block;t->read_valid=1u;
+    }
+    return t->read_pcm[pos&MI_REC_BLOCK_MASK];
+}
+static void put_pcm(mi_rec_track_t *t,unsigned tr,uint32_t pos,int16_t value)
+{
+    unsigned block=(unsigned)pos/MI_REC_ADPCM_SAMPLES;
+    if(pos>=MI_REC_CAPACITY)return;
+    if(!t->write_valid||t->write_block!=block){
+        commit(t,tr);
+        if(t->overdubbing&&t->count>=4u)
+            mi_adpcm_decode_64(t->write_pcm,clip[tr][block]);
+        else mi_memzero(t->write_pcm,sizeof t->write_pcm);
+        t->write_block=(uint16_t)block;
+        t->write_valid=1u;t->write_dirty=0u;
+    }
+    t->write_pcm[pos&MI_REC_BLOCK_MASK]=value;
+    t->write_dirty=1u;
+    t->read_valid=0u;
+}
+static void clear_track(mi_rec_track_t *t,unsigned tr)
+{
+    uint8_t clock=t->clock_active,bars=t->bars;
+    uint32_t clock_ticks=t->clock_ticks;
+    uint32_t clock_last_sample=t->clock_last_sample;
+    float clock_period=t->clock_period;
+    mi_memzero(t,sizeof *t);
+    t->clock_active=clock;t->clock_ticks=clock_ticks;
+    t->clock_last_sample=clock_last_sample;t->clock_period=clock_period;
+    t->bars=bars?bars:2u;
+    t->capture_step=0.5f;t->play_step=0.5f;
+    mi_memzero(wave_min[tr],sizeof wave_min[tr]);
+    mi_memzero(wave_max[tr],sizeof wave_max[tr]);
+}
+int16_t mi_rec_sample(uint32_t sample)
+{
+    return latest?get_pcm(&latest->tracks[0],0u,sample):0;
+}
 void mi_rec_peak(unsigned column,int8_t *lo,int8_t *hi)
 {
-    if(lo)*lo=column<224u?wave_min[column]:0;
-    if(hi)*hi=column<224u?wave_max[column]:0;
+    unsigned tr=latest?track_id(latest):0u;
+    if(lo)*lo=column<224u?wave_min[tr][column]:0;
+    if(hi)*hi=column<224u?wave_max[tr][column]:0;
 }
 void mi_rec_init(mi_recorder_t *r)
 {
+    unsigned i;
     if(!r)return;
-    mi_memzero(r,sizeof(*r));
-    r->bars=2u;
-    r->capture_step=0.5f; /* legacy standalone host calls: 22.05kHz */
-    r->play_step=0.5f;
+    mi_memzero(r,sizeof *r);
+    for(i=0u;i<MI_REC_TRACKS;i++){
+        r->tracks[i].bars=2u;
+        r->tracks[i].capture_step=0.5f;
+        r->tracks[i].play_step=0.5f;
+        r->pan[i]=64u;
+        mi_memzero(wave_min[i],sizeof wave_min[i]);
+        mi_memzero(wave_max[i],sizeof wave_max[i]);
+    }
+    for(i=0u;i<2u;i++){
+        r->params[i][0]=0u;r->params[i][1]=127u;
+        r->params[i][2]=3u;r->params[i][3]=100u;
+    }
+    latest=r;
 }
-/* A new take starts playback from its first sample; OVERDUB, including
- * manual stop, clock stop and 192-tick completion, never rewinds the loop. */
-static void finish(mi_recorder_t *r)
+void mi_rec_select(mi_recorder_t *r,unsigned track)
 {
-    uint8_t was_overdubbing=r->overdubbing;
-    r->recording=0u;r->overdubbing=0u;r->armed=0u;
-    if(r->count>=4u){
-        r->playing=1u;
-        if(!was_overdubbing)r->playback_pos=0.f;
+    if(r&&track<MI_REC_TRACKS)r->selected=(uint8_t)track;
+}
+void mi_rec_set_track(mi_recorder_t *r,unsigned track,const uint8_t controls[4],
+                      unsigned mute,unsigned pan)
+{
+    unsigned i;
+    if(!r||track>=MI_REC_TRACKS||!controls)return;
+    r->mute[track]=(uint8_t)(mute!=0u);
+    r->pan[track]=(uint8_t)(pan>127u?127u:pan);
+    if(track>0u)for(i=0u;i<4u;i++)r->params[track-1u][i]=controls[i];
+}
+int mi_rec_any_playing(const mi_recorder_t *r)
+{
+    unsigned i;
+    if(!r)return 0;
+    for(i=0u;i<MI_REC_TRACKS;i++)if(r->tracks[i].playing)return 1;
+    return 0;
+}
+int mi_rec_any_busy(const mi_recorder_t *r)
+{
+    unsigned i;
+    if(!r)return 0;
+    for(i=0u;i<MI_REC_TRACKS;i++)
+        if(r->tracks[i].playing||r->tracks[i].recording||r->tracks[i].armed)return 1;
+    return 0;
+}
+static void finish(mi_rec_track_t *t,unsigned tr)
+{
+    uint8_t was_overdubbing=t->overdubbing;
+    commit(t,tr);
+    t->recording=0u;t->overdubbing=0u;t->armed=0u;
+    if(t->count>=4u){
+        t->playing=1u;
+        if(!was_overdubbing)t->playback_pos=0.f;
     }
 }
-/* Align the overdub write head to the CURRENT playback position.
- * Never reset the playback head or clear the existing recording. */
-static void begin_overdub(mi_recorder_t *r)
+static void begin_overdub(mi_rec_track_t *t)
 {
-    if(r->playback_pos<0.f||r->playback_pos>=(float)r->count)
-        r->playback_pos=0.f;
-    r->write_pos=(uint32_t)r->playback_pos;
-    r->overdubbing=1u;r->recording=1u;r->playing=1u;
-    r->capture_step=r->play_step;
-    r->capture_sum=0.f;r->capture_samples=0u;r->accumulator=0.f;
+    if(t->playback_pos<0.f||t->playback_pos>=(float)t->count)
+        t->playback_pos=0.f;
+    t->write_pos=(uint32_t)t->playback_pos;
+    t->write_valid=0u;t->write_dirty=0u;
+    t->overdubbing=1u;t->recording=1u;t->playing=1u;
+    t->capture_step=t->play_step;
+    t->capture_sum=0.f;t->capture_samples=0u;t->accumulator=0.f;
 }
 void mi_rec_stop(mi_recorder_t *r)
 {
+    unsigned i;
     if(!r)return;
-    r->armed=0u;r->recording=0u;r->playing=0u;r->overdubbing=0u;
+    for(i=0u;i<MI_REC_TRACKS;i++){
+        mi_rec_track_t *t=&r->tracks[i];
+        commit(t,i);
+        t->armed=0u;t->recording=0u;t->playing=0u;t->overdubbing=0u;
+    }
 }
 void mi_rec_clear(mi_recorder_t *r)
 {
+    unsigned tr;
     if(!r)return;
-    r->count=0u;r->write_pos=0u;r->playback_pos=0.f;
-    r->accumulator=0.f;r->capture_phase=0u;
-    r->capture_sum=0.f;r->capture_samples=0u;
-    r->recording=0u;r->playing=0u;r->overdubbing=0u;r->armed=0u;
-    mi_memzero(wave_min,sizeof wave_min);
-    mi_memzero(wave_max,sizeof wave_max);
+    tr=track_id(r);
+    clear_track(&r->tracks[tr],tr);
 }
 void mi_rec_configure(mi_recorder_t *r,unsigned bpm,unsigned bars,
                       float sample_rate,uint32_t sample_clock)
 {
-    float step;
+    unsigned tr;
     if(!r)return;
     if(sample_rate<8000.f)sample_rate=44100.f;
     if(bpm<40u)bpm=40u;
     if(bpm>240u)bpm=240u;
-    if(r->clock_active && (uint32_t)(sample_clock-r->clock_last_sample)>
-       (uint32_t)sample_rate){r->clock_active=0u;r->clock_period=0.f;}
-    /* Do not change recorded duration mid-take because a UI parameter moved.
-     * External clock takes precedence and is always exactly two bars. */
-    if(r->clock_active)r->bars=2u;
-    else if(!r->recording&&!r->playing&&!r->armed)
-        r->bars=(uint8_t)(bars==4u?4u:2u);
-    /* 44,100 PCM points span 2 or 4 bars, even at 40 BPM.
-     * 4 bars therefore trades quality for duration, NOT extra RAM. */
-    step=(float)MI_REC_CAPACITY*(float)bpm/
-         (r->bars*4.f*60.f*sample_rate);
-    if(r->clock_active&&r->clock_period>1.f)
-        step=(float)MI_REC_CAPACITY/(192.f*r->clock_period);
-    if(step>0.95f)step=0.95f;
-    if(step<0.001f)step=0.001f;
-    if((!r->recording && !r->playing) ||
-       (r->recording && !r->overdubbing))r->capture_step=step;
-    if(!r->playing&&!r->recording&&!r->armed)r->play_step=step;
-    /* Once locked to a MIDI master, playback can follow tempo drift
-     * without re-recording or adding storage. */
-    if(r->clock_active && r->clock_period>1.f &&
-       r->playing&&!r->recording&&r->count>=4u){
-        r->play_step=(float)r->count/(192.f*r->clock_period);
-    }
-    /* Lost-clock fallback never leaves REC armed indefinitely. */
-    if(r->armed&&!r->clock_active){
-        r->armed=0u;
-        if(r->count>=4u)begin_overdub(r);
-        else{mi_rec_clear(r);r->recording=1u;}
+    for(tr=0u;tr<MI_REC_TRACKS;tr++){
+        mi_rec_track_t *t=&r->tracks[tr];
+        float step;
+        if(t->clock_active && (uint32_t)(sample_clock-t->clock_last_sample)>
+           (uint32_t)sample_rate){t->clock_active=0u;t->clock_period=0.f;}
+        if(t->clock_active)t->bars=2u;
+        else if(!t->recording&&!t->playing&&!t->armed)
+            t->bars=(uint8_t)(bars==4u?4u:2u);
+        step=(float)MI_REC_CAPACITY*(float)bpm/
+             (t->bars*4.f*60.f*sample_rate);
+        if(t->clock_active&&t->clock_period>1.f)
+            step=(float)MI_REC_CAPACITY/(192.f*t->clock_period);
+        step=boundf(step,0.001f,0.95f);
+        if((!t->recording && !t->playing) ||
+           (t->recording && !t->overdubbing))t->capture_step=step;
+        if(!t->playing&&!t->recording&&!t->armed)t->play_step=step;
+        if(t->clock_active && t->clock_period>1.f &&
+           t->playing&&!t->recording&&t->count>=4u)
+            t->play_step=(float)t->count/(192.f*t->clock_period);
+        if(t->armed&&!t->clock_active){
+            t->armed=0u;
+            if(t->count>=4u)begin_overdub(t);
+            else{clear_track(t,tr);t->recording=1u;}
+        }
     }
 }
 void mi_rec_external_tick(mi_recorder_t *r,uint32_t sample_clock)
 {
+    unsigned tr;
     if(!r)return;
-    if(r->clock_active){
-        uint32_t interval=(uint32_t)(sample_clock-r->clock_last_sample);
-        if(interval>100u&&interval<22050u){
-            if(r->clock_period<=1.f)r->clock_period=(float)interval;
-            else r->clock_period=r->clock_period*0.8f+0.2f*(float)interval;
+    for(tr=0u;tr<MI_REC_TRACKS;tr++){
+        mi_rec_track_t *t=&r->tracks[tr];
+        if(t->clock_active){
+            uint32_t interval=(uint32_t)(sample_clock-t->clock_last_sample);
+            if(interval>100u&&interval<22050u){
+                if(t->clock_period<=1.f)t->clock_period=(float)interval;
+                else t->clock_period=t->clock_period*0.8f+0.2f*(float)interval;
+            }
         }
-    }
-    r->clock_last_sample=sample_clock;
-    r->clock_active=1u;
-    ++r->clock_ticks;
-    if(r->armed && ((r->clock_ticks-1u)%96u)==0u){
-        uint8_t overdub=r->count>=4u;
-        if(!overdub)mi_rec_clear(r);
-        r->armed=0u;
-        if(overdub)begin_overdub(r);
-        else{
-            r->recording=1u;r->overdubbing=0u;r->playing=0u;
-            r->write_pos=0u;r->playback_pos=0.f;
-            r->capture_sum=0.f;r->capture_samples=0u;r->accumulator=0.f;
+        t->clock_last_sample=sample_clock;
+        t->clock_active=1u;
+        ++t->clock_ticks;
+        if(t->armed && ((t->clock_ticks-1u)%96u)==0u){
+            uint8_t overdub=t->count>=4u;
+            if(!overdub)clear_track(t,tr);
+            t->armed=0u;
+            if(overdub)begin_overdub(t);
+            else{
+                t->recording=1u;t->overdubbing=0u;t->playing=0u;
+                t->write_pos=0u;t->playback_pos=0.f;
+                t->capture_sum=0.f;t->capture_samples=0u;t->accumulator=0.f;
+            }
+            t->clock_start_tick=t->clock_ticks;
+            if(!overdub&&t->clock_period>1.f)
+                t->capture_step=boundf((float)MI_REC_CAPACITY/
+                                     (192.f*t->clock_period),0.001f,0.95f);
+        }else if(t->recording &&
+                 (uint32_t)(t->clock_ticks-t->clock_start_tick)>=192u){
+            finish(t,tr);
         }
-        r->clock_start_tick=r->clock_ticks;
-        if(!overdub&&r->clock_period>1.f)
-            r->capture_step=clamp((float)MI_REC_CAPACITY/
-                                  (192.f*r->clock_period),0.001f,0.95f);
-    }else if(r->recording &&
-             (uint32_t)(r->clock_ticks-r->clock_start_tick)>=192u){
-        finish(r);
     }
 }
 void mi_rec_clock_stop(mi_recorder_t *r)
 {
+    unsigned tr;
     if(!r)return;
-    r->clock_active=0u;r->clock_period=0.f;r->armed=0u;
-    if(r->recording)finish(r);
+    for(tr=0u;tr<MI_REC_TRACKS;tr++){
+        mi_rec_track_t *t=&r->tracks[tr];
+        t->clock_active=0u;t->clock_period=0.f;t->armed=0u;
+        if(t->recording)finish(t,tr);
+    }
 }
 void mi_rec_toggle_record(mi_recorder_t *r)
 {
-    uint8_t clock;
+    mi_rec_track_t *t;unsigned tr;
     if(!r)return;
-    if(r->armed){r->armed=0u;return;}
-    if(r->recording){finish(r);return;}
-    if(r->clock_active){r->armed=1u;return;}
-    clock=r->clock_active;
-    if(r->count>=4u){
-        begin_overdub(r);
-        return;
-    }
-    mi_rec_clear(r);
-    r->clock_active=clock;
-    r->recording=1u;
+    tr=track_id(r);t=&r->tracks[tr];
+    if(t->armed){t->armed=0u;return;}
+    if(t->recording){finish(t,tr);return;}
+    if(t->clock_active){t->armed=1u;return;}
+    if(t->count>=4u){begin_overdub(t);return;}
+    clear_track(t,tr);
+    t->recording=1u;
 }
 void mi_rec_toggle_play(mi_recorder_t *r)
 {
+    mi_rec_track_t *t;unsigned tr;
     if(!r)return;
-    if(r->recording){r->recording=0u;r->overdubbing=0u;}
-    r->armed=0u;
-    if(r->count<4u){r->playing=0u;return;}
-    if(r->playing){r->playing=0u;return;}
-    r->playback_pos=0.f;r->playing=1u;
+    tr=track_id(r);t=&r->tracks[tr];
+    if(t->recording){finish(t,tr);}
+    t->armed=0u;
+    if(t->count<4u){t->playing=0u;return;}
+    if(t->playing){t->playing=0u;return;}
+    t->playback_pos=0.f;t->playing=1u;
 }
-float mi_rec_tick(mi_recorder_t *r,float input,const uint8_t controls[4])
+static float tick_track(mi_rec_track_t *t,unsigned tr,float input,
+                        const uint8_t controls[4])
 {
-    static const float speed[7]={0.5f,0.667419927f,0.749153538f,
-                                 1.f,1.334839854f,1.498307077f,2.f};
     uint32_t first,last,i,next,fade;
     float pos,fraction,out=0.f,ratio,level;
-    if(!r||!controls)return 0.f;
-    if(r->playing&&r->count>=4u){
-        first=(r->count-1u)*controls[0]/127u;
-        last=(r->count-1u)*controls[1]/127u+1u;
-        if(last>r->count)last=r->count;
-        if(first+2u>last)r->playing=0u;
+    if(t->playing&&t->count>=4u){
+        first=(t->count-1u)*controls[0]/127u;
+        last=(t->count-1u)*controls[1]/127u+1u;
+        if(last>t->count)last=t->count;
+        if(first+2u>last)t->playing=0u;
         else{
-            if(r->playback_pos<(float)first||r->playback_pos>=(float)last)
-                r->playback_pos=(float)first;
-            pos=r->playback_pos;i=(uint32_t)pos;
+            if(t->playback_pos<(float)first||t->playback_pos>=(float)last)
+                t->playback_pos=(float)first;
+            pos=t->playback_pos;i=(uint32_t)pos;
             next=i+1u<last?i+1u:first;
             fraction=pos-(float)i;
-            out=((float)clip[i]+((float)clip[next]-(float)clip[i])*fraction)*
+            out=((float)get_pcm(t,tr,i)+
+                 ((float)get_pcm(t,tr,next)-(float)get_pcm(t,tr,i))*fraction)*
                 (1.f/32767.f);
             fade=(last-first)/8u;
             if(fade>128u)fade=128u;
@@ -186,53 +290,76 @@ float mi_rec_tick(mi_recorder_t *r,float input,const uint8_t controls[4])
                 float headpos=(float)first+pos-(float)(last-fade);
                 uint32_t j=(uint32_t)headpos;
                 float part=headpos-(float)j;
-                float head=((float)clip[j]+
-                            ((float)clip[j+1u]-(float)clip[j])*part)*
+                float head=((float)get_pcm(t,tr,j)+
+                           ((float)get_pcm(t,tr,j+1u)-(float)get_pcm(t,tr,j))*part)*
                            (1.f/32767.f);
                 float mix=(pos-(float)(last-fade))/(float)fade;
                 out=out*(1.f-mix)+head*mix;
             }
             ratio=speed[controls[2]<=6u?controls[2]:3u];
-            r->playback_pos+=ratio*r->play_step;
-            if(r->playback_pos>=(float)last){
-                r->playback_pos=(float)(first+fade)+
-                                (r->playback_pos-(float)last);
-                if(r->playback_pos>=(float)last)
-                    r->playback_pos=(float)(first+fade);
+            t->playback_pos+=ratio*t->play_step;
+            if(t->playback_pos>=(float)last){
+                t->playback_pos=(float)(first+fade)+(t->playback_pos-(float)last);
+                if(t->playback_pos>=(float)last)
+                    t->playback_pos=(float)(first+fade);
             }
         }
     }
-    if(r->recording){
-        r->capture_sum+=input;
-        if(r->capture_samples<65535u)++r->capture_samples;
-        r->accumulator+=r->capture_step;
-        if(r->accumulator>=1.f){
-            float v=clamp(r->capture_sum/(float)r->capture_samples,-1.f,1.f);
-            r->capture_sum=0.f;r->capture_samples=0u;
-            r->accumulator-=1.f;
-            if(r->write_pos<MI_REC_CAPACITY){
-                uint32_t column=r->write_pos*224u/MI_REC_CAPACITY;
+    if(t->recording){
+        t->capture_sum+=input;
+        if(t->capture_samples<65535u)++t->capture_samples;
+        t->accumulator+=t->capture_step;
+        if(t->accumulator>=1.f){
+            float val=boundf(t->capture_sum/(float)t->capture_samples,-1.f,1.f);
+            t->capture_sum=0.f;t->capture_samples=0u;
+            t->accumulator-=1.f;
+            if(t->write_pos<MI_REC_CAPACITY){
+                uint32_t col=t->write_pos*224u/MI_REC_CAPACITY;
                 int32_t amp;
-                if(r->overdubbing&&r->count>=4u)
-                    v=clamp((float)clip[r->write_pos]*(1.f/32767.f)+v,-1.f,1.f);
-                amp=(int32_t)(v*110.f);
+                if(t->overdubbing&&t->count>=4u)
+                    val=boundf((float)get_pcm(t,tr,t->write_pos)*
+                               (1.f/32767.f)+val,-1.f,1.f);
+                amp=(int32_t)(val*110.f);
                 if(amp>110)amp=110;
                 if(amp< -110)amp=-110;
-                if(amp<wave_min[column])wave_min[column]=(int8_t)amp;
-                if(amp>wave_max[column])wave_max[column]=(int8_t)amp;
-                clip[r->write_pos++]=(int16_t)(v*32767.f);
-                if(!r->overdubbing)r->count=r->write_pos;
+                if(amp<wave_min[tr][col])wave_min[tr][col]=(int8_t)amp;
+                if(amp>wave_max[tr][col])wave_max[tr][col]=(int8_t)amp;
+                put_pcm(t,tr,t->write_pos++,(int16_t)(val*32767.f));
+                if(!t->overdubbing)t->count=t->write_pos;
             }
-            if(r->overdubbing){
-                if(r->write_pos>=r->count)r->write_pos=0u;
-            }else if(r->write_pos>=MI_REC_CAPACITY){
-                /* Under clock, hold to the exact 192-pulse bar boundary. */
-                r->play_step=r->capture_step;
-                if(!r->clock_active)finish(r);
+            if(t->overdubbing){
+                if(t->write_pos>=t->count)t->write_pos=0u;
+            }else if(t->write_pos>=MI_REC_CAPACITY){
+                t->play_step=t->capture_step;
+                if(!t->clock_active)finish(t,tr);
             }
         }
     }
-    if(r->recording&&!r->overdubbing)r->play_step=r->capture_step;
-    level=clamp((float)controls[3]/127.f,0.f,1.f);
-    return clamp(out*level,-1.f,1.f);
+    if(t->recording&&!t->overdubbing)t->play_step=t->capture_step;
+    level=boundf((float)controls[3]/127.f,0.f,1.f);
+    return boundf(out*level,-1.f,1.f);
+}
+void mi_rec_tick_stereo(mi_recorder_t *r,float input,
+                        const uint8_t selected_controls[4],float *left,float *right)
+{
+    float l=0.f,rr=0.f;unsigned tr;
+    if(left)*left=0.f;if(right)*right=0.f;
+    if(!r||!selected_controls)return;
+    for(tr=0u;tr<MI_REC_TRACKS;tr++){
+        const uint8_t *controls=tr==0u?selected_controls:r->params[tr-1u];
+        float x=tick_track(&r->tracks[tr],tr,input,controls);
+        unsigned pan=r->pan[tr];
+        if(r->mute[tr])continue;
+        /* Balance pan: centre retains the previous mono playback level. */
+        l+=x*(pan<=64u?1.f:(float)(127u-pan)/63.f);
+        rr+=x*(pan>=64u?1.f:(float)pan/64.f);
+    }
+    if(left)*left=boundf(l,-1.f,1.f);
+    if(right)*right=boundf(rr,-1.f,1.f);
+}
+float mi_rec_tick(mi_recorder_t *r,float input,const uint8_t controls[4])
+{
+    float l=0.f,rr=0.f;
+    mi_rec_tick_stereo(r,input,controls,&l,&rr);
+    return (l+rr)*0.5f;
 }
