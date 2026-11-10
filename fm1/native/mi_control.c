@@ -196,7 +196,7 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
             if(k==1)p=second?&s->osc2_detune:&s->sub;
             if(k==2)p=&s->osc2_level;
         }else{
-            if(k==0){p=&s->wave;hi=MI_WAVE_FMDRUM;}
+            if(k==0){p=&s->wave;hi=MI_WAVE_PIANO;}
             if(s->wave==MI_WAVE_FMDRUM){
                 if(k==1)p=&s->drum_tone;
                 if(k==2)p=&s->drum_decay;
@@ -356,7 +356,7 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
         }else{
             uint8_t old=s->wave;
             s->wave=(uint8_t)limited(s->wave,steps>0?1:-1,0,
-                                     s->view==MI_HOME?MI_WAVE_FMDRUM:MI_WAVE_FMDRUM);
+                                     s->view==MI_HOME?MI_WAVE_PIANO:MI_WAVE_PIANO);
             if(old!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
                 s->osc1_wave=old;
                 if(s->osc2_level==0u)s->osc2_level=64u;
@@ -437,7 +437,7 @@ int mi_state_valid(const mi_state_t *s)
 {
     unsigned i, j;
     if (!s || (unsigned)s->view >= MI_VIEW_COUNT ||
-        s->wave > MI_WAVE_FMDRUM || s->osc1_wave > 3u ||
+        s->wave > MI_WAVE_PIANO || s->osc1_wave > 3u ||
         s->width > 127u || s->sub > 127u ||
         s->crush > 127u || s->level > 127u ||
         s->fx >= MI_FX_COUNT || s->fx2 >= MI_FX_COUNT ||
@@ -490,8 +490,8 @@ int mi_state_valid(const mi_state_t *s)
 
 const char *mi_wave_name(unsigned wave)
 {
-    static const char *const names[] = {"SINE","SAW","SQUARE","PULSE","MULTI","FMDRUM"};
-    return wave<=MI_WAVE_FMDRUM?names[wave]:"?";
+    static const char *const names[] = {"SINE","SAW","SQUARE","PULSE","MULTI","FMDRUM","PIANO"};
+    return wave<=MI_WAVE_PIANO?names[wave]:"?";
 }
 const char *mi_arp_mode_name(unsigned mode)
 {
