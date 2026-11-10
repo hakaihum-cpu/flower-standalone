@@ -50,11 +50,16 @@ void mi_slicer_tick(mi_slicer_t *s,float in_l,float in_r,
     /* One full slice must be entirely written before playback begins.
      * 2,048 points are about 46 ms at 44.1 kHz. */
     if(span>MI_SLICER_FRAMES/2u)span=MI_SLICER_FRAMES/2u;
-    if(s->span!=span){
+    /* Smooth MIDI clock follows tempo without resetting an active slice
+     * for every 1-sample drift in the measured incoming clock period.
+     * Intentional large RATE or tempo changes still take effect. */
+    if(!s->span || span>s->span+(s->span/32u)+1u ||
+       span+(span/32u)+1u<s->span){
         s->span=span;
         s->phase=0u;
         s->holding=0u;s->repeats=0u;
     }
+    span=s->span;
     if(s->phase==0u){
         if(s->holding&&s->repeats>0u)
             --s->repeats;
