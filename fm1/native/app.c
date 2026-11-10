@@ -22,7 +22,8 @@
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
 #define GREY RGB(218,213,202)
-#define SAVED_MAGIC 0x4D493138u /* MI18: three-track REC control persistence */
+#define SAVED_MAGIC 0x4D493139u /* MI19: three-track REC + SLICER */
+#define SAVED_MAGIC_M18 0x4D493138u /* MI18: three-track REC */
 #define SAVED_MAGIC_M17 0x4D493137u /* MI17: old four-slot saved bank */
 #define SAVED_MAGIC_M16 0x4D493136u /* MI16: old single-slot settings */
 #define SAVED_MAGIC_M15 0x4D493135u /* MI15 settings */
@@ -43,6 +44,13 @@ typedef struct {
     uint8_t valid_mask,active_slot,midi_channel,clock_mode;
     uint8_t slots[4][MI17_STATE_BYTES];
 } saved_mi17_t;
+/* MI18: same historical state offsets, without appended SLICER controls. */
+#define MI18_STATE_BYTES ((offsetof(mi_state_t,fx_slicer)+3u)&~3u)
+typedef struct {
+    uint32_t magic;
+    uint8_t valid_mask,active_slot,midi_channel,clock_mode;
+    uint8_t slots[4][MI18_STATE_BYTES];
+} saved_mi18_t;
 /* MI16 had exactly one state, aligned to the platform's 4-byte ABI.
  * Never interpret a smaller historic object as the four-slot MI17 blob. */
 #define MI16_STATE_BYTES ((offsetof(mi_state_t,midi_channel)+3u)&~3u)
@@ -305,6 +313,35 @@ void app_init(void)
      if(saved_bank.valid_mask&(1u<<(saved_bank.active_slot-1u))){
          state=saved_bank.slots[saved_bank.active_slot-1u];
          restored=1;
+     }
+ }else if(stored_bytes==(int)sizeof(saved_mi18_t)){
+     saved_mi18_t old18;
+     if(plat_store_load(OBJ_SETTINGS,&old18,sizeof old18)==
+        (int)sizeof old18 && old18.magic==SAVED_MAGIC_M18 &&
+        !(old18.valid_mask&0xF0u) &&
+        old18.active_slot>=1u&&old18.active_slot<=4u &&
+        old18.midi_channel>=1u&&old18.midi_channel<=16u &&
+        old18.clock_mode<=1u){
+         unsigned slot;
+         bank_loaded=1;
+         saved_bank.valid_mask=0u;
+         saved_bank.active_slot=old18.active_slot;
+         saved_bank.midi_channel=old18.midi_channel;
+         saved_bank.clock_mode=old18.clock_mode;
+         for(slot=0u;slot<4u;slot++)if(old18.valid_mask&(1u<<slot)){
+             mi_state_t migrated;
+             mi_init(&migrated);
+             mi_memcopy(&migrated,old18.slots[slot],
+                        offsetof(mi_state_t,fx_slicer));
+             if(mi_state_valid(&migrated)){
+                 saved_bank.slots[slot]=migrated;
+                 saved_bank.valid_mask|=(uint8_t)(1u<<slot);
+             }
+         }
+         if(saved_bank.valid_mask&(1u<<(old18.active_slot-1u))){
+             state=saved_bank.slots[old18.active_slot-1u];
+             restored=1;
+         }
      }
  }else if(stored_bytes==(int)sizeof(saved_mi17_t)){
      saved_mi17_t old17;
@@ -1104,7 +1141,7 @@ static void mi_fx_dial(unsigned half,int32_t x,int32_t y,unsigned knob)
         dial=fx*127u/(MI_FX_COUNT-1u);
     }else{
         number(v,val);
-        if(state.fx_page&&fx<MI_FX_COUNT){
+        if(state.fx_page&&fx<MI_FX_STORAGE_COUNT){
             if(knob==0u)dial=state.fx_extra[fx][0];
             if(knob==1u)dial=state.fx_extra[fx][1]>=64u?127u:0u;
         }
