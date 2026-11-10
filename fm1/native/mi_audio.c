@@ -527,8 +527,11 @@ void mi_audio_midi_clock(mi_audio_t *a,mi_state_t *s,unsigned status)
 {
     if(!a||!s)return;
     if(status==0xFAu){ /* MIDI Start: Recorder clock path unchanged. */
-        a->recorder.clock_ticks=0u;
-        a->recorder.clock_period=0.f;
+        {unsigned t;
+         for(t=0u;t<MI_REC_TRACKS;t++){
+             a->recorder.tracks[t].clock_ticks=0u;
+             a->recorder.tracks[t].clock_period=0.f;
+         }}
         if(s->global[3]!=1)return; /* SEQ CLOCK INTERNAL ignores MIDI transport */
         a->step_midi_mode=1u;
         a->step_clock_phase=0u;
@@ -641,6 +644,10 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     decay_step=(1.f-sustain)/(a->sample_rate*(0.005f+2.f*dec*dec));
     release_samples=a->sample_rate*(0.005f+3.f*rel*rel);
     lfo_speed=(0.07f+15.f*(float)rs->lfo[0]/127.f)/a->sample_rate;
+    mi_rec_select(&a->recorder,rs->rec_track);
+    mi_rec_set_track(&a->recorder,0u,rs->seq,rs->rec_mute[0],rs->rec_pan[0]);
+    mi_rec_set_track(&a->recorder,1u,rs->rec_extra[0],rs->rec_mute[1],rs->rec_pan[1]);
+    mi_rec_set_track(&a->recorder,2u,rs->rec_extra[1],rs->rec_mute[2],rs->rec_pan[2]);
     mi_rec_configure(&a->recorder,(unsigned)rs->global[0],rs->rec_bars,
                      a->sample_rate,a->rendered_samples);
     arp_sync(a,rs);
@@ -741,17 +748,20 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
          * in/out over milliseconds. Simply adding two full-scale signals
          * clipped during layered playback and caused sharp transitions. */
         {
-            float monitored=mi_rec_tick(&a->recorder,sample,rs->seq);
-            float target=a->recorder.playing?1.f:0.f;
-            a->rec_monitor_mix+=(target-a->rec_monitor_mix)*0.0015f;
-            sample=mi_soft_limit(sample*(1.f-0.45f*a->rec_monitor_mix)+
-                                 monitored*(0.75f*a->rec_monitor_mix));
-        }
-        /* Sequence FMDrum is output-only, even during recording or overdub. */
-        sample=mi_soft_limit(sample+drum_seq);
-        {
-            int32_t out=(int32_t)(clampf(sample,-1.f,1.f)*scale);
-            lr[2u*i]=out;lr[2u*i+1u]=out;
+            float rec_l=0.f,rec_r=0.f,play_mix;
+            float out_l,out_r;
+            mi_rec_tick_stereo(&a->recorder,sample,rs->seq,&rec_l,&rec_r);
+            play_mix=mi_rec_any_playing(&a->recorder)?1.f:0.f;
+            a->rec_monitor_mix+=(play_mix-a->rec_monitor_mix)*0.0015f;
+            /* Each REC track has independent balance pan; the oscillator
+             * and manual FMDrum remain centre. Gain and soft limiting are
+             * applied after all three playback heads are summed. */
+            out_l=mi_soft_limit(sample*(1.f-0.45f*a->rec_monitor_mix)+
+                    rec_l*(0.75f*a->rec_monitor_mix)+drum_seq);
+            out_r=mi_soft_limit(sample*(1.f-0.45f*a->rec_monitor_mix)+
+                    rec_r*(0.75f*a->rec_monitor_mix)+drum_seq);
+            lr[2u*i]=(int32_t)(clampf(out_l,-1.f,1.f)*scale);
+            lr[2u*i+1u]=(int32_t)(clampf(out_r,-1.f,1.f)*scale);
         }
     }
     a->osc_scope_active=scope_audible;
