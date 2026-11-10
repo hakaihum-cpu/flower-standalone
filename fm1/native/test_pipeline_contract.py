@@ -731,10 +731,20 @@ piano_header=(root / "fm1/native/mi_piano_set1.h").read_text()
 assert "#define MI_PIANO_SET1_SAMPLES 9600u" in piano_header
 assert "51u,58u,65u" in piano_header
 assert 'mi_piano_set1_engine.c' in manifest
+# Verify the actual 9,600 bytes for each user-provided source sample.
+# SHA in a C comment alone cannot detect accidental audio-byte corruption.
+import hashlib
+piano_sha={
+    51:"7a89a36fe3e4909f7c988b7bdb535be147fb848f03e4de73c45e462e9f302ea1",
+    58:"ea51f90718233a14d32d7a3e69b10892d05356b1425277b2066336f36424db70",
+    65:"95658795abbd1cce5c471eb3307c55d30e8f80e175d79e709bc32d959c90d92c",
+}
 for note in (51,58,65):
     piano_path=root/f"fm1/native/mi_piano_set1_{note}.c"
     txt=piano_path.read_text(encoding="utf-8")
-    assert len(__import__("re").findall(r"0x[0-9a-f]{2}",txt))==9600
+    hexbytes=re.findall(r"0x[0-9a-f]{2}",txt)
+    assert len(hexbytes)==9600
+    assert hashlib.sha256(bytes(int(n,16) for n in hexbytes)).hexdigest()==piano_sha[note]
     assert f"mi_piano_set1_{note}[9600]" in txt
     assert f"fm1/native/mi_piano_set1_{note}.c" in (root / "fm1/native/SOURCE_ALLOWLIST.txt").read_text()
 assert "fm1/native/test_mi_dsp_stress.c -o /tmp/mi_dsp_stress_test" in ci
