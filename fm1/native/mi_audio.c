@@ -751,7 +751,8 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
             float rec_l=0.f,rec_r=0.f,play_mix;
             float out_l,out_r;
             mi_rec_tick_stereo(&a->recorder,sample,rs->seq,&rec_l,&rec_r);
-            play_mix=mi_rec_any_playing(&a->recorder)?1.f:0.f;
+            /* A muted REC must not duck the live oscillator and drums. */
+            play_mix=mi_rec_any_audible(&a->recorder)?1.f:0.f;
             a->rec_monitor_mix+=(play_mix-a->rec_monitor_mix)*0.0015f;
             /* Each REC track has independent balance pan; the oscillator
              * and manual FMDrum remain centre. Gain and soft limiting are
