@@ -690,6 +690,8 @@ assert "note_channel==state.midi_channel" in ui
 assert "note==MI_REC_PITCH_CC" in ui
 # Manual FMDrum enters REC, but the FMDrum sequencer goes ONLY to final
 # output. The order must be unambiguous and preserved across future changes.
+assert "fm1/native/mi_rec_adpcm.c fm1/native/test_mi_rec_adpcm.c" in ci
+assert ci.index("/tmp/mi_rec_adpcm_test") < ci.index("Reconstruct all 144 original")
 assert "drum_on(a,s,notes[t],112u,1u)" in audio
 assert "drum_on(a,s,note,velocity,0u)" in audio
 assert "if(v->drum_from_step)drum_seq+=drum" in audio
