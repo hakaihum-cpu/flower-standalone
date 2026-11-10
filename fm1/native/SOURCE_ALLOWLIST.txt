@@ -6,5 +6,5 @@ fm1/native/app.c
 fm1/native/mi_video.c
 fm1/native/mi_fx_dsp.c
 fm1/native/mi_recorder.c
-fm1/native/mi_rec_adpcm.c
+fm1/native/mi_rec_pcm7.c
 fm1/native/mi_slicer.c
