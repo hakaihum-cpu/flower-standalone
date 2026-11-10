@@ -348,6 +348,19 @@ int main(void)
     mi_audio_render(&a,&s,lr,256u,4096u);
     for(j=0u;j<512u;j++)assert(lr[j]==dry[j]);
  }
- puts("PASS: FMDrum live REC and SEQ output-only isolation; MIDI clock transport");
+ /* SLICER is a selectable FX, but unlike the OSC-only FX chain it sees
+  * both full stereo channels AFTER the REC and sequenced FMDrum buses. */
+ mi_init(&s);mi_audio_init(&a,44100.f);
+ s.fx=MI_FX_SLICER;s.wet=127u;
+ s.fx_slicer[0]=127u;s.fx_slicer[1]=127u;
+ mi_audio_note_on(&a,60u,127u);
+ for(i=0u;i<65u;i++)mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(a.slicer.active&&a.slicer.valid==MI_SLICER_FRAMES);
+ assert(a.slicer_mix>0.90f&&a.slicer.span>=32u);
+ s.fx=MI_FX_OFF;
+ for(i=0u;i<45u;i++)mi_audio_render(&a,&s,lr,256u,4096u);
+ assert(!a.slicer.active&&!a.slicer.valid);
+ assert(a.slicer_mix<0.001f);
+ puts("PASS: FMDrum live REC vs SEQ isolation; 3x REC and SLICER FX bypass");
  return 0;
 }
