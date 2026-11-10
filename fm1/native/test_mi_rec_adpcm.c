@@ -9,7 +9,7 @@ int main(void)
     uint8_t block[MI_REC_ADPCM_BLOCK_BYTES];
     unsigned i;
     unsigned long abs_error=0;
-    assert(MI_REC_ADPCM_STORE_BYTES==74520u);
+    assert(MI_REC_ADPCM_STORE_BYTES==82800u);
     mi_adpcm_encode_64(block,silence);
     mi_adpcm_decode_64(decoded,block);
     for(i=0u;i<64u;i++)assert(decoded[i]>=-4&&decoded[i]<=4);
@@ -26,6 +26,6 @@ int main(void)
         abs_error+=(unsigned long)(err<0?-err:err);
     }
     assert(abs_error/64u<3500u); /* basic signal fidelity gate */
-    puts("PASS: 3-track 74,520-byte IMA ADPCM block codec");
+    puts("PASS: 3-track 82,800-byte transient-anchored IMA ADPCM block codec");
     return 0;
 }
