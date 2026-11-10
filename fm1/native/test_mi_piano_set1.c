@@ -13,7 +13,7 @@ int main(void)
     assert(mi_piano_set1_roots[0]==51u&&
            mi_piano_set1_roots[1]==58u&&mi_piano_set1_roots[2]==65u);
     for(zone=0u;zone<3u;zone++){
-        const uint8_t *samples=mi_piano_set1_data(zone);
+        /* Actual flash ROM is exercised by mi_piano_set1_tick below. */
         float pos=0.f,out,sum=0.f;
         unsigned transitions=0u;
         for(i=0u;i<12000u;i++){
