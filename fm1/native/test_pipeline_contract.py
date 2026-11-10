@@ -166,7 +166,8 @@ assert "pack_eureka_vq_candidate.py" in ci
 assert "test -s /tmp/fm1-base/miyako/build/miyako.fwsc" in ci
 assert "scripts/materialize_effects_video_pack.py" in ci
 assert "scripts/materialize_miyako_eureka_video.py" in ci
-assert "two serial FX with conflict guards" in ci
+assert "SLICER FX (RATE/RND/WET) processes the final stereo mix" in ci
+assert "Automatic step-sequencer FMDrum bypasses the recorder capture bus" in ci
 assert "MI_EUREKA_ASSET_COUNT 576u" in ci
 # fm1-base tools/build.py uses sys.executable for gen_font.py.
 # Pillow MUST already be installed in the SAME interpreter before first --host.
