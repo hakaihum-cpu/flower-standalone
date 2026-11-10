@@ -11,7 +11,7 @@ int main(void)
     uint32_t count[3];
     unsigned tr,i;
     mi_rec_init(&r);
-    assert(MI_REC_TRACKS==3u&&MI_REC_ADPCM_STORE_BYTES==82800u);
+    assert(MI_REC_TRACKS==3u&&MI_REC_PCM7_STORE_BYTES==115920u);
     for(tr=0u;tr<3u;tr++){
         mi_rec_select(&r,tr);
         mi_rec_set_track(&r,tr,controls,0u,64u);
@@ -65,6 +65,6 @@ int main(void)
            r.tracks[2].clock_active);
     mi_rec_stop(&r);
     assert(!mi_rec_any_busy(&r));
-    puts("PASS: independent 3x anchored ADPCM REC, overdub isolation, mute, pan and MIDI clock");
+    puts("PASS: independent 3x log-PCM REC, overdub isolation, mute, pan and MIDI clock");
     return 0;
 }
