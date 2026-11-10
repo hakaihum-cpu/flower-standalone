@@ -35,6 +35,7 @@ typedef struct {
     };
     uint8_t selected, params[MI_REC_TRACKS-1u][4];
     uint8_t mute[MI_REC_TRACKS],pan[MI_REC_TRACKS];
+    uint8_t level[MI_REC_TRACKS]; /* include zero-level tracks in bypass logic */
 } mi_recorder_t;
 #undef MI_REC_FIELDS
 void mi_rec_init(mi_recorder_t *r);
