@@ -32,8 +32,9 @@ static int step_predict(int predictor,int *index,unsigned nibble)
 void mi_adpcm_encode_64(uint8_t out[MI_REC_ADPCM_BLOCK_BYTES],
                         const int16_t samples[MI_REC_ADPCM_SAMPLES])
 {
-    unsigned i;int predictor=samples[0],index=0,first_gap;
+    unsigned i;int predictor,index=0,first_gap;
     if(!out||!samples)return;
+    predictor=samples[0];
     first_gap=(int)samples[1]-(int)samples[0];
     if(first_gap<0)first_gap=-first_gap;
     /* Match the initial step to the local transient; avoid a block-edge
