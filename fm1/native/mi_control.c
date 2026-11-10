@@ -222,7 +222,8 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
             if(k==2)p=&s->drum_color;
             if(k==3)p=&s->drum_level;
         }else if(s->osc_page==0u){
-            if(k==0){p=s->wave==MI_WAVE_MULTI?&s->osc1_wave:&s->wave;hi=3;}
+            if(k==0){p=s->wave==MI_WAVE_MULTI?&s->osc1_wave:&s->wave;
+                 hi=s->wave==MI_WAVE_MULTI?3:MI_WAVE_PIANO;}
             if(k==1)p=&s->width;
             if(k==2)p=&s->sub;
             if(k==3)p=&s->crush;
