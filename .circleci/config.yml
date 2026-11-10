@@ -92,6 +92,12 @@ jobs:
             /tmp/mi_piano_set1_test
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
+              fm1/native/mi_piano_set1_engine.c fm1/native/mi_piano_set1_51.c \
+              fm1/native/mi_piano_set1_58.c fm1/native/mi_piano_set1_65.c \
+              fm1/native/test_mi_piano_set1_stress.c -o /tmp/mi_piano_set1_stress
+            /tmp/mi_piano_set1_stress
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+              -fsanitize=address,undefined -fno-sanitize-recover=all \
               fm1/native/mi_rec_pcm7.c fm1/native/mi_slicer.c \
               fm1/native/test_mi_dsp_stress.c -o /tmp/mi_dsp_stress_test
             /tmp/mi_dsp_stress_test
