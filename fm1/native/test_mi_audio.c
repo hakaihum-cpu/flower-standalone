@@ -361,6 +361,32 @@ int main(void)
  for(i=0u;i<45u;i++)mi_audio_render(&a,&s,lr,256u,4096u);
  assert(!a.slicer.active&&!a.slicer.valid);
  assert(a.slicer_mix<0.001f);
- puts("PASS: FMDrum live REC vs SEQ isolation; 3x REC and SLICER FX bypass");
+ /* Original Wingie2 SET1 piano must sound on the normal OSC bus and
+  * record into the selected 3-track PCM7 recorder without a new bus. */
+ {
+    unsigned audible=0u;
+    mi_init(&s);mi_audio_init(&a,44100.f);
+    s.wave=MI_WAVE_PIANO;
+    s.fx=MI_FX_OFF;s.fx2=MI_FX_OFF;
+    mi_audio_rec_request(&a,1u);
+    mi_audio_input_on(&a,&s,51u,127u);
+    assert(a.v[0].piano_zone==0u);
+    for(i=0u;i<15u;i++){
+        mi_audio_render(&a,&s,lr,256u,4096u);
+        for(j=0u;j<512u;j++)if(lr[j]!=0)++audible;
+    }
+    assert(audible>1000u && a.recorder.tracks[0].count>100u);
+    mi_audio_rec_request(&a,1u);
+    mi_audio_render(&a,&s,lr,256u,4096u);
+    assert(a.recorder.tracks[0].playing);
+    mi_audio_input_off(&a,&s,51u);
+    mi_audio_panic(&a);
+    mi_audio_input_on(&a,&s,58u,120u);
+    assert(a.v[0].piano_zone==1u);
+    mi_audio_panic(&a);
+    mi_audio_input_on(&a,&s,65u,120u);
+    assert(a.v[0].piano_zone==2u);
+ }
+ puts("PASS: FMDrum live REC vs SEQ; 3x REC, SLICER and Wingie2 SET1 PIANO");
  return 0;
 }
