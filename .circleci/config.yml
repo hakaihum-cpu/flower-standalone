@@ -46,6 +46,11 @@ jobs:
             python3 -m compileall -q fm1/native
             python3 -m py_compile fm1/native/verify_standalone.py fm1/native/test_pipeline_contract.py
             python3 fm1/native/verify_standalone.py
+            # #303 regression rule: real source asset verification precedes
+            # contracts, and none of these steps create firmware artifacts.
+            python3 fm1/native/tools/build_arp_anim_header.py --out /tmp/mi_arp_preflight.h
+            test -s /tmp/mi_arp_preflight.h
+            grep -Fq "#define MI_ARP_FRAME_COUNT 162u" /tmp/mi_arp_preflight.h
             python3 fm1/native/test_pipeline_contract.py
             python3 fm1/native/tools/test_miyako_dynamic_version.py
             python3 fm1/native/tools/build_letter_anim_header.py --out /tmp/mi_letter_preflight.h
@@ -55,11 +60,6 @@ jobs:
             grep -Fq "#define MI_UI_MOTION_COUNT 100u" /tmp/mi_ui_preflight.h
             grep -Fq "#define MI_UI_ENV_COUNT 90u" /tmp/mi_ui_preflight.h
             grep -Fq "mi_ui_start_maps" /tmp/mi_ui_preflight.h
-            # ARP 162 frames: exact user-source SHA and all 162 delta offsets
-            # are verified before any build, SDK setup or media processing.
-            python3 fm1/native/tools/build_arp_anim_header.py --out /tmp/mi_arp_preflight.h
-            test -s /tmp/mi_arp_preflight.h
-            grep -Fq "#define MI_ARP_FRAME_COUNT 162u" /tmp/mi_arp_preflight.h
             python3 fm1/native/tools/test_miyako_resource96.py
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
