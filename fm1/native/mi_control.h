@@ -79,6 +79,10 @@ typedef struct {
     uint8_t rec_mute[3],rec_pan[3];
     /* MI19: independent SLICER rate and randomness, added at the tail. */
     uint8_t fx_slicer[2];
+    /* MI20: per-track reverse and quantized PLAY/STOP. Append-only:
+     * older MI19 flash slots migrate their exact historical prefix. */
+    uint8_t rec_reverse[3]; /* 0 forward, 1 reverse */
+    uint8_t rec_quant[3];   /* 0 immediate, 1 beat, 2 bar */
 } mi_state_t;
 typedef struct {
     mi_action_t action;
@@ -94,6 +98,12 @@ const char *mi_wave_name(unsigned wave);
 #define MI_WAVE_PIANO 6u /* Wingie2 SET1 original source, three flash zones */
 /* MIDI CC#21 on any channel controls REC PITCH's existing seven values. */
 #define MI_REC_PITCH_CC 21u
+/* New, non-overlapping REC control bank: CC22..24 level, 25..27 pan,
+ * 28..30 mute. Existing CC21 stays the selected-track pitch. */
+#define MI_REC_LEVEL_CC_BASE 22u
+#define MI_REC_PAN_CC_BASE 25u
+#define MI_REC_MUTE_CC_BASE 28u
+int mi_rec_cc(mi_state_t *s,unsigned cc,unsigned value);
 #define MI_LFO_DEST_COUNT 58u
 const char *mi_arp_mode_name(unsigned mode);
 const char *mi_lfo_wave_name(unsigned wave);
