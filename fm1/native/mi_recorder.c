@@ -65,6 +65,7 @@ static void put_pcm(mi_rec_track_t *t,unsigned tr,uint32_t pos,int16_t value)
 static void clear_track(mi_rec_track_t *t,unsigned tr)
 {
     uint8_t clock=t->clock_active,bars=t->bars;
+    uint8_t reverse=t->reverse,quant=t->quant;
     uint32_t clock_ticks=t->clock_ticks;
     uint32_t clock_last_sample=t->clock_last_sample;
     float clock_period=t->clock_period;
@@ -73,6 +74,7 @@ static void clear_track(mi_rec_track_t *t,unsigned tr)
     t->clock_active=clock;t->clock_ticks=clock_ticks;
     t->clock_last_sample=clock_last_sample;t->clock_period=clock_period;
     t->bars=bars?bars:2u;
+    t->reverse=reverse;t->quant=quant;
     t->capture_step=capture_step>0.f?capture_step:0.5f;
     t->play_step=play_step>0.f?play_step:0.5f;
     mi_memzero(wave_min[tr],sizeof wave_min[tr]);
@@ -114,6 +116,36 @@ void mi_rec_select(mi_recorder_t *r,unsigned track)
 {
     if(r&&track<MI_REC_TRACKS)r->selected=(uint8_t)track;
 }
+/* Pending requests belong to the audio thread and are consumed at a real
+ * quarter-note boundary (4 quarters for bar mode). No extra PCM storage. */
+static void quant_commit(mi_rec_track_t *t)
+{
+    if(t->pending_play==1u&&t->count>=4u){
+        t->playback_pos=t->reverse?(float)(t->count-1u):0.f;
+        t->playing=1u;
+    }else if(t->pending_play==2u)t->playing=0u;
+    t->pending_play=0u;
+}
+static void quant_boundary(mi_recorder_t *r,unsigned beat_index)
+{
+    unsigned tr;
+    for(tr=0u;tr<MI_REC_TRACKS;tr++){
+        mi_rec_track_t *t=&r->tracks[tr];
+        if(t->pending_play &&
+           (t->quant==1u||(t->quant==2u&&beat_index%4u==0u)))
+            quant_commit(t);
+    }
+}
+void mi_rec_set_transport(mi_recorder_t *r,unsigned track,
+                          unsigned reverse,unsigned quant)
+{
+    mi_rec_track_t *t;
+    if(!r||track>=MI_REC_TRACKS)return;
+    t=&r->tracks[track];
+    t->reverse=(uint8_t)(reverse!=0u);
+    t->quant=(uint8_t)(quant<=2u?quant:0u);
+    if(t->pending_play&&t->quant==0u)quant_commit(t);
+}
 void mi_rec_set_track(mi_recorder_t *r,unsigned track,const uint8_t controls[4],
                       unsigned mute,unsigned pan)
 {
@@ -145,7 +177,8 @@ int mi_rec_any_busy(const mi_recorder_t *r)
     unsigned i;
     if(!r)return 0;
     for(i=0u;i<MI_REC_TRACKS;i++)
-        if(r->tracks[i].playing||r->tracks[i].recording||r->tracks[i].armed)return 1;
+        if(r->tracks[i].playing||r->tracks[i].recording||
+           r->tracks[i].armed||r->tracks[i].pending_play)return 1;
     return 0;
 }
 static void finish(mi_rec_track_t *t,unsigned tr)
@@ -155,7 +188,8 @@ static void finish(mi_rec_track_t *t,unsigned tr)
     t->recording=0u;t->overdubbing=0u;t->armed=0u;
     if(t->count>=4u){
         t->playing=1u;
-        if(!was_overdubbing)t->playback_pos=0.f;
+        if(!was_overdubbing)
+            t->playback_pos=t->reverse?(float)(t->count-1u):0.f;
     }
 }
 static void begin_overdub(mi_rec_track_t *t)
@@ -175,7 +209,8 @@ void mi_rec_stop(mi_recorder_t *r)
     for(i=0u;i<MI_REC_TRACKS;i++){
         mi_rec_track_t *t=&r->tracks[i];
         commit(t,i);
-        t->armed=0u;t->recording=0u;t->playing=0u;t->overdubbing=0u;
+        t->armed=0u;t->recording=0u;t->playing=0u;
+        t->overdubbing=0u;t->pending_play=0u;
     }
 }
 void mi_rec_clear(mi_recorder_t *r)
@@ -193,6 +228,7 @@ void mi_rec_configure(mi_recorder_t *r,unsigned bpm,unsigned bars,
     if(sample_rate<8000.f)sample_rate=44100.f;
     if(bpm<40u)bpm=40u;
     if(bpm>240u)bpm=240u;
+    r->beat_samples=sample_rate*60.f/(float)bpm;
     for(tr=0u;tr<MI_REC_TRACKS;tr++){
         mi_rec_track_t *t=&r->tracks[tr];
         float step;
@@ -254,6 +290,10 @@ void mi_rec_external_tick(mi_recorder_t *r,uint32_t sample_clock)
             finish(t,tr);
         }
     }
+    /* Clock count 1 is MIDI Start's first downbeat; every 24 F8 pulses
+     * form one quarter note, 96 pulses one bar. */
+    if(((r->tracks[0].clock_ticks-1u)%24u)==0u)
+        quant_boundary(r,(r->tracks[0].clock_ticks-1u)/24u);
 }
 void mi_rec_clock_stop(mi_recorder_t *r)
 {
@@ -282,11 +322,15 @@ void mi_rec_toggle_play(mi_recorder_t *r)
     mi_rec_track_t *t;unsigned tr;
     if(!r)return;
     tr=track_id(r);t=&r->tracks[tr];
-    if(t->recording){finish(t,tr);}
+    if(t->recording)finish(t,tr);
     t->armed=0u;
-    if(t->count<4u){t->playing=0u;return;}
-    if(t->playing){t->playing=0u;return;}
-    t->playback_pos=0.f;t->playing=1u;
+    if(t->count<4u){
+        t->playing=0u;t->pending_play=0u;return;
+    }
+    /* A second press cancels a pending action; it cannot reverse a queue. */
+    if(t->pending_play){t->pending_play=0u;return;}
+    t->pending_play=t->playing?2u:1u;
+    if(!t->quant)quant_commit(t);
 }
 static float tick_track(mi_rec_track_t *t,unsigned tr,float input,
                         const uint8_t controls[4])
@@ -300,7 +344,7 @@ static float tick_track(mi_rec_track_t *t,unsigned tr,float input,
         if(first+2u>last)t->playing=0u;
         else{
             if(t->playback_pos<(float)first||t->playback_pos>=(float)last)
-                t->playback_pos=(float)first;
+                t->playback_pos=t->reverse?(float)(last-1u):(float)first;
             pos=t->playback_pos;i=(uint32_t)pos;
             next=i+1u<last?i+1u:first;
             fraction=pos-(float)i;
@@ -309,7 +353,16 @@ static float tick_track(mi_rec_track_t *t,unsigned tr,float input,
                 (1.f/32767.f);
             fade=(last-first)/8u;
             if(fade>128u)fade=128u;
-            if(fade>=2u&&pos>=(float)(last-fade)){
+            if(t->reverse&&fade>=2u&&pos<(float)(first+fade)){
+                float tail=(float)(last-fade)+pos-(float)first;
+                uint32_t j=(uint32_t)tail;
+                float part=tail-(float)j;
+                float end=((float)get_pcm(t,tr,j)+
+                           ((float)get_pcm(t,tr,j+1u)-
+                            (float)get_pcm(t,tr,j))*part)*(1.f/32767.f);
+                float mix=((float)(first+fade)-pos)/(float)fade;
+                out=out*(1.f-mix)+end*mix;
+            }else if(!t->reverse&&fade>=2u&&pos>=(float)(last-fade)){
                 float headpos=(float)first+pos-(float)(last-fade);
                 uint32_t j=(uint32_t)headpos;
                 float part=headpos-(float)j;
@@ -320,11 +373,21 @@ static float tick_track(mi_rec_track_t *t,unsigned tr,float input,
                 out=out*(1.f-mix)+head*mix;
             }
             ratio=speed[controls[2]<=6u?controls[2]:3u];
-            t->playback_pos+=ratio*t->play_step;
-            if(t->playback_pos>=(float)last){
-                t->playback_pos=(float)(first+fade)+(t->playback_pos-(float)last);
-                if(t->playback_pos>=(float)last)
-                    t->playback_pos=(float)(first+fade);
+            if(t->reverse){
+                t->playback_pos-=ratio*t->play_step;
+                if(t->playback_pos<(float)first){
+                    t->playback_pos=(float)(last-1u)-
+                        ((float)first-t->playback_pos);
+                    if(t->playback_pos<(float)first)
+                        t->playback_pos=(float)(last-1u);
+                }
+            }else{
+                t->playback_pos+=ratio*t->play_step;
+                if(t->playback_pos>=(float)last){
+                    t->playback_pos=(float)(first+fade)+(t->playback_pos-(float)last);
+                    if(t->playback_pos>=(float)last)
+                        t->playback_pos=(float)(first+fade);
+                }
             }
         }
     }
@@ -347,7 +410,10 @@ static float tick_track(mi_rec_track_t *t,unsigned tr,float input,
                 if(amp< -110)amp=-110;
                 if(amp<wave_min[tr][col])wave_min[tr][col]=(int8_t)amp;
                 if(amp>wave_max[tr][col])wave_max[tr][col]=(int8_t)amp;
-                put_pcm(t,tr,t->write_pos++,(int16_t)(val*32767.f));
+                put_pcm(t,tr,t->write_pos,(int16_t)(val*32767.f));
+                if(t->overdubbing&&t->reverse){
+                    t->write_pos=t->write_pos? t->write_pos-1u:t->count-1u;
+                }else ++t->write_pos;
                 if(!t->overdubbing)t->count=t->write_pos;
             }
             if(t->overdubbing){
@@ -369,6 +435,14 @@ void mi_rec_tick_stereo(mi_recorder_t *r,float input,
     if(left)*left=0.f;
     if(right)*right=0.f;
     if(!r||!selected_controls)return;
+    if(!r->tracks[0].clock_active && r->beat_samples>=16.f){
+        r->beat_phase+=1.f;
+        if(r->beat_phase>=r->beat_samples){
+            r->beat_phase-=r->beat_samples;
+            quant_boundary(r,r->beat_index);
+            r->beat_index=(uint8_t)((r->beat_index+1u)%4u);
+        }
+    }
     for(tr=0u;tr<MI_REC_TRACKS;tr++){
         const uint8_t *controls=tr==0u?selected_controls:r->params[tr-1u];
         float x=tick_track(&r->tracks[tr],tr,input,controls);
