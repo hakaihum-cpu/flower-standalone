@@ -232,17 +232,58 @@ jobs:
           name: Install pinned JieLi compiler and minimum AC79 packaging inputs
           command: |
             set -eu
-            sudo apt-get update
+            # Earlier Python dependency step already refreshed apt metadata.
+            # #308: a second apt update stalled on a broken git-core PPA.
             sudo apt-get install -y xz-utils libtinfo5
             # Exact, hash-verified JieLi pi32v2 release. The upstream unpinned
             # curl-to-tar endpoint timed out in #267; do not invoke it.
             sh fm1/native/tools/install_jieli_toolchain.sh /home/circleci/.jieli
-            git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
-              https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git "$AC79_SDK"
+            # #308: Gitee's large full clone lost TLS mid-pack (curl 56).
+            # The approved fm1-base package needs only cpu/wl82/tools.
+            # Two sparse/partial attempts, then an ordinary pinned-tag
+            # shallow clone for servers that do not support partial clones.
+            sdk_tag=AC79NN_SDK_V1.2.1_2023-12-13
+            sdk_url=https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git
+            test "$AC79_SDK" = "/home/circleci/fw-AC79_AIoT_SDK"
+            sdk_ok=0
+            for attempt in 1 2 3; do
+              rm -rf "$AC79_SDK"
+              echo "JieLi SDK pinned-tag fetch attempt $attempt/3"
+              if [ "$attempt" -lt 3 ]; then
+                if timeout 240 git -c http.version=HTTP/1.1 clone \
+                     --depth 1 --single-branch --filter=blob:none --sparse \
+                     --branch "$sdk_tag" "$sdk_url" "$AC79_SDK" &&
+                   timeout 120 git -C "$AC79_SDK" sparse-checkout set cpu/wl82/tools; then
+                  sdk_ok=1
+                  break
+                fi
+              else
+                if timeout 300 git -c http.version=HTTP/1.1 clone \
+                     --depth 1 --single-branch --branch "$sdk_tag" \
+                     "$sdk_url" "$AC79_SDK"; then
+                  sdk_ok=1
+                  break
+                fi
+              fi
+              echo "WARN: JieLi SDK fetch interrupted; clearing incomplete clone" >&2
+              sleep 5
+            done
+            if [ "$sdk_ok" -ne 1 ]; then
+              echo "FAIL: official pinned JieLi SDK unavailable after 3 attempts" >&2
+              exit 1
+            fi
+            # Fail closed: do not package wrong or incomplete SDK objects.
+            sdk_head=$(git -C "$AC79_SDK" rev-parse --verify HEAD)
+            sdk_pin=$(git -C "$AC79_SDK" rev-parse --verify "refs/tags/$sdk_tag^{commit}")
+            test "$sdk_head" = "$sdk_pin"
             test -x "$JIELI_TOOLCHAIN/pi32v2/bin/clang"
             test -f "$AC79_SDK/cpu/wl82/tools/uboot.boot"
             test -f "$AC79_SDK/cpu/wl82/tools/cfg_tool.bin"
             test -f "$AC79_SDK/cpu/wl82/tools/cfg/eq_cfg_hw.bin"
+            echo "4e3b4c220dc96641cb5a723f41e68ce41d5261ae9434bb33fbd7f2c59976ded4  $AC79_SDK/cpu/wl82/tools/uboot.boot" | sha256sum -c -
+            echo "276579954f076886a6a7694f65dc71c034a63a2c204b76749065c0ac7b010d1b  $AC79_SDK/cpu/wl82/tools/cfg_tool.bin" | sha256sum -c -
+            echo "41167491bffed4651750719c973d2758adeb9021a5670d02d6a53c85ed80ea7d  $AC79_SDK/cpu/wl82/tools/cfg/eq_cfg_hw.bin" | sha256sum -c -
+            echo "PASS: pinned JieLi SDK tag and all three SHA-256 packaging inputs"
       - run:
           name: Verify freestanding MIYAKO C with the actual JieLi target compiler BEFORE video conversion
           command: |
