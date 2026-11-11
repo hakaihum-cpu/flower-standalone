@@ -114,6 +114,16 @@ int main(void)
     mi_rotate(&s,MI_EN_K3,-100);
     mi_rotate(&s,MI_EN_K4,100);
     assert(s.arp[0]==4 && s.arp[1]==3 && s.arp[2]==10 && s.arp[3]==4);
+    /* The existing ARP K2 is four discrete rates: 1/4,1/8,1/16,1/32.
+     * Preserve one physical detent per rate, not an approximate percentage. */
+    for(i=3u;i>0u;--i){
+        mi_rotate(&s,MI_EN_K2,-1);
+        assert(s.arp[1]==i-1u);
+    }
+    mi_rotate(&s,MI_EN_K2,2);
+    assert(s.arp[1]==2u); /* 1/16 */
+    mi_rotate(&s,MI_EN_K2,1);
+    assert(s.arp[1]==3u); /* 1/32 */
     assert(!strcmp(mi_param_name(&s,0),"MODE"));
     assert(!strcmp(mi_param_name(&s,2),"GATE"));
     mi_button(&s,MI_B_LFO,8001);
@@ -391,9 +401,35 @@ int main(void)
     assert(s.rec_bars==4u);
     mi_rotate(&s,MI_EN_K4,-1);
     assert(s.rec_bars==2u);
-    mi_button(&s,MI_B_SEQ,9505);
-    assert(s.rec_page==0u);
+    mi_button(&s,MI_B_SEQ,9505); /* third REC transport page */
+    assert(s.rec_page==2u && !strcmp(mi_param_name(&s,0),"REV"));
+    assert(!strcmp(mi_param_name(&s,1),"QUANT"));
+    mi_rotate(&s,MI_EN_K1,1);
+    mi_rotate(&s,MI_EN_K2,1);
+    assert(s.rec_reverse[2]==1u && s.rec_quant[2]==1u);
+    mi_rotate(&s,MI_EN_K2,1);
+    assert(s.rec_quant[2]==2u);
+    mi_rotate(&s,MI_EN_K3,-1);
+    assert(s.rec_track==1u && s.rec_reverse[1]==0u);
+    mi_button(&s,MI_B_SEQ,9506); /* page 2 wraps to 0 */
+    assert(s.rec_page==0u && s.rec_reverse[2]==1u);
     assert(mi_state_valid(&s));
+    /* CC22..24 level, 25..27 pan, 28..30 mute are track-specific.
+     * Existing CC21 pitch and global MIDI channel are unaffected. */
+    assert(mi_rec_cc(&s,22u,0u));
+    assert(mi_rec_cc(&s,23u,48u));
+    assert(mi_rec_cc(&s,24u,110u));
+    assert(s.seq[3]==0u&&s.rec_extra[0][3]==48u&&s.rec_extra[1][3]==110u);
+    assert(mi_rec_cc(&s,25u,0u)&&mi_rec_cc(&s,26u,64u)&&
+           mi_rec_cc(&s,27u,127u));
+    assert(s.rec_pan[0]==0u&&s.rec_pan[1]==64u&&s.rec_pan[2]==127u);
+    assert(mi_rec_cc(&s,28u,64u)&&mi_rec_cc(&s,29u,63u)&&
+           mi_rec_cc(&s,30u,127u));
+    assert(s.rec_mute[0]==1u&&s.rec_mute[1]==0u&&s.rec_mute[2]==1u);
+    assert(!mi_rec_cc(&s,31u,127u) && !mi_rec_cc(&s,22u,128u));
+    assert(mi_state_valid(&s));
+    s.rec_reverse[0]=2u;assert(!mi_state_valid(&s));s.rec_reverse[0]=0u;
+    s.rec_quant[0]=3u;assert(!mi_state_valid(&s));s.rec_quant[0]=0u;
     /* Short SEQ remains the RECORDER; the long-hold editor has independent
      * discrete controls and all 16 step positions without touching REC. */
     mi_init(&s);
