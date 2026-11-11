@@ -838,9 +838,26 @@ assert "expect wave 5" in host_smoke
 smoke = (root / "fm1/native/host_smoke.txt").read_text(encoding="utf-8")
 assert "mi_ui_splash_until=plat_ms()+3000u;" in ui
 assert "master 4096\n# Show the original startup artwork for three seconds before normal UI.\nwait 3200" in smoke
-assert smoke.count("reboot\nwait 3200") == 2
-assert smoke.rindex("reboot\nwait 3200") < smoke.index(
-    "shot MIYAKO_OSC_SUB_0.png")
+# The original SUB image must be captured after the two early preset
+# reboot cases. Later feature regressions intentionally add MORE reboots
+# (e.g. DEFAULT boot). Never assert a global exact reboot count or use
+# rindex() over the entire growing simulator script.
+sub_zero=smoke.index("shot MIYAKO_OSC_SUB_0.png")
+before_sub=smoke[:sub_zero]
+assert before_sub.count("reboot\nwait 3200") >= 2, (
+    "original boot-and-preset checks must run before OSC SUB screenshots")
+assert before_sub.rfind("reboot\nwait 3200") < before_sub.index(
+    "tap HOME\nspin K2 -100\nexpect sub 0"), (
+    "the second startup wait must precede the SUB=0 setup")
+# Verify the later DEFAULT coverage directly; unrelated extra reboot cases
+# must not invalidate the original startup-display regression.
+default_case=smoke[smoke.index(
+    "# DEFAULT is a separately confirmed SAVE-menu action"):]
+assert "expect boot_slot 0\nexpect save_mask 3" in default_case
+assert "expect boot_slot 1\nexpect save_mask 3" in default_case
+assert "reboot\nwait 3200\nexpect view 0\nexpect wave 0" in default_case
+assert "reboot\nwait 3200\nexpect wave 2\nexpect boot_slot 1" in default_case
+assert "reboot\nwait 3200\nexpect wave 0\nexpect boot_slot 0" in default_case
 assert smoke.index("shot MIYAKO_OSC_SUB_0.png") < smoke.index(
     "shot MIYAKO_OSC_SUB_127.png")
 # Source-derived 72-frame high-detail 160x72 paper-airplane display,
