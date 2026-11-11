@@ -136,6 +136,13 @@ static void quant_boundary(mi_recorder_t *r,unsigned beat_index)
             quant_commit(t);
     }
 }
+void mi_rec_internal_start(mi_recorder_t *r)
+{
+    if(!r || r->tracks[0].clock_active)return;
+    r->beat_phase=0.f;
+    r->beat_index=1u;
+    quant_boundary(r,0u); /* first 16th step is also the bar downbeat */
+}
 void mi_rec_set_transport(mi_recorder_t *r,unsigned track,
                           unsigned reverse,unsigned quant)
 {
