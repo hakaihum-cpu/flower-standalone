@@ -982,37 +982,31 @@ assert "loop->playback_pos" in ui
 assert "MIYAKO_LOOP_VISUAL_SYNC.png" in host_smoke
 assert "test -s fm1-dist/MIYAKO_LOOP_VISUAL_SYNC.png" in ci
 assert "a.arp_clock==period-256u" in audio_test
-# ARP user-supplied yellow/black tile sheets (no re-generated drawing).
-# Complete cells: both images have nine full rows and columns; the first
-# displayed 10th row/column is truncated and must NOT enter the animation.
-arp_asset=(root/"fm1/native/tools/mi_arp_source_yellow_black.b64")
+# Original user-supplied two montage sheets: all 162 complete 9x9
+# frames rendered at the ACTUAL 72x72 LCD sprite resolution.
+# A 48x48 base plus a facial patch removed eyes in the old implementation.
+arp_asset=(root/"fm1/native/tools/mi_arp_72_detail_source.b64")
 arp_generator=(root/"fm1/native/tools/build_arp_anim_header.py").read_text()
 audio_h=(root/"fm1/native/mi_audio.h").read_text()
 host_smoke=(root/"fm1/native/host_smoke.txt").read_text()
-assert arp_asset.is_file() and arp_asset.stat().st_size==14073
-assert 'RAW_SHA256 = "5a36c5333b15bf6269212e13628e2fb4bce324a7cf09c62bda88a0ce97e32e87"' in arp_generator
+assert arp_asset.is_file() and arp_asset.stat().st_size==34309
+assert 'RAW_SHA256 = "a5b51a9a7da0dd3bb9080c6bde282a032cdd0b0730e295e7f4bdf157c1711c12"' in arp_generator
+assert 'SOURCE = Path(__file__).with_name("mi_arp_72_detail_source.b64")' in arp_generator
 assert "FRAME_COUNT = 162" in arp_generator
 assert "FRAMES_INTRO = 81" in arp_generator
-assert "PACK_BYTES = 10552" in arp_generator
-# Keep the 162 original frames and add ONLY user-image-derived facial detail.
-# Regression: 48x48 alone erased eyes/nose/mouth on the ARP screen.
-arp_face_asset=root/"fm1/native/tools/mi_arp_face_detail72.b64"
-assert arp_face_asset.is_file() and arp_face_asset.stat().st_size == 6821
-assert 'FACE_SOURCE = Path(__file__).with_name("mi_arp_face_detail72.b64")' in arp_generator
-assert 'FACE_PACK_BYTES = 5115' in arp_generator
-assert 'FACE_SHA256 = "a6ef0422a353ac536205836f689d26c3861fe93afe33a8c12da9812221279a19"' in arp_generator
-assert "face_books, face_offsets, face_data = read_face_pack()" in arp_generator
-assert 'arr("mi_arp_face_deltas", 8, list(face_data))' in arp_generator
-assert "mi_arp_face_decode(frame);" in ui
-assert "static unsigned mi_arp_face_pixel(" in ui
-assert "color?YELLOW:C_BLACK" in ui
+assert "W = H = 72" in arp_generator
+assert "BLOCKS = 18 * 18" in arp_generator
+assert "PACK_BYTES = 25730" in arp_generator
 assert "read_and_verify()" in arp_generator
 assert '#include "mi_arp_media.h"' in ui
 assert '"mi_arp_media.h"' in native_audit
 assert "mi_arp_decode(frame);" in ui
 assert "mi_arp_current_map" in ui and "mi_arp_books[index]" in ui
-assert "cv_rect(84+(int32_t)left,39+(int32_t)(y*3u/2u)," in ui
+assert "mi_arp_current_map[(y>>2)*18u+(x>>2)]" in ui
+assert "cv_rect(84+(int32_t)start,39+(int32_t)y," in ui
 assert "YELLOW);" in ui and "mi_arp_pixel(" in ui
+assert "mi_arp_face_decode" not in ui
+assert "mi_arp_face_deltas" not in arp_generator
 assert "uint16_t mi_arp_cached_frame=MI_ARP_FRAME_COUNT" in ui
 assert "static uint32_t shown_arp_visual_event=0xffffffffu" in ui
 assert "shown_arp_visual_event!=audio.arp_visual_event" in ui
