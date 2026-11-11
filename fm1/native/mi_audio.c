@@ -303,6 +303,8 @@ static void arp_sync(mi_audio_t *a,const mi_state_t *s)
     a->arp_mode=(uint8_t)mode;
     a->arp_clock=0;a->arp_gate_clock=0;
     a->arp_pos=0;a->arp_dir=0;a->arp_sounding=0;
+    a->arp_visual_frame=mode?0xffffu:0u;
+    ++a->arp_visual_event;
     if(!mode){
         unsigned note;
         for(note=0;note<128u;note++)
@@ -380,6 +382,12 @@ static void arp_tick(mi_audio_t *a,const mi_state_t *s)
         else mi_audio_note_on(a,a->arp_note,vel?vel:100u);
     }
     a->arp_sounding=1u;
+    /* Advance only when the ARP engine actually triggers a note:
+     * intro once; carousel 81..161 loops, with no extra audio work. */
+    if(a->arp_visual_frame==0xffffu) a->arp_visual_frame=0u;
+    else if(a->arp_visual_frame>=161u) a->arp_visual_frame=81u;
+    else ++a->arp_visual_frame;
+    ++a->arp_visual_event;
     a->arp_gate_clock=gate;
     a->arp_clock=period-1u;
     ++a->arp_pos;
