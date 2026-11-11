@@ -517,7 +517,7 @@ assert "if(t->overdubbing&&t->count>=4u)" in recorder
 assert "static void begin_overdub(mi_rec_track_t *t)" in recorder
 assert recorder.count("begin_overdub(t);") == 3
 assert "t->write_pos=(uint32_t)t->playback_pos;" in recorder
-assert "if(!was_overdubbing)t->playback_pos=0.f;" in recorder
+assert "t->playback_pos=t->reverse?(float)(t->count-1u):0.f;" in recorder
 assert "float capture_step=t->capture_step,play_step=t->play_step;" in recorder
 recorder_test = (root / "fm1/native/test_mi_recorder.c").read_text()
 for position in ("1234.25f", "2345.75f", "3765.5f"):
@@ -864,6 +864,32 @@ assert "if(state.view==MI_VIDEO||state.view==MI_FX){" in ui
 assert "visual_last_mode=255u;" in ui
 assert "video.effects_cooldown=0u;" in ui
 assert "video.eureka_previous=0.f;" in ui
+# MI20 / requested features: no legacy control or image bank removed.
+control_h = (root / "fm1/native/mi_control.h").read_text()
+control_test = (root / "fm1/native/test_mi_control.c").read_text()
+recorder_h = (root / "fm1/native/mi_recorder.h").read_text()
+recorder_test = (root / "fm1/native/test_mi_recorder.c").read_text()
+assert "uint8_t rec_reverse[3];" in control_h
+assert "uint8_t rec_quant[3];" in control_h
+assert "s->rec_page=(uint8_t)((s->rec_page+1u)%3u);" in controls
+assert 'transport[4]={"REV","QUANT","TRACK",""}' in controls
+assert "s->rec_reverse[i]>1u||s->rec_quant[i]>2u" in controls
+assert 'saved_mi19_t old19;' in ui
+assert 'old19.magic==SAVED_MAGIC_M19' in ui
+assert 'offsetof(mi_state_t,rec_reverse)' in ui
+assert "mi_rec_set_transport(&a->recorder,k" in audio
+assert "static void quant_boundary(" in recorder
+assert "if(t->reverse)" in recorder
+assert "t->pending_play=t->playing?2u:1u;" in recorder
+assert "r->beat_phase+=1.f;" in recorder
+assert "quant_boundary(r,(r->tracks[0].clock_ticks-1u)/24u)" in recorder
+assert "mi_rec_set_transport(" in recorder_h
+assert "mi_rec_external_tick(&r,97000u);" in recorder_test
+assert "mi_rec_cc(&state,note,velocity)" in ui
+assert "mi_rec_cc(&s,30u,127u)" in control_test
+assert "loop->playback_pos" in ui
+assert "MIYAKO_LOOP_VISUAL_SYNC.png" in host_smoke
+assert "a.arp_clock==period-256u" in audio_test
 # Repeat the manual gating and branch controls after introducing the assets.
 assert "when: << pipeline.parameters.run_build >>" in ci
 assert "only: feature/fm1-three-track-rec-drum-routing-video-slicer-20261110" in ci
