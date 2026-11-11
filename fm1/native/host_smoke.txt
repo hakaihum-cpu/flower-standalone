@@ -92,6 +92,8 @@ shot MIYAKO_ARP.png
 key 25 up
 turn K1 -1
 expect arp_mode 0
+# Audio callback, not the physical encoder, owns the visual reset.
+wait 20
 expect arp_visual_frame 0
 tap HOME
 expect view 0
