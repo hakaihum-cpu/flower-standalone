@@ -202,7 +202,7 @@ int main(void)
     s.midi_channel=0u;assert(!mi_state_valid(&s));s.midi_channel=1u;
     s.midi_channel=17u;assert(!mi_state_valid(&s));s.midi_channel=16u;
     s.global[3]=2;assert(!mi_state_valid(&s));s.global[3]=1;
-    s.save_action=2u;assert(!mi_state_valid(&s));s.save_action=0u;
+    s.save_action=3u;assert(!mi_state_valid(&s));s.save_action=0u;
     s.config_load_armed=2u;assert(!mi_state_valid(&s));s.config_load_armed=0u;
     s.osc2_octave=5u;assert(!mi_state_valid(&s));s.osc2_octave=2u;
     s.osc_page=3u;assert(!mi_state_valid(&s));s.osc_page=0u;
