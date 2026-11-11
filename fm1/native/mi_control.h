@@ -86,7 +86,7 @@ typedef struct {
 } mi_state_t;
 typedef struct {
     mi_action_t action;
-    uint8_t slot; /* meaningful only for MI_ACTION_SAVE */
+    uint8_t slot; /* selected preset slot for SAVE/LOAD; DEFAULT ignores it */
 } mi_result_t;
 
 void mi_init(mi_state_t *s);
