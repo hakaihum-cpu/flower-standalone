@@ -310,6 +310,9 @@ void mi_rec_toggle_record(mi_recorder_t *r)
     mi_rec_track_t *t;unsigned tr;
     if(!r)return;
     tr=track_id(r);t=&r->tracks[tr];
+    /* REC is an explicit operation: cancel an earlier queued PLAY/STOP
+     * so the quantizer cannot halt a newly started overdub. */
+    t->pending_play=0u;
     if(t->armed){t->armed=0u;return;}
     if(t->recording){finish(t,tr);return;}
     if(t->clock_active){t->armed=1u;return;}
