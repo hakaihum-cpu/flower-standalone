@@ -1767,6 +1767,10 @@ int app_expect(const char *what,int *got)
   else if(mi_streq(what,"rec_overdub")) *got=(int)audio.recorder.tracks[state.rec_track].overdubbing;
   else if(mi_streq(what,"rec_reverse")) *got=(int)state.rec_reverse[state.rec_track];
   else if(mi_streq(what,"rec_quant")) *got=(int)state.rec_quant[state.rec_track];
+  else if(mi_streq(what,"rec_level")) *got=(int)(state.rec_track?
+      state.rec_extra[state.rec_track-1u][3]:state.seq[3]);
+  else if(mi_streq(what,"rec_pan")) *got=(int)state.rec_pan[state.rec_track];
+  else if(mi_streq(what,"rec_mute")) *got=(int)state.rec_mute[state.rec_track];
   else if(mi_streq(what,"rec_pending")) *got=(int)audio.recorder.tracks[state.rec_track].pending_play;
   else if(mi_streq(what,"visual_tile")) *got=(int)visual_tile;
   else if(mi_streq(what,"step_editor")) *got=(int)state.step_editor;
