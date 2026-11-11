@@ -17,6 +17,7 @@
 #include "mi_eureka_vq_frames.h" /* 576 source frames */
 #include "mi_letter_anim.h" /* exact 72 user-source paper-airplane frames */
 #include "mi_ui_media.h" /* 90 ENV / 100 LFO, header logo and startup */
+#include "mi_arp_media.h" /* original 162 ARP tiles, black/yellow only */
 #include "mi_memory.h"
 #include <stddef.h>
 #define YELLOW RGB(255,209,12)
@@ -1336,15 +1337,66 @@ static void mi_graph_lfo(void)
         prior=y;
     }
 }
+/* The input montages use separate 9x9 complete tile sheets.
+ * The head opens over frames 0..80; then frames 81..161 rotate forever.
+ * Each sheet has a separately compressed keyframe and a 144-tile delta map.
+ * Decode only on a new AUDIO ARP attack, never on visual frame clock.
+ * No malloc, no zlib and no RAM copy of all 162 images. */
+static uint8_t mi_arp_current_map[MI_ARP_MAP_BYTES];
+static uint16_t mi_arp_cached_frame=MI_ARP_FRAME_COUNT;
+static void mi_arp_decode(unsigned target)
+{
+    unsigned i,start,j;
+    if(target>=MI_ARP_FRAME_COUNT)target=0u;
+    if(mi_arp_cached_frame==target)return;
+    if(mi_arp_cached_frame<target&&
+       (target<MI_ARP_INTRO_COUNT||
+        mi_arp_cached_frame>=MI_ARP_INTRO_COUNT))
+        start=(unsigned)mi_arp_cached_frame+1u;
+    else start=target<MI_ARP_INTRO_COUNT?0u:MI_ARP_INTRO_COUNT;
+    for(i=start;i<=target;i++){
+        const uint8_t *src=mi_arp_deltas+mi_arp_offsets[i];
+        if(i==0u||i==MI_ARP_INTRO_COUNT){
+            for(j=0;j<MI_ARP_MAP_BYTES;j++)
+                mi_arp_current_map[j]=src[j];
+        }else{
+            const uint8_t *values=src+MI_ARP_MASK_BYTES;
+            for(j=0;j<MI_ARP_MAP_BYTES;j++)
+                if(src[j>>3]&(0x80u>>(j&7u)))
+                    mi_arp_current_map[j]=*values++;
+        }
+    }
+    mi_arp_cached_frame=(uint16_t)target;
+}
+static unsigned mi_arp_pixel(unsigned x,unsigned y)
+{
+    unsigned index=mi_arp_current_map[(y>>2)*12u+(x>>2)];
+    unsigned bit=15u-((y&3u)*4u+(x&3u));
+    return (mi_arp_books[index]>>bit)&1u;
+}
 static void mi_graph_arp(void)
 {
-    unsigned x;
-    unsigned mode=state.arp[0];
-    for(x=0;x<8u;x++){
-        int32_t h=mode==2u?(int32_t)(8u-x)*5:
-                  mode==3u?(int32_t)((x<4u?x:7u-x)+1u)*10:
-                  (int32_t)(x+1u)*5;
-        cv_rect(18+(int32_t)x*27,98-h,18,h,mode?YELLOW:DIM);
+    unsigned y,x,frame;
+    /* Fixed x=84..155 and y=39..110: existing ARP labels, logo and
+     * K1..K4 control strip are not displaced or covered. */
+    frame=state.arp[0]?audio.arp_visual_frame:0u;
+    if(frame>=MI_ARP_FRAME_COUNT)frame=0u;
+    mi_arp_decode(frame);
+    for(y=0;y<MI_ARP_FRAME_H;y++){
+        unsigned height=((y+1u)*3u)/2u-(y*3u)/2u;
+        x=0u;
+        while(x<MI_ARP_FRAME_W){
+            if(!mi_arp_pixel(x,y)){x++;continue;}
+            {
+                unsigned start=x;
+                unsigned left,width;
+                while(x<MI_ARP_FRAME_W&&mi_arp_pixel(x,y))x++;
+                left=start*3u/2u;
+                width=x*3u/2u-left;
+                cv_rect(84+(int32_t)left,39+(int32_t)(y*3u/2u),
+                        (int32_t)width,(int32_t)height,YELLOW);
+            }
+        }
     }
 }
 /* The REC screen follows the existing four-row drum sequencer style.
@@ -1719,6 +1771,7 @@ void app_frame(void)
 {
  static uint32_t video_time;
  static uint8_t shown_seq_play=255u,shown_seq_clock=255u,shown_rec_pitch=255u;
+ static uint32_t shown_arp_visual_event=0xffffffffu;
  uint32_t now;
  input();
  now=plat_ms();
@@ -1743,6 +1796,11 @@ void app_frame(void)
      if((state.view==MI_VIDEO||state.view==MI_FX)&&
         state.lfo[2]&&state.lfo[3]>=24u&&state.lfo[3]<=27u)
          redraw=1;
+     if(state.view==MI_ARP&&
+        shown_arp_visual_event!=audio.arp_visual_event){
+         shown_arp_visual_event=audio.arp_visual_event;
+         redraw=1;
+     }
      if(state.view==MI_SEQ &&
         ((state.step_editor&&state.step_play)||
          (!state.step_editor&&mi_rec_any_busy(&audio.recorder))))
@@ -1798,6 +1856,8 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"arp_mode")) *got=(int)state.arp[0];
  else if(mi_streq(what,"arp_note")) *got=(int)audio.arp_note;
  else if(mi_streq(what,"arp_sounding")) *got=(int)audio.arp_sounding;
+ else if(mi_streq(what,"arp_visual_frame")) *got=(int)(
+     audio.arp_visual_frame<MI_ARP_FRAME_COUNT?audio.arp_visual_frame:0u);
  else if(mi_streq(what,"lfo_wave")) *got=(int)state.lfo[1];
  else if(mi_streq(what,"recording")) *got=(int)audio.recorder.tracks[state.rec_track].recording;
   else if(mi_streq(what,"rec_playing")) *got=(int)audio.recorder.tracks[state.rec_track].playing;
