@@ -1005,7 +1005,7 @@ assert "--out /tmp/fm1-base/miyako/mi_arp_media.h" in ci
 assert 'test -s /tmp/fm1-base/miyako/mi_arp_media.h' in ci
 assert "MI_ARP_FRAME_COUNT 162u" in ci
 assert ci.index("build_arp_anim_header.py --out /tmp/mi_arp_preflight.h") < ci.index(
-    "fm1/native/test_pipeline_contract.py")
+    "python3 fm1/native/test_pipeline_contract.py")
 assert "MIYAKO-FM1-NATIVE-DEV-res.bin" in ci
 # Repeat the manual gating and branch controls after introducing the assets.
 assert "when: << pipeline.parameters.run_build >>" in ci
