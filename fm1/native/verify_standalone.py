@@ -15,7 +15,7 @@ FORBIDDEN_SYMBOLS = ("KARMA", "FELUCCA", "ui_input(", "cloud_process(",
                      "EM_BOUNCE", "EM_PICK", "PRM_FOLD", "PRM_WAVE",
                      "PRM_HARM", "prism_model(", "phys_poly(",
                      "elem_poly(", "prism_poly(", "pr_harm_")
-GENERATED_MEDIA_HEADERS = {"mi_eureka_vq_frames.h", "mi_effects_vq_frames.h", "mi_letter_anim.h", "mi_ui_media.h"}
+GENERATED_MEDIA_HEADERS = {"mi_eureka_vq_frames.h", "mi_effects_vq_frames.h", "mi_letter_anim.h", "mi_ui_media.h", "mi_arp_media.h"}
 source_paths = []
 for raw in MANIFEST.read_text(encoding="utf-8").splitlines():
     name = raw.strip()
