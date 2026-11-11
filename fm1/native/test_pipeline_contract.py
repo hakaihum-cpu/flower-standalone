@@ -219,6 +219,35 @@ assert checkout_branches[0] == filtered_branches[0], (
 assert not re.search(r'only: feature/fm1-[\w-]+\d{8}',
                      Path(__file__).read_text(encoding="utf-8"))
 
+# #308: JieLi SDK's full Gitee pack was severed by curl 56 / TLS EOF.
+# The approved SDK tag and the 3 exact package input hashes must remain
+# mandatory. Narrow sparse checkout is retried without changing CI workflows.
+sdk_step = ci[ci.index("name: Install pinned JieLi compiler"):
+              ci.index("name: Verify freestanding MIYAKO C")]
+assert "sudo apt-get update" not in sdk_step, (
+    "regression #308: redundant apt refresh triggers dead git-core PPA")
+assert ci.count("sudo apt-get update") == 1
+assert "for attempt in 1 2 3; do" in sdk_step
+assert "rm -rf \"$AC79_SDK\"" in sdk_step
+assert "--filter=blob:none --sparse" in sdk_step
+assert "sparse-checkout set cpu/wl82/tools" in sdk_step
+assert "timeout 240 git -c http.version=HTTP/1.1 clone" in sdk_step
+assert "timeout 300 git -c http.version=HTTP/1.1 clone" in sdk_step
+assert "sdk_tag=AC79NN_SDK_V1.2.1_2023-12-13" in sdk_step
+assert "test \"$sdk_head\" = \"$sdk_pin\"" in sdk_step
+assert 'if [ "$sdk_ok" -ne 1 ]; then' in sdk_step
+assert 'echo "PASS: pinned JieLi SDK tag and all three SHA-256 packaging inputs"' in sdk_step
+for sdk_path, sha in (
+    ("cpu/wl82/tools/uboot.boot",
+     "4e3b4c220dc96641cb5a723f41e68ce41d5261ae9434bb33fbd7f2c59976ded4"),
+    ("cpu/wl82/tools/cfg_tool.bin",
+     "276579954f076886a6a7694f65dc71c034a63a2c204b76749065c0ac7b010d1b"),
+    ("cpu/wl82/tools/cfg/eq_cfg_hw.bin",
+     "41167491bffed4651750719c973d2758adeb9021a5670d02d6a53c85ed80ea7d"),
+):
+    assert sha + "  $AC79_SDK/" + sdk_path in sdk_step
+assert sdk_step.count("sha256sum -c -") == 3
+
 # A correct branch in the WRONG GitHub repository cannot build this app.
 # Reject the checkout before downloading 720 frames or starting the toolchain.
 assert 'git remote get-url origin' in ci
