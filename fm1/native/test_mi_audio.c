@@ -59,8 +59,10 @@ int main(void)
  assert(a.held_total==2);
  mi_audio_render(&a,&s,lr,256,4096);
  assert(a.arp_mode==1 && a.arp_sounding && a.arp_note==60);
+ /* Exact audio note attacks, not a separately advanced visual timer. */
+ assert(a.arp_visual_frame==0u && a.arp_visual_event>=2u);
  for(i=0;i<35;i++)mi_audio_render(&a,&s,lr,256,4096);
- assert(a.arp_note==64);
+ assert(a.arp_note==64 && a.arp_visual_frame==1u);
  mi_audio_input_off(&a,&s,60);
  assert(a.held_total==2); /* still held by second input */
  mi_audio_input_off(&a,&s,60);
@@ -74,11 +76,19 @@ int main(void)
  mi_audio_input_on(&a,&s,67,127);
  mi_audio_render(&a,&s,lr,256,4096);
  assert(a.arp_mode==2&&a.arp_note==67);
+ assert(a.arp_visual_frame==0u); /* mode change restarts intro */
+ {
+     uint32_t event=a.arp_visual_event;
+     a.arp_visual_frame=161u; /* exercise exact carousel loop bound */
+     a.arp_clock=0u;
+     mi_audio_render(&a,&s,lr,256,4096);
+     assert(a.arp_visual_frame==81u && a.arp_visual_event==event+1u);
+ }
  mi_audio_input_off(&a,&s,60);
  mi_audio_input_off(&a,&s,67);
  s.arp[0]=0;
  mi_audio_render(&a,&s,lr,256,4096);
- assert(a.arp_mode==0);
+ assert(a.arp_mode==0 && a.arp_visual_frame==0u);
  mi_audio_panic(&a);
  /* ADSR attack is no longer a fixed 0.002 per sample. */
  mi_init(&s);mi_audio_init(&a,44100.f);
