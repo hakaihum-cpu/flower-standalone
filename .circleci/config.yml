@@ -27,7 +27,7 @@ jobs:
           name: Verify exact MIYAKO branch and zero KARMA source closure
           command: |
             set -eu
-            test "$CIRCLE_BRANCH" = "feature/fm1-three-track-rec-drum-routing-video-slicer-20261110"
+            test "$CIRCLE_BRANCH" = "feature/fm1-arp-carousel-yellow-black-20261111"
             # GitHub App and OAuth checkouts may use HTTPS or SSH. Check
             # the actual checkout origin, not just the branch display name.
             source_url="$(git remote get-url origin 2>/dev/null || true)"
@@ -55,6 +55,11 @@ jobs:
             grep -Fq "#define MI_UI_MOTION_COUNT 100u" /tmp/mi_ui_preflight.h
             grep -Fq "#define MI_UI_ENV_COUNT 90u" /tmp/mi_ui_preflight.h
             grep -Fq "mi_ui_start_maps" /tmp/mi_ui_preflight.h
+            # ARP 162 frames: exact user-source SHA and all 162 delta offsets
+            # are verified before any build, SDK setup or media processing.
+            python3 fm1/native/tools/build_arp_anim_header.py --out /tmp/mi_arp_preflight.h
+            test -s /tmp/mi_arp_preflight.h
+            grep -Fq "#define MI_ARP_FRAME_COUNT 162u" /tmp/mi_arp_preflight.h
             python3 fm1/native/tools/test_miyako_resource96.py
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
@@ -161,6 +166,9 @@ jobs:
             test -s /tmp/fm1-base/miyako/mi_ui_media.h
             grep -Fq "#define MI_UI_MOTION_COUNT 100u" /tmp/fm1-base/miyako/mi_ui_media.h
             grep -Fq "#define MI_UI_ENV_COUNT 90u" /tmp/fm1-base/miyako/mi_ui_media.h
+            python3 fm1/native/tools/build_arp_anim_header.py               --out /tmp/fm1-base/miyako/mi_arp_media.h
+            test -s /tmp/fm1-base/miyako/mi_arp_media.h
+            grep -Fq "#define MI_ARP_INTRO_COUNT 81u" /tmp/fm1-base/miyako/mi_arp_media.h
             # Standard CRC-protected res.bin, 96x96 original-source images.
             # 279936 + 32-byte header fits in 69 sectors; saved data untouched.
             python3 fm1/native/tools/pack_miyako_resource.py \
@@ -381,6 +389,7 @@ jobs:
               'The exact matching 279968-byte MIYAKO-FM1-NATIVE-DEV-res.bin MUST be installed together with this FWSC; old image resources, even when the same size, have different VQ codebooks and are rejected. Use the original resource installer.' \
               'RECORDER: three independent 2/4-bar 56-byte log-PCM loop tracks, with per-track overdub, mute, pan, pitch, in/out and level. 2 bars when external MIDI Clock is active.' \
               'SEQ short press: RECORDER (repeat for parameters, MIX and REV/QUANT pages); PRESET selects LOOP 1/2/3. SEQ hold (650ms): independent 4-track FMDrum step sequencer.' \
+              'ARP visuals: 162 user-provided complete black/yellow tiles; each audible ARP note-on advances one frame, then carousel frames loop. ARP controls and timing unchanged.' \
               '16 white keys toggle steps 1-16. K1 track, K2 play/stop, K3 direction, K4 length 8-16.' \
               'SEQ MIDI input: F8 24-PPQN Clock, six clocks per step, FA Start, FB Continue, FC Stop. Internal BPM if clock is lost.' \
               'Selected REC track Pitch responds to MIDI CC21 on any channel. Values map to -12, -7, -5, 0, +5, +7, +12. Per-track CC22-24 LEVEL, CC25-27 PAN, CC28-30 MUTE.' \
@@ -403,4 +412,4 @@ workflows:
       - fm1_native_build:
           filters:
             branches:
-              only: feature/fm1-three-track-rec-drum-routing-video-slicer-20261110
+              only: feature/fm1-arp-carousel-yellow-black-20261111
