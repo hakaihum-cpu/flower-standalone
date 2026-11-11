@@ -380,12 +380,12 @@ jobs:
               'The 628 user photo frames retain their real RGB colours (including sepia sunsets) with 24 per-clip 16-colour palettes in the unchanged stock VQ format.' \
               'The exact matching 279968-byte MIYAKO-FM1-NATIVE-DEV-res.bin MUST be installed together with this FWSC; old image resources, even when the same size, have different VQ codebooks and are rejected. Use the original resource installer.' \
               'RECORDER: three independent 2/4-bar 56-byte log-PCM loop tracks, with per-track overdub, mute, pan, pitch, in/out and level. 2 bars when external MIDI Clock is active.' \
-              'SEQ short press: RECORDER (repeat to switch LOOP parameters/MIX page); PRESET selects LOOP 1/2/3. SEQ hold (650ms): independent 4-track FMDrum step sequencer.' \
+              'SEQ short press: RECORDER (repeat for parameters, MIX and REV/QUANT pages); PRESET selects LOOP 1/2/3. SEQ hold (650ms): independent 4-track FMDrum step sequencer.' \
               '16 white keys toggle steps 1-16. K1 track, K2 play/stop, K3 direction, K4 length 8-16.' \
               'SEQ MIDI input: F8 24-PPQN Clock, six clocks per step, FA Start, FB Continue, FC Stop. Internal BPM if clock is lost.' \
-              'Selected REC track Pitch responds to MIDI CC21 on any channel. Values map to existing semitone choices -12, -7, -5, 0, +5, +7, +12.' \
+              'Selected REC track Pitch responds to MIDI CC21 on any channel. Values map to -12, -7, -5, 0, +5, +7, +12. Per-track CC22-24 LEVEL, CC25-27 PAN, CC28-30 MUTE.' \
               'GLOBAL: K1 MIDI note channel 1-16, K2 SEQ Clock INTERNAL/MIDI, K3 preset slot 1-4, K4 clockwise twice loads the preset.' \
-              'SAVE: K1 slot, K2 SAVE/LOAD, physical SAVE key twice confirms the action. Four independently stored flash presets.' \
+              'SAVE: K1 slot 1-4, K2 SAVE/LOAD/DEFAULT. Physical SAVE key twice confirms. DEFAULT restores the initial MIYAKO sound (not stock firmware), preserves all four saved slots and GLOBAL MIDI settings, and remains the startup default until a slot is saved or loaded.' \
               'FMDrum live keyboard is recorded by RECORDER. Automatic step-sequencer FMDrum bypasses the recorder capture bus and remains audible on the final output.' \
               'SLICER FX (RATE/RND/WET) processes the final stereo mix including all LOOP tracks and FMDrum. RECORDER MIDI Clock capture behavior is preserved.' \
               'PIANO: Wingie2 SET1 only, flash-backed MIDI roots 51/58/65, three 0.8-second 12kHz mono samples. PIANO keyboard/MIDI enters the normal FX and REC capture bus.' \
