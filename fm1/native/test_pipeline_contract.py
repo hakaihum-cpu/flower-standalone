@@ -889,6 +889,7 @@ assert "mi_rec_cc(&state,note,velocity)" in ui
 assert "mi_rec_cc(&s,30u,127u)" in control_test
 assert "loop->playback_pos" in ui
 assert "MIYAKO_LOOP_VISUAL_SYNC.png" in host_smoke
+assert "test -s fm1-dist/MIYAKO_LOOP_VISUAL_SYNC.png" in ci
 assert "a.arp_clock==period-256u" in audio_test
 # Repeat the manual gating and branch controls after introducing the assets.
 assert "when: << pipeline.parameters.run_build >>" in ci
