@@ -24,6 +24,19 @@ MASK_BYTES = (BLOCKS + 7) // 8
 HEADER_BYTES = 256 * 2 + FRAME_COUNT * 2
 PACK_BYTES = 10552
 
+# Facial detail comes from the SAME user-provided two montages at 72px.
+# Keep the original 48px outline, add a 36x28 exact-source facial inset.
+# This avoids another ~23KB of full high-resolution images in the FWSC.
+FACE_SOURCE = Path(__file__).with_name("mi_arp_face_detail72.b64")
+FACE_SHA256 = "a6ef0422a353ac536205836f689d26c3861fe93afe33a8c12da9812221279a19"
+FACE_PACK_BYTES = 5115
+FACE_W = 36
+FACE_H = 28
+FACE_X = 20
+FACE_Y = 40
+FACE_BLOCKS = (FACE_W // 4) * (FACE_H // 4)
+FACE_MASK_BYTES = (FACE_BLOCKS + 7) // 8
+
 
 def arr(name: str, width: int, vals: list[int]) -> str:
     if width == 8:
@@ -76,11 +89,53 @@ def read_and_verify() -> tuple[list[int], list[int], bytes]:
     return book, offsets, delta
 
 
+
+def read_face_pack() -> tuple[list[int], list[int], bytes]:
+    """Validate all 162 per-frame patches; never accept synthetic substitutes."""
+    try:
+        data = base64.b64decode(
+            FACE_SOURCE.read_text(encoding="ascii").strip(), validate=True)
+    except (OSError, ValueError) as exc:
+        raise SystemExit("FAIL: missing/invalid original-source ARP facial detail") from exc
+    if len(data) != FACE_PACK_BYTES or hashlib.sha256(data).hexdigest() != FACE_SHA256:
+        raise SystemExit("FAIL: original-source ARP facial detail SHA256/size mismatch")
+    books = list(struct.unpack_from("<256H", data, 0))
+    offsets = list(struct.unpack_from(f"<{FRAME_COUNT}H", data, 512))
+    deltas = data[512 + FRAME_COUNT * 2:]
+    if offsets[0] != 0 or not all(0 <= k < len(deltas) for k in offsets):
+        raise SystemExit("FAIL: ARP facial detail offsets")
+    current = [0] * FACE_BLOCKS
+    for frame, offset in enumerate(offsets):
+        if frame in (0, FRAMES_INTRO):
+            if offset + FACE_BLOCKS > len(deltas):
+                raise SystemExit("FAIL: truncated ARP facial keyframe")
+            current[:] = deltas[offset:offset + FACE_BLOCKS]
+            end = offset + FACE_BLOCKS
+        else:
+            if offset + FACE_MASK_BYTES > len(deltas):
+                raise SystemExit("FAIL: truncated ARP facial delta mask")
+            mask = deltas[offset:offset + FACE_MASK_BYTES]
+            end = offset + FACE_MASK_BYTES
+            for j in range(FACE_BLOCKS):
+                if mask[j // 8] & (0x80 >> (j % 8)):
+                    if end >= len(deltas):
+                        raise SystemExit("FAIL: truncated ARP facial delta pixel")
+                    current[j] = deltas[end]
+                    end += 1
+        if frame + 1 < FRAME_COUNT and end != offsets[frame + 1]:
+            raise SystemExit(f"FAIL: ARP facial frame {frame} overlaps/gaps")
+        if frame + 1 == FRAME_COUNT and end != len(deltas):
+            raise SystemExit("FAIL: ARP facial data trailing bytes")
+        if not any(books[k] for k in current):
+            raise SystemExit(f"FAIL: ARP facial frame {frame} has no visible pixels")
+    return books, offsets, deltas
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--out", type=Path, required=True)
     a = p.parse_args()
     book, offsets, data = read_and_verify()
+    face_books, face_offsets, face_data = read_face_pack()
     code = "".join([
         "/* Exact original user-supplied ARP tiles, 2-colour VQ, 162 frames. */\n",
         "#ifndef MI_ARP_MEDIA_H\n#define MI_ARP_MEDIA_H\n#include <stdint.h>\n",
@@ -90,12 +145,21 @@ def main() -> None:
         arr("mi_arp_books", 16, book),
         arr("mi_arp_offsets", 16, offsets),
         arr("mi_arp_deltas", 8, list(data)),
+        "/* Facial source detail: overlay only, NO new or generated imagery. */\n",
+        f"#define MI_ARP_FACE_X {FACE_X}u\n#define MI_ARP_FACE_Y {FACE_Y}u\n",
+        f"#define MI_ARP_FACE_W {FACE_W}u\n#define MI_ARP_FACE_H {FACE_H}u\n",
+        f"#define MI_ARP_FACE_MAP_BYTES {FACE_BLOCKS}u\n",
+        f"#define MI_ARP_FACE_MASK_BYTES {FACE_MASK_BYTES}u\n",
+        arr("mi_arp_face_books", 16, face_books),
+        arr("mi_arp_face_offsets", 16, face_offsets),
+        arr("mi_arp_face_deltas", 8, list(face_data)),
         "#endif\n",
     ])
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(code, encoding="ascii")
     print(f"PASS: 162 complete ARP frames (81 opening + 81 rotation), "
-          f"original 2-colour yellow/black, {PACK_BYTES} source bytes")
+          f"original 2-colour yellow/black, {PACK_BYTES} source bytes; "
+          f"{FACE_PACK_BYTES} bytes of 72px-source facial detail")
 
 
 if __name__ == "__main__":
