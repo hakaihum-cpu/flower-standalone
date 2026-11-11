@@ -969,7 +969,45 @@ assert "loop->playback_pos" in ui
 assert "MIYAKO_LOOP_VISUAL_SYNC.png" in host_smoke
 assert "test -s fm1-dist/MIYAKO_LOOP_VISUAL_SYNC.png" in ci
 assert "a.arp_clock==period-256u" in audio_test
+# ARP user-supplied yellow/black tile sheets (no re-generated drawing).
+# Complete cells: both images have nine full rows and columns; the first
+# displayed 10th row/column is truncated and must NOT enter the animation.
+arp_asset=(root/"fm1/native/tools/mi_arp_source_yellow_black.b64")
+arp_generator=(root/"fm1/native/tools/build_arp_anim_header.py").read_text()
+audio_h=(root/"fm1/native/mi_audio.h").read_text()
+host_smoke=(root/"fm1/native/host_smoke.txt").read_text()
+assert arp_asset.is_file() and arp_asset.stat().st_size==14073
+assert 'RAW_SHA256 = "5a36c5333b15bf6269212e13628e2fb4bce324a7cf09c62bda88a0ce97e32e87"' in arp_generator
+assert "FRAME_COUNT = 162" in arp_generator
+assert "FRAMES_INTRO = 81" in arp_generator
+assert "PACK_BYTES = 10552" in arp_generator
+assert "read_and_verify()" in arp_generator
+assert '#include "mi_arp_media.h"' in ui
+assert '"mi_arp_media.h"' in native_audit
+assert "mi_arp_decode(frame);" in ui
+assert "mi_arp_current_map" in ui and "mi_arp_books[index]" in ui
+assert "cv_rect(84+(int32_t)left,39+(int32_t)(y*3u/2u)," in ui
+assert "YELLOW);" in ui and "mi_arp_pixel(" in ui
+assert "uint16_t mi_arp_cached_frame=MI_ARP_FRAME_COUNT" in ui
+assert "static uint32_t shown_arp_visual_event=0xffffffffu" in ui
+assert "shown_arp_visual_event!=audio.arp_visual_event" in ui
+assert "volatile uint16_t arp_visual_frame;" in audio_h
+assert "volatile uint32_t arp_visual_event;" in audio_h
+assert "a->arp_visual_frame=mode?0xffffu:0u;" in audio
+assert "a->arp_visual_frame>=161u" in audio
+assert "a->arp_visual_frame=81u;" in audio
+assert "++a->arp_visual_event;" in audio
+assert "assert(a.arp_visual_frame==81u" in audio_test
+assert "expect arp_visual_frame >0" in host_smoke
+assert "expect arp_visual_frame 0" in host_smoke
+assert "build_arp_anim_header.py --out /tmp/mi_arp_preflight.h" in ci
+assert "--out /tmp/fm1-base/miyako/mi_arp_media.h" in ci
+assert 'test -s /tmp/fm1-base/miyako/mi_arp_media.h' in ci
+assert "MI_ARP_FRAME_COUNT 162u" in ci
+assert ci.index("build_arp_anim_header.py --out /tmp/mi_arp_preflight.h") < ci.index(
+    "fm1/native/test_pipeline_contract.py")
+assert "MIYAKO-FM1-NATIVE-DEV-res.bin" in ci
 # Repeat the manual gating and branch controls after introducing the assets.
 assert "when: << pipeline.parameters.run_build >>" in ci
-assert "only: feature/fm1-three-track-rec-drum-routing-video-slicer-20261110" in ci
+assert "only: feature/fm1-arp-carousel-yellow-black-20261111" in ci
 print("PASS: manual Phase 3 REC + EUREKA 2sec/576 frames + guarded dual-FX")
