@@ -149,6 +149,62 @@ int main(void)
     mi_rec_configure(&r,120u,2u,44100.f,50000u);
     assert(!r.clock_active&&!r.armed&&r.recording&&r.overdubbing);
     assert(r.write_pos==3765u&&r.playback_pos==3765.5f);
+    /* MI20 reverse: read current PCM in reverse without allocating another
+     * clip; overdub follows the reverse playhead, not the forward write head. */
+    mi_rec_init(&r);
+    mi_rec_configure(&r,120u,2u,44100.f,0u);
+    mi_rec_toggle_record(&r);
+    for(i=0u;i<8000u;i++)mi_rec_tick(&r,(i&256u)?0.3f:-0.3f,edits);
+    mi_rec_toggle_record(&r);
+    assert(r.playing&&r.count>1000u);
+    mi_rec_set_transport(&r,0u,1u,0u);
+    r.playback_pos=1234.25f;
+    mi_rec_tick(&r,0.f,edits);
+    assert(r.playback_pos<1234.25f&&r.tracks[0].reverse==1u);
+    mi_rec_toggle_record(&r);
+    assert(r.overdubbing&&r.write_pos==1233u);
+    for(i=0u;i<20u;i++)mi_rec_tick(&r,0.1f,edits);
+    assert(r.write_pos<1233u);
+    mi_rec_toggle_record(&r);
+    assert(!r.recording&&r.playing);
+    mi_rec_toggle_play(&r);
+    assert(!r.playing);
+    mi_rec_toggle_play(&r);
+    assert(r.playing && r.playback_pos==(float)(r.count-1u));
+    /* Internal clock: a pending beat STOP fires after 22,050 output samples
+     * at 120 BPM, with the same sample counter used for playback. */
+    mi_rec_set_transport(&r,0u,1u,1u);
+    r.beat_phase=0.f;r.beat_index=0u;
+    mi_rec_toggle_play(&r);
+    assert(r.playing && r.tracks[0].pending_play==2u);
+    for(i=0u;i<22049u;i++)mi_rec_tick(&r,0.f,edits);
+    assert(r.playing&&r.tracks[0].pending_play==2u);
+    mi_rec_tick(&r,0.f,edits);
+    assert(!r.playing&&!r.tracks[0].pending_play);
+    mi_rec_toggle_play(&r);
+    assert(!r.playing&&r.tracks[0].pending_play==1u);
+    /* A second PLAY press cancels the pending quantized start. */
+    mi_rec_toggle_play(&r);
+    assert(!r.tracks[0].pending_play);
+    /* On external MIDI, BAR mode aligns to tick 1/97 (24 PPQN*4). */
+    mi_rec_init(&r);
+    r.count=8000u;
+    mi_rec_set_transport(&r,0u,0u,2u);
+    mi_rec_toggle_play(&r);
+    assert(!r.playing && r.tracks[0].pending_play==1u);
+    mi_rec_external_tick(&r,1000u);
+    assert(r.playing&&!r.tracks[0].pending_play);
+    mi_rec_toggle_play(&r);
+    assert(r.playing&&r.tracks[0].pending_play==2u);
+    for(i=2u;i<=96u;i++)mi_rec_external_tick(&r,i*1000u);
+    assert(r.playing);
+    mi_rec_external_tick(&r,97000u);
+    assert(!r.playing&&!r.tracks[0].pending_play);
+    mi_rec_set_transport(&r,0u,0u,1u);
+    mi_rec_toggle_play(&r);
+    assert(r.tracks[0].pending_play==1u);
+    mi_rec_set_transport(&r,0u,0u,0u);
+    assert(r.playing&&!r.tracks[0].pending_play);
     puts("PASS: REC manual stop, adaptive 2/4 bars, 192 MIDI ticks, overdub, clear, pitch/trim, current-playhead overdub");
     return 0;
 }
