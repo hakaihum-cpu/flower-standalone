@@ -357,8 +357,9 @@ static float tick_track(mi_rec_track_t *t,unsigned tr,float input,
                 float tail=(float)(last-fade)+pos-(float)first;
                 uint32_t j=(uint32_t)tail;
                 float part=tail-(float)j;
+                uint32_t after=j+1u<last?j+1u:first;
                 float end=((float)get_pcm(t,tr,j)+
-                           ((float)get_pcm(t,tr,j+1u)-
+                           ((float)get_pcm(t,tr,after)-
                             (float)get_pcm(t,tr,j))*part)*(1.f/32767.f);
                 float mix=((float)(first+fade)-pos)/(float)fade;
                 out=out*(1.f-mix)+end*mix;
