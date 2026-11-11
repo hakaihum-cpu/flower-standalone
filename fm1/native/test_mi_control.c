@@ -82,6 +82,17 @@ int main(void)
     mi_button(&s,MI_B_SAVE,600);
     r=mi_button(&s,MI_B_SAVE,700);
     assert(r.action==MI_ACTION_LOAD && r.slot==2u);
+    /* DEFAULT is the third explicit SAVE-page action. It requires the same
+     * two physical SAVE confirmations and NEVER aliases slot 1 or SAVE. */
+    mi_rotate(&s,MI_EN_K2,1);
+    assert(s.save_action==2u && mi_state_valid(&s));
+    assert(mi_button(&s,MI_B_SAVE,710u).action==MI_ACTION_NONE);
+    r=mi_button(&s,MI_B_SAVE,720u);
+    assert(r.action==MI_ACTION_DEFAULT && r.slot==2u);
+    mi_rotate(&s,MI_EN_K2,-1);
+    assert(s.save_action==1u);
+    s.save_action=3u;assert(!mi_state_valid(&s));
+    s.save_action=1u;assert(mi_state_valid(&s));
     mi_rotate(&s,MI_EN_K1,1);
     assert(s.project_slot==3u&&s.save_armed==0u);
     mi_button(&s, MI_B_HOME, 1000);
