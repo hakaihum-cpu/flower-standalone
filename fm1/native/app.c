@@ -1374,6 +1374,43 @@ static unsigned mi_arp_pixel(unsigned x,unsigned y)
     unsigned bit=15u-((y&3u)*4u+(x&3u));
     return (mi_arp_books[index]>>bit)&1u;
 }
+
+/* Face and eyes are too small for the old 48px two-colour approximation.
+ * Keep the 162 original base tiles and redraw only a 36x28 inset from the
+ * same original source at 72px, preserving brows, eyes, nose and mouth.
+ * 63 bytes of map RAM; no re-encoded whole-frame copy or new frame clock. */
+static uint8_t mi_arp_face_map[MI_ARP_FACE_MAP_BYTES];
+static uint16_t mi_arp_face_cached=MI_ARP_FRAME_COUNT;
+static void mi_arp_face_decode(unsigned target)
+{
+    unsigned first,i,j;
+    if(target>=MI_ARP_FRAME_COUNT)target=0u;
+    if(mi_arp_face_cached==target)return;
+    if(mi_arp_face_cached<target &&
+       (target<MI_ARP_INTRO_COUNT ||
+        mi_arp_face_cached>=MI_ARP_INTRO_COUNT))
+        first=(unsigned)mi_arp_face_cached+1u;
+    else first=target<MI_ARP_INTRO_COUNT?0u:MI_ARP_INTRO_COUNT;
+    for(i=first;i<=target;i++){
+        const uint8_t *src=mi_arp_face_deltas+mi_arp_face_offsets[i];
+        if(i==0u||i==MI_ARP_INTRO_COUNT){
+            for(j=0u;j<MI_ARP_FACE_MAP_BYTES;j++)
+                mi_arp_face_map[j]=src[j];
+        }else{
+            const uint8_t *values=src+MI_ARP_FACE_MASK_BYTES;
+            for(j=0u;j<MI_ARP_FACE_MAP_BYTES;j++)
+                if(src[j>>3]&(0x80u>>(j&7u)))
+                    mi_arp_face_map[j]=*values++;
+        }
+    }
+    mi_arp_face_cached=(uint16_t)target;
+}
+static unsigned mi_arp_face_pixel(unsigned x,unsigned y)
+{
+    unsigned index=mi_arp_face_map[(y>>2)*(MI_ARP_FACE_W/4u)+(x>>2)];
+    unsigned bit=15u-((y&3u)*4u+(x&3u));
+    return (mi_arp_face_books[index]>>bit)&1u;
+}
 static void mi_graph_arp(void)
 {
     unsigned y,x,frame;
@@ -1396,6 +1433,22 @@ static void mi_graph_arp(void)
                 cv_rect(84+(int32_t)left,39+(int32_t)(y*3u/2u),
                         (int32_t)width,(int32_t)height,YELLOW);
             }
+        }
+    }
+    /* Exact-source facial details use physical 1:1 pixels. The previous
+     * 48px base is still 1.5x expanded; the overlay restores information
+     * lost by that coarse face downsampling, without touching ARP controls. */
+    mi_arp_face_decode(frame);
+    for(y=0u;y<MI_ARP_FACE_H;y++){
+        x=0u;
+        while(x<MI_ARP_FACE_W){
+            unsigned start=x;
+            unsigned color=mi_arp_face_pixel(x,y);
+            do {++x;} while(x<MI_ARP_FACE_W &&
+                           mi_arp_face_pixel(x,y)==color);
+            cv_rect(84+(int32_t)MI_ARP_FACE_X+(int32_t)start,
+                    39+(int32_t)MI_ARP_FACE_Y+(int32_t)y,
+                    (int32_t)(x-start),1,color?YELLOW:C_BLACK);
         }
     }
 }
