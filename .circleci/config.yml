@@ -316,6 +316,7 @@ jobs:
             test -s fm1-dist/MIYAKO_GLOBAL.png
             test -s fm1-dist/MIYAKO_GLOBAL_MIDI.png
             test -s fm1-dist/MIYAKO_SAVE_LOAD.png
+            test -s fm1-dist/MIYAKO_DEFAULT_LOAD.png
             test -s fm1-dist/MIYAKO_LFO.png
             /tmp/mi-video-venv/bin/python fm1/native/tools/check_ui_sprite_layout.py \
               fm1-dist/MIYAKO_ENV.png fm1-dist/MIYAKO_LFO.png
