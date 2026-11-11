@@ -34,6 +34,10 @@ typedef struct {
     uint8_t arp_mode, arp_dir, arp_note, arp_sounding, held_total;
     uint16_t arp_pos;
     uint32_t arp_clock, arp_gate_clock, arp_random;
+    /* Audio note-on drives frame changes: 0..80 head opens, 81..161
+     * carousel turns. UI reads event sequence, not a guessed BPM timer. */
+    volatile uint16_t arp_visual_frame;
+    volatile uint32_t arp_visual_event;
     float lfo_phase;
     float filter_a,filter_b;
     volatile uint8_t video_effective[4];
