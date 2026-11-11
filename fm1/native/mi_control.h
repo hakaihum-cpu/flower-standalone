@@ -27,7 +27,7 @@ typedef enum {
 } mi_encoder_t;
 typedef enum {
     MI_ACTION_NONE, MI_ACTION_SAVE, MI_ACTION_PLAY, MI_ACTION_RECORD,
-    MI_ACTION_LOAD
+    MI_ACTION_LOAD, MI_ACTION_DEFAULT
 } mi_action_t;
 /* Preserve all approved MI17/MI18 FX parameter offsets when appending SLICER.
  * SLICER's two controls live at the tail of mi_state_t. */
@@ -70,7 +70,7 @@ typedef struct {
     /* MI17: appended configuration and explicit save/load controls.
      * Historic MI16 flash data is migrated by its exact aligned prefix. */
     uint8_t midi_channel;     /* 1..16: incoming note channel */
-    uint8_t save_action;      /* SAVE screen K2: 0=SAVE 1=LOAD */
+    uint8_t save_action;      /* SAVE screen K2: 0=SAVE, 1=LOAD, 2=DEFAULT */
     uint8_t config_load_armed;/* GLO K4 double-detent confirmation */
     /* MI18 REC: track 1 retains seq[] for historic preset/CC21 migration. */
     uint8_t rec_track;   /* 0..2, PRESET turns while on REC */
