@@ -175,6 +175,8 @@ static void mi_step_tick(mi_audio_t *a,const mi_state_t *s)
     if(len<8u||len>16u)len=8u;
     if(dir>2u)dir=0u;
     if(!a->step_active||a->step_last_dir!=dir||a->step_last_len!=len){
+        if(!a->step_active&&!a->step_midi_mode)
+            mi_rec_internal_start(&a->recorder);
         a->step_active=1u;
         a->step_wait=0u;
         a->step_next=(uint8_t)(dir==1u?len-1u:0u);
