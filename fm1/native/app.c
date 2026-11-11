@@ -22,7 +22,8 @@
 #define YELLOW RGB(255,209,12)
 #define DIM RGB(129,106,39)
 #define GREY RGB(218,213,202)
-#define SAVED_MAGIC 0x4D493139u /* MI19: three-track REC + SLICER */
+#define SAVED_MAGIC 0x4D493230u /* MI20: LOOP REV/QUANT + MIDI/visual */
+#define SAVED_MAGIC_M19 0x4D493139u /* MI19: three-track REC + SLICER */
 #define SAVED_MAGIC_M18 0x4D493138u /* MI18: three-track REC */
 #define SAVED_MAGIC_M17 0x4D493137u /* MI17: old four-slot saved bank */
 #define SAVED_MAGIC_M16 0x4D493136u /* MI16: old single-slot settings */
@@ -44,6 +45,13 @@ typedef struct {
     uint8_t valid_mask,active_slot,midi_channel,clock_mode;
     uint8_t slots[4][MI17_STATE_BYTES];
 } saved_mi17_t;
+/* MI19: historic four-slot state before REV/QUANT fields. */
+#define MI19_STATE_BYTES ((offsetof(mi_state_t,rec_reverse)+3u)&~3u)
+typedef struct {
+    uint32_t magic;
+    uint8_t valid_mask,active_slot,midi_channel,clock_mode;
+    uint8_t slots[4][MI19_STATE_BYTES];
+} saved_mi19_t;
 /* MI18: same historical state offsets, without appended SLICER controls. */
 #define MI18_STATE_BYTES ((offsetof(mi_state_t,fx_slicer)+3u)&~3u)
 typedef struct {
@@ -314,6 +322,35 @@ void app_init(void)
          state=saved_bank.slots[saved_bank.active_slot-1u];
          restored=1;
      }
+ }else if(stored_bytes==(int)sizeof(saved_mi19_t)){
+     saved_mi19_t old19;
+     if(plat_store_load(OBJ_SETTINGS,&old19,sizeof old19)==
+        (int)sizeof old19 && old19.magic==SAVED_MAGIC_M19 &&
+        !(old19.valid_mask&0xF0u) &&
+        old19.active_slot>=1u&&old19.active_slot<=4u &&
+        old19.midi_channel>=1u&&old19.midi_channel<=16u &&
+        old19.clock_mode<=1u){
+         unsigned slot;
+         bank_loaded=1;
+         saved_bank.valid_mask=0u;
+         saved_bank.active_slot=old19.active_slot;
+         saved_bank.midi_channel=old19.midi_channel;
+         saved_bank.clock_mode=old19.clock_mode;
+         for(slot=0u;slot<4u;slot++)if(old19.valid_mask&(1u<<slot)){
+             mi_state_t migrated;
+             mi_init(&migrated);
+             mi_memcopy(&migrated,old19.slots[slot],
+                        offsetof(mi_state_t,rec_reverse));
+             if(mi_state_valid(&migrated)){
+                 saved_bank.slots[slot]=migrated;
+                 saved_bank.valid_mask|=(uint8_t)(1u<<slot);
+             }
+         }
+         if(saved_bank.valid_mask&(1u<<(old19.active_slot-1u))){
+             state=saved_bank.slots[old19.active_slot-1u];
+             restored=1;
+         }
+     }
  }else if(stored_bytes==(int)sizeof(saved_mi18_t)){
      saved_mi18_t old18;
      if(plat_store_load(OBJ_SETTINGS,&old18,sizeof old18)==
@@ -500,6 +537,8 @@ static void midi_audio_poll(void)
              if(state.rec_track==0u)state.seq[2]=pitch;
              else state.rec_extra[state.rec_track-1u][2]=pitch;
          }
+     else if(kind==0xB0u&&mi_rec_cc(&state,note,velocity))
+         redraw=1; /* all-channel per-LOOP level/pan/mute CC22..30 */
      else if(kind==0xB0u&&note==123u&&
              note_channel==state.midi_channel)
          mi_audio_panic(&audio);
@@ -903,6 +942,38 @@ static unsigned mi_visual_step(float activity)
         changed=1;
     }
     if(visual_cooldown)--visual_cooldown;
+    /* Use the selected LOOP's position to advance existing PHOTO frames;
+     * reverse audio naturally reverses the image, without new frame data. */
+    if(photo_bank>=0){
+        const mi_rec_track_t *loop=0;
+        unsigned tr,count,next;
+        tr=state.rec_track<MI_REC_TRACKS?state.rec_track:0u;
+        if(audio.recorder.tracks[tr].playing &&
+           audio.recorder.tracks[tr].count>=4u && !state.rec_mute[tr])
+            loop=&audio.recorder.tracks[tr];
+        if(!loop){
+            for(tr=0u;tr<MI_REC_TRACKS;tr++)
+                if(audio.recorder.tracks[tr].playing &&
+                   audio.recorder.tracks[tr].count>=4u &&
+                   !state.rec_mute[tr]){
+                    loop=&audio.recorder.tracks[tr];break;
+                }
+        }
+        if(loop){
+            count=mi_tile_bank_count[photo_bank];
+            next=(unsigned)((float)loop->playback_pos*(float)count/
+                            (float)loop->count);
+            if(next>=count)next=count-1u;
+            next+=(unsigned)mi_tile_bank_first[photo_bank];
+            if(visual_tile!=next){
+                visual_tile=(uint16_t)next;
+                ++visual_generation;
+                changed=1;
+            }
+            visual_last_activity=activity;
+            return (unsigned)changed;
+        }
+    }
     if(photo_bank>=0 && activity>0.003f &&
        (activity>visual_last_activity*1.28f+0.0015f||!visual_cooldown)){
         unsigned count=mi_tile_bank_count[photo_bank],next;
@@ -1256,6 +1327,7 @@ static void mi_graph_recorder(void)
         cv_text(9,(int32_t)y+1,&FONT_XS,names[tr],sel?YELLOW:GREY);
         cv_text(58,(int32_t)y+1,&FONT_XS,
             t->recording?"REC":t->armed?"ARM":
+            t->pending_play==1u?"WAIT":t->pending_play==2u?"QSTOP":
             state.rec_mute[tr]?"MUTE":t->playing?"PLAY":"STOP",
             t->recording?YELLOW:GREY);
         cv_line(111,(int32_t)y+12,230,(int32_t)y+12,DIM);
@@ -1573,6 +1645,13 @@ static void draw(void)
         else if(state.view==MI_ARP&&i==1u){
             static const char *const rates[]={"1/4","1/8","1/16","1/32"};
             textcpy(val,rates[state.arp[1]<=3u?state.arp[1]:3u],sizeof val);
+        }else if(state.view==MI_SEQ&&state.rec_page==2u&&i==0u)
+            textcpy(val,state.rec_reverse[state.rec_track]?"REV":"FWD",sizeof val);
+        else if(state.view==MI_SEQ&&state.rec_page==2u&&i==1u){
+            static const char *const modes[]={"OFF","BEAT","BAR"};
+            textcpy(val,modes[state.rec_quant[state.rec_track]],sizeof val);
+        }else if(state.view==MI_SEQ&&state.rec_page==2u&&i==3u){
+            val[0]=0;
         }else if(state.view==MI_SEQ&&!state.rec_page&&i==2u){
             static const int semitone[7]={-12,-7,-5,0,5,7,12};
             unsigned pitch=state.rec_track?
@@ -1686,6 +1765,10 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"recording")) *got=(int)audio.recorder.tracks[state.rec_track].recording;
   else if(mi_streq(what,"rec_playing")) *got=(int)audio.recorder.tracks[state.rec_track].playing;
   else if(mi_streq(what,"rec_overdub")) *got=(int)audio.recorder.tracks[state.rec_track].overdubbing;
+  else if(mi_streq(what,"rec_reverse")) *got=(int)state.rec_reverse[state.rec_track];
+  else if(mi_streq(what,"rec_quant")) *got=(int)state.rec_quant[state.rec_track];
+  else if(mi_streq(what,"rec_pending")) *got=(int)audio.recorder.tracks[state.rec_track].pending_play;
+  else if(mi_streq(what,"visual_tile")) *got=(int)visual_tile;
   else if(mi_streq(what,"step_editor")) *got=(int)state.step_editor;
   else if(mi_streq(what,"step_track")) *got=(int)state.step_track;
   else if(mi_streq(what,"step_play")) *got=(int)state.step_play;
