@@ -344,6 +344,7 @@ jobs:
             test -s fm1-dist/MIYAKO_FX_EUREKA_LARGE.png
             test -s fm1-dist/MIYAKO_RECORDER.png
             test -s fm1-dist/MIYAKO_RECORDER_PLAY.png
+            test -s fm1-dist/MIYAKO_LOOP_VISUAL_SYNC.png
             test -s fm1-dist/MIYAKO_EUREKA_AUDIO.wav
             test -s fm1-dist/MIYAKO_FX_PREVIEW.wav
             test "$(stat -c %s fm1-dist/MIYAKO_FX_PREVIEW.wav)" -gt 10000
