@@ -426,3 +426,66 @@ tap SEL
 expect view 3
 wait 70
 shot MIYAKO_NORMAL_SEL_FROM_FX.png
+# MI20: PLAY/STOP sync, reverse LOOP and video playhead reuse existing photos.
+# Current global MIDI channel is 2; CC22..30 must accept ANY input channel.
+tap HOME
+midi USB 91 45 7F
+wait 20
+tap REC
+expect view 7
+wait 650
+tap REC
+midi USB 81 45 00
+wait 20
+expect rec_playing 1
+tap SEQ
+expect rec_page 1
+tap SEQ
+expect rec_page 2
+turn K1 1
+expect rec_reverse 1
+turn K2 1
+expect rec_quant 1
+# Existing track 1 audio is audible; CC bank is independent of GLO MIDI CH.
+midi USB B9 16 40
+wait 15
+expect rec_level 64
+midi USB B9 19 00
+wait 15
+expect rec_pan 0
+midi USB B9 1C 7F
+wait 15
+expect rec_mute 1
+midi USB B9 1C 00
+wait 15
+expect rec_mute 0
+# Beat-quantized STOP stays pending until the next internal 1/4-note grid.
+tap PLAY
+wait 15
+expect rec_pending 2
+expect rec_playing 1
+wait 750
+expect rec_pending 0
+expect rec_playing 0
+# A second PLAY should wait for the following quarter grid before starting.
+tap PLAY
+wait 15
+expect rec_pending 1
+wait 750
+expect rec_pending 0
+expect rec_playing 1
+tap SEL
+expect view 3
+turn SELECT 1
+wait 70
+shot MIYAKO_LOOP_VISUAL_SYNC.png
+tap SEQ
+expect view 7
+# Return to the existing REC page and preserve independent track direction.
+expect rec_page 0
+tap SEQ
+expect rec_page 1
+tap SEQ
+expect rec_page 2
+expect rec_reverse 1
+expect rec_quant 1
