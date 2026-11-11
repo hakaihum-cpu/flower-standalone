@@ -737,7 +737,7 @@ assert "state.midi_channel=midi;" in ui and "state.global[3]=clock;" in ui
 assert 'app_say("DEFAULT LOADED","PRESETS 1-4 KEPT");' in ui
 assert "action.action==MI_ACTION_DEFAULT" in ui
 assert 'state.save_action==2u?"DEFAULT"' in ui
-assert '"BOOT: DEFAULT"' in ui
+assert '"BOOT: DEFAULT"' not in ui and '"BOOT: THIS SLOT"' not in ui
 assert '"boot_slot"' in ui
 assert "expect boot_slot 0" in host_smoke and "expect boot_slot 1" in host_smoke
 assert "expect save_mask 3" in host_smoke
