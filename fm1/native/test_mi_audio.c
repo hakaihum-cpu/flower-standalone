@@ -387,6 +387,21 @@ int main(void)
     mi_audio_input_on(&a,&s,65u,120u);
     assert(a.v[0].piano_zone==2u);
  }
+ /* ARP K2 timing is calculated by the audio sample clock, not by
+  * animation/UI ticks: 120 BPM -> 1/4, 1/8, 1/16, 1/32 in order. */
+ for(i=0u;i<4u;i++){
+     uint32_t period=22050u>>i;
+     mi_init(&s);mi_audio_init(&a,44100.f);
+     s.global[0]=120;s.arp[0]=1u;s.arp[1]=(uint8_t)i;
+     mi_audio_input_on(&a,&s,60u,127u);
+     mi_audio_input_on(&a,&s,64u,127u);
+     mi_audio_render(&a,&s,lr,256u,4096u);
+     assert(a.arp_note==60u&&a.arp_pos==1u);
+     assert(a.arp_clock==period-256u);
+     for(j=256u;j<period;j+=256u)
+         mi_audio_render(&a,&s,lr,256u,4096u);
+     assert(a.arp_pos==2u && a.arp_note==64u);
+ }
  puts("PASS: FMDrum live REC vs SEQ; 3x REC, SLICER and Wingie2 SET1 PIANO");
  return 0;
 }
