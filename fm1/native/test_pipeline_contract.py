@@ -88,6 +88,37 @@ def _audit_stale_literal_contracts():
     print(f"PASS: {checked} current-source contract comparisons")
 
 _audit_stale_literal_contracts()
+
+# #303: the original OSC splash test assumed there would never be more than
+# two reboots in the growing host_smoke.txt. Reject reintroducing a GLOBAL
+# smoke reboot count/last-occurrence test. Other independent cases may freely
+# append reboots; the original checks must remain scoped before the OSC shots.
+def _global_smoke_reboot_calls(source):
+    import ast
+    result = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        method = node.func
+        if method.attr not in ("count", "rindex"):
+            continue
+        if not isinstance(method.value, ast.Name) or method.value.id not in (
+                "smoke", "host_smoke"):
+            continue
+        if node.args and isinstance(node.args[0], ast.Constant) and (
+                isinstance(node.args[0].value, str) and
+                "reboot" in node.args[0].value):
+            result.append(node.lineno)
+    return result
+
+assert _global_smoke_reboot_calls(
+    'assert smoke.count("reboot\\nwait 3200") == 2')
+assert _global_smoke_reboot_calls(
+    'assert smoke.rindex("reboot\\nwait 3200") < 99')
+_regression_source = Path(__file__).read_text(encoding="utf-8")
+assert not _global_smoke_reboot_calls(_regression_source), (
+    "REGRESSION #303: a global smoke reboot count/rindex will fail whenever "
+    "later features legitimately add reboot scenarios")
 ci = (root / ".circleci/config.yml").read_text(encoding="utf-8")
 required = (
     "version: 2.1",
