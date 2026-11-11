@@ -148,7 +148,8 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
     case MI_B_LFO: view(s, MI_LFO); break;
     case MI_B_ARP: view(s, MI_ARP); break;
     case MI_B_SEQ:
-        if(s->view==MI_SEQ&&!s->step_editor)s->rec_page^=1u;
+        if(s->view==MI_SEQ&&!s->step_editor)
+            s->rec_page=(uint8_t)((s->rec_page+1u)%3u);
         else{view(s, MI_SEQ);s->rec_page=0u;}
         s->step_editor=0u;
         break;
@@ -283,7 +284,14 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
             if(k==3u)s->step_len=(uint8_t)limited(s->step_len,d,8,16);
             return;
         }
-        if(s->rec_page){
+        if(s->rec_page==2u){
+            unsigned tr=s->rec_track;
+            if(k==0u)s->rec_reverse[tr]^=1u;
+            if(k==1u)s->rec_quant[tr]=(uint8_t)limited(s->rec_quant[tr],d,0,2);
+            if(k==2u)s->rec_track=(uint8_t)limited(tr,d,0,2);
+            return;
+        }
+        if(s->rec_page==1u){
             if(k==0u)s->rec_mute[s->rec_track]^=1u;
             if(k==1u)s->rec_pan[s->rec_track]=(uint8_t)
                 limited(s->rec_pan[s->rec_track],fast_step(d,2u),0,127);
@@ -467,13 +475,15 @@ int mi_state_valid(const mi_state_t *s)
         s->step_len<8u||s->step_len>16u||s->step_editor>1u||
         s->midi_channel<1u||s->midi_channel>16u||
         s->save_action>1u||s->config_load_armed>1u||
-        s->rec_track>=3u||s->rec_page>1u)
+        s->rec_track>=3u||s->rec_page>2u)
         return 0;
     for (i = 0; i < 4u; ++i) {
         if (s->env[i] > 127u || s->lfo[i] > 127u || s->video_params[i]>127u)
             return 0;
     }
-    for(i=0u;i<3u;i++)if(s->rec_mute[i]>1u||s->rec_pan[i]>127u)return 0;
+    for(i=0u;i<3u;i++)
+        if(s->rec_mute[i]>1u||s->rec_pan[i]>127u||
+           s->rec_reverse[i]>1u||s->rec_quant[i]>2u)return 0;
     for(i=0u;i<2u;i++){
         if(s->rec_extra[i][0]>=s->rec_extra[i][1] ||
            s->rec_extra[i][1]>127u || s->rec_extra[i][2]>6u ||
@@ -489,6 +499,28 @@ int mi_state_valid(const mi_state_t *s)
     return 1;
 }
 
+/* Any MIDI channel, like the existing selected-track CC21 pitch.
+ * No new per-channel state or audio buffers. */
+int mi_rec_cc(mi_state_t *s,unsigned cc,unsigned value)
+{
+    unsigned tr;
+    if(!s||value>127u)return 0;
+    if(cc>=MI_REC_LEVEL_CC_BASE&&cc<MI_REC_LEVEL_CC_BASE+3u){
+        tr=cc-MI_REC_LEVEL_CC_BASE;
+        if(tr==0u)s->seq[3]=(uint8_t)value;
+        else s->rec_extra[tr-1u][3]=(uint8_t)value;
+        return 1;
+    }
+    if(cc>=MI_REC_PAN_CC_BASE&&cc<MI_REC_PAN_CC_BASE+3u){
+        s->rec_pan[cc-MI_REC_PAN_CC_BASE]=(uint8_t)value;
+        return 1;
+    }
+    if(cc>=MI_REC_MUTE_CC_BASE&&cc<MI_REC_MUTE_CC_BASE+3u){
+        s->rec_mute[cc-MI_REC_MUTE_CC_BASE]=(uint8_t)(value>=64u);
+        return 1;
+    }
+    return 0;
+}
 const char *mi_wave_name(unsigned wave)
 {
     static const char *const names[] = {"SINE","SAW","SQUARE","PULSE","MULTI","FMDRUM","PIANO"};
@@ -542,9 +574,13 @@ const char *mi_param_name(const mi_state_t *s, unsigned k)
         static const char *const names[4]={"TRACK","PLAY","DIR","STEPS"};
         return names[k];
     }
-    if(s->view==MI_SEQ&&s->rec_page){
+    if(s->view==MI_SEQ&&s->rec_page==1u){
         static const char *const mix[4]={"MUTE","PAN","TRACK","BARS"};
         return mix[k];
+    }
+    if(s->view==MI_SEQ&&s->rec_page==2u){
+        static const char *const transport[4]={"REV","QUANT","TRACK",""};
+        return transport[k];
     }
     if(s->view==MI_VIDEO){
         static const char *const v[4]={"GLITCH","TILE","XSHIFT","YSHIFT"};
@@ -648,9 +684,12 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
         if(s->step_editor)
             return k==0?s->step_track+1u:k==1?s->step_play:
                    k==2?s->step_dir:s->step_len;
-        if(s->rec_page)return k==0?s->rec_mute[s->rec_track]:
+        if(s->rec_page==1u)return k==0?s->rec_mute[s->rec_track]:
             k==1?s->rec_pan[s->rec_track]:
             k==2?s->rec_track+1u:s->rec_bars;
+        if(s->rec_page==2u)return k==0?s->rec_reverse[s->rec_track]:
+            k==1?s->rec_quant[s->rec_track]:
+            k==2?s->rec_track+1u:0;
         return s->rec_track?s->rec_extra[s->rec_track-1u][k]:s->seq[k];
     case MI_CONFIG: return k==0?s->midi_channel:k==1?s->global[3]:
                           k==2?s->project_slot:s->config_load_armed;
