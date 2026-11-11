@@ -994,6 +994,18 @@ assert 'RAW_SHA256 = "5a36c5333b15bf6269212e13628e2fb4bce324a7cf09c62bda88a0ce97
 assert "FRAME_COUNT = 162" in arp_generator
 assert "FRAMES_INTRO = 81" in arp_generator
 assert "PACK_BYTES = 10552" in arp_generator
+# Keep the 162 original frames and add ONLY user-image-derived facial detail.
+# Regression: 48x48 alone erased eyes/nose/mouth on the ARP screen.
+arp_face_asset=root/"fm1/native/tools/mi_arp_face_detail72.b64"
+assert arp_face_asset.is_file() and arp_face_asset.stat().st_size == 6821
+assert 'FACE_SOURCE = Path(__file__).with_name("mi_arp_face_detail72.b64")' in arp_generator
+assert 'FACE_PACK_BYTES = 5115' in arp_generator
+assert 'FACE_SHA256 = "a6ef0422a353ac536205836f689d26c3861fe93afe33a8c12da9812221279a19"' in arp_generator
+assert "face_books, face_offsets, face_data = read_face_pack()" in arp_generator
+assert 'arr("mi_arp_face_deltas", 8, list(face_data))' in arp_generator
+assert "mi_arp_face_decode(frame);" in ui
+assert "static unsigned mi_arp_face_pixel(" in ui
+assert "color?YELLOW:C_BLACK" in ui
 assert "read_and_verify()" in arp_generator
 assert '#include "mi_arp_media.h"' in ui
 assert '"mi_arp_media.h"' in native_audit
