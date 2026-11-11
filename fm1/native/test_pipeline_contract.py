@@ -165,6 +165,12 @@ assert "def precompile_first_stage(" in shell_gate
 assert 'len(compiles) != 11' in shell_gate
 assert '"-fsyntax-only"' in shell_gate and '["bash", "-n"]' in shell_gate
 assert "precompile_first_stage(scripts[0][1], root)" in shell_gate
+assert "def assert_compiler_warning_gate()" in shell_gate
+assert "int main(void){int unused;return 0;}" in shell_gate
+assert '"unused-variable" not in bad.stderr' in shell_gate
+assert "if not assert_compiler_warning_gate():" in shell_gate
+assert shell_gate.index("if not assert_compiler_warning_gate():") < shell_gate.index(
+    "if not precompile_first_stage(scripts[0][1], root):")
 piano_host = (root / "fm1/native/test_mi_piano_set1.c").read_text()
 assert "const uint8_t *samples=mi_piano_set1_data(zone);" not in piano_host
 assert "mi_piano_set1_tick(zone,&pos,1.f)" in piano_host
