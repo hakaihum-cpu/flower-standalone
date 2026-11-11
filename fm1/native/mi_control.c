@@ -172,7 +172,8 @@ mi_result_t mi_button(mi_state_t *s, mi_button_t b, uint32_t now_ms)
             s->save_armed_ms = now_ms;
         } else {
             s->save_armed = 0;
-            return result(s->save_action?MI_ACTION_LOAD:MI_ACTION_SAVE,
+            return result(s->save_action==2u?MI_ACTION_DEFAULT:
+                          s->save_action==1u?MI_ACTION_LOAD:MI_ACTION_SAVE,
                           s->project_slot);
         }
         break;
@@ -317,7 +318,7 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         return;
     case MI_SAVE:
         if(k==0u) {s->project_slot=(uint8_t)limited(s->project_slot,d,1,4);}
-        if(k==1u) {s->save_action=(uint8_t)limited(s->save_action,d,0,1);}
+        if(k==1u) {s->save_action=(uint8_t)limited(s->save_action,d,0,2);}
         s->save_armed=0u; /* switching slot/action cancels confirmation */
         return;
     default: break;
@@ -474,7 +475,7 @@ int mi_state_valid(const mi_state_t *s)
         s->step_track>=4u||s->step_play>1u||s->step_dir>2u||
         s->step_len<8u||s->step_len>16u||s->step_editor>1u||
         s->midi_channel<1u||s->midi_channel>16u||
-        s->save_action>1u||s->config_load_armed>1u||
+        s->save_action>2u||s->config_load_armed>1u||
         s->rec_track>=3u||s->rec_page>2u)
         return 0;
     for (i = 0; i < 4u; ++i) {
