@@ -186,6 +186,13 @@ int main(void)
     /* A second PLAY press cancels the pending quantized start. */
     mi_rec_toggle_play(&r);
     assert(!r.tracks[0].pending_play);
+    /* Starting the internal step sequencer defines beat 0 for all loops,
+     * without waiting for a free-running grid from firmware boot. */
+    mi_rec_toggle_play(&r);
+    assert(r.tracks[0].pending_play==1u);
+    mi_rec_internal_start(&r);
+    assert(r.playing&&!r.tracks[0].pending_play);
+    assert(r.beat_index==1u&&r.beat_phase==0.f);
     /* On external MIDI, BAR mode aligns to tick 1/97 (24 PPQN*4). */
     mi_rec_init(&r);
     r.count=8000u;
