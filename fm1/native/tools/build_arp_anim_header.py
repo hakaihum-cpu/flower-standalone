@@ -27,7 +27,10 @@ PACK_BYTES = 10552
 # Facial detail comes from the SAME user-provided two montages at 72px.
 # Keep the original 48px outline, add a 36x28 exact-source facial inset.
 # This avoids another ~23KB of full high-resolution images in the FWSC.
-FACE_SOURCE = Path(__file__).with_name("mi_arp_face_detail72.b64")
+FACE_SOURCES = (
+    Path(__file__).with_name("mi_arp_face_detail72_0.b64"),
+    Path(__file__).with_name("mi_arp_face_detail72_1.b64"),
+)
 FACE_SHA256 = "a6ef0422a353ac536205836f689d26c3861fe93afe33a8c12da9812221279a19"
 FACE_PACK_BYTES = 5115
 FACE_W = 36
@@ -93,8 +96,11 @@ def read_and_verify() -> tuple[list[int], list[int], bytes]:
 def read_face_pack() -> tuple[list[int], list[int], bytes]:
     """Validate all 162 per-frame patches; never accept synthetic substitutes."""
     try:
-        data = base64.b64decode(
-            FACE_SOURCE.read_text(encoding="ascii").strip(), validate=True)
+        # Two small repository chunks concatenate into a single exact
+        # 5115-byte original-source pack. Neither chunk is decoded alone.
+        packed = "".join(p.read_text(encoding="ascii").strip()
+                         for p in FACE_SOURCES)
+        data = base64.b64decode(packed, validate=True)
     except (OSError, ValueError) as exc:
         raise SystemExit("FAIL: missing/invalid original-source ARP facial detail") from exc
     if len(data) != FACE_PACK_BYTES or hashlib.sha256(data).hexdigest() != FACE_SHA256:
