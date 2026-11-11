@@ -743,6 +743,7 @@ assert "expect boot_slot 0" in host_smoke and "expect boot_slot 1" in host_smoke
 assert "expect save_mask 3" in host_smoke
 assert "shot MIYAKO_DEFAULT_LOAD.png" in host_smoke
 assert "test -s fm1-dist/MIYAKO_DEFAULT_LOAD.png" in ci
+assert "DEFAULT restores the initial MIYAKO sound" in ci
 # Dedicated pages and physical controls; no generic OSC/FX column UI.
 assert "static void mi_draw_config(void)" in ui
 assert "static void mi_draw_save(void)" in ui
