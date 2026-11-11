@@ -878,6 +878,9 @@ assert 'saved_mi19_t old19;' in ui
 assert 'old19.magic==SAVED_MAGIC_M19' in ui
 assert 'offsetof(mi_state_t,rec_reverse)' in ui
 assert "mi_rec_set_transport(&a->recorder,k" in audio
+assert "mi_rec_internal_start(&a->recorder)" in audio
+assert "void mi_rec_internal_start(mi_recorder_t *r)" in recorder
+assert "mi_rec_internal_start(&r);" in recorder_test
 assert "static void quant_boundary(" in recorder
 assert "if(t->reverse)" in recorder
 assert "t->pending_play=t->playing?2u:1u;" in recorder
