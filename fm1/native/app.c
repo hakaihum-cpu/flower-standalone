@@ -311,7 +311,6 @@ void app_init(void)
     saved_bank.magic==SAVED_MAGIC&&
     !(saved_bank.valid_mask&0xF0u)&&
     saved_bank.active_slot<=4u&& /* 0 means boot factory DEFAULT */
-
     saved_bank.midi_channel>=1u&&saved_bank.midi_channel<=16u&&
     saved_bank.clock_mode<=1u){
      bank_loaded=1;
@@ -1486,6 +1485,10 @@ static void mi_draw_save(void)
     cv_text(12,76,&FONT_XS,"SLOT STATUS",GREY);
     cv_text(135,73,&FONT_S,occupied?"STORED":"EMPTY",
             occupied?YELLOW:GREY);
+    if(saved_bank.active_slot==0u)
+        cv_text(12,99,&FONT_XS,"BOOT: DEFAULT",YELLOW);
+    else if(saved_bank.active_slot==state.project_slot)
+        cv_text(12,99,&FONT_XS,"BOOT: THIS SLOT",GREY);
     cv_blit(0,0);
 
     cv_begin(240,120,C_BLACK);
