@@ -717,6 +717,32 @@ assert "mi_store_slot(void)" in ui and "mi_load_slot(void)" in ui
 assert "saved_bank.valid_mask" in ui
 assert "mi_state_valid(&saved_bank.slots[index])" in ui
 assert "saved_t save;" not in ui
+# LOAD DEFAULT: factory sound is a fifth *load choice*, not a writable
+# slot. Persist active_slot=0 without changing MI20 bank layout or globals.
+control_h = (root / "fm1/native/mi_control.h").read_text()
+control_test = (root / "fm1/native/test_mi_control.c").read_text()
+assert "MI_ACTION_DEFAULT" in control_h
+assert "s->save_action==2u?MI_ACTION_DEFAULT:" in controls
+assert "s->save_action>2u" in controls
+assert "s->save_action,d,0,2" in controls
+assert "r.action==MI_ACTION_DEFAULT && r.slot==2u" in control_test
+assert "s.save_action=3u;assert(!mi_state_valid(&s))" in control_test
+assert "#define SAVED_MAGIC 0x4D493230u" in ui  # no format bump
+assert "saved_bank.active_slot<=4u" in ui
+assert "if(saved_bank.active_slot>0u&&" in ui
+assert "state.project_slot=saved_bank.active_slot?" in ui
+assert "static void mi_load_default(void)" in ui
+assert "saved_bank.active_slot=0u;" in ui
+assert "state.midi_channel=midi;" in ui and "state.global[3]=clock;" in ui
+assert 'app_say("DEFAULT LOADED","PRESETS 1-4 KEPT");' in ui
+assert "action.action==MI_ACTION_DEFAULT" in ui
+assert 'state.save_action==2u?"DEFAULT"' in ui
+assert '"BOOT: DEFAULT"' in ui
+assert '"boot_slot"' in ui
+assert "expect boot_slot 0" in host_smoke and "expect boot_slot 1" in host_smoke
+assert "expect save_mask 3" in host_smoke
+assert "shot MIYAKO_DEFAULT_LOAD.png" in host_smoke
+assert "test -s fm1-dist/MIYAKO_DEFAULT_LOAD.png" in ci
 # Dedicated pages and physical controls; no generic OSC/FX column UI.
 assert "static void mi_draw_config(void)" in ui
 assert "static void mi_draw_save(void)" in ui
