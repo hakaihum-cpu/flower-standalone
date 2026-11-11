@@ -162,7 +162,7 @@ int main(void)
     mi_rec_tick(&r,0.f,edits);
     assert(r.playback_pos<1234.25f&&r.tracks[0].reverse==1u);
     mi_rec_toggle_record(&r);
-    assert(r.overdubbing&&r.write_pos==1233u);
+    assert(r.overdubbing&&r.write_pos==1234u); /* 0.25-point/sample at 120 BPM */
     for(i=0u;i<20u;i++)mi_rec_tick(&r,0.1f,edits);
     assert(r.write_pos<1233u);
     mi_rec_toggle_record(&r);
