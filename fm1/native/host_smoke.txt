@@ -487,3 +487,62 @@ tap SEQ
 expect rec_page 2
 expect rec_reverse 1
 expect rec_quant 1
+# DEFAULT is a separately confirmed SAVE-menu action, never a fifth
+# writable patch slot. PRESET 1/2 must survive and globals stay unchanged.
+tap SAVE
+expect view 9
+expect slot 2
+turn K1 -1
+expect slot 1
+turn K2 2
+expect save_action 2
+tap SAVE
+expect save_armed 1
+tap SAVE
+expect save_armed 0
+expect boot_slot 0
+expect save_mask 3
+expect wave 0
+expect fx 0
+expect midi_channel 2
+expect clock_mode 1
+shot MIYAKO_DEFAULT_LOAD.png
+# Cold boot with active_slot 0 must NOT auto-load saved PRESET 1.
+reboot
+wait 3200
+expect view 0
+expect wave 0
+expect fx 0
+expect boot_slot 0
+expect save_mask 3
+expect slot 1
+expect midi_channel 2
+expect clock_mode 1
+# Saved PRESET 1 can still be loaded after DEFAULT and becomes boot slot 1.
+tap SAVE
+expect save_action 0
+turn K2 1
+expect save_action 1
+tap SAVE
+tap SAVE
+expect wave 2
+expect boot_slot 1
+expect save_mask 3
+reboot
+wait 3200
+expect wave 2
+expect boot_slot 1
+# Selecting DEFAULT again permanently overrides the auto-boot selection,
+# WITHOUT erasing PRESET 1 or PRESET 2.
+tap SAVE
+turn K2 2
+expect save_action 2
+tap SAVE
+tap SAVE
+expect boot_slot 0
+expect save_mask 3
+reboot
+wait 3200
+expect wave 0
+expect boot_slot 0
+expect save_mask 3
