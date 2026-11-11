@@ -51,8 +51,9 @@ jobs:
             python3 fm1/native/tools/build_arp_anim_header.py --out /tmp/mi_arp_preflight.h
             test -s /tmp/mi_arp_preflight.h
             grep -Fq "#define MI_ARP_FRAME_COUNT 162u" /tmp/mi_arp_preflight.h
-            grep -Fq "#define MI_ARP_FACE_W 36u" /tmp/mi_arp_preflight.h
-            grep -Fq "mi_arp_face_deltas" /tmp/mi_arp_preflight.h
+            grep -Fq "#define MI_ARP_FRAME_W 72u" /tmp/mi_arp_preflight.h
+            grep -Fq "#define MI_ARP_MAP_BYTES 324u" /tmp/mi_arp_preflight.h
+            grep -Fq "#define MI_ARP_MASK_BYTES 41u" /tmp/mi_arp_preflight.h
             python3 fm1/native/test_pipeline_contract.py
             python3 fm1/native/tools/test_miyako_dynamic_version.py
             python3 fm1/native/tools/build_letter_anim_header.py --out /tmp/mi_letter_preflight.h
@@ -171,7 +172,8 @@ jobs:
             python3 fm1/native/tools/build_arp_anim_header.py               --out /tmp/fm1-base/miyako/mi_arp_media.h
             test -s /tmp/fm1-base/miyako/mi_arp_media.h
             grep -Fq "#define MI_ARP_INTRO_COUNT 81u" /tmp/fm1-base/miyako/mi_arp_media.h
-            grep -Fq "mi_arp_face_deltas" /tmp/fm1-base/miyako/mi_arp_media.h
+            grep -Fq "#define MI_ARP_FRAME_W 72u" /tmp/fm1-base/miyako/mi_arp_media.h
+            grep -Fq "#define MI_ARP_MAP_BYTES 324u" /tmp/fm1-base/miyako/mi_arp_media.h
             # Standard CRC-protected res.bin, 96x96 original-source images.
             # 279936 + 32-byte header fits in 69 sectors; saved data untouched.
             python3 fm1/native/tools/pack_miyako_resource.py \
