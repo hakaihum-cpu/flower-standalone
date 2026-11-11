@@ -25,6 +25,7 @@ typedef struct {
     int16_t read_pcm[MI_REC_PCM7_SAMPLES],write_pcm[MI_REC_PCM7_SAMPLES];
     uint16_t read_block,write_block;
     uint8_t read_valid,write_valid,write_dirty;
+    uint8_t reverse,quant,pending_play; /* 0/1, off/beat/bar, none/start/stop */
 } mi_rec_track_t;
 typedef struct {
     /* C anonymous struct exposes the historic r.count/r.playback_pos names,
@@ -36,10 +37,14 @@ typedef struct {
     uint8_t selected, params[MI_REC_TRACKS-1u][4];
     uint8_t mute[MI_REC_TRACKS],pan[MI_REC_TRACKS];
     uint8_t level[MI_REC_TRACKS]; /* include zero-level tracks in bypass logic */
+    float beat_phase,beat_samples; /* internal quantization sample clock */
+    uint8_t beat_index; /* modulo four, preserved across LOOP transport */
 } mi_recorder_t;
 #undef MI_REC_FIELDS
 void mi_rec_init(mi_recorder_t *r);
 void mi_rec_select(mi_recorder_t *r,unsigned track);
+void mi_rec_set_transport(mi_recorder_t *r,unsigned track,
+                          unsigned reverse,unsigned quant);
 void mi_rec_set_track(mi_recorder_t *r,unsigned track,const uint8_t controls[4],
                       unsigned mute,unsigned pan);
 int mi_rec_any_playing(const mi_recorder_t *r);
