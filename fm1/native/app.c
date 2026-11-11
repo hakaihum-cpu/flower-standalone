@@ -310,7 +310,8 @@ void app_init(void)
         (int)sizeof saved_bank &&
     saved_bank.magic==SAVED_MAGIC&&
     !(saved_bank.valid_mask&0xF0u)&&
-    saved_bank.active_slot>=1u&&saved_bank.active_slot<=4u&&
+    saved_bank.active_slot<=4u&& /* 0 means boot factory DEFAULT */
+
     saved_bank.midi_channel>=1u&&saved_bank.midi_channel<=16u&&
     saved_bank.clock_mode<=1u){
      bank_loaded=1;
@@ -318,10 +319,13 @@ void app_init(void)
          if((saved_bank.valid_mask&(1u<<i))&&
             !mi_state_valid(&saved_bank.slots[i]))
              saved_bank.valid_mask=(uint8_t)(saved_bank.valid_mask&~(1u<<i));
-     if(saved_bank.valid_mask&(1u<<(saved_bank.active_slot-1u))){
+     if(saved_bank.active_slot>0u&&
+        (saved_bank.valid_mask&(1u<<(saved_bank.active_slot-1u)))){
          state=saved_bank.slots[saved_bank.active_slot-1u];
          restored=1;
      }
+     /* active_slot==0 intentionally leaves mi_init()'s factory sound
+      * selected, while retaining the four stored presets and globals. */
  }else if(stored_bytes==(int)sizeof(saved_mi19_t)){
      saved_mi19_t old19;
      if(plat_store_load(OBJ_SETTINGS,&old19,sizeof old19)==
@@ -463,7 +467,8 @@ void app_init(void)
          saved_bank.slots[state.project_slot-1u]=state;
      }
  }else{
-     state.project_slot=saved_bank.active_slot;
+     state.project_slot=saved_bank.active_slot?
+                        saved_bank.active_slot:1u;
      state.midi_channel=saved_bank.midi_channel;
      state.global[3]=(int16_t)saved_bank.clock_mode;
  }
@@ -644,6 +649,35 @@ static void mi_load_slot(void)
         app_say("PRESET LOADED","");
     }else app_say("LOADED","NOT STORED");
 }
+/* Load true factory sound without deleting PRESET 1..4.
+ * Persist active_slot=0 in the SAME MI20 bank: on every next boot,
+ * mi_init() is used instead of unconditionally loading PRESET 1.
+ * GLOBAL MIDI channel / MIDI Clock choice are never factory-reset. */
+static void mi_load_default(void)
+{
+    mi_state_t previous=state;
+    uint8_t old_active=saved_bank.active_slot;
+    uint8_t midi=state.midi_channel;
+    int16_t clock=state.global[3];
+    uint8_t slot=state.project_slot;
+    mi_view_t current=state.view;
+    mi_audio_panic(&audio);
+    mi_init(&state);
+    state.midi_channel=midi;
+    state.global[3]=clock;
+    state.project_slot=slot;
+    state.view=current; /* show the confirmed DEFAULT action */
+    state.save_action=2u;
+    saved_bank.active_slot=0u; /* distinct from the four saved presets */
+    if(mi_store_bank()){
+        config_dirty=0u;
+        app_say("DEFAULT LOADED","PRESETS 1-4 KEPT");
+    }else{
+        saved_bank.active_slot=old_active;
+        state=previous; /* never silently claim a failed default load */
+        app_say("DEFAULT FAILED","NOT LOADED");
+    }
+}
 static mi_button_t map_button(unsigned k)
 {
  switch(k){
@@ -748,6 +782,8 @@ static void input(void)
          mi_store_slot();
      }else if(action.action==MI_ACTION_LOAD){
          mi_load_slot();
+     }else if(action.action==MI_ACTION_DEFAULT){
+         mi_load_default();
      }else if(action.action==MI_ACTION_RECORD){
          mi_audio_rec_request(&audio,1u);
     }else if(action.action==MI_ACTION_PLAY){
@@ -1454,7 +1490,9 @@ static void mi_draw_save(void)
 
     cv_begin(240,120,C_BLACK);
     cv_text(12,15,&FONT_XS,"ACTION",GREY);
-    cv_text(92,13,&FONT_S,state.save_action?"LOAD":"SAVE",YELLOW);
+    cv_text(92,13,&FONT_S,
+            state.save_action==2u?"DEFAULT":
+            state.save_action==1u?"LOAD":"SAVE",YELLOW);
     cv_rect(8,41,224,1,DIM);
     if(plat_ms()<message_until){
         cv_text(12,51,&FONT_XS,line_a,YELLOW);
@@ -1464,7 +1502,7 @@ static void mi_draw_save(void)
                 state.save_armed?"PRESS SAVE: CONFIRM":"PRESS SAVE TWICE",
                 state.save_armed?YELLOW:GREY);
     }
-    cv_text(12,86,&FONT_XS,"K1 SLOT  K2 SAVE / LOAD",GREY);
+    cv_text(12,86,&FONT_XS,"K1 SLOT  K2 SAVE/LOAD/DEFAULT",GREY);
     cv_text(12,103,&FONT_XS,"SAVE KEY: CONFIRM",GREY);
     cv_blit(0,120);
 }
@@ -1805,6 +1843,7 @@ int app_expect(const char *what,int *got)
  else if(mi_streq(what,"save_armed")) *got=(int)state.save_armed;
  else if(mi_streq(what,"config_load_armed")) *got=(int)state.config_load_armed;
  else if(mi_streq(what,"save_mask")) *got=(int)saved_bank.valid_mask;
+ else if(mi_streq(what,"boot_slot")) *got=(int)saved_bank.active_slot;
  else if(mi_streq(what,"active")) {
     unsigned i;int n=0;
     for(i=0;i<MI_NATIVE_POLY;i++)if(audio.v[i].active)n++;
