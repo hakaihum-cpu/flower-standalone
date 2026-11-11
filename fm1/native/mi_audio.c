@@ -685,6 +685,8 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
     release_samples=a->sample_rate*(0.005f+3.f*rel*rel);
     lfo_speed=(0.07f+15.f*(float)rs->lfo[0]/127.f)/a->sample_rate;
     mi_rec_select(&a->recorder,rs->rec_track);
+    for(k=0u;k<MI_REC_TRACKS;k++)
+        mi_rec_set_transport(&a->recorder,k,rs->rec_reverse[k],rs->rec_quant[k]);
     mi_rec_set_track(&a->recorder,0u,rs->seq,rs->rec_mute[0],rs->rec_pan[0]);
     mi_rec_set_track(&a->recorder,1u,rs->rec_extra[0],rs->rec_mute[1],rs->rec_pan[1]);
     mi_rec_set_track(&a->recorder,2u,rs->rec_extra[1],rs->rec_mute[2],rs->rec_pan[2]);
