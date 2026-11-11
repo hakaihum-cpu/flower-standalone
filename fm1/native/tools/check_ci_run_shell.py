@@ -86,6 +86,24 @@ def precompile_first_stage(script: str, root: Path) -> bool:
     return True
 
 
+
+def assert_compiler_warning_gate() -> bool:
+    """Fail closed if CircleCI's C compiler permits a diagnostic under -Werror."""
+    cmd = ["cc", "-std=c99", "-Wall", "-Wextra", "-Werror",
+           "-fsyntax-only", "-x", "c", "-"]
+    good = subprocess.run(cmd, input="int main(void){return 0;}\n",
+                          text=True, capture_output=True, check=False)
+    bad = subprocess.run(cmd, input="int main(void){int unused;return 0;}\n",
+                         text=True, capture_output=True, check=False)
+    if good.returncode != 0 or bad.returncode == 0 or "unused-variable" not in bad.stderr:
+        print("FAIL: actual C compiler does not enforce the #301 unused-variable guard",
+              file=sys.stderr)
+        print("good: " + good.stderr + "\nbad: " + bad.stderr, file=sys.stderr)
+        return False
+    print("PASS: actual C compiler rejects injected #301 unused-variable regression")
+    return True
+
+
 def main() -> int:
     root = Path(__file__).resolve().parents[3]
     config = root / ".circleci/config.yml"
@@ -106,6 +124,8 @@ def main() -> int:
             )
             return 1
     print(f"PASS: bash -n for all {len(scripts)} CircleCI run commands")
+    if not assert_compiler_warning_gate():
+        return 1
     if not precompile_first_stage(scripts[0][1], root):
         return 1
     return 0
