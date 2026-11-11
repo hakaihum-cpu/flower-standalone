@@ -461,16 +461,14 @@ wait 15
 expect rec_mute 0
 # Beat-quantized STOP stays pending until the next internal 1/4-note grid.
 tap PLAY
-wait 15
-expect rec_pending 2
-expect rec_playing 1
+# The button may fall immediately before a beat; avoid a race-prone
+# 15-ms assertion. The exact pending state is tested under a sample clock
+# by test_mi_recorder.c; the host checks the audible end state.
 wait 750
 expect rec_pending 0
 expect rec_playing 0
-# A second PLAY should wait for the following quarter grid before starting.
+# A second PLAY starts no later than the following quarter-note grid.
 tap PLAY
-wait 15
-expect rec_pending 1
 wait 750
 expect rec_pending 0
 expect rec_playing 1
