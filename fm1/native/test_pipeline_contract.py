@@ -920,10 +920,16 @@ assert "else drum_manual+=drum" in audio
 assert "sample=effect(a,rs,sample);" in audio
 assert "sample=mi_soft_limit(sample+drum_manual);" in audio
 assert "mi_rec_tick_stereo(&a->recorder,sample,rs->seq,&rec_l,&rec_r)" in audio
-assert "rec_l*(0.75f*a->rec_monitor_mix)+drum_seq" in audio
+# Approved gain change: LOOP playback is unity on BOTH channels.
+# Keep oscillator ducking and the rest of the mixer exactly as before.
+assert "rec_l*(1.0f*a->rec_monitor_mix)+drum_seq" in audio
+assert "rec_r*(1.0f*a->rec_monitor_mix)+drum_seq" in audio
+assert "rec_l*(0.75f*a->rec_monitor_mix)+drum_seq" not in audio
+assert "rec_r*(0.75f*a->rec_monitor_mix)+drum_seq" not in audio
+assert "sample*(1.f-0.45f*a->rec_monitor_mix)+" in audio
 assert audio.index("sample=mi_soft_limit(sample+drum_manual);") < \
        audio.index("mi_rec_tick_stereo(&a->recorder,sample,rs->seq,&rec_l,&rec_r)") < \
-       audio.index("rec_l*(0.75f*a->rec_monitor_mix)+drum_seq")
+       audio.index("rec_l*(1.0f*a->rec_monitor_mix)+drum_seq")
 assert "if(t->armed && ((t->clock_ticks-1u)%96u)==0u)" in recorder
 # Real host screenshots plus flash-reboot/load assertions.
 for name in ("MIYAKO_GLOBAL.png","MIYAKO_GLOBAL_MIDI.png",
