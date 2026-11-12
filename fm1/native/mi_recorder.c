@@ -419,9 +419,13 @@ static float tick_track(mi_rec_track_t *t,unsigned tr,float input,
             }else{
                 t->playback_pos+=ratio*t->play_step;
                 if(t->playback_pos>=(float)last){
-                    t->playback_pos=(float)(first+fade)+(t->playback_pos-(float)last);
+                    /* Keep a padded 1-BAR clip exactly one bar long:
+                     * the historic crossfade wrap skipped 128 points,
+                     * shortening every repetition without changing tempo. */
+                    uint32_t wrap=t->one_bar_loop?first:first+fade;
+                    t->playback_pos=(float)wrap+(t->playback_pos-(float)last);
                     if(t->playback_pos>=(float)last)
-                        t->playback_pos=(float)(first+fade);
+                        t->playback_pos=(float)wrap;
                 }
             }
         }
