@@ -343,7 +343,11 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     }
     if(s->view==MI_HOME&&k==0u){
         if(previous_wave!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
-            if(previous_wave<=3u)s->osc1_wave=previous_wave;
+            /* K1 may report several detents together. Traversing 0 -> 4
+             * must equal four individual detents: MULTI inherits the
+             * preceding PULSE waveform (3), never the starting SINE (0).
+             * Returning from FMDRUM/PIANO preserves saved MULTI OSC1. */
+            if(previous_wave<MI_WAVE_MULTI)s->osc1_wave=3u;
             if(s->osc2_level==0u)s->osc2_level=64u;
             s->osc_page=0u;
         }else if(previous_wave==MI_WAVE_MULTI&&s->wave!=MI_WAVE_MULTI){
