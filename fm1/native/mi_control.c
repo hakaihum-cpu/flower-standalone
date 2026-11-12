@@ -189,12 +189,13 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     if (k >= 4) return;
     switch (s->view) {
     case MI_HOME:
-        /* HOME edits oscillator controls, never FX. MULTI's PRESET encoder
-         * selects OSC1/OSC2 without changing the active synthesis mode.
-         * K1 edits the selected waveform; K2 edits SUB or OSC2 DETUNE. */
+        /* HOME K1 always selects a top-level sound, INCLUDING FMDRUM and
+         * PIANO after MULTI. Previous MULTI-only behavior swallowed K1
+         * turns by modifying OSC1/OSC2 instead of leaving MULTI.
+         * Internal MULTI wave editing remains on the OSC EDIT page. */
         if(s->wave==MI_WAVE_MULTI){
             unsigned second=s->osc_page==1u;
-            if(k==0){p=second?&s->osc2_wave:&s->osc1_wave;hi=3;}
+            if(k==0){p=&s->wave;hi=MI_WAVE_PIANO;}
             if(k==1)p=second?&s->osc2_detune:&s->sub;
             if(k==2)p=&s->osc2_level;
         }else{
@@ -340,11 +341,15 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
             rate=1u;
         *p=(uint8_t)limited(*p,fast_step(d,rate),lo,hi);
     }
-    if(s->view==MI_HOME&&k==0u &&
-       previous_wave!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
-        s->osc1_wave=previous_wave;
-        if(s->osc2_level==0u)s->osc2_level=64u;
-        s->osc_page=0u;
+    if(s->view==MI_HOME&&k==0u){
+        if(previous_wave!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
+            s->osc1_wave=previous_wave;
+            if(s->osc2_level==0u)s->osc2_level=64u;
+            s->osc_page=0u;
+        }else if(previous_wave==MI_WAVE_MULTI&&s->wave!=MI_WAVE_MULTI){
+            /* Do not enter the OSC2 edit page of FMDRUM/PIANO. */
+            s->osc_page=0u;
+        }
     }
     if(s->view==MI_HOME && !mi_fx_pair_supported(s->fx,s->fx2))
         s->fx2=MI_FX_OFF;
@@ -645,7 +650,7 @@ int32_t mi_param_value(const mi_state_t *s, unsigned k)
     case MI_HOME:
         if(s->wave==MI_WAVE_MULTI){
             int second=s->osc_page==1u;
-            return k==0?(second?s->osc2_wave:s->osc1_wave):
+            return k==0?s->wave:
                    k==1?(second?((int32_t)s->osc2_detune-64):(int32_t)s->sub):
                    k==2?s->osc2_level:s->level;
         }
