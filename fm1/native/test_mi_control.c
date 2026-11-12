@@ -276,8 +276,8 @@ int main(void)
     assert(s.fx==MI_FX_EUREKA && s.fx2==MI_FX_REVERB);
     assert(mi_fx_pair_supported(s.fx,s.fx2));
 
-    /* HOME MULTI: PRESET chooses the oscillator; K1 only changes its wave.
-     * Switching the selection must NEVER reapply a preset or leave MULTI. */
+    /* HOME K1 traverses ALL main sounds, including FMDRUM and PIANO.
+     * Previously selecting MULTI trapped K1 in OSC1/OSC2 edit mode. */
     mi_init(&s);
     assert(!strcmp(mi_param_name(&s,1),"SUB"));
     assert(!strcmp(mi_param_name(&s,2),"CRUSH"));
@@ -286,42 +286,49 @@ int main(void)
     assert(s.sub==24u&&s.crush==12u&&s.fx==MI_FX_OFF);
     mi_rotate(&s,MI_EN_K1,4);
     assert(s.wave==MI_WAVE_MULTI&&s.osc2_level==64u);
-    assert(s.osc_page==0u && s.preset==0u);
+    assert(s.osc_page==0u&&s.preset==0u);
     assert(!strcmp(mi_param_name(&s,0),"WAVE"));
+    assert(mi_param_value(&s,0)==MI_WAVE_MULTI);
     assert(!strcmp(mi_param_name(&s,1),"SUB"));
     assert(!strcmp(mi_param_name(&s,2),"MIX2"));
-    mi_rotate(&s,MI_EN_K1,3);
-    assert(s.osc1_wave==3u && s.wave==MI_WAVE_MULTI);
-    mi_rotate(&s,MI_EN_K1,-3); /* OSC1=PULSE -> SINE, not reset */
-    assert(s.osc1_wave==0u && s.wave==MI_WAVE_MULTI);
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.wave==MI_WAVE_FMDRUM&&s.osc_page==0u);
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.wave==MI_WAVE_PIANO&&mi_state_valid(&s));
+    mi_rotate(&s,MI_EN_K1,-1);
+    assert(s.wave==MI_WAVE_FMDRUM);
+    mi_rotate(&s,MI_EN_K1,-1);
+    assert(s.wave==MI_WAVE_MULTI&&s.osc_page==0u);
+    assert(s.osc1_wave<=3u&&mi_state_valid(&s));
+    /* PRESET chooses which MULTI oscillator the OSC page edits.
+     * The OSC page K1 still edits each local waveform independently. */
     mi_rotate(&s,MI_EN_PRESETS,1);
-    assert(s.osc_page==1u && s.preset==0u && s.wave==MI_WAVE_MULTI);
+    assert(s.osc_page==1u&&s.preset==0u&&s.wave==MI_WAVE_MULTI);
     assert(!strcmp(mi_param_name(&s,1),"DETUNE"));
-    mi_rotate(&s,MI_EN_K1,3); /* OSC2=PULSE, OSC1 remains SINE */
-    assert(s.osc1_wave==0u && s.osc2_wave==3u);
-    assert(s.wave==MI_WAVE_MULTI && mi_param_value(&s,0)==3);
-    mi_rotate(&s,MI_EN_K2,2); /* DETUNE only, no mode change */
-    assert(s.osc2_detune==68u && mi_param_value(&s,1)==4);
+    assert(mi_param_value(&s,0)==MI_WAVE_MULTI);
+    mi_rotate(&s,MI_EN_K2,2);
+    assert(s.osc2_detune==68u&&mi_param_value(&s,1)==4);
     mi_rotate(&s,MI_EN_K3,10);
-    assert(s.osc2_level==84u && mi_param_value(&s,2)==84);
+    assert(s.osc2_level==84u&&mi_param_value(&s,2)==84);
+    mi_button(&s,MI_B_EDIT,9299);
+    assert(s.view==MI_OSC&&s.osc_page==1u);
+    mi_rotate(&s,MI_EN_K1,3);
+    assert(s.osc1_wave==0u&&s.osc2_wave==3u);
+    mi_button(&s,MI_B_HOME,9300);
     mi_rotate(&s,MI_EN_PRESETS,-1);
-    assert(s.osc_page==0u && s.osc1_wave==0u &&
-           s.osc2_wave==3u && s.wave==MI_WAVE_MULTI);
-    mi_rotate(&s,MI_EN_PRESETS,1);
-    assert(s.osc_page==1u && s.wave==MI_WAVE_MULTI);
-    mi_rotate(&s,MI_EN_PRESETS,-1);
-    mi_button(&s,MI_B_EDIT,9300);
+    assert(s.osc_page==0u&&s.wave==MI_WAVE_MULTI);
+    mi_button(&s,MI_B_EDIT,9301);
     assert(s.view==MI_OSC&&s.osc_page==0u);
     mi_rotate(&s,MI_EN_K1,1);
     assert(s.osc1_wave==1u&&s.osc2_wave==3u);
-    mi_button(&s,MI_B_EDIT,9301);
+    mi_button(&s,MI_B_EDIT,9302);
     assert(s.osc_page==1u);
     mi_rotate(&s,MI_EN_K1,-1);
     assert(s.osc1_wave==1u&&s.osc2_wave==2u);
-    mi_button(&s,MI_B_EDIT,9302);
+    mi_button(&s,MI_B_EDIT,9303);
     assert(s.osc_page==2u&&!strcmp(mi_param_name(&s,1),"RES"));
-    mi_button(&s,MI_B_HOME,9303);
-    assert(s.view==MI_HOME && s.osc_page==0u);
+    mi_button(&s,MI_B_HOME,9304);
+    assert(s.view==MI_HOME&&s.osc_page==0u);
     assert(s.wave==MI_WAVE_MULTI);
     mi_rotate(&s,MI_EN_ALGORITHM,-1);
     assert(s.wave==3u&&mi_state_valid(&s));
@@ -333,12 +340,17 @@ int main(void)
     assert(!strcmp(mi_wave_name(s.wave),"PIANO"));
     mi_rotate(&s,MI_EN_K1,-1);
     assert(s.wave==MI_WAVE_FMDRUM);
-    mi_button(&s,MI_B_EDIT,9304);
+    mi_button(&s,MI_B_EDIT,9305);
     assert(!strcmp(mi_param_name(&s,0),"TONE"));
     mi_rotate(&s,MI_EN_K1,10);
     assert(s.drum_tone==84u);
-    mi_button(&s,MI_B_EDIT,9305);
+    mi_button(&s,MI_B_EDIT,9306);
     assert(!strcmp(mi_param_name(&s,0),"CUTOFF"));
+    mi_button(&s,MI_B_HOME,9307);
+    mi_rotate(&s,MI_EN_ALGORITHM,-1);
+    assert(s.wave==MI_WAVE_MULTI&&s.osc1_wave<=3u&&mi_state_valid(&s));
+    mi_rotate(&s,MI_EN_K1,1);
+    assert(s.wave==MI_WAVE_FMDRUM&&mi_state_valid(&s));
     mi_init(&s);
     s.osc1_wave=4u;
     assert(!mi_state_valid(&s));
