@@ -182,23 +182,32 @@ turn SELECT 1
 expect view 3
 tap HOME
 expect view 0
-# HOME MULTI fifth parameter: PRESET selects OSC1/OSC2; K1 changes only
-# the selected oscillator's waveform, never re-applies a preset.
+# HOME K1 must pass through MULTI to FMDRUM and PIANO, never be
+# trapped editing OSC1/OSC2. Those local waveforms remain on OSC page K1.
 spin K1 -20
 expect wave 0
 turn K1 4
 expect wave 4
 expect osc_page 0
-expect osc1_wave 3
-turn K1 -3
+expect osc1_wave 0
+turn K1 1
+expect wave 5
+turn K1 1
+expect wave 6
+turn K1 -2
 expect wave 4
+expect osc_page 0
 expect osc1_wave 0
 turn PRESET 1
 expect wave 4
 expect osc_page 1
+tap EDIT
+expect view 1
 turn K1 3
 expect osc2_wave 3
 expect osc1_wave 0
+tap HOME
+expect view 0
 expect wave 4
 turn PRESET -1
 expect osc_page 0
