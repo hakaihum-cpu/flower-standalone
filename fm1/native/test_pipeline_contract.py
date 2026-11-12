@@ -483,8 +483,13 @@ assert "state.osc_page" in ui and "state.osc2_wave" in ui
 # A previous contract incorrectly pinned the HOME K1 MULTI trap.
 assert "if(state.view==MI_HOME&&i==0u)" in ui
 assert "textcpy(val,mi_wave_name(state.wave),sizeof val);" in ui
-assert "if(k==0){p=&s->wave;hi=MI_WAVE_PIANO;}" in controls
-assert "if(previous_wave<MI_WAVE_MULTI)s->osc1_wave=3u;" in controls
+assert "if(s->view==MI_HOME&&k==0u){" in controls
+assert "while(left--){" in controls
+assert "if(old==3u&&s->wave==MI_WAVE_MULTI){" in controls
+assert "if(s->wave==old)break;" in controls
+assert "if(left>MI_WAVE_PIANO)left=MI_WAVE_PIANO;" in controls
+assert "s->osc1_wave=old;" in controls
+assert 'if(old==MI_WAVE_MULTI&&s->wave!=MI_WAVE_MULTI)' in controls
 assert "if(old<=3u)s->osc1_wave=old;" in controls
 assert "state.wave==MI_WAVE_MULTI" in ui
 assert "state.osc1_wave" in ui and "state.osc2_wave" in ui
@@ -506,6 +511,9 @@ assert "turn K1 -2\nexpect osc1_wave 1" in home_part
 control_test=(root/"fm1/native/test_mi_control.c").read_text(encoding="utf-8")
 assert "for(i=0u;i<4u;i++)mi_rotate(&stepped,MI_EN_K1,1);" in control_test
 assert "assert(s.osc1_wave==stepped.osc1_wave);" in control_test
+assert "assert(memcmp(&batched,&sequential,sizeof batched)==0);" in control_test
+assert "mi_rotate(&s,MI_EN_K1,2); /* PULSE -> MULTI -> FMDRUM in 2 clicks */" in control_test
+assert "assert(s.wave==MI_WAVE_FMDRUM&&s.osc1_wave==3u);" in control_test
 assert "expect osc2_wave 3" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "expect osc2_wave 2" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "turn K1 1\nexpect wave 5\nturn K1 1\nexpect wave 6" in (root / "fm1/native/host_smoke.txt").read_text()
