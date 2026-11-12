@@ -358,6 +358,35 @@ int main(void)
     assert(s.wave==MI_WAVE_MULTI&&s.osc1_wave<=3u&&mi_state_valid(&s));
     mi_rotate(&s,MI_EN_K1,1);
     assert(s.wave==MI_WAVE_FMDRUM&&mi_state_valid(&s));
+    /* #311: control logic must be invariant to encoder batching.
+     * Hardware can aggregate multiple K1 clicks into a single event:
+     * compare entire state with an otherwise identical per-click path.
+     * Covers jumping OVER MULTI into FMDRUM, not just landing on MULTI. */
+    {
+        unsigned initial,osc,page,j;
+        int32_t detents;
+        for(initial=0u;initial<=MI_WAVE_PIANO;initial++)
+        for(osc=0u;osc<4u;osc++)
+        for(page=0u;page<3u;page++)
+        for(detents=-12;detents<=12;detents++){
+            mi_state_t batched,sequential;
+            mi_init(&batched);mi_init(&sequential);
+            batched.wave=sequential.wave=(uint8_t)initial;
+            batched.osc1_wave=sequential.osc1_wave=(uint8_t)osc;
+            batched.osc_page=sequential.osc_page=(uint8_t)page;
+            mi_rotate(&batched,MI_EN_K1,detents);
+            for(j=0u;j<(unsigned)(detents<0?-detents:detents);j++)
+                mi_rotate(&sequential,MI_EN_K1,detents<0?-1:1);
+            assert(memcmp(&batched,&sequential,sizeof batched)==0);
+            assert(mi_state_valid(&batched));
+        }
+    }
+    mi_init(&s);
+    s.wave=3u;s.osc1_wave=1u;
+    mi_rotate(&s,MI_EN_K1,2); /* PULSE -> MULTI -> FMDRUM in 2 clicks */
+    assert(s.wave==MI_WAVE_FMDRUM&&s.osc1_wave==3u);
+    mi_rotate(&s,MI_EN_K1,-1); /* return to MULTI preserves PULSE */
+    assert(s.wave==MI_WAVE_MULTI&&s.osc1_wave==3u);
     mi_init(&s);
     s.osc1_wave=4u;
     assert(!mi_state_valid(&s));
