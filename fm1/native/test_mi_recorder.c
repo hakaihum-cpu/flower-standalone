@@ -226,6 +226,8 @@ int main(void)
     assert(mi_rec_sample(100u)>10000);
     assert(mi_rec_sample(17000u)==0); /* the 1-bar silent tail */
     assert(r.play_step>0.24f&&r.play_step<0.26f);
+    for(i=0u;i<88200u;i++)mi_rec_tick(&r,0.f,edits);
+    assert(r.playback_pos<0.26f); /* exactly 1 bar at 120 BPM */
     /* Overdub into previously silent tail must work and never extend loop. */
     r.playback_pos=16500.f;
     mi_rec_toggle_record(&r);
