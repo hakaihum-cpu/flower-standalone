@@ -185,8 +185,32 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
 {
     uint8_t *p = 0;
     int32_t lo = 0, hi = 127;
-    uint8_t previous_wave=s->wave;
     if (k >= 4) return;
+    /* A batch of physical K1 detents must produce the SAME transitions as
+     * individual K1 detents. In particular, jumping PULSE -> FMDRUM
+     * traverses MULTI, so MULTI's OSC1 must inherit PULSE. Earlier code
+     * handled only the final destination and skipped this transition. */
+    if(s->view==MI_HOME&&k==0u){
+        int32_t delta=fast_step(d,1u);
+        int32_t direction=delta>0?1:-1;
+        unsigned left=(unsigned)(delta>0?delta:-delta);
+        /* Only seven top-level waveforms: extra turns at either limit
+         * cannot change state, so avoid 4096 audio-frame loop iterations. */
+        if(left>MI_WAVE_PIANO)left=MI_WAVE_PIANO;
+        while(left--){
+            uint8_t old=s->wave;
+            s->wave=(uint8_t)limited(s->wave,direction,0,MI_WAVE_PIANO);
+            if(s->wave==old)break;
+            if(old==3u&&s->wave==MI_WAVE_MULTI){
+                s->osc1_wave=old;
+                if(s->osc2_level==0u)s->osc2_level=64u;
+                s->osc_page=0u;
+            }else if(old==MI_WAVE_MULTI&&s->wave!=MI_WAVE_MULTI){
+                s->osc_page=0u;
+            }
+        }
+        return;
+    }
     switch (s->view) {
     case MI_HOME:
         /* HOME K1 always selects a top-level sound, INCLUDING FMDRUM and
@@ -195,11 +219,9 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
          * Internal MULTI wave editing remains on the OSC EDIT page. */
         if(s->wave==MI_WAVE_MULTI){
             unsigned second=s->osc_page==1u;
-            if(k==0){p=&s->wave;hi=MI_WAVE_PIANO;}
             if(k==1)p=second?&s->osc2_detune:&s->sub;
             if(k==2)p=&s->osc2_level;
         }else{
-            if(k==0){p=&s->wave;hi=MI_WAVE_PIANO;}
             if(s->wave==MI_WAVE_FMDRUM){
                 if(k==1)p=&s->drum_tone;
                 if(k==2)p=&s->drum_decay;
@@ -327,10 +349,7 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     if(p){
         unsigned rate=s->view==MI_ENV?4u:2u;
         /* Choice knobs must never skip waveforms, FX, rhythm or octaves. */
-        if((s->view==MI_HOME &&
-            ((s->wave==MI_WAVE_MULTI&&k==0u)||
-             (s->wave!=MI_WAVE_MULTI&&k==0u)))||
-           (s->view==MI_OSC&&
+        if((s->view==MI_OSC&&
             ((s->osc_page==0u&&k==0u&&s->wave!=MI_WAVE_FMDRUM)||
              (s->osc_page==1u&&s->wave!=MI_WAVE_FMDRUM&&
               (k==0u||k==3u))))||
@@ -340,20 +359,6 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
            (s->view==MI_SAVE))
             rate=1u;
         *p=(uint8_t)limited(*p,fast_step(d,rate),lo,hi);
-    }
-    if(s->view==MI_HOME&&k==0u){
-        if(previous_wave!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
-            /* K1 may report several detents together. Traversing 0 -> 4
-             * must equal four individual detents: MULTI inherits the
-             * preceding PULSE waveform (3), never the starting SINE (0).
-             * Returning from FMDRUM/PIANO preserves saved MULTI OSC1. */
-            if(previous_wave<MI_WAVE_MULTI)s->osc1_wave=3u;
-            if(s->osc2_level==0u)s->osc2_level=64u;
-            s->osc_page=0u;
-        }else if(previous_wave==MI_WAVE_MULTI&&s->wave!=MI_WAVE_MULTI){
-            /* Do not enter the OSC2 edit page of FMDRUM/PIANO. */
-            s->osc_page=0u;
-        }
     }
     if(s->view==MI_HOME && !mi_fx_pair_supported(s->fx,s->fx2))
         s->fx2=MI_FX_OFF;
