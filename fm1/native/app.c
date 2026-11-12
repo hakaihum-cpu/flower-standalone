@@ -1671,7 +1671,9 @@ static void draw(void)
     cv_begin(240,120,C_BLACK);
     mi_ui_draw_logo();
     cv_text(140,10,&FONT_XS,
-            state.view==MI_SEQ?(audio.recorder.clock_active?"MIDI 2BAR":
+            state.view==MI_SEQ?(
+                audio.recorder.tracks[state.rec_track].one_bar_loop?"LOOP 1BAR":
+                audio.recorder.clock_active?"MIDI 2BAR":
                 state.rec_bars==4u?"REC 4BAR":"REC 2BAR"):
             state.view==MI_OSC?(state.osc_page==2u?"FILTER":
                 state.wave==MI_WAVE_FMDRUM?"FMDRUM":
