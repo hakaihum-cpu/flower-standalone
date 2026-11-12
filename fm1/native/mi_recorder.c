@@ -200,18 +200,20 @@ static void finish(mi_rec_track_t *t,unsigned tr)
      * This adds no PCM allocation and never changes an overdubbed length. */
     if(!was_overdubbing && t->tempo_ready && t->count>=4u){
         uint32_t one_bar=MI_REC_CAPACITY/(t->bars==4u?4u:2u);
-        if(t->count<one_bar){
-            unsigned block=(unsigned)((t->count+MI_REC_PCM7_SAMPLES-1u)/
-                                      MI_REC_PCM7_SAMPLES);
-            unsigned final=(unsigned)((one_bar+MI_REC_PCM7_SAMPLES-1u)/
-                                      MI_REC_PCM7_SAMPLES);
-            for(;block<final;block++)
-                mi_memzero(clip_block(tr,block),MI_REC_PCM7_BLOCK_BYTES);
-            t->read_valid=0u;
-            t->write_valid=0u;
-            t->write_dirty=0u;
-            t->count=one_bar;
-            t->one_bar_loop=1u;
+        if(t->count<=one_bar){
+            if(t->count<one_bar){
+                unsigned block=(unsigned)((t->count+MI_REC_PCM7_SAMPLES-1u)/
+                                          MI_REC_PCM7_SAMPLES);
+                unsigned final=(unsigned)((one_bar+MI_REC_PCM7_SAMPLES-1u)/
+                                          MI_REC_PCM7_SAMPLES);
+                for(;block<final;block++)
+                    mi_memzero(clip_block(tr,block),MI_REC_PCM7_BLOCK_BYTES);
+                t->read_valid=0u;
+                t->write_valid=0u;
+                t->write_dirty=0u;
+                t->count=one_bar;
+            }
+            t->one_bar_loop=1u; /* includes STOP exactly on bar boundary */
         }
     }
     t->recording=0u;t->overdubbing=0u;t->armed=0u;
