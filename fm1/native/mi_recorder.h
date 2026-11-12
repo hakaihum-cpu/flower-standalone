@@ -26,6 +26,7 @@ typedef struct {
     uint16_t read_block,write_block;
     uint8_t read_valid,write_valid,write_dirty;
     uint8_t reverse,quant,pending_play; /* 0/1, off/beat/bar, none/start/stop */
+    uint8_t tempo_ready,one_bar_loop; /* tempo-based first-bar padding only */
 } mi_rec_track_t;
 typedef struct {
     /* C anonymous struct exposes the historic r.count/r.playback_pos names,
