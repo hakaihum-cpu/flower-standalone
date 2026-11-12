@@ -65,7 +65,7 @@ static void put_pcm(mi_rec_track_t *t,unsigned tr,uint32_t pos,int16_t value)
 static void clear_track(mi_rec_track_t *t,unsigned tr)
 {
     uint8_t clock=t->clock_active,bars=t->bars;
-    uint8_t reverse=t->reverse,quant=t->quant;
+    uint8_t reverse=t->reverse,quant=t->quant,tempo_ready=t->tempo_ready;
     uint32_t clock_ticks=t->clock_ticks;
     uint32_t clock_last_sample=t->clock_last_sample;
     float clock_period=t->clock_period;
@@ -74,7 +74,7 @@ static void clear_track(mi_rec_track_t *t,unsigned tr)
     t->clock_active=clock;t->clock_ticks=clock_ticks;
     t->clock_last_sample=clock_last_sample;t->clock_period=clock_period;
     t->bars=bars?bars:2u;
-    t->reverse=reverse;t->quant=quant;
+    t->reverse=reverse;t->quant=quant;t->tempo_ready=tempo_ready;
     t->capture_step=capture_step>0.f?capture_step:0.5f;
     t->play_step=play_step>0.f?play_step:0.5f;
     mi_memzero(wave_min[tr],sizeof wave_min[tr]);
@@ -192,6 +192,28 @@ static void finish(mi_rec_track_t *t,unsigned tr)
 {
     uint8_t was_overdubbing=t->overdubbing;
     commit(t,tr);
+    /* A manually stopped, tempo-configured first take shorter than one
+     * measure becomes exactly one measure; its unused tail is SILENCE.
+     * PCM7 silence is encoded as all-zero bytes. Only the final partly
+     * written block is already zero-filled by put_pcm(), and all following
+     * blocks can be cleared directly without re-encoding audio samples.
+     * This adds no PCM allocation and never changes an overdubbed length. */
+    if(!was_overdubbing && t->tempo_ready && t->count>=4u){
+        uint32_t one_bar=MI_REC_CAPACITY/(t->bars==4u?4u:2u);
+        if(t->count<one_bar){
+            unsigned block=(unsigned)((t->count+MI_REC_PCM7_SAMPLES-1u)/
+                                      MI_REC_PCM7_SAMPLES);
+            unsigned final=(unsigned)((one_bar+MI_REC_PCM7_SAMPLES-1u)/
+                                      MI_REC_PCM7_SAMPLES);
+            for(;block<final;block++)
+                mi_memzero(clip_block(tr,block),MI_REC_PCM7_BLOCK_BYTES);
+            t->read_valid=0u;
+            t->write_valid=0u;
+            t->write_dirty=0u;
+            t->count=one_bar;
+            t->one_bar_loop=1u;
+        }
+    }
     t->recording=0u;t->overdubbing=0u;t->armed=0u;
     if(t->count>=4u){
         t->playing=1u;
@@ -249,12 +271,14 @@ void mi_rec_configure(mi_recorder_t *r,unsigned bpm,unsigned bars,
         if(t->clock_active&&t->clock_period>1.f)
             step=(float)MI_REC_CAPACITY/(192.f*t->clock_period);
         step=boundf(step,0.001f,0.95f);
+        t->tempo_ready=1u;
         if((!t->recording && !t->playing) ||
            (t->recording && !t->overdubbing))t->capture_step=step;
         if(!t->playing&&!t->recording&&!t->armed)t->play_step=step;
         if(t->clock_active && t->clock_period>1.f &&
            t->playing&&!t->recording&&t->count>=4u)
-            t->play_step=(float)t->count/(192.f*t->clock_period);
+            t->play_step=(float)t->count/
+                ((t->one_bar_loop?96.f:192.f)*t->clock_period);
         if(t->armed&&!t->clock_active){
             t->armed=0u;
             if(t->count>=4u)begin_overdub(t);
