@@ -252,6 +252,15 @@ int main(void)
     assert(mi_rec_sample(9000u)==0);
     mi_rec_clear(&r);
     assert(r.count==0u&&!r.tracks[0].one_bar_loop);
+    /* STOP exactly on the first bar boundary is also a one-bar loop. */
+    mi_rec_init(&r);
+    mi_rec_configure(&r,120u,2u,44100.f,0u);
+    mi_rec_toggle_record(&r);
+    for(i=0u;i<88200u;i++)mi_rec_tick(&r,0.3f,edits);
+    assert(r.count==22050u);
+    mi_rec_toggle_record(&r);
+    assert(r.count==22050u&&r.tracks[0].one_bar_loop==1u);
+    assert(mi_rec_sample(21900u)>0);
     /* A take longer than the first bar retains its exact manual length. */
     mi_rec_init(&r);
     mi_rec_configure(&r,120u,2u,44100.f,0u);
