@@ -343,7 +343,7 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
     }
     if(s->view==MI_HOME&&k==0u){
         if(previous_wave!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
-            s->osc1_wave=previous_wave;
+            if(previous_wave<=3u)s->osc1_wave=previous_wave;
             if(s->osc2_level==0u)s->osc2_level=64u;
             s->osc_page=0u;
         }else if(previous_wave==MI_WAVE_MULTI&&s->wave!=MI_WAVE_MULTI){
@@ -373,7 +373,7 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
             s->wave=(uint8_t)limited(s->wave,steps>0?1:-1,0,
                                      s->view==MI_HOME?MI_WAVE_PIANO:MI_WAVE_PIANO);
             if(old!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
-                s->osc1_wave=old;
+                if(old<=3u)s->osc1_wave=old;
                 if(s->osc2_level==0u)s->osc2_level=64u;
                 s->osc_page=0u;
             }
