@@ -1375,28 +1375,34 @@ static unsigned mi_arp_pixel(unsigned x,unsigned y)
     return (mi_arp_books[index]>>bit)&1u;
 }
 
-/* Original ARP asset stays 72x72 / 162 frames / yellow+black.
- * Draw at 116x116 in the RIGHT 120px column of the 240x120 top LCD,
- * clear of the 106px left logo (x=8..113) and the bottom knob strip.
- * This is exact nearest-neighbour area coverage: source pixel edges map
- * to ceil(src*116/72), with zero interpolation/blur or image re-encoding.
- * Render horizontal runs, not 13,456 single pixels per animation frame. */
-#define MI_ARP_DRAW_SIZE 116u
-#define MI_ARP_DRAW_X 122u
-#define MI_ARP_DRAW_Y 2u
+/* ARP-only 240x240 layout: 28px original MIYAKO logo at the top,
+ * source-accurate 162-frame carousel centred at 160x160, and four
+ * parameter controls under it at physical y=192..239.
+ * Split each enlarged sprite row at the 120px LCD-half boundary.
+ * No source-frame resampling/recompression and no change to other views. */
+#define MI_ARP_DRAW_SIZE 160u
+#define MI_ARP_DRAW_X 40u
+#define MI_ARP_DRAW_Y 30u
 static unsigned mi_arp_scaled_edge(unsigned source,unsigned extent)
 {
     return (source*MI_ARP_DRAW_SIZE+extent-1u)/extent;
 }
-static void mi_graph_arp(void)
+static void mi_graph_arp_half(unsigned half)
 {
     unsigned y,x,frame;
+    const int32_t clip_top=(int32_t)half*120;
+    const int32_t clip_bottom=clip_top+120;
     frame=state.arp[0]?audio.arp_visual_frame:0u;
     if(frame>=MI_ARP_FRAME_COUNT)frame=0u;
     mi_arp_decode(frame);
     for(y=0u;y<MI_ARP_FRAME_H;y++){
-        unsigned top=mi_arp_scaled_edge(y,MI_ARP_FRAME_H);
-        unsigned bottom=mi_arp_scaled_edge(y+1u,MI_ARP_FRAME_H);
+        int32_t top=(int32_t)(MI_ARP_DRAW_Y+
+            mi_arp_scaled_edge(y,MI_ARP_FRAME_H));
+        int32_t bottom=(int32_t)(MI_ARP_DRAW_Y+
+            mi_arp_scaled_edge(y+1u,MI_ARP_FRAME_H));
+        if(bottom<=clip_top||top>=clip_bottom)continue;
+        if(top<clip_top)top=clip_top;
+        if(bottom>clip_bottom)bottom=clip_bottom;
         x=0u;
         while(x<MI_ARP_FRAME_W){
             unsigned start,left,right;
@@ -1405,10 +1411,36 @@ static void mi_graph_arp(void)
             do {++x;} while(x<MI_ARP_FRAME_W && mi_arp_pixel(x,y));
             left=mi_arp_scaled_edge(start,MI_ARP_FRAME_W);
             right=mi_arp_scaled_edge(x,MI_ARP_FRAME_W);
-            cv_rect((int32_t)(MI_ARP_DRAW_X+left),
-                    (int32_t)(MI_ARP_DRAW_Y+top),
-                    (int32_t)(right-left),(int32_t)(bottom-top),YELLOW);
+            cv_rect((int32_t)(MI_ARP_DRAW_X+left),top-clip_top,
+                    (int32_t)(right-left),bottom-top,YELLOW);
         }
+    }
+}
+static void mi_draw_arp(void)
+{
+    unsigned half,i;
+    static const char *const rates[]={"1/4","1/8","1/16","1/32"};
+    for(half=0u;half<2u;half++){
+        cv_begin(240,120,C_BLACK);
+        if(half==0u)mi_ui_draw_logo();
+        mi_graph_arp_half(half);
+        if(half==1u){
+            /* Physical y=192 divider, 199 labels, 218 numeric values.
+             * The 160px image ends at y=190: no overlap or clipping. */
+            cv_rect(8,72,224,1,DIM);
+            for(i=0u;i<4u;i++){
+                int32_t x=8+(int32_t)i*58;
+                char val[16];
+                cv_text(x,79,&FONT_XS,mi_param_name(&state,i),GREY);
+                if(i==0u)textcpy(val,mi_arp_mode_name(state.arp[0]),sizeof val);
+                else if(i==1u)
+                    textcpy(val,rates[state.arp[1]<=3u?state.arp[1]:3u],
+                            sizeof val);
+                else number(mi_param_value(&state,i),val);
+                cv_text(x,98,&FONT_S,val,YELLOW);
+            }
+        }
+        cv_blit(0,half*120u);
     }
 }
 /* The REC screen follows the existing four-row drum sequencer style.
@@ -1683,12 +1715,13 @@ static void draw(void)
         return;
     }
 
+    if(state.view==MI_ARP){
+        mi_draw_arp();
+        return;
+    }
     cv_begin(240,120,C_BLACK);
     mi_ui_draw_logo();
-    /* ARP uses the full right top LCD for the enlarged animation;
-     * the mode is already shown on the left, so omit its duplicate title. */
-    if(state.view!=MI_ARP)
-        cv_text(140,10,&FONT_XS,
+    cv_text(140,10,&FONT_XS,
             state.view==MI_SEQ?(
                 audio.recorder.tracks[state.rec_track].one_bar_loop?"LOOP 1BAR":
                 audio.recorder.clock_active?"MIDI 2BAR":
@@ -1698,7 +1731,7 @@ static void draw(void)
                 state.osc_page==1u?"OSC2":"OSC1"):
             state.view==MI_HOME?"HOME / OSC":
             mi_view_name(state.view),GREY);
-    cv_rect(8,31,state.view==MI_ARP?104:224,1,DIM);
+    cv_rect(8,31,224,1,DIM);
     if(now<message_until){
         cv_text(12,50,&FONT_B,line_a,YELLOW);
         cv_text(12,76,&FONT_XS,line_b,GREY);
@@ -1731,9 +1764,6 @@ static void draw(void)
         mi_graph_lfo();
     }else if(state.view==MI_SEQ){
         mi_graph_recorder();
-    }else if(state.view==MI_ARP){
-        mi_graph_arp();
-        cv_text(12,38,&FONT_XS,mi_arp_mode_name(state.arp[0]),GREY);
     }else{
         cv_text(12,54,&FONT_B,mi_view_name(state.view),YELLOW);
     }
@@ -1757,12 +1787,7 @@ static void draw(void)
             textcpy(val,mi_lfo_wave_name(state.lfo[1]),sizeof val);
         else if(state.view==MI_LFO&&i==3u)
              textcpy(val,mi_lfo_dest_name(state.lfo[3]),sizeof val);
-        else if(state.view==MI_ARP&&i==0u)
-            textcpy(val,mi_arp_mode_name(state.arp[0]),sizeof val);
-        else if(state.view==MI_ARP&&i==1u){
-            static const char *const rates[]={"1/4","1/8","1/16","1/32"};
-            textcpy(val,rates[state.arp[1]<=3u?state.arp[1]:3u],sizeof val);
-        }else if(state.view==MI_SEQ&&state.rec_page==2u&&i==0u)
+        else if(state.view==MI_SEQ&&state.rec_page==2u&&i==0u)
             textcpy(val,state.rec_reverse[state.rec_track]?"REV":"FWD",sizeof val);
         else if(state.view==MI_SEQ&&state.rec_page==2u&&i==1u){
             static const char *const modes[]={"OFF","BEAT","BAR"};
