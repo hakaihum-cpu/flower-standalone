@@ -8,7 +8,7 @@
 #include <stdio.h>
 int main(void)
 {
-    mi_state_t s;
+    mi_state_t s, stepped;
     mi_result_t r;
     unsigned i;
     mi_init(&s);
@@ -284,8 +284,15 @@ int main(void)
     mi_rotate(&s,MI_EN_K2,12);
     mi_rotate(&s,MI_EN_K3,6);
     assert(s.sub==24u&&s.crush==12u&&s.fx==MI_FX_OFF);
+    /* Batched detents must behave like 4 individual physical clicks:
+     * the final single sound before MULTI is PULSE, not the starting
+     * SINE. This detects the source bug behind pipeline #311. */
+    mi_init(&stepped);
+    for(i=0u;i<4u;i++)mi_rotate(&stepped,MI_EN_K1,1);
     mi_rotate(&s,MI_EN_K1,4);
     assert(s.wave==MI_WAVE_MULTI&&s.osc2_level==64u);
+    assert(stepped.wave==MI_WAVE_MULTI&&stepped.osc1_wave==3u);
+    assert(s.osc1_wave==stepped.osc1_wave);
     assert(s.osc_page==0u&&s.preset==0u);
     assert(!strcmp(mi_param_name(&s,0),"WAVE"));
     assert(mi_param_value(&s,0)==MI_WAVE_MULTI);
@@ -299,7 +306,7 @@ int main(void)
     assert(s.wave==MI_WAVE_FMDRUM);
     mi_rotate(&s,MI_EN_K1,-1);
     assert(s.wave==MI_WAVE_MULTI&&s.osc_page==0u);
-    assert(s.osc1_wave<=3u&&mi_state_valid(&s));
+    assert(s.osc1_wave==3u&&mi_state_valid(&s));
     /* PRESET chooses which MULTI oscillator the OSC page edits.
      * The OSC page K1 still edits each local waveform independently. */
     mi_rotate(&s,MI_EN_PRESETS,1);
@@ -313,13 +320,13 @@ int main(void)
     mi_button(&s,MI_B_EDIT,9299);
     assert(s.view==MI_OSC&&s.osc_page==1u);
     mi_rotate(&s,MI_EN_K1,3);
-    assert(s.osc1_wave==0u&&s.osc2_wave==3u);
+    assert(s.osc1_wave==3u&&s.osc2_wave==3u);
     mi_button(&s,MI_B_HOME,9300);
     mi_rotate(&s,MI_EN_PRESETS,-1);
     assert(s.osc_page==0u&&s.wave==MI_WAVE_MULTI);
     mi_button(&s,MI_B_EDIT,9301);
     assert(s.view==MI_OSC&&s.osc_page==0u);
-    mi_rotate(&s,MI_EN_K1,1);
+    mi_rotate(&s,MI_EN_K1,-2); /* PULSE -> SAW, actual 3->1 edit */
     assert(s.osc1_wave==1u&&s.osc2_wave==3u);
     mi_button(&s,MI_B_EDIT,9302);
     assert(s.osc_page==1u);
