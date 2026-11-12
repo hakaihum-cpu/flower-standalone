@@ -484,7 +484,7 @@ assert "state.osc_page" in ui and "state.osc2_wave" in ui
 assert "if(state.view==MI_HOME&&i==0u)" in ui
 assert "textcpy(val,mi_wave_name(state.wave),sizeof val);" in ui
 assert "if(k==0){p=&s->wave;hi=MI_WAVE_PIANO;}" in controls
-assert "if(previous_wave<=3u)s->osc1_wave=previous_wave;" in controls
+assert "if(previous_wave<MI_WAVE_MULTI)s->osc1_wave=3u;" in controls
 assert "if(old<=3u)s->osc1_wave=old;" in controls
 assert "state.wave==MI_WAVE_MULTI" in ui
 assert "state.osc1_wave" in ui and "state.osc2_wave" in ui
@@ -495,7 +495,17 @@ assert "if(s->osc_page>1u)s->osc_page=0u;" in controls
 assert 'cv_text(104,35,&FONT_XS,"OSC",GREY);' in ui
 assert 'mi_streq(what,"osc1_wave")' in ui
 assert 'mi_streq(what,"osc2_wave")' in ui
-assert "expect osc1_wave 0" in (root / "fm1/native/host_smoke.txt").read_text()
+# #311: the physical turns 0->1->2->3->MULTI; OSC1 inherits PULSE (3).
+# Stopping at 0 was a defective oracle, and batched K1 input must agree.
+home_smoke=(root/"fm1/native/host_smoke.txt").read_text(encoding="utf-8")
+home_part=home_smoke.split("# HOME K1 must pass through MULTI",1)[1].split(
+    "# Physical SEQ button long-hold",1)[0]
+assert home_part.count("expect osc1_wave 3")==4
+assert "expect osc1_wave 0" not in home_part
+assert "turn K1 -2\nexpect osc1_wave 1" in home_part
+control_test=(root/"fm1/native/test_mi_control.c").read_text(encoding="utf-8")
+assert "for(i=0u;i<4u;i++)mi_rotate(&stepped,MI_EN_K1,1);" in control_test
+assert "assert(s.osc1_wave==stepped.osc1_wave);" in control_test
 assert "expect osc2_wave 3" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "expect osc2_wave 2" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "turn K1 1\nexpect wave 5\nturn K1 1\nexpect wave 6" in (root / "fm1/native/host_smoke.txt").read_text()
