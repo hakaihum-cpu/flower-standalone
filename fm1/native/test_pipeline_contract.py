@@ -478,11 +478,14 @@ assert "a->osc_scope_active=scope_audible;" in audio
 assert "MIYAKO_OSC_LIVE_SINE.png" in ci
 assert "expect osc_scope_active 1" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "state.osc_page" in ui and "state.osc2_wave" in ui
-# HOME MULTI: PRESET controls OSC1/OSC2 selection without applying
-# a global preset (which previously reset WAVE and the chosen oscillator).
-# Four physical K knobs edit the selected wave / SUB or DETUNE / MIX2 / LEVEL.
-assert "mi_wave_name(state.osc_page==1u?" in ui
-assert "state.osc2_wave:state.osc1_wave),sizeof val" in ui
+# HOME K1 globally selects ALL sounds, including FMDRUM/PIANO beyond MULTI.
+# PRESET still selects OSC1/OSC2; those LOCAL waves are edited on the OSC page.
+# A previous contract incorrectly pinned the HOME K1 MULTI trap.
+assert "if(state.view==MI_HOME&&i==0u)" in ui
+assert "textcpy(val,mi_wave_name(state.wave),sizeof val);" in ui
+assert "if(k==0){p=&s->wave;hi=MI_WAVE_PIANO;}" in controls
+assert "if(previous_wave<=3u)s->osc1_wave=previous_wave;" in controls
+assert "if(old<=3u)s->osc1_wave=old;" in controls
 assert "state.wave==MI_WAVE_MULTI" in ui
 assert "state.osc1_wave" in ui and "state.osc2_wave" in ui
 assert 'static const char *const multi1[4]={"WAVE","SUB","MIX2","LEVEL"};' in controls
@@ -495,6 +498,7 @@ assert 'mi_streq(what,"osc2_wave")' in ui
 assert "expect osc1_wave 0" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "expect osc2_wave 3" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "expect osc2_wave 2" in (root / "fm1/native/host_smoke.txt").read_text()
+assert "turn K1 1\nexpect wave 5\nturn K1 1\nexpect wave 6" in (root / "fm1/native/host_smoke.txt").read_text()
 # FX SELECT restores page navigation; only SEL changes photo banks.
 assert 'if(i==EN_SELECT&&state.view==MI_VIDEO)' in ui
 assert 'if(i==EN_SELECT&&(state.view==MI_FX||state.view==MI_VIDEO))' not in ui
@@ -777,6 +781,12 @@ assert "fx_stage(a,s,second" in audio
 assert '"LOOP 1","LOOP 2","LOOP 3"' in ui
 assert '"REC":t->armed?"ARM":' in ui
 assert "mi_rec_peak_track(tr,bucket,&lo,&hi);" in ui
+# Vertical waveform magnification only; preserve the recorded TIME axis.
+assert "for(col=0u;col<120u;col+=2u)" in ui
+assert "bucket=col*224u/120u" in ui
+assert "hi*10/(int32_t)peak" in ui
+assert "lo*10/(int32_t)peak" in ui
+assert "for(b=0u;b<224u;b++)" in ui
 assert "mi_recorder.c" in (root / "fm1/native/fm1.toml").read_text()
 # MI19: preserve four patch slots and migrate old MI17 and MI18 banks;
 # historic MI16/15/14/13 single-slot layouts still migrate.
@@ -1005,6 +1015,16 @@ assert "r->beat_phase+=1.f;" in recorder
 assert "quant_boundary(r,(r->tracks[0].clock_ticks-1u)/24u)" in recorder
 assert "mi_rec_set_transport(" in recorder_h
 assert "mi_rec_external_tick(&r,97000u);" in recorder_test
+# A first take manually stopped within bar 1 must loop for one bar with
+# unrecorded remainder silent; overdub and MIDI-clock timing remain intact.
+assert "uint8_t tempo_ready,one_bar_loop;" in recorder_h
+assert "t->one_bar_loop=1u;" in recorder
+assert "t->tempo_ready=1u;" in recorder
+assert "mi_memzero(clip_block(tr,block),MI_REC_PCM7_BLOCK_BYTES);" in recorder
+assert "t->one_bar_loop?96.f:192.f" in recorder
+assert "assert(r.count==22050u&&r.tracks[0].one_bar_loop==1u);" in recorder_test
+assert "assert(mi_rec_sample(17000u)==0);" in recorder_test
+assert "assert(r.count==11025u&&r.tracks[0].one_bar_loop==1u);" in recorder_test
 assert "mi_rec_cc(&state,note,velocity)" in ui
 assert "mi_rec_cc(&s,30u,127u)" in control_test
 assert "loop->playback_pos" in ui
