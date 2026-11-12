@@ -116,8 +116,13 @@ int main(void)
         a.recorder.count<=55u);
  mi_audio_rec_request(&a,1u);
  mi_audio_render(&a,&s,lr,256,4096);
+ /* #310: first take is short, so manual STOP now pads the clip to
+  * exactly one bar while leaving the unrecorded tail silent. The old
+  * count<=55 assertion described the pre-1BAR feature and was stale. */
  assert(!a.recorder.recording && a.recorder.playing &&
-        a.recorder.count>=40u && a.recorder.count<=55u);
+        a.recorder.count==MI_REC_CAPACITY/2u &&
+        a.recorder.tracks[0].one_bar_loop==1u);
+ assert(mi_rec_sample(1000u)==0); /* untouched first-bar tail */
  mi_audio_rec_request(&a,2u);
  mi_audio_render(&a,&s,lr,256,4096);
  assert(!a.recorder.playing);
