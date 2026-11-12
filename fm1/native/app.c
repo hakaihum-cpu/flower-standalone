@@ -1724,10 +1724,9 @@ static void draw(void)
     for(i=0;i<4u;i++){
         int32_t x=8+(int32_t)i*58;
         cv_text(x,24,&FONT_XS,mi_param_name(&state,i),GREY);
-        if(state.view==MI_HOME&&state.wave==MI_WAVE_MULTI&&i==0u)
-            textcpy(val,mi_wave_name(state.osc_page==1u?
-                    state.osc2_wave:state.osc1_wave),sizeof val);
-        else if(state.view==MI_HOME&&i==0u)
+        /* HOME K1 selects the global sound even in MULTI; the internal
+         * oscillator waves are edited separately on the OSC page. */
+        if(state.view==MI_HOME&&i==0u)
             textcpy(val,mi_wave_name(state.wave),sizeof val);
         else if(state.view==MI_OSC&&state.osc_page<2u&&
                 state.wave!=MI_WAVE_FMDRUM&&i==0u)
