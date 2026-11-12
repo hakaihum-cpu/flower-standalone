@@ -1405,8 +1405,20 @@ static void mi_graph_recorder(void)
     static const char *const names[3]={"LOOP 1","LOOP 2","LOOP 3"};
     for(tr=0u;tr<MI_REC_TRACKS;tr++){
         const mi_rec_track_t *t=&audio.recorder.tracks[tr];
-        unsigned y=37u+tr*26u;
+        unsigned y=37u+tr*26u,peak=20u,b;
         int sel=(tr==state.rec_track);
+        /* Scale vertical waveform amplitude to the existing 26px track
+         * height, not horizontal recording length. Keep 10px clearance
+         * above/below the centre and a 20/110 floor against noise. */
+        for(b=0u;b<224u;b++){
+            int8_t lo=0,hi=0;
+            unsigned amp;
+            mi_rec_peak_track(tr,b,&lo,&hi);
+            amp=(unsigned)(lo<0?-(int)lo:(int)lo);
+            if(amp>peak)peak=amp;
+            amp=(unsigned)(hi<0?-(int)hi:(int)hi);
+            if(amp>peak)peak=amp;
+        }
         if(sel)cv_rect(3,(int32_t)y,3,20,YELLOW);
         cv_text(9,(int32_t)y+1,&FONT_XS,names[tr],sel?YELLOW:GREY);
         cv_text(58,(int32_t)y+1,&FONT_XS,
@@ -1421,8 +1433,8 @@ static void mi_graph_recorder(void)
             int32_t y0,y1;
             if(bucket*MI_REC_CAPACITY/224u>=t->count)break;
             mi_rec_peak_track(tr,bucket,&lo,&hi);
-            y0=(int32_t)y+12-(int32_t)hi/15;
-            y1=(int32_t)y+12-(int32_t)lo/15;
+            y0=(int32_t)y+12-(int32_t)hi*10/(int32_t)peak;
+            y1=(int32_t)y+12-(int32_t)lo*10/(int32_t)peak;
             if(y1<y0)y1=y0;
             cv_line(111+(int32_t)col,y0,111+(int32_t)col,y1,
                     sel?YELLOW:GREY);
