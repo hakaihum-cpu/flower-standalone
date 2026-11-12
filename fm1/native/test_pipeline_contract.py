@@ -1025,6 +1025,20 @@ assert "t->one_bar_loop?96.f:192.f" in recorder
 assert "assert(r.count==22050u&&r.tracks[0].one_bar_loop==1u);" in recorder_test
 assert "assert(mi_rec_sample(17000u)==0);" in recorder_test
 assert "assert(r.count==11025u&&r.tracks[0].one_bar_loop==1u);" in recorder_test
+# #310: after a real audio-block REC stop, an early first take is now
+# padded to a full 1-BAR loop. The old <=55-point post-STOP test is invalid.
+audio_rec_case = audio_test[audio_test.index(
+    "/* A clip recording command is consumed only on an audio block boundary. */"):
+    audio_test.index("/* Test captured PCM, silence, and selected MULTI OSC2. */")]
+assert audio_rec_case.count("a.recorder.count<=55u") == 1, (
+    "only the DURING-recording block may expect the short captured length")
+assert "a.recorder.count==MI_REC_CAPACITY/2u" in audio_rec_case
+assert "a.recorder.tracks[0].one_bar_loop==1u" in audio_rec_case
+assert "assert(mi_rec_sample(1000u)==0);" in audio_rec_case
+assert audio_rec_case.index("a.recorder.count<=55u") < audio_rec_case.index(
+    "mi_audio_rec_request(&a,1u);", audio_rec_case.index(
+    "mi_audio_rec_request(&a,1u);")+1), (
+    "the obsolete short-count assertion must never follow the STOP command")
 assert "mi_rec_cc(&state,note,velocity)" in ui
 assert "mi_rec_cc(&s,30u,127u)" in control_test
 assert "loop->playback_pos" in ui
