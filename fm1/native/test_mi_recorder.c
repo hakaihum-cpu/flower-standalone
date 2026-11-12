@@ -212,6 +212,55 @@ int main(void)
     assert(r.tracks[0].pending_play==1u);
     mi_rec_set_transport(&r,0u,0u,0u);
     assert(r.playing&&!r.tracks[0].pending_play);
+    /* User-requested 1-bar first take: a manual STOP during bar 1
+     * retains the original recorded sound and fills the remaining interval
+     * with PCM7 zero (no time stretching). Existing overdubs keep length. */
+    mi_rec_init(&r);
+    mi_rec_configure(&r,120u,2u,44100.f,0u);
+    mi_rec_toggle_record(&r);
+    for(i=0u;i<44100u;i++)mi_rec_tick(&r,0.6f,edits); /* half bar */
+    assert(r.count>10900u&&r.count<11200u);
+    mi_rec_toggle_record(&r);
+    assert(!r.recording&&r.playing&&r.count==22050u);
+    assert(r.tracks[0].one_bar_loop==1u);
+    assert(mi_rec_sample(100u)>10000);
+    assert(mi_rec_sample(17000u)==0); /* the 1-bar silent tail */
+    assert(r.play_step>0.24f&&r.play_step<0.26f);
+    /* Overdub into previously silent tail must work and never extend loop. */
+    r.playback_pos=16500.f;
+    mi_rec_toggle_record(&r);
+    assert(r.overdubbing&&r.write_pos==16500u);
+    for(i=0u;i<24u;i++)mi_rec_tick(&r,0.4f,edits);
+    mi_rec_toggle_record(&r);
+    assert(!r.recording&&r.count==22050u&&r.tracks[0].one_bar_loop==1u);
+    assert(mi_rec_sample(16500u)!=0);
+    assert(mi_rec_sample(17000u)==0);
+    /* Following external MIDI tempo must be ONE bar (96 F8), not 192. */
+    mi_rec_external_tick(&r,1000u);
+    mi_rec_external_tick(&r,2000u);
+    mi_rec_configure(&r,120u,2u,44100.f,2000u);
+    assert(r.play_step>0.22f&&r.play_step<0.24f);
+    /* 4-BAR capacity setting still gives the same one-bar duration. */
+    mi_rec_init(&r);
+    mi_rec_configure(&r,120u,4u,44100.f,0u);
+    mi_rec_toggle_record(&r);
+    for(i=0u;i<10000u;i++)mi_rec_tick(&r,0.4f,edits);
+    mi_rec_toggle_record(&r);
+    assert(r.count==11025u&&r.tracks[0].one_bar_loop==1u);
+    assert(mi_rec_sample(9000u)==0);
+    mi_rec_clear(&r);
+    assert(r.count==0u&&!r.tracks[0].one_bar_loop);
+    /* A take longer than the first bar retains its exact manual length. */
+    mi_rec_init(&r);
+    mi_rec_configure(&r,120u,2u,44100.f,0u);
+    mi_rec_toggle_record(&r);
+    for(i=0u;i<120000u;i++)mi_rec_tick(&r,0.2f,edits);
+    assert(r.count>22050u&&r.count<MI_REC_CAPACITY);
+    {
+        uint32_t original=r.count;
+        mi_rec_toggle_record(&r);
+        assert(!r.recording&&r.count==original&&!r.tracks[0].one_bar_loop);
+    }
     puts("PASS: REC manual stop, adaptive 2/4 bars, 192 MIDI ticks, overdub, clear, pitch/trim, current-playhead overdub");
     return 0;
 }
