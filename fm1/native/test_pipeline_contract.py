@@ -523,7 +523,7 @@ assert 'if(i==EN_SELECT&&(state.view==MI_FX||state.view==MI_VIDEO))' not in ui
 assert '"PRESET:P1/2"' in ui
 assert "turn SELECT 1\nexpect view 3\ntap HOME" in (root / "fm1/native/host_smoke.txt").read_text()
 assert "mi_graph_env();" in ui and "mi_graph_lfo();" in ui
-assert "mi_graph_arp();" in ui
+assert "mi_draw_arp();" in ui
 assert "mi_audio_input_on(&audio,&state" in ui
 assert "mi_audio_input_off(&audio,&state" in ui
 assert "arp_tick(a,rs);" in audio
@@ -1070,8 +1070,8 @@ assert "MIYAKO_LOOP_VISUAL_SYNC.png" in host_smoke
 assert "test -s fm1-dist/MIYAKO_LOOP_VISUAL_SYNC.png" in ci
 assert "a.arp_clock==period-256u" in audio_test
 # Original user-supplied two montage sheets: all 162 complete 9x9
-# 72x72 frames are decoded without alterations, then drawn at 116x116
-# with integer nearest-neighbour coverage in the right LCD column.
+# 72x72 frames are decoded without alterations, then drawn at 160x160
+# with nearest-neighbour coverage centred above the bottom controls.
 # A 48x48 base plus a facial patch removed eyes in the old implementation.
 arp_asset=(root/"fm1/native/tools/mi_arp_72_detail_source.b64")
 arp_generator=(root/"fm1/native/tools/build_arp_anim_header.py").read_text()
@@ -1091,22 +1091,48 @@ assert '"mi_arp_media.h"' in native_audit
 assert "mi_arp_decode(frame);" in ui
 assert "mi_arp_current_map" in ui and "mi_arp_books[index]" in ui
 assert "mi_arp_current_map[(y>>2)*18u+(x>>2)]" in ui
-# Renderer-only enlargement: never modify the 72x72 source or 162-frame
-# packed asset, and never cover the MIYAKO header or the parameter strip.
-assert "#define MI_ARP_DRAW_SIZE 116u" in ui
-assert "#define MI_ARP_DRAW_X 122u" in ui
-assert "#define MI_ARP_DRAW_Y 2u" in ui
+# User-requested ARP-specific 240x240 layout: original logo at the top,
+# central sprite 160x160 across LCD halves, parameters below at y=199/218.
+# Keep the 72x72 two-colour/162-frame animation SOURCE unchanged.
+assert "#define MI_ARP_DRAW_SIZE 160u" in ui
+assert "#define MI_ARP_DRAW_X 40u" in ui
+assert "#define MI_ARP_DRAW_Y 30u" in ui
 assert "static unsigned mi_arp_scaled_edge(unsigned source,unsigned extent)" in ui
 assert "return (source*MI_ARP_DRAW_SIZE+extent-1u)/extent;" in ui
-assert "unsigned top=mi_arp_scaled_edge(y,MI_ARP_FRAME_H);" in ui
-assert "unsigned bottom=mi_arp_scaled_edge(y+1u,MI_ARP_FRAME_H);" in ui
-assert "left=mi_arp_scaled_edge(start,MI_ARP_FRAME_W);" in ui
-assert "right=mi_arp_scaled_edge(x,MI_ARP_FRAME_W);" in ui
-assert "(int32_t)(right-left),(int32_t)(bottom-top),YELLOW);" in ui
-assert "if(state.view!=MI_ARP)" in ui
-assert "cv_rect(8,31,state.view==MI_ARP?104:224,1,DIM);" in ui
+assert "static void mi_graph_arp_half(unsigned half)" in ui
+assert "mi_graph_arp_half(half);" in ui
+assert "const int32_t clip_top=(int32_t)half*120;" in ui
+assert "const int32_t clip_bottom=clip_top+120;" in ui
+assert "if(bottom<=clip_top||top>=clip_bottom)continue;" in ui
+assert "if(top<clip_top)top=clip_top;" in ui
+assert "if(bottom>clip_bottom)bottom=clip_bottom;" in ui
+assert "(int32_t)(right-left),bottom-top,YELLOW);" in ui
+assert "if(half==0u)mi_ui_draw_logo();" in ui
+assert "cv_rect(8,72,224,1,DIM);" in ui
+assert "cv_text(x,79,&FONT_XS,mi_param_name(&state,i),GREY);" in ui
+assert "cv_text(x,98,&FONT_S,val,YELLOW);" in ui
+assert "if(state.view==MI_ARP){" in ui and "mi_draw_arp();" in ui
+assert "cv_rect(8,31,state.view==MI_ARP?104:224,1,DIM);" not in ui
 assert "cv_rect(84+(int32_t)start,39+(int32_t)y," not in ui
-assert 122+116<=240 and 2+116<=120 and 8+106<122
+assert "mi_graph_arp();" not in ui
+# Physical UI geometry; no split row may escape the two 120px buffers.
+assert 40+160<=240 and 30>=28 and 30+160<192
+assert 192+6<199 and 218+16<=240
+for y in range(72):
+    top=30+(y*160+71)//72
+    bottom=30+((y+1)*160+71)//72
+    assert 0<=top<bottom<=190
+    spans=[]
+    for half in (0,1):
+        lo=max(top,half*120)
+        hi=min(bottom,(half+1)*120)
+        if lo<hi:
+            spans.extend(range(lo,hi))
+    assert spans==list(range(top,bottom))
+for x in range(72):
+    left=40+(x*160+71)//72
+    right=40+((x+1)*160+71)//72
+    assert 40<=left<right<=200
 assert "YELLOW);" in ui and "mi_arp_pixel(" in ui
 assert "mi_arp_face_decode" not in ui
 assert "mi_arp_face_deltas" not in arp_generator
