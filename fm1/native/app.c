@@ -1375,9 +1375,19 @@ static unsigned mi_arp_pixel(unsigned x,unsigned y)
     return (mi_arp_books[index]>>bit)&1u;
 }
 
-/* Render exact original-source 72x72 sprites at physical pixel size.
- * No blurry scaling, no detail-destroying 48px base, no overlapping patch.
- * Position and knob strip are unchanged; audio triggers frame advancement. */
+/* Original ARP asset stays 72x72 / 162 frames / yellow+black.
+ * Draw at 116x116 in the RIGHT 120px column of the 240x120 top LCD,
+ * clear of the 106px left logo (x=8..113) and the bottom knob strip.
+ * This is exact nearest-neighbour area coverage: source pixel edges map
+ * to ceil(src*116/72), with zero interpolation/blur or image re-encoding.
+ * Render horizontal runs, not 13,456 single pixels per animation frame. */
+#define MI_ARP_DRAW_SIZE 116u
+#define MI_ARP_DRAW_X 122u
+#define MI_ARP_DRAW_Y 2u
+static unsigned mi_arp_scaled_edge(unsigned source,unsigned extent)
+{
+    return (source*MI_ARP_DRAW_SIZE+extent-1u)/extent;
+}
 static void mi_graph_arp(void)
 {
     unsigned y,x,frame;
@@ -1385,14 +1395,19 @@ static void mi_graph_arp(void)
     if(frame>=MI_ARP_FRAME_COUNT)frame=0u;
     mi_arp_decode(frame);
     for(y=0u;y<MI_ARP_FRAME_H;y++){
+        unsigned top=mi_arp_scaled_edge(y,MI_ARP_FRAME_H);
+        unsigned bottom=mi_arp_scaled_edge(y+1u,MI_ARP_FRAME_H);
         x=0u;
         while(x<MI_ARP_FRAME_W){
-            unsigned start;
+            unsigned start,left,right;
             if(!mi_arp_pixel(x,y)){++x;continue;}
             start=x;
             do {++x;} while(x<MI_ARP_FRAME_W && mi_arp_pixel(x,y));
-            cv_rect(84+(int32_t)start,39+(int32_t)y,
-                    (int32_t)(x-start),1,YELLOW);
+            left=mi_arp_scaled_edge(start,MI_ARP_FRAME_W);
+            right=mi_arp_scaled_edge(x,MI_ARP_FRAME_W);
+            cv_rect((int32_t)(MI_ARP_DRAW_X+left),
+                    (int32_t)(MI_ARP_DRAW_Y+top),
+                    (int32_t)(right-left),(int32_t)(bottom-top),YELLOW);
         }
     }
 }
@@ -1670,7 +1685,10 @@ static void draw(void)
 
     cv_begin(240,120,C_BLACK);
     mi_ui_draw_logo();
-    cv_text(140,10,&FONT_XS,
+    /* ARP uses the full right top LCD for the enlarged animation;
+     * the mode is already shown on the left, so omit its duplicate title. */
+    if(state.view!=MI_ARP)
+        cv_text(140,10,&FONT_XS,
             state.view==MI_SEQ?(
                 audio.recorder.tracks[state.rec_track].one_bar_loop?"LOOP 1BAR":
                 audio.recorder.clock_active?"MIDI 2BAR":
@@ -1680,7 +1698,7 @@ static void draw(void)
                 state.osc_page==1u?"OSC2":"OSC1"):
             state.view==MI_HOME?"HOME / OSC":
             mi_view_name(state.view),GREY);
-    cv_rect(8,31,224,1,DIM);
+    cv_rect(8,31,state.view==MI_ARP?104:224,1,DIM);
     if(now<message_until){
         cv_text(12,50,&FONT_B,line_a,YELLOW);
         cv_text(12,76,&FONT_XS,line_b,GREY);
