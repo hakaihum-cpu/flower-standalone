@@ -850,9 +850,9 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
              * and manual FMDrum remain centre. Gain and soft limiting are
              * applied after all three playback heads are summed. */
             out_l=mi_soft_limit(sample*(1.f-0.45f*a->rec_monitor_mix)+
-                    rec_l*(0.75f*a->rec_monitor_mix)+drum_seq);
+                    rec_l*(1.0f*a->rec_monitor_mix)+drum_seq);
             out_r=mi_soft_limit(sample*(1.f-0.45f*a->rec_monitor_mix)+
-                    rec_r*(0.75f*a->rec_monitor_mix)+drum_seq);
+                    rec_r*(1.0f*a->rec_monitor_mix)+drum_seq);
             {
                 float st_l=out_l,st_r=out_r;
                 /* The approved FX-OFF path must not spend an extra DSP
