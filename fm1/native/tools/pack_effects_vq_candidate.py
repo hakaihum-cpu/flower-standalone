@@ -21,7 +21,7 @@ from pathlib import Path
 
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from mi_palette import clip_pixels
 from black_frame_guard import replace_black_frames
@@ -274,7 +274,7 @@ def main():
     palettes, books, maps, worst = [], [], [], []
     decoded_crc32 = 0
     reconstructed = 0
-    montage = Image.new("RGB", (256, HEIGHT * CLIPS * 3)) if a.preview else None
+    montage = Image.new("RGB", (3 * WIDTH, HEIGHT * CLIPS * 3)) if a.preview else None
     for clip in range(CLIPS):
         print(f"EFFECTS source clip {clip+1}/{CLIPS}: quantising all 36 frames", flush=True)
         images = jpeg_frames(source, clip)
@@ -347,11 +347,21 @@ def main():
         # 256-tile VQ. A quantized-only preview conceals palette damage.
         full_source = np.stack([np.asarray(im, dtype=np.float32)
                                 for im in images])
-        decoded_rgb = rgb_palette(palette)[recon[:, :HEIGHT]].astype(np.float32)
+        palette_rgb = rgb_palette(palette)
+        quantized_rgb = palette_rgb[idx[:, :HEIGHT]].astype(np.float32)
+        decoded_rgb = palette_rgb[recon[:, :HEIGHT]].astype(np.float32)
+        pre_vq_mse = np.mean((full_source - quantized_rgb) ** 2,
+                             axis=(1, 2, 3))
         full_mse = np.mean((full_source - decoded_rgb) ** 2,
                            axis=(1, 2, 3))
-        full_psnr = np.array([10 * math.log10(255 * 255 / max(float(e), 1e-9))
-                              for e in full_mse])
+        pre_vq_psnr = 10 * np.log10(255 * 255 / np.maximum(pre_vq_mse, 1e-9))
+        full_psnr = 10 * np.log10(255 * 255 / np.maximum(full_mse, 1e-9))
+        # Both measurements use the EXACT same original source frame.
+        # The difference isolates additional loss from the VQ stage.
+        print(f"INFO PRE-VQ 16-colour source PSNR: "
+              f"worst={pre_vq_psnr.min():.2f} mean={pre_vq_psnr.mean():.2f}; "
+              f"POST-VQ source PSNR: "
+              f"worst={full_psnr.min():.2f} mean={full_psnr.mean():.2f}", flush=True)
         print(f"INFO FULL-SOURCE EFFECTS clip {clip+1}/{CLIPS} "
               f"RGB PSNR worst={full_psnr.min():.2f} "
               f"mean={full_psnr.mean():.2f}; includes palette+VQ", flush=True)
@@ -359,20 +369,30 @@ def main():
               f"mean={quality[1]:.2f} distinct={quality[3]}/36 vs input={quality[2]}/36 "
               f"dictionary={selected}", flush=True)
         if montage is not None:
-            pal = rgb_palette(palette)
-            # Show FIRST / MIDDLE / LAST source and reconstructed frames.
-            # A single clip-first preview hides motion-dependent VQ damage.
+            # Three stages shown at the same source pixel geometry:
+            # untouched JPEG -> shared 16-colour RGB565 -> VQ decoder.
             for row, frame in enumerate((0, FRAMES//2, FRAMES-1)):
                 top = (clip * 3 + row) * HEIGHT
                 montage.paste(images[frame], (0, top))
-                montage.paste(Image.fromarray(pal[recon[frame, :HEIGHT]]),
-                              (WIDTH, top))
+                montage.paste(Image.fromarray(
+                    palette_rgb[idx[frame, :HEIGHT]]), (WIDTH, top))
+                montage.paste(Image.fromarray(
+                    palette_rgb[recon[frame, :HEIGHT]]), (WIDTH * 2, top))
     if reconstructed != CLIPS * FRAMES or len(palettes) != CLIPS:
         raise RuntimeError(f"FAIL: VQ reconstructed {reconstructed}/{CLIPS*FRAMES} original slots")
     write_candidate(a.output_header, palettes, books, maps, decoded_crc32)
     if a.preview:
         a.preview.parent.mkdir(parents=True, exist_ok=True)
-        montage.resize((768, HEIGHT * CLIPS * 3 * 3), Image.Resampling.NEAREST).save(a.preview)
+                enlarged = montage.resize(
+            (3 * WIDTH * 3, HEIGHT * CLIPS * 3 * 3), Image.Resampling.NEAREST)
+        preview = Image.new("RGB", (enlarged.width, enlarged.height + 30),
+                            (20, 20, 20))
+        draw = ImageDraw.Draw(preview)
+        for col, label in enumerate(("ORIGINAL JPEG", "16 COLORS / NO VQ",
+                                     "16 COLORS + VQ")):
+            draw.text((col * WIDTH * 3 + 8, 9), label, fill=(245, 245, 245))
+        preview.paste(enlarged, (0, 30))
+        preview.save(a.preview)
     print(f"CANDIDATE: RGB565 16 colours, {reconstructed} original-frame slots; "
           f"media {MEDIA_BYTES}/{APP_SLOT} bytes; worst additional PSNR "
           f"{min(worst):.2f} dB; decoded CRC32={decoded_crc32:08X}; "
