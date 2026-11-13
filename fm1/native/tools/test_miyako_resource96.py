@@ -13,7 +13,7 @@ from pack_miyako_resource import read_payload, CHUNK_DIR, MHP2_CORE_BYTES
 from mhp2 import unpack
 
 COUNT=628
-PIXEL_SHA256='09945db985afc7af6f8ee35405cb8002bfc80464bfd1f00a0fcd7ede44e54e45'
+PIXEL_SHA256='68695e08463847565d09b87755f16d9631fb2276f485bc9a9451d68abac279dd'
 BANK_SIZES=(81,64,100,81,81,81,70,70)
 
 
@@ -65,7 +65,7 @@ def check(data: bytes) -> None:
     got=digest.hexdigest()
     if got != PIXEL_SHA256:
         raise AssertionError(f'628-frame exact pixels changed: {got}')
-    print(f'PASS MHP2: 628 frames, 24 clip palettes, 4170 source tile patches, {distinct_min}+ colours/frame, SHA256 {got}')
+    print(f'PASS MHP2: 628 frames, 24 clip palettes, 3916 source tile patches, {distinct_min}+ colours/frame, SHA256 {got}')
 
 
 if __name__=='__main__':

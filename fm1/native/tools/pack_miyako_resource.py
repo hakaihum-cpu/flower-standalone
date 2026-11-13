@@ -15,13 +15,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 CHUNK_DIR = ROOT / 'Resources' / 'fm1_mhp2_96_chunks'
-PAYLOAD_BYTES = 281567
-SHA256 = 'ea3d75e1f8e5865eb488661edbe709bf11cd3b1539734ebf8e56ca5b58625d4c'
+PAYLOAD_BYTES = 282071
+SHA256 = '35ab028b0bb48659ecab47c36afe2a4c6873e6b91f29c0b46313606f41cb5a3f'
 RESOURCE_CAPACITY = 69 * 4096 - 32
 FILES = 12
 PALETTE_CLIPS = 24
 PALETTE_ENTRIES = 16
-MHP2_CORE_BYTES = 203991
+MHP2_CORE_BYTES = 209067
 MHP2_OVERLAY_BYTES = PAYLOAD_BYTES - MHP2_CORE_BYTES
 FRAMES = 628
 FRAME_OFFSETS_BYTES = (FRAMES + 1) * 4
@@ -62,7 +62,7 @@ def read_payload(directory: Path) -> bytes:
             for v in overlay[FRAME_OFFSETS_BYTES + off + 2:FRAME_OFFSETS_BYTES + off + 18]:
                 if (v >> 4) > 15 or (v & 15) > 15:
                     raise ValueError('MHP2 palette index overflow')
-    if patches != 4170:
+    if patches != 3916:
         raise ValueError(f'MHP2 correction count mismatch: {patches}')
     palettes = []
     for clip in range(PALETTE_CLIPS):

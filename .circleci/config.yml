@@ -177,10 +177,10 @@ jobs:
             grep -Fq "#define MI_ARP_FRAME_W 72u" /tmp/fm1-base/miyako/mi_arp_media.h
             grep -Fq "#define MI_ARP_MAP_BYTES 324u" /tmp/fm1-base/miyako/mi_arp_media.h
             # Standard CRC-protected res.bin, 96x96 original-source images.
-            # 281567 + 32-byte header fits in 69 sectors; saved data untouched.
+            # 282071 + 32-byte header fits in 69 sectors; saved data untouched.
             python3 fm1/native/tools/pack_miyako_resource.py \
               /tmp/fm1-base/miyako/miyako_media.bin
-            test "$(stat -c %s /tmp/fm1-base/miyako/miyako_media.bin)" -eq 281567
+            test "$(stat -c %s /tmp/fm1-base/miyako/miyako_media.bin)" -eq 282071
             # CircleCI pipeline number drives the running UI version, OTA
             # loader and FWSC product marker; fixed 938 is forbidden.
             python3 fm1/native/tools/set_miyako_product_id.py --base /tmp/fm1-base
@@ -426,15 +426,15 @@ jobs:
             test -s /tmp/fm1-base/miyako/build/miyako-res.bin
             cp /tmp/fm1-base/miyako/build/miyako-res.bin \
               fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin
-            test "$(stat -c %s fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin)" -eq 281599
+            test "$(stat -c %s fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin)" -eq 282103
             printf '%s\n' \
               'MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE' \
               'Built without the KARMA application and DSP.' \
               'REEL, DREAMY, DELAY, REVERB and CHORUS are native FM-1 DSP implementations.' \
               'Original 144 EFFECTS and 576 EUREKA source frames are 16-colour VQ.' \
               'To see all 628 photo tiles, install the matching MIYAKO-FM1-NATIVE-DEV-res.bin with the existing fm1-base resource installer; FWSC-only updates do not include photos.' \
-              'The 628 user photo frames use 24 16-colour RGB565 palettes with pre-compressed MHP2 dictionaries, and 4170 original-source correction tiles.' \
-              'The exact matching 281599-byte MIYAKO-FM1-NATIVE-DEV-res.bin MUST be installed together with this FWSC; stock VQ resources are rejected. Use the existing fm1-base resource installer.' \
+              'The 628 user photo frames use 24 16-colour RGB565 palettes with pre-compressed MHP2 dictionaries, and 3916 original-source correction tiles.' \
+              'The exact matching 282103-byte MIYAKO-FM1-NATIVE-DEV-res.bin MUST be installed together with this FWSC; stock VQ resources are rejected. Use the existing fm1-base resource installer.' \
               'RECORDER: three independent 2/4-bar 56-byte log-PCM loop tracks, with per-track overdub, mute, pan, pitch, in/out and level. 2 bars when external MIDI Clock is active.' \
               'SEQ short press: RECORDER (repeat for parameters, MIX and REV/QUANT pages); PRESET selects LOOP 1/2/3. SEQ hold (650ms): independent 4-track FMDrum step sequencer.' \
               'ARP visuals: 162 user-provided complete black/yellow tiles; each audible ARP note-on advances one frame, then carousel frames loop. ARP controls and timing unchanged.' \
