@@ -71,9 +71,14 @@ def palette_from_original(frames, colors):
     """Clip-constant palette. Choose from actual source RGB, not a sepia LUT."""
     w,h=frames[0].size
     n=len(frames)
-    montage=Image.new("RGB",(6*w,math.ceil(n/6)*h))
+    # An incomplete last SEL clip has 7, not 27 frames. Avoid black
+    # padding pixels becoming artificial palette training inputs.
+    cols=min(6,n)
+    while n%cols:
+        cols-=1
+    montage=Image.new("RGB",(cols*w,(n//cols)*h))
     for i,im in enumerate(frames):
-        montage.paste(im,((i%6)*w,(i//6)*h))
+        montage.paste(im,((i%cols)*w,(i//cols)*h))
     src=np.stack([np.asarray(im,dtype=np.uint8) for im in frames])
     gray=((77*src[...,0].astype(np.int32)+150*src[...,1].astype(np.int32)+
            29*src[...,2].astype(np.int32))>>8)
