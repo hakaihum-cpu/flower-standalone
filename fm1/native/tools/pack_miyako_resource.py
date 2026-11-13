@@ -1,55 +1,77 @@
 #!/usr/bin/env python3
-"""Reassemble the separately flashed FM-1 photo resource from approved images.
+"""Pack approved original-source MHP2 SEL images for the existing FM-1 resource installer.
 
-628 original, user-supplied frames (96x96), 16 RGB565 colours, 8x4 VQ.
-The prebuilt compressed payload is checked into Resources/fm1_photo_96_chunks.
-No image generation, network access, or image transcoding occurs during CI.
-The standard fm1-base builder adds its 32-byte CRC header to this payload.
+The FM-1 file contains a CRC32-protected MHP2 core and a per-frame tile
+correction directory. It is NOT an installable resource by itself: the
+existing upstream builder adds the 32-byte res.bin header/CRC.
 """
 from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import struct
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-CHUNK_DIR = ROOT / 'Resources' / 'fm1_photo_96_chunks'
-PAYLOAD_BYTES = 279936
-SHA256 = 'df517e2d8c7902bed076610a07876dee660890799ba5dec6bc12bf366783bcf4'
+CHUNK_DIR = ROOT / 'Resources' / 'fm1_mhp2_96_chunks'
+PAYLOAD_BYTES = 281567
+SHA256 = 'ea3d75e1f8e5865eb488661edbe709bf11cd3b1539734ebf8e56ca5b58625d4c'
 RESOURCE_CAPACITY = 69 * 4096 - 32
 FILES = 12
-# All 24 clip palettes are sourced from the eight exact uploaded images.
-# Six near-monochrome sheets, one mostly monochrome and one with real yellow/
-# sunset colours. A single fake 16-colour table must NOT overwrite them.
-# The native LCD decodes each RGB565 table using the existing res.bin format.
 PALETTE_CLIPS = 24
 PALETTE_ENTRIES = 16
+MHP2_CORE_BYTES = 203991
+MHP2_OVERLAY_BYTES = PAYLOAD_BYTES - MHP2_CORE_BYTES
+FRAMES = 628
+FRAME_OFFSETS_BYTES = (FRAMES + 1) * 4
+
 
 def read_payload(directory: Path) -> bytes:
     files = sorted(directory.glob('part_????.b64'))
     if len(files) != FILES or [p.name for p in files] != [f'part_{i:04}.b64' for i in range(1, FILES + 1)]:
-        raise ValueError('FM-1 photo resource requires all 12 numbered source chunks')
-    # Chunk boundaries are multiples of four Base64 characters; validate
-    # the entire assembled input against the generated source checksum.
+        raise ValueError('MHP2 resource requires all 12 numbered image chunks')
     encoded = ''.join(''.join(p.read_text(encoding='ascii').split()) for p in files)
-    result = base64.b64decode(encoded, validate=True)
-    if len(result) != PAYLOAD_BYTES or len(result) > RESOURCE_CAPACITY:
-        raise ValueError(f'FM-1 96x96 resource has invalid size: {len(result)}')
-    digest = hashlib.sha256(result).hexdigest()
-    if digest != SHA256:
-        raise ValueError('FM-1 96x96 original-source resource SHA256 mismatch')
-    # Archive SHA256 authenticates palette, all 24 VQ dictionaries and
-    # the exact 628 chronological frame maps. Never recolour the archive.
-    # Minimum 13 colours per frame is checked independently by the decoder.
-    unique = []
+    data = base64.b64decode(encoded, validate=True)
+    if len(data) != PAYLOAD_BYTES or len(data) > RESOURCE_CAPACITY:
+        raise ValueError(f'MHP2 resource size invalid: {len(data)}')
+    if hashlib.sha256(data).hexdigest() != SHA256:
+        raise ValueError('MHP2 resource SHA-256 mismatch')
+    if data[:4] != b'MHP2' or struct.unpack_from('<I', data, 8)[0] != MHP2_CORE_BYTES:
+        raise ValueError('MHP2 magic/size mismatch')
+    if zlib.crc32(data[64:MHP2_CORE_BYTES]) != struct.unpack_from('<I', data, 12)[0]:
+        raise ValueError('MHP2 core CRC mismatch')
+    if struct.unpack_from('<HHHH', data, 16) != (PALETTE_CLIPS, FRAMES, 96, 96):
+        raise ValueError('MHP2 clip/frame/geometry mismatch')
+    if len(data[MHP2_CORE_BYTES:]) != MHP2_OVERLAY_BYTES:
+        raise ValueError('MHP2 overlay length mismatch')
+    overlay = data[MHP2_CORE_BYTES:]
+    directory_entries = struct.unpack_from('<629I', overlay)
+    if directory_entries[0] or directory_entries[-1] != MHP2_OVERLAY_BYTES - FRAME_OFFSETS_BYTES:
+        raise ValueError('MHP2 overlay directory invalid')
+    patches = 0
+    for i in range(FRAMES):
+        a, b = directory_entries[i:i+2]
+        if a > b or (b - a) % 18 or b > directory_entries[-1]:
+            raise ValueError(f'MHP2 tile directory bounds invalid frame {i}')
+        patches += (b - a) // 18
+        for off in range(a, b, 18):
+            tile = struct.unpack_from('<H', overlay, FRAME_OFFSETS_BYTES + off)[0]
+            if tile >= 288:
+                raise ValueError(f'MHP2 tile ID invalid frame {i}')
+            for v in overlay[FRAME_OFFSETS_BYTES + off + 2:FRAME_OFFSETS_BYTES + off + 18]:
+                if (v >> 4) > 15 or (v & 15) > 15:
+                    raise ValueError('MHP2 palette index overflow')
+    if patches != 4170:
+        raise ValueError(f'MHP2 correction count mismatch: {patches}')
+    palettes = []
     for clip in range(PALETTE_CLIPS):
-        palette = tuple(int.from_bytes(
-            result[clip * 32 + i * 2:clip * 32 + i * 2 + 2], 'little')
-            for i in range(PALETTE_ENTRIES))
-        unique.append(len(set(palette)))
-    if min(unique) < 15:
-        raise ValueError('FM-1 source RGB565 palette lost colour entries')
-    return result
+        pal = struct.unpack_from('<16H', data, 64 + clip*32)
+        if len(set(pal)) < 15:
+            raise ValueError(f'MHP2 palette too small clip {clip}')
+        palettes.append(pal)
+    print(f'PASS MHP2 resource: {len(data)}B, {FRAMES} frames, {patches} source patches, 16 RGB565 colours/clip')
+    return data
 
 
 def main() -> None:
@@ -60,8 +82,8 @@ def main() -> None:
     data = read_payload(args.chunk_dir)
     args.resource_payload.parent.mkdir(parents=True, exist_ok=True)
     args.resource_payload.write_bytes(data)
-    print(f'PASS: 628 original-source 96x96 photos, 24 clip-specific 16-colour RGB565 palettes, {len(data)}B, '
-          f'archive SHA256 {SHA256}, output SHA256 {hashlib.sha256(data).hexdigest()}')
+    print('PASS resource SHA256 ' + hashlib.sha256(data).hexdigest())
+    print('MHP2 is build-time encoded. The FM-1 firmware contains only the freestanding decoder.')
 
 
 if __name__ == '__main__':

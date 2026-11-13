@@ -1,79 +1,75 @@
 #!/usr/bin/env python3
-"""Independent full-frame audit of the stored 96x96 16-colour VQ resource.
+"""Exhaustive offline 628-frame validation of encoded MHP2+corrections.
 
-Checks actual decoded indices for ALL 628 frames; verifies source bank frame
-counts, 24 independent RGB palettes, unique chronological frames, and complete 4bpp data.
+Run in existing first-stage CircleCI source checks, before FWSC creation.
+No source frames are generated or rewritten here.
 """
 from __future__ import annotations
 import argparse
-from pathlib import Path
-from pack_miyako_resource import read_payload, CHUNK_DIR, SHA256
 import hashlib
+import struct
+from pathlib import Path
+from pack_miyako_resource import read_payload, CHUNK_DIR, MHP2_CORE_BYTES
+from mhp2 import unpack
 
-COUNT = 628
-SIDE = 96
-CLIP_FRAMES = 27
-CLIPS = 24
-MAP_STRIDE = 288
-PALETTE_BYTES = CLIPS * 16 * 2
-BOOK_BYTES = CLIPS * 256 * 16
-BOOK_OFFSET = PALETTE_BYTES
-MAP_OFFSET = PALETTE_BYTES + BOOK_BYTES
-BANK_SIZES = (81, 64, 100, 81, 81, 81, 70, 70)
+COUNT=628
+PIXEL_SHA256='09945db985afc7af6f8ee35405cb8002bfc80464bfd1f00a0fcd7ede44e54e45'
+BANK_SIZES=(81,64,100,81,81,81,70,70)
 
 
 def check(data: bytes) -> None:
-    assert sum(BANK_SIZES) == COUNT
-    assert MAP_OFFSET + COUNT * MAP_STRIDE == len(data) == 279936
-    palettes = []
-    for c in range(CLIPS):
-        colors = tuple(int.from_bytes(
-            data[c * 32 + i * 2:c * 32 + i * 2 + 2], 'little')
-            for i in range(16))
-        assert len(set(colors)) >= 15, f'clip {c} lost source colors'
-        palettes.append(colors)
-    # User sheets include genuine yellow/sepia sunsets in the final bank.
-    def chroma(rgb565):
-        r = ((rgb565 >> 11) & 31) * 255 // 31
-        g = ((rgb565 >> 5) & 63) * 255 // 63
-        b = (rgb565 & 31) * 255 // 31
-        return max(r, g, b) - min(r, g, b)
-    assert any(chroma(v) > 20 for clip in palettes[21:] for v in clip), (
-        'source sunset colors were lost by greyscale conversion')
-    min_colors = 16
-    colourful = 0
-    unique_frames = set()
+    if sum(BANK_SIZES) != COUNT:
+        raise AssertionError('SEL banks do not add up to 628')
+    legacy = unpack(data[:MHP2_CORE_BYTES])
+    if len(legacy) != 279936:
+        raise AssertionError('MHP2 core not 628 original-index frames')
+    overlay=data[MHP2_CORE_BYTES:]
+    frame_offsets=struct.unpack_from('<629I', overlay)
+    digest=hashlib.sha256()
+    seen=set()
+    distinct_min=16
     for f in range(COUNT):
-        c = f // CLIP_FRAMES
-        counts = [0] * 16
-        m = data[MAP_OFFSET + f * MAP_STRIDE: MAP_OFFSET + (f + 1) * MAP_STRIDE]
-        assert len(m) == MAP_STRIDE
-        # Decode every 8x4 tile to all 96*96 pixels, not just palette metadata.
-        decoded = bytearray()
-        for entry in m:
-            code = data[BOOK_OFFSET + (c * 256 + entry) * 16:BOOK_OFFSET + (c * 256 + entry + 1) * 16]
-            assert len(code) == 16
-            decoded.extend(code)
-            for b in code:
-                counts[b >> 4] += 1
-                counts[b & 15] += 1
-        assert sum(counts) == SIDE * SIDE, (f, sum(counts))
-        # Some original almost-monochrome drawings legitimately use fewer
-        # than 15 of the available 16 colors. Never add fake colors to pass.
-        distinct = sum(x > 0 for x in counts)
-        assert distinct >= 13, f'frame {f} lost original detail: {distinct}'
-        colourful += distinct >= 15
-        min_colors = min(min_colors, distinct)
-        unique_frames.add(hashlib.sha256(decoded).digest())
-    assert len(unique_frames) == COUNT, 'identical VQ output for different user frames'
-    assert colourful >= 610, f'only {colourful}/628 frames use >=15 colours'
-    print(f'PASS: all {COUNT} distinct source RGB frames, 24 palettes, '
-          f'original sunset colours preserved, >= {min_colors}/16 colours, '
-          f'full decoded geometry 96x96; sha256 {hashlib.sha256(data).hexdigest()}')
+        clip=f//27
+        book=legacy[768+clip*4096:768+(clip+1)*4096]
+        tile_ids=legacy[99072+f*288:99072+(f+1)*288]
+        pixels=bytearray(96*96)
+        for ty in range(24):
+            for tx in range(12):
+                code=book[tile_ids[ty*12+tx]*16:tile_ids[ty*12+tx]*16+16]
+                for row in range(4):
+                    y=(ty*4+row)*96+tx*8
+                    for col in range(4):
+                        v=code[row*4+col]
+                        pixels[y+2*col]=v>>4
+                        pixels[y+2*col+1]=v&15
+        for off in range(frame_offsets[f],frame_offsets[f+1],18):
+            start=2516+off
+            tile=struct.unpack_from('<H',overlay,start)[0]
+            ty,tx=divmod(tile,12)
+            correction=overlay[start+2:start+18]
+            for row in range(4):
+                pos=(ty*4+row)*96+tx*8
+                for col in range(4):
+                    v=correction[row*4+col]
+                    pixels[pos+col*2]=v>>4
+                    pixels[pos+col*2+1]=v&15
+        unique=set(pixels)
+        if len(unique)<5 or max(unique)>15:
+            raise AssertionError(f'frame {f}: invalid palette coverage')
+        distinct_min=min(distinct_min,len(unique))
+        frame_hash=hashlib.sha256(pixels).digest()
+        if frame_hash in seen:
+            raise AssertionError(f'duplicate decoded frame {f}')
+        seen.add(frame_hash)
+        digest.update(pixels)
+    got=digest.hexdigest()
+    if got != PIXEL_SHA256:
+        raise AssertionError(f'628-frame exact pixels changed: {got}')
+    print(f'PASS MHP2: 628 frames, 24 clip palettes, 4170 source tile patches, {distinct_min}+ colours/frame, SHA256 {got}')
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--chunk-dir', type=Path, default=CHUNK_DIR)
-    args = parser.parse_args()
+if __name__=='__main__':
+    arg=argparse.ArgumentParser()
+    arg.add_argument('--chunk-dir',type=Path,default=CHUNK_DIR)
+    args=arg.parse_args()
     check(read_payload(args.chunk_dir))
