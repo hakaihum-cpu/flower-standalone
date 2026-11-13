@@ -1,0 +1,180 @@
+{
+  "sha256_source_verified": true,
+  "original_source_frames": 628,
+  "source_geometry": "96x96 unchanged",
+  "fixed_palette": "16 RGB565 entries per clip; 24 clips",
+  "mhp2_core_size": 215925,
+  "core_breakdown": {
+    "header_tables_and_indices": 11152,
+    "dictionaries": 59810,
+    "maps": 144963,
+    "modes": [
+      3,
+      21
+    ],
+    "per_clip": [
+      [
+        0,
+        2321,
+        5654,
+        1
+      ],
+      [
+        1,
+        2270,
+        5912,
+        1
+      ],
+      [
+        2,
+        2384,
+        5859,
+        1
+      ],
+      [
+        3,
+        2330,
+        6669,
+        1
+      ],
+      [
+        4,
+        2382,
+        6796,
+        1
+      ],
+      [
+        5,
+        2655,
+        6521,
+        1
+      ],
+      [
+        6,
+        2766,
+        6290,
+        1
+      ],
+      [
+        7,
+        2730,
+        6102,
+        1
+      ],
+      [
+        8,
+        2730,
+        6431,
+        1
+      ],
+      [
+        9,
+        2663,
+        6420,
+        1
+      ],
+      [
+        10,
+        2751,
+        6507,
+        1
+      ],
+      [
+        11,
+        2801,
+        6111,
+        1
+      ],
+      [
+        12,
+        2466,
+        5334,
+        1
+      ],
+      [
+        13,
+        2234,
+        5242,
+        1
+      ],
+      [
+        14,
+        2325,
+        5311,
+        1
+      ],
+      [
+        15,
+        2352,
+        5540,
+        1
+      ],
+      [
+        16,
+        2279,
+        5374,
+        1
+      ],
+      [
+        17,
+        2357,
+        5553,
+        1
+      ],
+      [
+        18,
+        2463,
+        7416,
+        0
+      ],
+      [
+        19,
+        2408,
+        7536,
+        0
+      ],
+      [
+        20,
+        2455,
+        7519,
+        0
+      ],
+      [
+        21,
+        2392,
+        6508,
+        1
+      ],
+      [
+        22,
+        2662,
+        6817,
+        1
+      ],
+      [
+        23,
+        2634,
+        1541,
+        1
+      ]
+    ]
+  },
+  "patch_count": 3563,
+  "patched_frames": 628,
+  "patch_bytes": 66650,
+  "total_bytes": 282575,
+  "cap_bytes": 282592,
+  "remaining_bytes": 17,
+  "mse_against_color_target_before_patch": 713.157958984375,
+  "mse_against_color_target_after_patch": 643.6539306640625,
+  "n_source_pixels_retouched_or_redrawn": 0,
+  "time_seconds": 18.3,
+  "host_mode_only": true,
+  "actual_firmware_tested": false,
+  "actual_encoded_mhp2_bytes": 215925,
+  "actual_packed_overlay_bytes": 66650,
+  "actual_final_bundle_bytes": 282575,
+  "actual_binary_sha256": "275cf3a4fc771ac6a4a010ac5a81f0278d1a7d7db23ebee6e22fc551a3930884",
+  "verified_all628_overlay_pixels_exact": true,
+  "physical_firmware_not_tested": true
+}
