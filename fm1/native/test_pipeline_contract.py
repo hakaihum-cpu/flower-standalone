@@ -89,6 +89,18 @@ def _audit_stale_literal_contracts():
 
 _audit_stale_literal_contracts()
 
+# Parse every palette/VQ preview Python source BEFORE the heavy original JPEG
+# restoration and codec work. A syntax failure is a source error, not a
+# firmware build discovery. Do not weaken this after a failing run.
+for _path in (
+    "fm1/native/tools/preview_original_palette.py",
+    "fm1/native/tools/pack_effects_vq_candidate.py",
+    "fm1/native/tools/pack_eureka_vq_candidate.py",
+):
+    compile((root / _path).read_text(encoding="utf-8"), _path, "exec")
+print("PASS: FX/EUREKA/SEL original-source preview Python syntax")
+
+
 # #303: the original OSC splash test assumed there would never be more than
 # two reboots in the growing host_smoke.txt. Reject reintroducing a GLOBAL
 # smoke reboot count/last-occurrence test. Other independent cases may freely
