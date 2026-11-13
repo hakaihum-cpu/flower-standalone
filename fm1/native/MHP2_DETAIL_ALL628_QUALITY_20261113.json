@@ -1,0 +1,139 @@
+{
+  "original_frames": 628,
+  "originals_sha256_verified": 8,
+  "current_master_vq_sha256": "df517e2d8c7902bed076610a07876dee660890799ba5dec6bc12bf366783bcf4",
+  "palette": "same 24 original-source RGB565 16-colour palettes as approved master; no recolouring",
+  "old_raw_vq_bytes": 279936,
+  "new_mhp2_base_bytes": 238535,
+  "overlay_directory_bytes": 2516,
+  "overlay_records": 2200,
+  "overlay_record_bytes": 39600,
+  "overlay_total_bytes": 42116,
+  "total_candidate_resource_payload_bytes": 280651,
+  "max_resource_payload_bytes": 282592,
+  "remaining_capacity_bytes": 1941,
+  "frames_with_patches": 628,
+  "frames_without_patches": 0,
+  "patches_per_frame_min": 1,
+  "patches_per_frame_max": 8,
+  "all_628_RGB_psnr_current_dB": 20.337,
+  "all_628_RGB_psnr_MHP2_DETAIL_dB": 20.657,
+  "average_per_frame_PSNR_gain_dB": 0.366,
+  "min_per_frame_PSNR_gain_dB": 0.031,
+  "max_per_frame_PSNR_gain_dB": 1.432,
+  "per_bank": [
+    {
+      "bank": 0,
+      "frames": 81,
+      "patches": 297,
+      "psnr_current": 21.871,
+      "psnr_detail": 22.367
+    },
+    {
+      "bank": 1,
+      "frames": 64,
+      "patches": 64,
+      "psnr_current": 25.708,
+      "psnr_detail": 25.818
+    },
+    {
+      "bank": 2,
+      "frames": 100,
+      "patches": 222,
+      "psnr_current": 20.511,
+      "psnr_detail": 20.71
+    },
+    {
+      "bank": 3,
+      "frames": 81,
+      "patches": 138,
+      "psnr_current": 21.131,
+      "psnr_detail": 21.297
+    },
+    {
+      "bank": 4,
+      "frames": 81,
+      "patches": 397,
+      "psnr_current": 22.159,
+      "psnr_detail": 22.932
+    },
+    {
+      "bank": 5,
+      "frames": 81,
+      "patches": 404,
+      "psnr_current": 21.909,
+      "psnr_detail": 22.653
+    },
+    {
+      "bank": 6,
+      "frames": 70,
+      "patches": 219,
+      "psnr_current": 16.953,
+      "psnr_detail": 17.065
+    },
+    {
+      "bank": 7,
+      "frames": 70,
+      "patches": 459,
+      "psnr_current": 17.758,
+      "psnr_detail": 18.105
+    }
+  ],
+  "select_frames": {
+    "0": {
+      "patch_count": 8,
+      "PSNR_current": 23.26,
+      "PSNR_MHP2_DETAIL": 24.22
+    },
+    "40": {
+      "patch_count": 8,
+      "PSNR_current": 20.49,
+      "PSNR_MHP2_DETAIL": 21.29
+    },
+    "81": {
+      "patch_count": 1,
+      "PSNR_current": 25.83,
+      "PSNR_MHP2_DETAIL": 25.97
+    },
+    "145": {
+      "patch_count": 1,
+      "PSNR_current": 23.08,
+      "PSNR_MHP2_DETAIL": 23.2
+    },
+    "245": {
+      "patch_count": 1,
+      "PSNR_current": 22.85,
+      "PSNR_MHP2_DETAIL": 22.96
+    },
+    "326": {
+      "patch_count": 6,
+      "PSNR_current": 22.28,
+      "PSNR_MHP2_DETAIL": 23.26
+    },
+    "407": {
+      "patch_count": 5,
+      "PSNR_current": 22.1,
+      "PSNR_MHP2_DETAIL": 22.79
+    },
+    "488": {
+      "patch_count": 1,
+      "PSNR_current": 17.37,
+      "PSNR_MHP2_DETAIL": 17.4
+    },
+    "558": {
+      "patch_count": 8,
+      "PSNR_current": 19.0,
+      "PSNR_MHP2_DETAIL": 19.64
+    },
+    "600": {
+      "patch_count": 8,
+      "PSNR_current": 18.91,
+      "PSNR_MHP2_DETAIL": 19.53
+    },
+    "627": {
+      "patch_count": 1,
+      "PSNR_current": 20.81,
+      "PSNR_MHP2_DETAIL": 20.88
+    }
+  }
+}
