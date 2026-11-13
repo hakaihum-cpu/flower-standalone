@@ -629,16 +629,16 @@ assert 'APP_RES_BASE 0x97000u' in app_header
 assert 'APP_RES_SECTORS 69u' in app_header
 assert 'APP_STORE_MAP {0xFC000u, 0xDC000u}' in app_header
 assert 'APP_BACKUP_OBJS {OBJ_SETTINGS}' in app_header
-assert 'MI_TILE_VQ_MAP_OFFSET 99072u' in resource_header
-assert 'MI_TILE_VQ_BOOK_OFFSET 768u' in resource_header
+assert 'MI_TILE_MHP2_OVERLAY_BYTES 77576u' in resource_header
+assert 'MI_TILE_MHP2_CORE_BYTES 203991u' in resource_header
 assert 'MI_TILE_VQ_MAP_STRIDE 288u' in resource_header
 assert 'MI_TILE_VQ_FRAMES_PER_CLIP 27u' in resource_header
 assert 'MI_TILE_SIDE 96u' in resource_header
 assert 'MI_TILE_COUNT 628u' in resource_header
 assert 'MI_TILE_BANKS 8u' in resource_header
-assert 'MI_TILE_DATA_BYTES 279936u' in resource_header
+assert 'MI_TILE_DATA_BYTES 281567u' in resource_header
 assert 'test_miyako_resource96.py' in ci
-assert '279968' in ci and '279936' in ci
+assert '281599' in ci and '281567' in ci
 assert '#include "mi_resource_media.h"' in ui and 'mi_photo_source(&length)' in ui
 assert "mi_resource_media.h" in ci
 assert "pack_miyako_resource.py" in ci
@@ -683,7 +683,7 @@ assert (root / "fm1/native/tools/check_ui_sprite_layout.py").is_file()
 # Photo bank requires the CRC-checked separate resource. Both SEL and FX
 # must display a visible existing EFFECTS frame when FWSC is installed alone.
 assert "mi_media_draw_scaled_half(half,px,py,size,size,clip_left,0);" in ui
-assert "*length<MI_TILE_DATA_BYTES" in ui
+assert "*length!=MI_TILE_DATA_BYTES" in ui
 assert "mi_photo_cached=-1;" in ui
 # Toggling res 0 must force a render; pixel tests must not accept the
 # previous cached photo screenshot without rendering the fallback.
@@ -720,12 +720,12 @@ assert "turn K1 6\nexpect fx 6" not in host_eureka
 host_fx = (root / "fm1/native/host_fx_preview.txt").read_text()
 assert "spin K1 -3\nexpect fx 2" in host_fx
 assert "spin PRESET 1" not in host_fx
-# The archived 628 user frames now use the same stock flash VQ layout
+# The archived 628 user frames now use the MHP2 source-reconstruction layout
 # with 24 SOURCE-RGB palettes, not the previous grayscale recolour.
-assert "df517e2d8c7902bed076610a07876dee660890799ba5dec6bc12bf366783bcf4" in resource_packer
+assert "ea3d75e1f8e5865eb488661edbe709bf11cd3b1539734ebf8e56ca5b58625d4c" in resource_packer
 assert "RESOURCE_CAPACITY = 69 * 4096 - 32" in resource_packer
 assert "PALETTE_CLIPS = 24" in resource_packer
-assert "return result" in resource_packer
+assert "return data" in resource_packer
 assert "transformed = bytearray(result)" not in resource_packer
 manifest_photo = __import__("json").loads(
     (root / "Resources/fm1_photo_96_chunks/manifest.json").read_text())
@@ -737,12 +737,12 @@ assert len(manifest_photo["files"]) == 8
 assert "photo96_rebuild.py" in (
     root / "fm1/native/tools/PHOTO96_REBUILD.md").read_text()
 assert "MI_TILE_RESOURCE_RGB_SOURCE 1u" in resource_header
-assert "MI_TILE_VQ_PALETTE_OFFSET 0u" in resource_header
+assert "MI_TILE_MHP2_CORE_BYTES 203991u" in resource_header
 assert "mi_photo_grayscale_palette" not in ui
-assert "mi_photo_palette[i]=(uint16_t)" in ui
-assert "((uint16_t)res[offset+1u]<<8u)" in ui
-assert "res[4u]!=0xEFu" in ui and "res[30u]!=0x8Au" in ui
-assert "clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP" in ui
+assert "mi_photo_palette[i]=mi_photo_decoder.palette[i]" in ui
+assert "mi_mhp2_decode(&mi_photo_decoder" in ui
+assert "res[0u]!='M'" in ui and "res[3u]!='2'" in ui
+assert "mi_mhp2_decode(&mi_photo_decoder" in ui
 assert "mi_visual_photo_bank(mode)" in ui
 assert "MIYAKO_FX_DREAMY_LARGE.png" in ci
 assert "MIYAKO_FX_EUREKA_LARGE.png" in ci
@@ -766,9 +766,9 @@ assert "mi_user_reference_rgb565[16]" not in ui
 # every 27-frame clip. Guard the actual native decoder, not the removed
 # 8-bank grayscale recolouring that caused CircleCI #298's false failure.
 assert "mi_photo_grayscale_palette" not in ui
-assert "mi_photo_palette[i]=(uint16_t)((uint16_t)res[offset]|" in ui
-assert "((uint16_t)res[offset+1u]<<8u)" in ui
-assert "clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP" in ui
+assert "mi_photo_palette[i]=mi_photo_decoder.palette[i]" in ui
+assert "mi_mhp2_decode(&mi_photo_decoder" in ui
+assert "mi_mhp2_decode(&mi_photo_decoder" in ui
 assert "mi_tile_bank_first[8]" in resource_header
 # Repeated gamma, edge sharpening and blue-channel alterations harmed
 # user JPEGs before the 16-colour/VQ stage. Verify every encoder now passes

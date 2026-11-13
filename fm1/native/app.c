@@ -13,6 +13,8 @@
 #include "mi_audio.h"
 #include "mi_video.h"
 #include "mi_resource_media.h"
+#include "mi_mhp2_codec_poc.h"
+#include "mi_mhp2_patch_poc.h"
 #include "mi_effects_vq_frames.h" /* 144 source frames */
 #include "mi_eureka_vq_frames.h" /* 576 source frames */
 #include "mi_letter_anim.h" /* exact 72 user-source paper-airplane frames */
@@ -1044,60 +1046,55 @@ static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
     if(y+h>120)h=120-y;
     if(w>0&&h>0)cv_rect(x,y,w,h,rgb);
 }
-/* Real fixed 16 RGB565 colours are encoded in the NEW original-source
- * 96x96 VQ payload. Do not remap them by brightness (the previous buggy
- * method made every real picture look like coloured grayscale). */
+/* 628 original-source frames: MHP2 Huffman VQ plus exact 8x4 corrections.
+ * Off-line encoder only; this code only decodes a CRC-protected res.bin.
+ * The existing upstream installer handles the 32-byte resource header. */
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];
 static uint16_t mi_photo_palette[16];
 static int16_t mi_photo_cached=-1;
-/* The original user images have been re-encoded in the existing VQ
- * format. Old res.bin codebooks/selectors are NOT interchangeable. Reject
- * them even if the size matches: display the established FX fallback
- * until the matching standard CRC-checked resource is installed. */
+static mi_mhp2_t mi_photo_decoder;
+static const uint8_t *mi_photo_active_resource=0;
+
+/* Do not accept an old stock VQ resource or a bare, incomplete MHP2 core.
+ * A missing/replaced res.bin must invalidate the old cached image. */
 static const uint8_t *mi_photo_source(uint32_t *length)
 {
     const uint8_t *res=plat_res(length);
-    if(!res||*length<MI_TILE_DATA_BYTES||
-       res[0u]!=0xFFu||res[1u]!=0xFFu||
-       res[2u]!=0x00u||res[3u]!=0x00u||
-       res[4u]!=0xEFu||res[5u]!=0x83u||
-       res[30u]!=0x8Au||res[31u]!=0x4Au)
+    if(!res||*length!=MI_TILE_DATA_BYTES||
+       res[0u]!='M'||res[1u]!='H'||res[2u]!='P'||res[3u]!='2'){
+        mi_photo_active_resource=0;
+        mi_photo_cached=-1;
         return 0;
+    }
+    if(mi_photo_active_resource!=res){
+        if(!mi_mhp2_init(&mi_photo_decoder,res,MI_TILE_MHP2_CORE_BYTES)){
+            mi_photo_active_resource=0;
+            mi_photo_cached=-1;
+            return 0;
+        }
+        mi_photo_active_resource=res;
+        mi_photo_cached=-1;
+    }
     return res;
 }
 static void mi_photo_decode(unsigned frame)
 {
     uint32_t length=0u;
     const uint8_t *res;
-    unsigned clip,ty,tx,row,col,i;
-    if(frame>=MI_TILE_COUNT||mi_photo_cached==(int16_t)frame)return;
-    /* All 628 frames require the matching CRC-validated res.bin with its
-     * real original-source, clip-specific RGB565 palette and VQ maps. */
+    unsigned i;
+    if(frame>=MI_TILE_COUNT)return;
     res=mi_photo_source(&length);
-    if(!res){mi_photo_cached=-1;return;}
-    clip=frame/MI_TILE_VQ_FRAMES_PER_CLIP;
-    if(clip>=MI_TILE_VQ_CLIPS){mi_photo_cached=-1;return;}
-    /* Clip palette is stored alongside its codebook in the existing
-     * 279936-byte res.bin. Never substitute unrelated colours: this
-     * preserves the sepia/yellow sunset as well as grayscale frames. */
-    for(i=0u;i<16u;i++){
-        unsigned offset=MI_TILE_VQ_PALETTE_OFFSET+clip*32u+i*2u;
-        mi_photo_palette[i]=(uint16_t)((uint16_t)res[offset]|
-                                      ((uint16_t)res[offset+1u]<<8u));
+    if(!res)return;
+    if(mi_photo_cached==(int16_t)frame)return;
+    if(!mi_mhp2_decode(&mi_photo_decoder,(uint16_t)frame,mi_photo_pixels)||
+       !mi_mhp2_apply_patch(res+MI_TILE_MHP2_CORE_BYTES,
+                            MI_TILE_MHP2_OVERLAY_BYTES,
+                            (uint16_t)frame,mi_photo_pixels)){
+        mi_photo_cached=-1;
+        return;
     }
-    for(ty=0u;ty<MI_TILE_VQ_ROWS;ty++)
-        for(tx=0u;tx<MI_TILE_VQ_COLS;tx++){
-            unsigned id=res[MI_TILE_VQ_MAP_OFFSET+
-                            frame*MI_TILE_VQ_MAP_STRIDE+
-                            ty*MI_TILE_VQ_COLS+tx];
-            const uint8_t *tile=res+MI_TILE_VQ_BOOK_OFFSET+
-                                (clip*256u+id)*16u;
-            for(row=0u;row<4u;row++)
-                for(col=0u;col<4u;col++){
-                    unsigned at=(ty*4u+row)*(MI_TILE_SIDE/2u)+tx*4u+col;
-                    mi_photo_pixels[at]=tile[row*4u+col];
-                }
-        }
+    for(i=0u;i<16u;i++)
+        mi_photo_palette[i]=mi_photo_decoder.palette[i];
     mi_photo_cached=(int16_t)frame;
 }
 /* 65 cells across matches the original MiyakoPixelMotion 720-square scene

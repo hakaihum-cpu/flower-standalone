@@ -27,7 +27,7 @@ jobs:
           name: Verify exact MIYAKO branch and zero KARMA source closure
           command: |
             set -eu
-            test "$CIRCLE_BRANCH" = "feature/fm1-arp-carousel-yellow-black-20261111"
+            test "$CIRCLE_BRANCH" = "feature/fm1-sel-mhp2-fw-resource-20261114"
             # GitHub App and OAuth checkouts may use HTTPS or SSH. Check
             # the actual checkout origin, not just the branch display name.
             source_url="$(git remote get-url origin 2>/dev/null || true)"
@@ -156,6 +156,8 @@ jobs:
                fm1/native/mi_piano_set1_51.c fm1/native/mi_piano_set1_58.c \
                fm1/native/mi_piano_set1_65.c \
                fm1/native/mi_memory.h fm1/native/mi_resource_media.h \
+               fm1/native/mi_mhp2_codec_poc.c fm1/native/mi_mhp2_codec_poc.h \
+               fm1/native/mi_mhp2_patch_poc.c fm1/native/mi_mhp2_patch_poc.h \
                /tmp/fm1-base/miyako/
             test -s /tmp/fm1-base/miyako/words.tsv
             grep -q '^# url: https://' /tmp/fm1-base/miyako/words.tsv
@@ -175,10 +177,10 @@ jobs:
             grep -Fq "#define MI_ARP_FRAME_W 72u" /tmp/fm1-base/miyako/mi_arp_media.h
             grep -Fq "#define MI_ARP_MAP_BYTES 324u" /tmp/fm1-base/miyako/mi_arp_media.h
             # Standard CRC-protected res.bin, 96x96 original-source images.
-            # 279936 + 32-byte header fits in 69 sectors; saved data untouched.
+            # 281567 + 32-byte header fits in 69 sectors; saved data untouched.
             python3 fm1/native/tools/pack_miyako_resource.py \
               /tmp/fm1-base/miyako/miyako_media.bin
-            test "$(stat -c %s /tmp/fm1-base/miyako/miyako_media.bin)" -eq 279936
+            test "$(stat -c %s /tmp/fm1-base/miyako/miyako_media.bin)" -eq 281567
             # CircleCI pipeline number drives the running UI version, OTA
             # loader and FWSC product marker; fixed 938 is forbidden.
             python3 fm1/native/tools/set_miyako_product_id.py --base /tmp/fm1-base
@@ -292,7 +294,7 @@ jobs:
             test -x "$CLC"
             # All four independent MIYAKO native DSP / video objects.
             # Same CPU, FPU, standard, builtin and optimization policy as fm1-base.
-            for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_pcm7.c mi_slicer.c mi_piano_set1_engine.c mi_piano_set1_51.c mi_piano_set1_58.c mi_piano_set1_65.c mi_control.c mi_video.c; do
+            for unit in mi_fx_dsp.c mi_audio.c mi_recorder.c mi_rec_pcm7.c mi_slicer.c mi_piano_set1_engine.c mi_piano_set1_51.c mi_piano_set1_58.c mi_piano_set1_65.c mi_control.c mi_video.c mi_mhp2_codec_poc.c mi_mhp2_patch_poc.c; do
               "$CLC" -fsyntax-only -std=c99 -Os -mcpu=r3 -mfprev1 -ffp-contract=off \
                 -fno-builtin -Wall -Werror=implicit-function-declaration \
                 -I /tmp/fm1-base/miyako -I /tmp/fm1-base/include \
@@ -424,15 +426,15 @@ jobs:
             test -s /tmp/fm1-base/miyako/build/miyako-res.bin
             cp /tmp/fm1-base/miyako/build/miyako-res.bin \
               fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin
-            test "$(stat -c %s fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin)" -eq 279968
+            test "$(stat -c %s fm1-dist/MIYAKO-FM1-NATIVE-DEV-res.bin)" -eq 281599
             printf '%s\n' \
               'MIYAKO FM-1 NATIVE DEVELOPMENT FIRMWARE' \
               'Built without the KARMA application and DSP.' \
               'REEL, DREAMY, DELAY, REVERB and CHORUS are native FM-1 DSP implementations.' \
               'Original 144 EFFECTS and 576 EUREKA source frames are 16-colour VQ.' \
               'To see all 628 photo tiles, install the matching MIYAKO-FM1-NATIVE-DEV-res.bin with the existing fm1-base resource installer; FWSC-only updates do not include photos.' \
-              'The 628 user photo frames retain their real RGB colours (including sepia sunsets) with 24 per-clip 16-colour palettes in the unchanged stock VQ format.' \
-              'The exact matching 279968-byte MIYAKO-FM1-NATIVE-DEV-res.bin MUST be installed together with this FWSC; old image resources, even when the same size, have different VQ codebooks and are rejected. Use the original resource installer.' \
+              'The 628 user photo frames use 24 16-colour RGB565 palettes with pre-compressed MHP2 dictionaries, and 4170 original-source correction tiles.' \
+              'The exact matching 281599-byte MIYAKO-FM1-NATIVE-DEV-res.bin MUST be installed together with this FWSC; stock VQ resources are rejected. Use the existing fm1-base resource installer.' \
               'RECORDER: three independent 2/4-bar 56-byte log-PCM loop tracks, with per-track overdub, mute, pan, pitch, in/out and level. 2 bars when external MIDI Clock is active.' \
               'SEQ short press: RECORDER (repeat for parameters, MIX and REV/QUANT pages); PRESET selects LOOP 1/2/3. SEQ hold (650ms): independent 4-track FMDrum step sequencer.' \
               'ARP visuals: 162 user-provided complete black/yellow tiles; each audible ARP note-on advances one frame, then carousel frames loop. ARP controls and timing unchanged.' \
@@ -458,4 +460,4 @@ workflows:
       - fm1_native_build:
           filters:
             branches:
-              only: feature/fm1-arp-carousel-yellow-black-20261111
+              only: feature/fm1-sel-mhp2-fw-resource-20261114

@@ -12,3 +12,5 @@ fm1/native/mi_piano_set1_engine.c
 fm1/native/mi_piano_set1_51.c
 fm1/native/mi_piano_set1_58.c
 fm1/native/mi_piano_set1_65.c
+fm1/native/mi_mhp2_codec_poc.c
+fm1/native/mi_mhp2_patch_poc.c

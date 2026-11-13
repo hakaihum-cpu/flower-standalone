@@ -5,7 +5,7 @@ name = "MIYAKO"
 id_prefix = "FM-1_9"
 usb_manufacturer = "MIYAKO"
 usb_product = "MIYAKO FM-1"
-o2 = ["mi_control.c", "mi_audio.c", "mi_fx_dsp.c", "mi_video.c", "mi_recorder.c", "mi_rec_pcm7.c", "mi_slicer.c", "mi_piano_set1_engine.c", "mi_piano_set1_51.c", "mi_piano_set1_58.c", "mi_piano_set1_65.c"]
+o2 = ["mi_control.c", "mi_audio.c", "mi_fx_dsp.c", "mi_video.c", "mi_recorder.c", "mi_rec_pcm7.c", "mi_slicer.c", "mi_piano_set1_engine.c", "mi_piano_set1_51.c", "mi_piano_set1_58.c", "mi_piano_set1_65.c", "mi_mhp2_codec_poc.c", "mi_mhp2_patch_poc.c"]
 ble = false
 ble_central = false
 usb_audio_in = false
@@ -16,7 +16,7 @@ credits = "MIYAKO native application with fm1-base / felucca-bsp hardware suppor
 author = "MIYAKO"
 description = "Native MIYAKO FM-1 development firmware. NOT a complete MIYAKO port."
 tags = ["synth", "utility"]
-# fm1-base standard resource: 96x96 original-source RGB565 16-colour VQ.
+# fm1-base standard res.bin installer, carrying verified offline MHP2+patch payload.
 backup = true
 resources = "miyako_media.bin"
 resources_what = "MIYAKO image data"
