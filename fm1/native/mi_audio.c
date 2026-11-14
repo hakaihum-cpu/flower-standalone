@@ -8,6 +8,7 @@
 #include "mi_fx_dsp.h"
 #include "mi_memory.h"
 #include "mi_piano_set1.h"
+#include "mi_miyako_sample.h"
 static mi_fx_dsp_t native_fx;
 static float clampf(float x,float lo,float hi){return x<lo?lo:x>hi?hi:x;}
 /* Peak compression keeps the slope continuous at +/-0.75, unlike a hard
@@ -74,6 +75,25 @@ void mi_audio_init(mi_audio_t *a,float rate)
     a->video_effective[2]=64u;a->video_effective[3]=64u;
     a->last_mode=MI_FX_OFF;
 }
+/* One-shot 12 kHz PCM8 user WAV: no heap, no new audio bus. */
+static float mi_miyako_tick(float *pos, float step)
+{
+    unsigned i; float p, value, fade;
+    if(!pos)return 0.f;
+    p=*pos;
+    if(p>=(float)MI_MIYAKO_SAMPLES-1.f)return 0.f;
+    if(p<0.f)p=0.f;
+    i=(unsigned)p;
+    value=(float)mi_miyako_pcm[i]+
+          ((float)mi_miyako_pcm[i+1u]-(float)mi_miyako_pcm[i])*(p-(float)i);
+    fade=((float)MI_MIYAKO_SAMPLES-p)/128.f;
+    if(fade>1.f)fade=1.f;
+    if(fade<0.f)fade=0.f;
+    if(step<0.f)step=0.f;
+    if(step>16.f)step=16.f;
+    *pos=p+step;
+    return (value-128.f)*(1.f/128.f)*fade;
+}
 /* Nearest original keys: MIDI 51, 58, 65. */
 static unsigned piano_zone(uint8_t note){return note<=54u?0u:note<=61u?1u:2u;}
 void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
@@ -99,6 +119,8 @@ void mi_audio_note_on(mi_audio_t *a,uint8_t note,uint8_t velocity)
     v->piano_step=(float)MI_PIANO_SET1_RATE/a->sample_rate*
                   note_freq((int)note)/
                   note_freq((int)mi_piano_set1_roots[v->piano_zone]);
+    v->miyako_step=(float)MI_MIYAKO_RATE/a->sample_rate*
+                   note_freq((int)note)/note_freq(65);
 }
 void mi_audio_note_off(mi_audio_t *a,uint8_t note)
 {
@@ -469,7 +491,7 @@ static void apply_lfo_destination(mi_state_t *m,unsigned dest,float depth)
     case 44:mod_fx_extra(m,second,2u,depth);break;
     case 45:mod_fx_extra(m,second,3u,depth);break;
     MOD(46,osc2_octave,4u);MOD(47,osc1_wave,3u);
-    MOD(48,osc2_wave,3u);MOD(49,wave,MI_WAVE_PIANO);
+    MOD(48,osc2_wave,3u);MOD(49,wave,MI_WAVE_MIYAKO);
     MOD(50,fx,MI_FX_COUNT-1u);MOD(51,fx2,MI_FX_COUNT-1u);
     MOD(52,arp[0],4u);MOD(53,lfo[0],127u);
     MOD(54,lfo[1],3u);MOD(55,lfo[2],127u);
@@ -755,6 +777,26 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
             }else{
                 v->env-=v->release_step;
                 if(v->env<=0.f){v->env=0.f;v->active=0u;continue;}
+            }
+            if(rs->wave==MI_WAVE_MIYAKO){
+                /* F3 is reserved as silence; note 54..79 are 26 keys.
+                 * The same original F4 PCM is pitch-correctly read per key.
+                 * Existing ENV/FILTER/FX/REC routing remains unchanged. */
+                float pitch_mod=rs->lfo[3]==0u?
+                    clampf(1.f+mod*0.059f,0.8f,1.2f):1.f;
+                float value;
+                if(v->note==53u || v->piano_pos>=(float)MI_MIYAKO_SAMPLES-1.f){
+                    v->active=0u;
+                    continue;
+                }
+                value=mi_miyako_tick(&v->piano_pos,v->miyako_step*pitch_mod);
+                if(rs->lfo[3]==2u)
+                    value*=clampf(1.f-0.5f*(float)rs->lfo[2]/127.f*
+                                   (1.f-lfo),0.f,1.f);
+                value*=v->env*(v->vel/127.f)*0.36f;
+                sample+=value;
+                osc_capture+=value;
+                continue;
             }
             if(rs->wave==MI_WAVE_PIANO){
                 /* Flash-backed Wingie2 SET1 goes through the normal OSC
