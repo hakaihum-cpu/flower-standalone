@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pack approved original-source MHP2 SEL images for the existing FM-1 resource installer.
+"""Pack Runway-recolored user-source MHP2 SEL images for the existing FM-1 resource installer.
 
 The FM-1 file contains a CRC32-protected MHP2 core and a per-frame tile
 correction directory. It is NOT an installable resource by itself: the
@@ -15,13 +15,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 CHUNK_DIR = ROOT / 'Resources' / 'fm1_mhp2_96_chunks'
-PAYLOAD_BYTES = 282071
-SHA256 = '35ab028b0bb48659ecab47c36afe2a4c6873e6b91f29c0b46313606f41cb5a3f'
+PAYLOAD_BYTES = 280651
+SHA256 = '2426992e3f5c06870a654c49086923293e6c00247a1796f9f14048824bf1c17c'
 RESOURCE_CAPACITY = 69 * 4096 - 32
 FILES = 12
 PALETTE_CLIPS = 24
 PALETTE_ENTRIES = 16
-MHP2_CORE_BYTES = 209067
+MHP2_CORE_BYTES = 200735
 MHP2_OVERLAY_BYTES = PAYLOAD_BYTES - MHP2_CORE_BYTES
 FRAMES = 628
 FRAME_OFFSETS_BYTES = (FRAMES + 1) * 4
@@ -62,7 +62,7 @@ def read_payload(directory: Path) -> bytes:
             for v in overlay[FRAME_OFFSETS_BYTES + off + 2:FRAME_OFFSETS_BYTES + off + 18]:
                 if (v >> 4) > 15 or (v & 15) > 15:
                     raise ValueError('MHP2 palette index overflow')
-    if patches != 3916:
+    if patches != 4300:
         raise ValueError(f'MHP2 correction count mismatch: {patches}')
     palettes = []
     for clip in range(PALETTE_CLIPS):
@@ -70,7 +70,7 @@ def read_payload(directory: Path) -> bytes:
         if len(set(pal)) < 15:
             raise ValueError(f'MHP2 palette too small clip {clip}')
         palettes.append(pal)
-    print(f'PASS MHP2 resource: {len(data)}B, {FRAMES} frames, {patches} source patches, 16 RGB565 colours/clip')
+    print(f'PASS MHP2 resource: {len(data)}B, {FRAMES} frames, {patches} color-detail patches, 16 RGB565 colours/clip')
     return data
 
 
