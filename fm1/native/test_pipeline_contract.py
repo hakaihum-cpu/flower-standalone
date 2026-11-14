@@ -571,7 +571,7 @@ assert 'return "PWIDTH";' in controls
 # Current user requirements: original animation into normal SEL (not FX-only),
 # no newly invented video codec or new CircleCI workflow; multi-OSC and overdub.
 # The old 488-frame compile-time atlas is NOT part of the active firmware.
-# All 628 photo frames now come from the CRC-checked separate resource.
+# All 645 active photo frames now come from the CRC-checked separate resource.
 # Reject accidental reintroduction of the obsolete atlas into the renderer.
 assert '#include "mi_dreamy_dot_portrait.h"' not in ui
 assert "mi_dreamy_dot_draw_half" not in ui
@@ -629,16 +629,16 @@ assert 'APP_RES_BASE 0x97000u' in app_header
 assert 'APP_RES_SECTORS 69u' in app_header
 assert 'APP_STORE_MAP {0xFC000u, 0xDC000u}' in app_header
 assert 'APP_BACKUP_OBJS {OBJ_SETTINGS}' in app_header
-assert 'MI_TILE_MHP2_OVERLAY_BYTES 79916u' in resource_header
-assert 'MI_TILE_MHP2_CORE_BYTES 200735u' in resource_header
+assert 'MI_TILE_MHP2_OVERLAY_BYTES 79336u' in resource_header
+assert 'MI_TILE_MHP2_CORE_BYTES 203248u' in resource_header
 assert 'MI_TILE_VQ_MAP_STRIDE 288u' in resource_header
 assert 'MI_TILE_VQ_FRAMES_PER_CLIP 27u' in resource_header
 assert 'MI_TILE_SIDE 96u' in resource_header
-assert 'MI_TILE_COUNT 628u' in resource_header
+assert 'MI_TILE_COUNT 645u' in resource_header
 assert 'MI_TILE_BANKS 8u' in resource_header
-assert 'MI_TILE_DATA_BYTES 280651u' in resource_header
+assert 'MI_TILE_DATA_BYTES 282584u' in resource_header
 assert 'test_miyako_resource96.py' in ci
-assert '280683' in ci and '280651' in ci
+assert '282616' in ci and '282584' in ci
 assert '#include "mi_resource_media.h"' in ui and 'mi_photo_source(&length)' in ui
 assert "mi_resource_media.h" in ci
 assert "pack_miyako_resource.py" in ci
@@ -722,7 +722,7 @@ assert "spin K1 -3\nexpect fx 2" in host_fx
 assert "spin PRESET 1" not in host_fx
 # The archived 628 user frames now use the MHP2 source-reconstruction layout
 # with 24 SOURCE-RGB palettes, not the previous grayscale recolour.
-assert "2426992e3f5c06870a654c49086923293e6c00247a1796f9f14048824bf1c17c" in resource_packer
+assert "a83500a38d95fa341b998f09d1ef1d8cf05ae04bea9879e3476cb42ac631d74e" in resource_packer
 assert "RESOURCE_CAPACITY = 69 * 4096 - 32" in resource_packer
 assert "PALETTE_CLIPS = 24" in resource_packer
 assert "return data" in resource_packer
@@ -737,7 +737,7 @@ assert len(manifest_photo["files"]) == 8
 assert "photo96_rebuild.py" in (
     root / "fm1/native/tools/PHOTO96_REBUILD.md").read_text()
 assert "MI_TILE_RESOURCE_RGB_SOURCE 1u" in resource_header
-assert "MI_TILE_MHP2_CORE_BYTES 200735u" in resource_header
+assert "MI_TILE_MHP2_CORE_BYTES 203248u" in resource_header
 assert "mi_photo_grayscale_palette" not in ui
 assert "mi_photo_palette[i]=mi_photo_decoder.palette[i]" in ui
 assert "mi_mhp2_decode(&mi_photo_decoder" in ui

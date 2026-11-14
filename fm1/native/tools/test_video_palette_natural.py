@@ -16,10 +16,10 @@ from pack_miyako_resource import read_payload, CHUNK_DIR, SHA256
 import hashlib
 import re
 
-# The active 628-frame Runway recolor uses 24 independent RGB565 palettes.
+# The active 645-frame Runway recolor uses 24 independent RGB565 palettes.
 # It is decoded from MHP2, not the archived original-source VQ resource.
 resource = read_payload(CHUNK_DIR)
-assert SHA256 == "2426992e3f5c06870a654c49086923293e6c00247a1796f9f14048824bf1c17c"
+assert SHA256 == "a83500a38d95fa341b998f09d1ef1d8cf05ae04bea9879e3476cb42ac631d74e"
 assert hashlib.sha256(resource).hexdigest() == SHA256
 app_source = (Path(__file__).resolve().parents[1] / "app.c").read_text()
 header = (Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pack Runway-colored 628-frame MHP2 SEL images for the existing FM-1 resource installer.
+"""Pack Runway-colored 645-frame MHP2 SEL images for the existing FM-1 resource installer.
 
 The FM-1 file contains a CRC32-protected MHP2 core and a per-frame tile
 correction directory. It is NOT an installable resource by itself: the
@@ -15,15 +15,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 CHUNK_DIR = ROOT / 'Resources' / 'fm1_mhp2_96_chunks'
-PAYLOAD_BYTES = 280651
-SHA256 = '2426992e3f5c06870a654c49086923293e6c00247a1796f9f14048824bf1c17c'
+PAYLOAD_BYTES = 282584
+SHA256 = 'a83500a38d95fa341b998f09d1ef1d8cf05ae04bea9879e3476cb42ac631d74e'
 RESOURCE_CAPACITY = 69 * 4096 - 32
 FILES = 12
 PALETTE_CLIPS = 24
 PALETTE_ENTRIES = 16
-MHP2_CORE_BYTES = 200735
+MHP2_CORE_BYTES = 203248
 MHP2_OVERLAY_BYTES = PAYLOAD_BYTES - MHP2_CORE_BYTES
-FRAMES = 628
+FRAMES = 645
 FRAME_OFFSETS_BYTES = (FRAMES + 1) * 4
 
 
@@ -46,7 +46,7 @@ def read_payload(directory: Path) -> bytes:
     if len(data[MHP2_CORE_BYTES:]) != MHP2_OVERLAY_BYTES:
         raise ValueError('MHP2 overlay length mismatch')
     overlay = data[MHP2_CORE_BYTES:]
-    directory_entries = struct.unpack_from('<629I', overlay)
+    directory_entries = struct.unpack_from('<646I', overlay)
     if directory_entries[0] or directory_entries[-1] != MHP2_OVERLAY_BYTES - FRAME_OFFSETS_BYTES:
         raise ValueError('MHP2 overlay directory invalid')
     patches = 0
@@ -62,7 +62,7 @@ def read_payload(directory: Path) -> bytes:
             for v in overlay[FRAME_OFFSETS_BYTES + off + 2:FRAME_OFFSETS_BYTES + off + 18]:
                 if (v >> 4) > 15 or (v & 15) > 15:
                     raise ValueError('MHP2 palette index overflow')
-    if patches != 4300:
+    if patches != 4264:
         raise ValueError(f'MHP2 correction count mismatch: {patches}')
     palettes = []
     for clip in range(PALETTE_CLIPS):

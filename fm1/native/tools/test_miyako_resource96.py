@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exhaustive offline 628-frame validation of encoded MHP2+corrections.
+"""Exhaustive offline 645-frame validation of encoded MHP2+corrections.
 
 Run in existing first-stage CircleCI source checks, before FWSC creation.
 No source frames are generated or rewritten here.
@@ -12,19 +12,19 @@ from pathlib import Path
 from pack_miyako_resource import read_payload, CHUNK_DIR, MHP2_CORE_BYTES
 from mhp2 import unpack
 
-COUNT=628
-PIXEL_SHA256='387652dd94d90d51d2f636320a72449c1557bacdf759d7cb2f62999c15e6d4a0'
-BANK_SIZES=(81,64,100,81,81,81,70,70)
+COUNT=645
+PIXEL_SHA256='4187c7f9ecd606da56b964f8cc993c125052eb47ba4cb750b74bbb5240c44d24'
+BANK_SIZES=(90,72,81,100,81,81,70,70)
 
 
 def check(data: bytes) -> None:
     if sum(BANK_SIZES) != COUNT:
-        raise AssertionError('SEL banks do not add up to 628')
-    legacy = unpack(data[:MHP2_CORE_BYTES])
-    if len(legacy) != 279936:
-        raise AssertionError('MHP2 core not 628 original-index frames')
+        raise AssertionError('SEL banks do not add up to 645')
+    legacy = unpack(data[:MHP2_CORE_BYTES], frame_count=COUNT)
+    if len(legacy) != 284832:
+        raise AssertionError('MHP2 core not 645 original-index frames')
     overlay=data[MHP2_CORE_BYTES:]
-    frame_offsets=struct.unpack_from('<629I', overlay)
+    frame_offsets=struct.unpack_from('<646I', overlay)
     digest=hashlib.sha256()
     seen=set()
     distinct_min=16
@@ -43,7 +43,7 @@ def check(data: bytes) -> None:
                         pixels[y+2*col]=v>>4
                         pixels[y+2*col+1]=v&15
         for off in range(frame_offsets[f],frame_offsets[f+1],18):
-            start=2516+off
+            start=2584+off
             tile=struct.unpack_from('<H',overlay,start)[0]
             ty,tx=divmod(tile,12)
             correction=overlay[start+2:start+18]
@@ -64,8 +64,8 @@ def check(data: bytes) -> None:
         digest.update(pixels)
     got=digest.hexdigest()
     if got != PIXEL_SHA256:
-        raise AssertionError(f'628-frame exact pixels changed: {got}')
-    print(f'PASS MHP2: 628 frames, 24 clip palettes, 4300 Runway detail correction tiles, {distinct_min}+ colours/frame, SHA256 {got}')
+        raise AssertionError(f'645-frame exact pixels changed: {got}')
+    print(f'PASS MHP2: 628 frames, 24 clip palettes, 4264 Runway detail correction tiles, {distinct_min}+ colours/frame, SHA256 {got}')
 
 
 if __name__=='__main__':

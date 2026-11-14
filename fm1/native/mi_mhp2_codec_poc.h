@@ -5,7 +5,7 @@
 #ifndef MI_MHP2_CODEC_POC_H
 #define MI_MHP2_CODEC_POC_H
 #include <stdint.h>
-#define MI_MHP2_FRAME_COUNT 628u
+#define MI_MHP2_FRAME_COUNT 645u
 #define MI_MHP2_CLIP_COUNT 24u
 #define MI_MHP2_FRAME_BYTES 4608u
 #define MI_MHP2_DICT_BYTES 4096u

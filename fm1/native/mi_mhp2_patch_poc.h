@@ -6,7 +6,7 @@
 #define MI_MHP2_PATCH_POC_H
 #include <stdint.h>
 #include "mi_mhp2_codec_poc.h"
-/* Packed 629-entry uint32 frame directory, followed by 18-byte records:
+/* Packed 646-entry uint32 frame directory, followed by 18-byte records:
  * uint16 tile_id (0..287), 16 bytes exact source palette indices (8x4 4bpp).
  * Caller must provide a CRC-protected resource and bounds-checked length.
  */

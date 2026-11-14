@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static uint8_t reference[279936u];
+static uint8_t reference[284832u];
 static uint8_t encoded[MI_MHP2_RESOURCE_MAX];
 static uint8_t pixels[MI_MHP2_FRAME_BYTES];
 static uint8_t expected[MI_MHP2_FRAME_BYTES];
@@ -83,6 +83,6 @@ int main(int argc,char **argv){
     if(mi_mhp2_init(&decoder,encoded,(uint32_t)encsize)){
         fprintf(stderr,"accepted corrupted resource CRC\n");return 1;
     }
-    printf("PASS C MHP2: 628 forward + 628 reverse + 628 random; exact 96x96 packed pixels + 16 RGB565 palette; rejects corrupt CRC\n");
+    printf("PASS C MHP2: 645 forward + 645 reverse + 645 random; exact 96x96 packed pixels + 16 RGB565 palette; rejects corrupt CRC\n");
     return 0;
 }

@@ -2,7 +2,7 @@
  * Independent MIYAKO FM-1 app using only fm1-base's hardware platform API.
  * This is an INCOMPLETE port. Original EFFECTS and EUREKA frames are
  * encoded at build time (16-colour lossy VQ); additionally, the six
- * user-supplied image sheets are 628 frames in eight 16-colour resource banks.
+ * user-supplied image sheets are 645 frames in eight 16-colour resource banks.
  * Full original MIYAKO DSP and independent video banks are not yet present.
  * Do not release this development image as the approved MIYAKO firmware.
  *
@@ -898,7 +898,7 @@ static void mi_media_decode(unsigned frame,unsigned eureka)
  * original animation (128x78 -> 240x146) centered at y=47, with no labels
  * or hidden FX parameter values. No source pixels are cropped or stretched.
  */
-/* Eight photo banks, 628 frames, rebuilt from approved original sheets at 96x96. */
+/* Eight photo banks, 645 frames, rebuilt from approved original sheets at 96x96. */
 /* Photo frames use the separately installed 96x96 RGB565 resource;
  * EFFECTS/EUREKA still use their independent compiled 128x78 VQ tables. */
 /* Display effect follows the actual active FX, independently of which
@@ -1046,7 +1046,7 @@ static void mi_image_rect(int32_t x,int32_t y,int32_t w,int32_t h,
     if(y+h>120)h=120-y;
     if(w>0&&h>0)cv_rect(x,y,w,h,rgb);
 }
-/* 628 original-source frames: MHP2 Huffman VQ plus exact 8x4 corrections.
+/* 645 border-aligned Runway-color frames: MHP2 Huffman VQ plus exact 8x4 corrections.
  * Off-line encoder only; this code only decodes a CRC-protected res.bin.
  * The existing upstream installer handles the 32-byte resource header. */
 static uint8_t mi_photo_pixels[MI_TILE_SIDE*MI_TILE_SIDE/2u];

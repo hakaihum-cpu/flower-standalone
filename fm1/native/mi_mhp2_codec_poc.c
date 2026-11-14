@@ -9,7 +9,7 @@
 #define MI_MHP2_LENGTHS (24u*2u*160u)
 #define MI_MHP2_MODES 24u
 #define MI_MHP2_BOOK_DIR (25u*4u)
-#define MI_MHP2_FRAME_DIR (629u*4u)
+#define MI_MHP2_FRAME_DIR (646u*4u)
 #define MI_MHP2_MIN_PAYLOAD (MI_MHP2_HEADER+MI_MHP2_PALS+MI_MHP2_LENGTHS+MI_MHP2_MODES+MI_MHP2_BOOK_DIR+MI_MHP2_FRAME_DIR)
 
 typedef struct {
@@ -118,16 +118,16 @@ int mi_mhp2_init(mi_mhp2_t *st, const uint8_t *p, uint32_t n) {
     if(!st||!p||n<MI_MHP2_MIN_PAYLOAD||n>MI_MHP2_RESOURCE_MAX)return 0;
     if(p[0]!='M'||p[1]!='H'||p[2]!='P'||p[3]!='2'||
        mi_u16(p+4u)!=1u||mi_u16(p+6u)!=0u||mi_u32(p+8u)!=n||
-       mi_u16(p+16u)!=24u||mi_u16(p+18u)!=628u||
+       mi_u16(p+16u)!=24u||mi_u16(p+18u)!=645u||
        mi_u16(p+20u)!=96u||mi_u16(p+22u)!=96u)return 0;
     if(mi_u32(p+24u)!=64u||mi_u32(p+28u)!=832u||
        mi_u32(p+32u)!=8512u||mi_u32(p+36u)!=8536u||
-       mi_u32(p+40u)!=8636u||mi_u32(p+44u)!=11152u)return 0;
+       mi_u32(p+40u)!=8636u||mi_u32(p+44u)!=11220u)return 0;
     bookstart=mi_u32(p+44u);framestart=mi_u32(p+48u);
     if(framestart<bookstart||framestart>n)return 0;
     if(mi_u32(p+8536u)!=0u||mi_u32(p+8636u)!=0u||
        mi_u32(p+8536u+24u*4u)!=framestart-bookstart||
-       mi_u32(p+8636u+628u*4u)!=n-framestart)return 0;
+       mi_u32(p+8636u+645u*4u)!=n-framestart)return 0;
     if(mi_crc32(p+64u,n-64u)!=mi_u32(p+12u))return 0;
     st->blob=p;st->length=n;st->cached_clip=0xffffu;
     return 1;
@@ -152,7 +152,7 @@ int mi_mhp2_decode(mi_mhp2_t *st, uint16_t frame, uint8_t out_pixels[MI_MHP2_FRA
             st->palette[i]=mi_u16(p+64u+clip*32u+i*2u);
         st->cached_clip=(uint16_t)clip;
     }
-    if(!mi_dir_bounds(p,8636u,628u,(unsigned)frame,st->length-framestart,&a,&b))return 0;
+    if(!mi_dir_bounds(p,8636u,645u,(unsigned)frame,st->length-framestart,&a,&b))return 0;
     if(!mi_read_huff_table(p+832u+clip*320u+160u,&h))return 0;
     rd.data=p+framestart+a;rd.length=b-a;rd.bit=0u;
     limit=p[8512u+clip];

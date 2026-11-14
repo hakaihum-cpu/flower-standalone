@@ -275,11 +275,17 @@ def pack(source: bytes):
     return data, report
 
 
-def unpack(data: bytes) -> bytes:
+def unpack(data: bytes, *, frame_count: int = FRAMES) -> bytes:
+    """Read MHP2 archives with the 628-frame legacy or 645-frame border-corrected count.
+
+    Encoding of the historical 628-frame archive remains unchanged.
+    """
+    if frame_count not in (628, 645):
+        raise ValueError("unsupported MHP2 frame count")
     if len(data) < HEADER or data[:4] != MAGIC:
         raise ValueError("not MHP2")
     magic, ver, flags, declared, crc, clips, frames, w, h = struct.unpack_from("<4sHHIIHHHH", data)
-    if ver != VERSION or flags or declared != len(data) or clips != CLIPS or frames != FRAMES or (w,h) != (WIDTH, HEIGHT):
+    if ver != VERSION or flags or declared != len(data) or clips != CLIPS or frames != frame_count or (w,h) != (WIDTH, HEIGHT):
         raise ValueError("bad MHP2 header")
     if zlib.crc32(data[HEADER:]) != crc:
         raise ValueError("MHP2 checksum mismatch")
@@ -295,13 +301,13 @@ def unpack(data: bytes) -> bytes:
     if any(x not in (0,1) for x in modes):
         raise ValueError("unsupported MHP2 map mode")
     books_index = struct.unpack_from("<" + "I" * (CLIPS + 1), data, o[3])
-    frame_index = struct.unpack_from("<" + "I" * (FRAMES + 1), data, o[4])
+    frame_index = struct.unpack_from("<" + "I" * (frame_count + 1), data, o[4])
     if books_index[0] or frame_index[0] or books_index[-1] != o[6] - o[5] or frame_index[-1] != len(data) - o[6]:
         raise ValueError("MHP2 directory terminal offset invalid")
     if any(x > y for x,y in zip(books_index, books_index[1:])) or any(x > y for x,y in zip(frame_index, frame_index[1:])):
         raise ValueError("MHP2 directory not monotonic")
     book_results = []
-    map_results = [None] * FRAMES
+    map_results = [None] * frame_count
     for clip in range(CLIPS):
         tab = o[1] + clip * 2 * TABLE_BYTES
         b_lengths = unpack_lengths(data[tab:tab + TABLE_BYTES])
@@ -315,7 +321,7 @@ def unpack(data: bytes) -> bytes:
         if (stream.pos + 7) // 8 != b-a:
             raise ValueError("dictionary padding invalid")
         book_results.append(book)
-        for f in range(clip * 27, min((clip + 1) * 27, FRAMES)):
+        for f in range(clip * 27, min((clip + 1) * 27, frame_count)):
             a = o[6] + frame_index[f]
             b = o[6] + frame_index[f+1]
             map_results[f] = decode_map(data[a:b], m_dec, m_max, modes[clip])
