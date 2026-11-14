@@ -16,19 +16,19 @@ from pack_miyako_resource import read_payload, CHUNK_DIR, SHA256
 import hashlib
 import re
 
-# The exact 628-frame archive now contains 24 independent RGB565 palettes
-# reconstructed from the eight SHA-verified original user image sheets.
-# The last contact sheet includes real yellow and sunset hues.
+# The active 628-frame Runway recolor uses 24 independent RGB565 palettes.
+# It is decoded from MHP2, not the archived original-source VQ resource.
 resource = read_payload(CHUNK_DIR)
-assert SHA256 == "df517e2d8c7902bed076610a07876dee660890799ba5dec6bc12bf366783bcf4"
+assert SHA256 == "2426992e3f5c06870a654c49086923293e6c00247a1796f9f14048824bf1c17c"
 assert hashlib.sha256(resource).hexdigest() == SHA256
 app_source = (Path(__file__).resolve().parents[1] / "app.c").read_text()
 header = (Path(__file__).resolve().parents[1] / "mi_resource_media.h").read_text()
 assert re.search(r"static\s+uint16_t\s+mi_photo_palette\[16\];", app_source)
 assert "res=plat_res(length);" in app_source
 assert "res=mi_photo_source(&length);" in app_source
-assert "mi_photo_palette[i]=(uint16_t)" in app_source
-assert "((uint16_t)res[offset+1u]<<8u)" in app_source
+assert "mi_mhp2_decode(&mi_photo_decoder" in app_source
+assert "mi_mhp2_apply_patch(res+MI_TILE_MHP2_CORE_BYTES" in app_source
+assert "mi_photo_palette[i]=mi_photo_decoder.palette[i];" in app_source
 assert "MI_TILE_RESOURCE_RGB_SOURCE 1u" in header
 assert "mi_photo_grayscale_palette" not in app_source
 assert "mi_photo_palette[idx]" in app_source
