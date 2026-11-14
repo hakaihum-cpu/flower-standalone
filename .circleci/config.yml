@@ -27,7 +27,7 @@ jobs:
           name: Verify exact MIYAKO branch and zero KARMA source closure
           command: |
             set -eu
-            test "$CIRCLE_BRANCH" = "feature/fm1-runway645-borderfix-crisp-20261114"
+            test "$CIRCLE_BRANCH" = "feature/fm1-osc-miyako-wav-20261114"
             # GitHub App and OAuth checkouts may use HTTPS or SSH. Check
             # the actual checkout origin, not just the branch display name.
             source_url="$(git remote get-url origin 2>/dev/null || true)"
@@ -461,4 +461,4 @@ workflows:
       - fm1_native_build:
           filters:
             branches:
-              only: feature/fm1-runway645-borderfix-crisp-20261114
+              only: feature/fm1-osc-miyako-wav-20261114
