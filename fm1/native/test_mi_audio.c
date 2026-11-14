@@ -402,6 +402,31 @@ int main(void)
     mi_audio_input_on(&a,&s,65u,120u);
     assert(a.v[0].piano_zone==2u);
  }
+ /* MIYAKO user WAV: 27-key span F3..G5, with only F3 silent.
+  * Check real audio output and pitch scaling rather than only wave labels. */
+ {
+     static const uint8_t notes[] = {53u,54u,65u,79u,80u};
+     float lower=0.f, root=0.f, upper=0.f;
+     unsigned n;
+     for(n=0u;n<sizeof(notes);n++){
+         unsigned count=0u;
+         mi_init(&s);mi_audio_init(&a,44100.f);
+         s.wave=MI_WAVE_MIYAKO;
+         s.fx=MI_FX_OFF;s.fx2=MI_FX_OFF;
+         mi_audio_input_on(&a,&s,notes[n],127u);
+         if(notes[n]==54u)lower=a.v[0].miyako_step;
+         if(notes[n]==65u)root=a.v[0].miyako_step;
+         if(notes[n]==79u)upper=a.v[0].miyako_step;
+         for(i=0u;i<40u;i++){
+             mi_audio_render(&a,&s,lr,256u,4096u);
+             for(j=0u;j<512u;j++)if(lr[j]!=0)++count;
+         }
+         if(notes[n]==53u||notes[n]==80u)assert(count==0u);
+         else assert(count>1000u);
+         mi_audio_input_off(&a,&s,notes[n]);
+     }
+     assert(lower>0.f && lower<root && root<upper);
+ }
  /* ARP K2 timing is calculated by the audio sample clock, not by
   * animation/UI ticks: 120 BPM -> 1/4, 1/8, 1/16, 1/32 in order. */
  for(i=0u;i<4u;i++){
