@@ -881,15 +881,15 @@ assert "MI_WAVE_PIANO" in (root / "fm1/native/mi_control.h").read_text()
 miyako_sample = root / "fm1/native/mi_miyako_sample.h"
 assert miyako_sample.is_file(), "Missing converted user WAV: mi_miyako_sample.h"
 miyako_pcm = miyako_sample.read_text(encoding="utf-8")
-assert "#define MI_MIYAKO_RATE 12000u" in miyako_pcm
+assert "#define MI_MIYAKO_RATE 3000u" in miyako_pcm
 assert "MI_MIYAKO_SAMPLES" in miyako_pcm and "mi_miyako_pcm" in miyako_pcm
 # Validate the actual user WAV-derived PCM bytes, not just a comment or length.
 mi_pcm_bytes = bytes(int(b, 16) for b in
                      re.findall(r"\\x([0-9a-f]{2})", miyako_pcm))
-assert len(mi_pcm_bytes) == 38400
+assert len(mi_pcm_bytes) == 5400
 import hashlib as _mi_hash
 assert _mi_hash.sha256(mi_pcm_bytes).hexdigest() == (
-    "95921a195391660e9387c6ca67b4155fa16e5a8ee3f3868283391b9d613e5100"
+    "d9a19d23354c5b0bd3e28e10005e00518d108002ba5af0e179041dbe95968692"
 ), "MIYAKO WAV PCM payload modified"
 assert "fm1/native/mi_miyako_sample.h" in ci, "WAV must be staged for target"
 assert "v->note<54u || v->note>79u" in audio
