@@ -196,10 +196,10 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
         unsigned left=(unsigned)(delta>0?delta:-delta);
         /* Only seven top-level waveforms: extra turns at either limit
          * cannot change state, so avoid 4096 audio-frame loop iterations. */
-        if(left>MI_WAVE_PIANO)left=MI_WAVE_PIANO;
+        if(left>MI_WAVE_MIYAKO)left=MI_WAVE_MIYAKO;
         while(left--){
             uint8_t old=s->wave;
-            s->wave=(uint8_t)limited(s->wave,direction,0,MI_WAVE_PIANO);
+            s->wave=(uint8_t)limited(s->wave,direction,0,MI_WAVE_MIYAKO);
             if(s->wave==old)break;
             if(old==3u&&s->wave==MI_WAVE_MULTI){
                 s->osc1_wave=old;
@@ -248,7 +248,7 @@ static void knob(mi_state_t *s, unsigned k, int32_t d)
             if(k==3)p=&s->drum_level;
         }else if(s->osc_page==0u){
             if(k==0){p=s->wave==MI_WAVE_MULTI?&s->osc1_wave:&s->wave;
-                 hi=s->wave==MI_WAVE_MULTI?3:MI_WAVE_PIANO;}
+                 hi=s->wave==MI_WAVE_MULTI?3:MI_WAVE_MIYAKO;}
             if(k==1)p=&s->width;
             if(k==2)p=&s->sub;
             if(k==3)p=&s->crush;
@@ -380,7 +380,7 @@ mi_result_t mi_rotate(mi_state_t *s, mi_encoder_t e, int32_t steps)
         }else{
             uint8_t old=s->wave;
             s->wave=(uint8_t)limited(s->wave,steps>0?1:-1,0,
-                                     s->view==MI_HOME?MI_WAVE_PIANO:MI_WAVE_PIANO);
+                                     s->view==MI_HOME?MI_WAVE_MIYAKO:MI_WAVE_MIYAKO);
             if(old!=MI_WAVE_MULTI&&s->wave==MI_WAVE_MULTI){
                 if(old<=3u)s->osc1_wave=old;
                 if(s->osc2_level==0u)s->osc2_level=64u;
@@ -461,7 +461,7 @@ int mi_state_valid(const mi_state_t *s)
 {
     unsigned i, j;
     if (!s || (unsigned)s->view >= MI_VIEW_COUNT ||
-        s->wave > MI_WAVE_PIANO || s->osc1_wave > 3u ||
+        s->wave > MI_WAVE_MIYAKO || s->osc1_wave > 3u ||
         s->width > 127u || s->sub > 127u ||
         s->crush > 127u || s->level > 127u ||
         s->fx >= MI_FX_COUNT || s->fx2 >= MI_FX_COUNT ||
@@ -538,8 +538,8 @@ int mi_rec_cc(mi_state_t *s,unsigned cc,unsigned value)
 }
 const char *mi_wave_name(unsigned wave)
 {
-    static const char *const names[] = {"SINE","SAW","SQUARE","PULSE","MULTI","FMDRUM","PIANO"};
-    return wave<=MI_WAVE_PIANO?names[wave]:"?";
+    static const char *const names[] = {"SINE","SAW","SQUARE","PULSE","MULTI","FMDRUM","PIANO","MIYAKO"};
+    return wave<=MI_WAVE_MIYAKO?names[wave]:"?";
 }
 const char *mi_arp_mode_name(unsigned mode)
 {
