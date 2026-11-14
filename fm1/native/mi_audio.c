@@ -75,7 +75,7 @@ void mi_audio_init(mi_audio_t *a,float rate)
     a->video_effective[2]=64u;a->video_effective[3]=64u;
     a->last_mode=MI_FX_OFF;
 }
-/* One-shot 12 kHz PCM8 user WAV: no heap, no new audio bus. */
+/* App-slot-fitted 3 kHz PCM8 user WAV: no heap or new audio bus. */
 static float mi_miyako_tick(float *pos, float step)
 {
     unsigned i; float p, value, fade;
