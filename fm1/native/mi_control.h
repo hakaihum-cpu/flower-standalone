@@ -96,6 +96,7 @@ const char *mi_wave_name(unsigned wave);
 #define MI_WAVE_MULTI 4u
 #define MI_WAVE_FMDRUM 5u
 #define MI_WAVE_PIANO 6u /* Wingie2 SET1 original source, three flash zones */
+#define MI_WAVE_MIYAKO 7u /* User WAV sample, local F3 silent */
 /* MIDI CC#21 on any channel controls REC PITCH's existing seven values. */
 #define MI_REC_PITCH_CC 21u
 /* New, non-overlapping REC control bank: CC22..24 level, 25..27 pan,
