@@ -34,3 +34,6 @@ Only use the existing CircleCI `fm1_manual` workflow on this feature branch with
 5. User's FM-1 physical test: boot, SEL/FX display, 628-bank scene handling, image color, play/loop audio without dropouts.
 
 Prior unapproved warm-colored resource is not accepted output of this branch.
+
+## Native C decoder validation added to existing manual CI job
+The existing `fm1_manual` job now generates temporary host fixtures from the actual Runway resource; it compiles the actual MHP2 decoder and patch source with `-Wall -Wextra -Werror -fsanitize=address,undefined` and executes 628 forward, reverse and pseudo-random frame checks, including a bad-CRC rejection test, before video encoding/target build. This remains unexecuted until the manual pipeline is run.

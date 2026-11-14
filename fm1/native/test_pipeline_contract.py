@@ -638,6 +638,8 @@ assert 'MI_TILE_COUNT 628u' in resource_header
 assert 'MI_TILE_BANKS 8u' in resource_header
 assert 'MI_TILE_DATA_BYTES 280651u' in resource_header
 assert 'test_miyako_resource96.py' in ci
+assert 'export_runway_mhp2_host_fixtures.py' in ci
+assert 'test_mi_mhp2_codec_poc.c' in ci
 assert '280683' in ci and '280651' in ci
 assert '#include "mi_resource_media.h"' in ui and 'mi_photo_source(&length)' in ui
 assert "mi_resource_media.h" in ci

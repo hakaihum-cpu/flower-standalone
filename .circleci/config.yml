@@ -64,6 +64,20 @@ jobs:
             grep -Fq "#define MI_UI_ENV_COUNT 90u" /tmp/mi_ui_preflight.h
             grep -Fq "mi_ui_start_maps" /tmp/mi_ui_preflight.h
             python3 fm1/native/tools/test_miyako_resource96.py
+            # Exercise real FM1 C codec on actual Runway resource before target build.
+            # 628 forward + 628 reverse + 628 random + CRC corruption check.
+            python3 fm1/native/tools/export_runway_mhp2_host_fixtures.py \
+              --out /tmp/mi_runway628_c_test_files
+            cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+              -fsanitize=address,undefined -fno-sanitize-recover=all \
+              fm1/native/mi_mhp2_codec_poc.c fm1/native/mi_mhp2_patch_poc.c \
+              fm1/native/test_mi_mhp2_codec_poc.c \
+              -o /tmp/mi_runway628_c_test
+            /tmp/mi_runway628_c_test \
+              /tmp/mi_runway628_c_test_files/reference.vq \
+              /tmp/mi_runway628_c_test_files/encoded.mhp2 \
+              /tmp/mi_runway628_c_test_files/overlay.bin \
+              /tmp/mi_runway628_c_test_files/expected_patched.bin
             cc -std=c99 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
               -fsanitize=address,undefined -fno-sanitize-recover=all \
               fm1/native/mi_control.c fm1/native/test_mi_control.c \
