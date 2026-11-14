@@ -345,6 +345,11 @@ int main(void)
     mi_rotate(&s,MI_EN_K1,1); /* SET1 piano follows FMDrum */
     assert(s.wave==MI_WAVE_PIANO&&mi_state_valid(&s));
     assert(!strcmp(mi_wave_name(s.wave),"PIANO"));
+    mi_rotate(&s,MI_EN_K1,1); /* MIYAKO follows PIANO. */
+    assert(s.wave==MI_WAVE_MIYAKO&&mi_state_valid(&s));
+    assert(!strcmp(mi_wave_name(s.wave),"MIYAKO"));
+    mi_rotate(&s,MI_EN_K1,-1);
+    assert(s.wave==MI_WAVE_PIANO);
     mi_rotate(&s,MI_EN_K1,-1);
     assert(s.wave==MI_WAVE_FMDRUM);
     mi_button(&s,MI_B_EDIT,9305);
@@ -365,7 +370,7 @@ int main(void)
     {
         unsigned initial,osc,page,j;
         int32_t detents;
-        for(initial=0u;initial<=MI_WAVE_PIANO;initial++)
+        for(initial=0u;initial<=MI_WAVE_MIYAKO;initial++)
         for(osc=0u;osc<4u;osc++)
         for(page=0u;page<3u;page++)
         for(detents=-12;detents<=12;detents++){
