@@ -147,6 +147,7 @@ jobs:
                fm1/native/words.tsv \
                fm1/native/mi_control.c fm1/native/mi_control.h \
                fm1/native/mi_audio.c fm1/native/mi_audio.h \
+               fm1/native/mi_miyako_sample.h \
                fm1/native/mi_video.c fm1/native/mi_video.h \
                fm1/native/mi_fx_dsp.c fm1/native/mi_fx_dsp.h \
                fm1/native/mi_recorder.c fm1/native/mi_recorder.h \
