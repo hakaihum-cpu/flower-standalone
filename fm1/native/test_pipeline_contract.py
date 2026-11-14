@@ -629,16 +629,16 @@ assert 'APP_RES_BASE 0x97000u' in app_header
 assert 'APP_RES_SECTORS 69u' in app_header
 assert 'APP_STORE_MAP {0xFC000u, 0xDC000u}' in app_header
 assert 'APP_BACKUP_OBJS {OBJ_SETTINGS}' in app_header
-assert 'MI_TILE_MHP2_OVERLAY_BYTES 73004u' in resource_header
-assert 'MI_TILE_MHP2_CORE_BYTES 209067u' in resource_header
+assert 'MI_TILE_MHP2_OVERLAY_BYTES 79916u' in resource_header
+assert 'MI_TILE_MHP2_CORE_BYTES 200735u' in resource_header
 assert 'MI_TILE_VQ_MAP_STRIDE 288u' in resource_header
 assert 'MI_TILE_VQ_FRAMES_PER_CLIP 27u' in resource_header
 assert 'MI_TILE_SIDE 96u' in resource_header
 assert 'MI_TILE_COUNT 628u' in resource_header
 assert 'MI_TILE_BANKS 8u' in resource_header
-assert 'MI_TILE_DATA_BYTES 282071u' in resource_header
+assert 'MI_TILE_DATA_BYTES 280651u' in resource_header
 assert 'test_miyako_resource96.py' in ci
-assert '282103' in ci and '282071' in ci
+assert '280683' in ci and '280651' in ci
 assert '#include "mi_resource_media.h"' in ui and 'mi_photo_source(&length)' in ui
 assert "mi_resource_media.h" in ci
 assert "pack_miyako_resource.py" in ci
@@ -722,7 +722,7 @@ assert "spin K1 -3\nexpect fx 2" in host_fx
 assert "spin PRESET 1" not in host_fx
 # The archived 628 user frames now use the MHP2 source-reconstruction layout
 # with 24 SOURCE-RGB palettes, not the previous grayscale recolour.
-assert "35ab028b0bb48659ecab47c36afe2a4c6873e6b91f29c0b46313606f41cb5a3f" in resource_packer
+assert "2426992e3f5c06870a654c49086923293e6c00247a1796f9f14048824bf1c17c" in resource_packer
 assert "RESOURCE_CAPACITY = 69 * 4096 - 32" in resource_packer
 assert "PALETTE_CLIPS = 24" in resource_packer
 assert "return data" in resource_packer
@@ -737,7 +737,7 @@ assert len(manifest_photo["files"]) == 8
 assert "photo96_rebuild.py" in (
     root / "fm1/native/tools/PHOTO96_REBUILD.md").read_text()
 assert "MI_TILE_RESOURCE_RGB_SOURCE 1u" in resource_header
-assert "MI_TILE_MHP2_CORE_BYTES 209067u" in resource_header
+assert "MI_TILE_MHP2_CORE_BYTES 200735u" in resource_header
 assert "mi_photo_grayscale_palette" not in ui
 assert "mi_photo_palette[i]=mi_photo_decoder.palette[i]" in ui
 assert "mi_mhp2_decode(&mi_photo_decoder" in ui
