@@ -876,6 +876,14 @@ assert ci.index("/tmp/mi_piano_set1_stress") < ci.index("Reconstruct all 144 ori
 assert "/tmp/mi_piano_set1_test" in ci
 assert "PIANO: Wingie2 SET1 only" in ci
 assert "MI_WAVE_PIANO" in (root / "fm1/native/mi_control.h").read_text()
+# MIYAKO is a real user WAV oscillator, never a silent placeholder: fail before
+# target compile if the generated PCM resource has not been committed.
+miyako_sample = root / "fm1/native/mi_miyako_sample.h"
+assert miyako_sample.is_file(), "Missing converted user WAV: mi_miyako_sample.h"
+miyako_pcm = miyako_sample.read_text(encoding="utf-8")
+assert "#define MI_MIYAKO_RATE 12000u" in miyako_pcm
+assert "MI_MIYAKO_SAMPLES" in miyako_pcm and "mi_miyako_pcm" in miyako_pcm
+assert "v->note<54u || v->note>79u" in audio
 assert 'return wave<=MI_WAVE_MIYAKO?names[wave]:"?";' in controls
 assert 'mi_piano_set1_tick(v->piano_zone,&v->piano_pos' in audio
 assert "drum_on(a,s,(uint8_t)note,a->held_velocity[note],0u)" in audio
