@@ -785,7 +785,8 @@ void mi_audio_render(mi_audio_t *a,const mi_state_t *s,int32_t *lr,uint32_t n,ui
                 float pitch_mod=rs->lfo[3]==0u?
                     clampf(1.f+mod*0.059f,0.8f,1.2f):1.f;
                 float value;
-                if(v->note==53u || v->piano_pos>=(float)MI_MIYAKO_SAMPLES-1.f){
+                if(v->note<54u || v->note>79u ||
+                   v->piano_pos>=(float)MI_MIYAKO_SAMPLES-1.f){
                     v->active=0u;
                     continue;
                 }
