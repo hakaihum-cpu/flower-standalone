@@ -487,7 +487,7 @@ assert "if(s->view==MI_HOME&&k==0u){" in controls
 assert "while(left--){" in controls
 assert "if(old==3u&&s->wave==MI_WAVE_MULTI){" in controls
 assert "if(s->wave==old)break;" in controls
-assert "if(left>MI_WAVE_PIANO)left=MI_WAVE_PIANO;" in controls
+assert "if(left>MI_WAVE_MIYAKO)left=MI_WAVE_MIYAKO;" in controls
 assert "s->osc1_wave=old;" in controls
 assert 'if(old==MI_WAVE_MULTI&&s->wave!=MI_WAVE_MULTI)' in controls
 assert "if(old<=3u)s->osc1_wave=old;" in controls
@@ -876,7 +876,7 @@ assert ci.index("/tmp/mi_piano_set1_stress") < ci.index("Reconstruct all 144 ori
 assert "/tmp/mi_piano_set1_test" in ci
 assert "PIANO: Wingie2 SET1 only" in ci
 assert "MI_WAVE_PIANO" in (root / "fm1/native/mi_control.h").read_text()
-assert 'return wave<=MI_WAVE_PIANO?names[wave]:"?";' in controls
+assert 'return wave<=MI_WAVE_MIYAKO?names[wave]:"?";' in controls
 assert 'mi_piano_set1_tick(v->piano_zone,&v->piano_pos' in audio
 assert "drum_on(a,s,(uint8_t)note,a->held_velocity[note],0u)" in audio
 assert "drum_on(a,s,a->arp_note,vel?vel:100u,0u)" in audio
