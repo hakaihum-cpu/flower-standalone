@@ -720,8 +720,13 @@ static void input(void)
                  break;
              }
          }else{
-             held_note[i]=note;
-             mi_audio_input_on(&audio,&state,note,(uint8_t)touch_vel(i));
+             /* Reserve leftmost FM-1 F key for MIYAKO, even after OCT transposition. */
+             if(state.wave==MI_WAVE_MIYAKO&&i==0u)
+                 held_note[i]=255u;
+             else{
+                 held_note[i]=note;
+                 mi_audio_input_on(&audio,&state,note,(uint8_t)touch_vel(i));
+             }
          }
      }
      if(!(keys&bit)&&(last_keys&bit)&&held_note[i]<128u)
